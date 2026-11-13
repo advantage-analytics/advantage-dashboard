@@ -4,8 +4,8 @@ import { createContext, use } from "react";
 
 /**
  * Where a read-only mount reads the match's ball-paths file, or `null` when
- * it has nowhere to (`MatchReportMeta.ballPathsEndpoint`, which
- * `MatchReportProvider` puts here).
+ * it has nowhere to (`MatchReportProvider ballPathsEndpoint`, which
+ * the provider puts here).
  *
  * A context of its own, like `film-read-only.ts`, rather than a read of the
  * report context: `use-ball-paths.ts` is bundled into the film room's small

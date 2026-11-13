@@ -2,6 +2,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { expect, test } from "@playwright/test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+import { BallPathsEndpointContext } from "@/components/dashboard/matches/match-detail/film/ball-paths-endpoint";
+import { useBallPathsRoute } from "@/components/dashboard/matches/match-detail/film/use-ball-paths";
 
 /**
  * The admin match report (`/admin/matches/[matchId]`) is read-only like the
@@ -61,5 +66,38 @@ test.describe("admin match report wiring", () => {
       "src/components/dashboard/matches/match-detail/match-report-context.tsx",
     );
     expect(context).toContain("if (sample || !recordView) return;");
+  });
+});
+
+/** `useBallPathsRoute(readOnly)` under a named endpoint (or none), as JSON. */
+function routeFor(readOnly: boolean, named: string | null) {
+  function Probe() {
+    return JSON.stringify(useBallPathsRoute(readOnly));
+  }
+  const html = renderToStaticMarkup(
+    createElement(
+      BallPathsEndpointContext,
+      { value: named },
+      createElement(Probe),
+    ),
+  );
+  return JSON.parse(html.replaceAll("&quot;", '"')) as {
+    allowed: boolean;
+    endpoint?: string;
+  };
+}
+
+test.describe("useBallPathsRoute", () => {
+  const ADMIN = "/admin/matches/m1/ball-paths";
+
+  test("a mount that is not read-only uses the match's own route", () => {
+    expect(routeFor(false, null)).toEqual({ allowed: true });
+    // A named endpoint is for read-only mounts only.
+    expect(routeFor(false, ADMIN)).toEqual({ allowed: true });
+  });
+
+  test("a read-only mount reads only from a named endpoint", () => {
+    expect(routeFor(true, null)).toEqual({ allowed: false });
+    expect(routeFor(true, ADMIN)).toEqual({ allowed: true, endpoint: ADMIN });
   });
 });

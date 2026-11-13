@@ -188,17 +188,6 @@ export interface MatchReportMeta {
    */
   playbackEndpoint: string | null;
   /**
-   * Where a read-only mount reads the match's ball-paths file. The match's own
-   * `/api/matches/${matchId}/ball-paths` asks the reader's session whether
-   * they can see the match, so a read-only mount — a share link, the sample —
-   * does not ask at all and its lob figures are a dash. The admin report is
-   * read-only too, but its reader is signed in and gated by `is_admin`, so it
-   * names `/admin/matches/${matchId}/ball-paths` here and the file is read
-   * from that. `null` — the default — leaves a read-only mount without one;
-   * a mount that is not read-only always uses the match's own route.
-   */
-  ballPathsEndpoint: string | null;
-  /**
    * The views this report offers, in rail order. All three under
    * `/dashboard`; on `/m/[token]` only what the link carries. The rail
    * switcher draws these rows and `?tab=` cannot open anything else.
@@ -242,7 +231,6 @@ export interface MatchReportProviderProps extends Omit<
   | "readOnly"
   | "sample"
   | "playbackEndpoint"
-  | "ballPathsEndpoint"
   | "statsUnavailable"
   | "foldUnreconciled"
   | "views"
@@ -259,7 +247,18 @@ export interface MatchReportProviderProps extends Omit<
   sample?: boolean;
   /** See `MatchReportMeta.playbackEndpoint`. Defaults to `null`. */
   playbackEndpoint?: string | null;
-  /** See `MatchReportMeta.ballPathsEndpoint`. Defaults to `null`. */
+  /**
+   * Where a read-only mount reads the match's ball-paths file. The match's own
+   * `/api/matches/${matchId}/ball-paths` asks the reader's session whether
+   * they can see the match, so a read-only mount — a share link, the sample —
+   * does not ask at all and its lob figures are a dash. The admin report is
+   * read-only too, but its reader is signed in and gated by `is_admin`, so it
+   * names `/admin/matches/${matchId}/ball-paths` here and the file is read
+   * from that. Not part of `meta`: it is handed to
+   * `BallPathsEndpointContext`, which the readers use (`useBallPathsRoute`).
+   * `null` — the default — leaves a read-only mount without one;
+   * a mount that is not read-only always uses the match's own route.
+   */
   ballPathsEndpoint?: string | null;
   /**
    * Whether opening this report sends `match_viewed`. Defaults to `true`. The
@@ -436,7 +435,6 @@ export function MatchReportProvider({
       readOnly,
       sample,
       playbackEndpoint,
-      ballPathsEndpoint,
       views,
     }),
     [
@@ -457,7 +455,6 @@ export function MatchReportProvider({
       readOnly,
       sample,
       playbackEndpoint,
-      ballPathsEndpoint,
       views,
     ],
   );

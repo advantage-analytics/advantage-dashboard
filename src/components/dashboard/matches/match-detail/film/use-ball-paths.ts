@@ -64,7 +64,7 @@ function cachedFile(matchId: string): BallPathsFile | null {
  * The match's own route asks the reader's session whether they can see the
  * match, so a read-only mount (a share link, the sample) does not ask. The
  * admin report is read-only as well, but names a route of its own
- * (`MatchReportMeta.ballPathsEndpoint`, read through `ball-paths-endpoint.ts`),
+ * (`MatchReportProvider ballPathsEndpoint`, read through `ball-paths-endpoint.ts`),
  * and with one a read-only mount reads from that. `endpoint` is `undefined`
  * for the match's own route. With no report provider (a harness) only
  * `readOnly` decides, as it always did.
