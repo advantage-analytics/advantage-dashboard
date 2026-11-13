@@ -97,7 +97,7 @@ export function VizWall({
   }
 
   return (
-    <div className="@container flex flex-col gap-[18px]">
+    <div data-viz-wall="" className="@container flex flex-col gap-[18px]">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {hasSaved && (
           <div className="flex gap-2" role="group" aria-label="View">

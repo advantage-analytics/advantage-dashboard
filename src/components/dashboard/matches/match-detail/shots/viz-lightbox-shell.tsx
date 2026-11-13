@@ -159,8 +159,10 @@ export interface VizLightboxShellProps {
   /* ── Words ───────────────────────────────────────────────────────────── */
   title: string;
   /** The header's own action, immediately left of the close — an open saved
-   *  view's ⋯. */
-  headerAction?: ReactNode;
+   *  view's ⋯. Handed the lightbox's Esc step for its tooltip, as the close
+   *  and zoom tooltips get it: an open tooltip is the topmost layer and
+   *  would otherwise take the Esc meant for the lightbox. */
+  headerAction?: (ctx: { onTooltipEscape: () => void }) => ReactNode;
   /** One line under the subtitle: a change to the view the server refused. */
   notice?: string;
   subtitle: string;
@@ -937,7 +939,12 @@ export function VizLightboxShell({
               <span className="flex-1" />
               {/* The header's chrome, one cluster: the view's ⋯, then close. */}
               <div className="flex shrink-0 items-center gap-1">
-                {!pending && headerAction}
+                {!pending && headerAction && (
+                  <HeaderActionSlot
+                    render={headerAction}
+                    onTooltipEscape={escapeFromTooltip}
+                  />
+                )}
                 <ChromeTooltip
                   label="Close"
                   shortcut="Esc"
@@ -1349,6 +1356,17 @@ export function VizLightboxShell({
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
   );
+}
+
+/** The host's header action, handed the lightbox's Esc step. */
+function HeaderActionSlot({
+  render,
+  onTooltipEscape,
+}: {
+  render: (ctx: { onTooltipEscape: () => void }) => ReactNode;
+  onTooltipEscape: () => void;
+}) {
+  return render({ onTooltipEscape });
 }
 
 /** The host's control-row menus, handed the band editor's opener. */

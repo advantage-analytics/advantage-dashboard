@@ -399,6 +399,31 @@ export function SavedViewsBand({
     setDragId(null);
   }
 
+  /**
+   * Where focus goes when no other manageable card is left: the wall's
+   * first link that is not inside the card being removed (that card is
+   * still mounted when the delete handler runs), or — when the removed view
+   * was the last one anywhere, so the grid gives way to the Undo line — the
+   * wall's pressed collection chip ("Saved"), which is always there.
+   */
+  function fallbackFocusTarget(removedId: string): HTMLElement | undefined {
+    const removedEl = tileElsRef.current.get(removedId);
+    const links = listRef.current?.querySelectorAll<HTMLElement>("a[href]");
+    const link =
+      optimisticViews.length > 1
+        ? Array.from(links ?? []).find((a) => !removedEl?.contains(a))
+        : undefined;
+    return (
+      link ??
+      listRef.current
+        ?.closest("[data-viz-wall]")
+        ?.querySelector<HTMLElement>(
+          '[role="group"][aria-label="View"] button[aria-pressed="true"]',
+        ) ??
+      undefined
+    );
+  }
+
   function focusAfterRemoval(removedId: string) {
     // Among the cards on screen: the other player's views are not mounted.
     // With none left, the wall's first link ("Create view") takes focus
@@ -406,10 +431,7 @@ export function SavedViewsBand({
     const nextId = nextFocusId(visibleManageableIds, removedId);
     const nextEl =
       (nextId ? menuTriggerElsRef.current.get(nextId) : undefined) ??
-      (manageMode
-        ? undefined
-        : (listRef.current?.querySelector<HTMLElement>("a[href]") ??
-          undefined));
+      (manageMode ? undefined : fallbackFocusTarget(removedId));
     (nextEl ?? doneButtonRef.current)?.focus();
   }
 

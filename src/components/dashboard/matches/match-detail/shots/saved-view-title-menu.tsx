@@ -33,6 +33,7 @@ export function SavedViewTitleMenu({
   workspaceKind,
   workspaceRole,
   onAction,
+  onTooltipEscape,
 }: {
   view: SavedViewRow;
   /** The name on screen — the view's, or one just typed and still saving. */
@@ -41,6 +42,8 @@ export function SavedViewTitleMenu({
   workspaceKind: WorkspaceKind;
   workspaceRole: ProgramRole;
   onAction: (action: SavedViewAction) => void;
+  /** The lightbox's Esc step, for when this ⋯'s tooltip holds Esc. */
+  onTooltipEscape?: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -56,6 +59,7 @@ export function SavedViewTitleMenu({
         label="View options"
         align="end"
         hidden={menuOpen || renameOpen}
+        onEscapeKeyDown={onTooltipEscape}
       >
         <span className="inline-flex">
           <ManageTileMenu
@@ -102,7 +106,7 @@ export function SavedViewTitleMenu({
         onOpenChange={setRenameOpen}
         anchorRef={rowRef}
         currentName={name}
-        poolNames={savedViewNamePool([...savedViews], {
+        poolNames={savedViewNamePool(savedViews, {
           shared: view.shared,
           excludeId: view.id,
         })}

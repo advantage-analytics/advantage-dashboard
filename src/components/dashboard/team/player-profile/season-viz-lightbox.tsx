@@ -552,27 +552,30 @@ export function SeasonVizLightbox({
             : court.title
         }
         headerAction={
-          openView !== null && manage && saveView ? (
-            <Suspense fallback={null}>
-              <LazySavedViewTitleMenu
-                view={openView}
-                name={manage.names[openView.id] ?? openView.name}
-                savedViews={saveView.savedViews}
-                workspaceKind="team"
-                workspaceRole={saveView.workspaceRole}
-                onAction={(action) => {
-                  // The view is gone: back to the wall, where its Undo is.
-                  if (action.kind === "delete") close();
-                  manage.run(action, openView);
-                }}
-              />
-            </Suspense>
-          ) : undefined
+          openView !== null && manage && saveView
+            ? ({ onTooltipEscape }) => (
+                <Suspense fallback={null}>
+                  <LazySavedViewTitleMenu
+                    onTooltipEscape={onTooltipEscape}
+                    view={openView}
+                    name={manage.names[openView.id] ?? openView.name}
+                    savedViews={saveView.savedViews}
+                    workspaceKind="team"
+                    workspaceRole={saveView.workspaceRole}
+                    onAction={(action) => {
+                      // The view is gone: back to the wall, where its Undo is.
+                      if (action.kind === "delete") close();
+                      manage.run(action, openView);
+                    }}
+                  />
+                </Suspense>
+              )
+            : undefined
         }
         // A change to the open view the server refused: the wall's own line
         // is behind the scrim, so it is said here.
         notice={
-          openView !== null && manage?.status && !manage.status.undo
+          openView !== null && manage?.status?.failed
             ? manage.status.text
             : undefined
         }

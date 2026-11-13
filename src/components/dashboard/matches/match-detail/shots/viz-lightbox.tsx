@@ -522,16 +522,19 @@ export function VizLightbox({
       title={title}
       notice={failureShown ?? undefined}
       headerAction={
-        canManageOpenView && savedView !== null ? (
-          <SavedViewTitleMenu
-            view={savedView}
-            name={nameOf(savedView)}
-            savedViews={meta.savedViews}
-            workspaceKind={meta.workspaceKind}
-            workspaceRole={meta.workspaceRole}
-            onAction={handleViewAction}
-          />
-        ) : undefined
+        canManageOpenView && savedView !== null
+          ? ({ onTooltipEscape }) => (
+              <SavedViewTitleMenu
+                onTooltipEscape={onTooltipEscape}
+                view={savedView}
+                name={nameOf(savedView)}
+                savedViews={meta.savedViews}
+                workspaceKind={meta.workspaceKind}
+                workspaceRole={meta.workspaceRole}
+                onAction={handleViewAction}
+              />
+            )
+          : undefined
       }
       subtitle={subtitle}
       filterPhrases={phrases}

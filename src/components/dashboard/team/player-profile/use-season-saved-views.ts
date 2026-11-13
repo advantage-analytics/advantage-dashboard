@@ -22,7 +22,9 @@ export interface SeasonSavedViewActions {
   /** Views deleted here and not yet gone from the server's cards. */
   removed: ReadonlySet<string>;
   /** The line above the Saved cards: what just happened, and its Undo. */
-  status: { text: string; undo?: () => void } | null;
+  /** `failed`: a change the server refused, as opposed to one that landed
+   *  ("Deleted …") — the open view repeats only the refusals. */
+  status: { text: string; undo?: () => void; failed?: boolean } | null;
   dismissStatus: () => void;
   run: (action: SavedViewAction, view: SavedViewRow) => void;
 }
@@ -54,10 +56,15 @@ export function useSeasonSavedViews(): SeasonSavedViewActions {
     [],
   );
 
-  function say(text: string, undo?: () => void) {
+  function say(text: string, undo?: () => void, failed = false) {
     if (timer.current) clearTimeout(timer.current);
-    setStatus({ text, undo });
+    setStatus({ text, undo, failed });
     timer.current = setTimeout(() => setStatus(null), STATUS_MS);
+  }
+
+  /** A change the server refused. */
+  function fail(text: string) {
+    say(text, undefined, true);
   }
 
   function dismissStatus() {
@@ -84,7 +91,7 @@ export function useSeasonSavedViews(): SeasonSavedViewActions {
         order: view.order,
       });
       if (!result.ok) {
-        say(
+        fail(
           result.error === "unsupported_cut_chart"
             ? "This kind of view can't be saved yet."
             : FAILED,
@@ -107,7 +114,7 @@ export function useSeasonSavedViews(): SeasonSavedViewActions {
             delete next[view.id];
             return next;
           });
-          say(
+          fail(
             result.error === "duplicate_name"
               ? `A view called “${name}” already exists.`
               : FAILED,
@@ -123,7 +130,7 @@ export function useSeasonSavedViews(): SeasonSavedViewActions {
       startTransition(async () => {
         const result = await duplicateSavedView(view.id);
         if (!result.ok) {
-          say(
+          fail(
             result.error === "unsupported_cut_chart"
               ? "This kind of view can't be saved yet."
               : FAILED,
@@ -140,7 +147,7 @@ export function useSeasonSavedViews(): SeasonSavedViewActions {
       startTransition(async () => {
         const result = await setSavedViewShared(view.id, shared);
         if (!result.ok) {
-          say(
+          fail(
             shared && result.error === "duplicate_name"
               ? `A shared view is already called "${view.name}". Rename yours first.`
               : FAILED,
@@ -158,7 +165,7 @@ export function useSeasonSavedViews(): SeasonSavedViewActions {
       const result = await deleteSavedView(view.id);
       if (!result.ok) {
         unremove(view.id);
-        say(FAILED);
+        fail(FAILED);
         return;
       }
       const deleted = result.data;
