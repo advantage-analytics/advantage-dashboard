@@ -49,6 +49,7 @@ import {
 import { askAdapterModel, askStageModels } from "@/lib/services/ask/model";
 import {
   isJwtShaped,
+  jwtLooksExpired,
   mcpClientFromUserAgent,
   MCP_SCOPES,
   readBearerToken,
@@ -80,6 +81,26 @@ export const maxDuration = 60;
 const MAX_BODY_BYTES = 64 * 1024;
 
 const NO_STORE = "private, no-store";
+
+/** At most this many `mcp_auth_failed` events per window, per server instance. */
+const AUTH_FAILURE_EVENTS_PER_WINDOW = 20;
+const AUTH_FAILURE_WINDOW_MS = 5 * 60_000;
+let authFailureWindow = { startedAt: 0, sent: 0 };
+
+/**
+ * Whether one more `mcp_auth_failed` may be sent. The 401 path needs no
+ * sign-in, so without a cap a loop of bad tokens would be a loop of product
+ * events. A few per window is all a report of "an app's sign-in is broken"
+ * needs; the cap is per instance, which is as soft as the call window's.
+ */
+function allowAuthFailureEvent(now: number): boolean {
+  if (now - authFailureWindow.startedAt >= AUTH_FAILURE_WINDOW_MS) {
+    authFailureWindow = { startedAt: now, sent: 0 };
+  }
+  if (authFailureWindow.sent >= AUTH_FAILURE_EVENTS_PER_WINDOW) return false;
+  authFailureWindow.sent += 1;
+  return true;
+}
 
 /**
  * The 401. `errorResponse()`'s body shape, so the sentence is where every
@@ -120,16 +141,19 @@ export async function POST(request: Request): Promise<Response> {
 
   const calling = mcpClientFromUserAgent(request.headers.get("user-agent"));
   const posthog = getPostHogServerClient();
-  // A token that was sent and refused: an app whose sign-in has lapsed or
-  // broken. No user is known, so the event is anonymous, and it carries the
-  // app and the reason only — never the token.
-  const refused = (reason: "malformed" | "not_verified"): Response => {
-    if (posthog) {
+  // A token Supabase Auth refused, which was not simply past its expiry: an
+  // app whose sign-in has broken. No user is known, so the event is
+  // anonymous, and it carries the app only — never the token. Nothing is
+  // sent for junk or for an expired token (every client's routine cue to
+  // refresh), and what is sent is capped (`allowAuthFailureEvent`), because
+  // anyone can reach this line without signing in.
+  const refused = (report: boolean): Response => {
+    if (report && posthog && allowAuthFailureEvent(Date.now())) {
       posthog.capture({
         distinctId: "mcp_anonymous",
         event: "mcp_auth_failed",
         properties: {
-          reason,
+          reason: "not_verified",
           client: calling.client,
           client_agent: calling.agent,
           $process_person_profile: false,
@@ -143,9 +167,9 @@ export async function POST(request: Request): Promise<Response> {
   const token = readBearerToken(request.headers.get("authorization"));
   if (!token) return unauthorized(origin, false);
   // Junk never costs a round trip to Supabase Auth.
-  if (!isJwtShaped(token)) return refused("malformed");
+  if (!isJwtShaped(token)) return refused(false);
   const verified = await verifyBearerUser(token);
-  if (!verified) return refused("not_verified");
+  if (!verified) return refused(!jwtLooksExpired(token, Date.now()));
   const { client, user } = verified;
 
   // The three server-only functions need the service role (`database.ts`).

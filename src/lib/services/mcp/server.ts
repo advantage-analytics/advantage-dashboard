@@ -557,6 +557,26 @@ export function askReadHandlers(deps: AskReadDeps) {
     };
   }
 
+  /** The match's row, read through the view: a match outside the scope has no row. */
+  async function matchInScope(scope: AskScope, matchId: string): Promise<Row> {
+    const team = scope.kind === "team";
+    const { rows } = await runAskQuery(
+      scope,
+      oneMatchScope(matchId),
+      matchRowSql(team),
+    );
+    const row = rows[0];
+    if (!row) {
+      throw refusal(
+        "match_not_found",
+        team
+          ? "This match is not in the program's matches."
+          : "This match is not in your matches.",
+      );
+    }
+    return row;
+  }
+
   // ── list_matches ───────────────────────────────────────────────────────
   async function listMatches({
     program_id,
@@ -608,21 +628,7 @@ export function askReadHandlers(deps: AskReadDeps) {
   }): Promise<CallToolResult> {
     const scope = await resolveScope(program_id);
     const team = scope.kind === "team";
-    // The view decides visibility: a match outside the scope has no row.
-    const { rows } = await runAskQuery(
-      scope,
-      oneMatchScope(match_id),
-      matchRowSql(team),
-    );
-    const row = rows[0];
-    if (!row) {
-      throw refusal(
-        "match_not_found",
-        team
-          ? "This match is not in the program's matches."
-          : "This match is not in your matches.",
-      );
-    }
+    const row = await matchInScope(scope, match_id);
     const [{ rows: statRows }, report] = await Promise.all([
       row.has_stats === true
         ? runAskQuery(scope, oneMatchScope(match_id), MATCH_STATS_SQL)
@@ -728,6 +734,7 @@ export function askReadHandlers(deps: AskReadDeps) {
   return {
     resolveScope,
     runAskQuery,
+    matchInScope,
     listMatches,
     listWorkspaces,
     getMatch,
@@ -749,7 +756,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     reads: context.reads,
     userId: context.caller.userId,
   });
-  const { resolveScope, runAskQuery } = read;
+  const { resolveScope, runAskQuery, matchInScope } = read;
 
   // ── The guard every tool runs under ────────────────────────────────────
   // The two limits first, then the tool; one `mcp_tool_call` event however
@@ -1098,6 +1105,12 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           }
           body[field] = null;
         }
+        // Clearing the school clears the link with it (`resolveOpponentTeam`),
+        // so naming both is one request, not the either/or a value is held to.
+        if ("opponent_school" in body && body.opponent_school === null) {
+          if (body.opponent_program_id === null)
+            delete body.opponent_program_id;
+        }
         if (Object.keys(body).length === 0) {
           throw refusal(
             "nothing_to_change",
@@ -1428,22 +1441,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
             "A player's season needs program_id: season visualizations exist for team roster players only. In a personal workspace, pass match_id. (program_id)",
           );
         }
-        if (match_id !== undefined) {
-          // The view decides visibility, as get_match reads it.
-          const { rows } = await runAskQuery(
-            scope,
-            oneMatchScope(match_id),
-            matchRowSql(team),
-          );
-          if (!rows[0]) {
-            throw refusal(
-              "match_not_found",
-              team
-                ? "This match is not in the program's matches."
-                : "This match is not in your matches.",
-            );
-          }
-        }
+        if (match_id !== undefined) await matchInScope(scope, match_id);
         const link = visualizationLink(
           match_id !== undefined
             ? { kind: "match", matchId: match_id }
@@ -1473,7 +1471,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     "find_points",
     {
       title: "Find points to watch",
-      description: `A link that plays chosen points of one match in its Video tab. Two ways to choose, which combine: filters the tab applies itself (the set, the situation, who served and where, how the return and the point ended), and a point list — pass rally_min and/or rally_max to pick points by how many shots the rally had (the serve counts as one), or point_numbers from a run_query over ask.points for anything the filters do not cover. The answer has the url to give the person, and for a point list the numbers and how many there are; with filters alone the tab does the choosing, so count them with run_query if a number is needed. At most ${MAX_POINT_SET} points fit in one link. The link opens the match's Video tab; a match with no video has nothing to play.`,
+      description: `A link that plays chosen points of one match in its Video tab. Two ways to choose, which combine: filters the tab applies itself (the set, the situation, who served and where, how the return and the point ended), and a point list — pass rally_min and/or rally_max to pick points by how many shots the rally had (the serve counts as one), or point_numbers from a run_query over ask.points for anything the filters do not cover. The answer has the url to give the person, and for a point list the numbers and how many there are; with filters alone the tab does the choosing, so count them with run_query if a number is needed. At most ${MAX_POINT_SET} points fit in one link. has_video says whether there is one to play: yes for an analysed match, unknown for a SwingVision import (it has video only when one was attached in the app), and no — with no url — for a match entered by hand.`,
       inputSchema: {
         match_id: UUID().describe("A match id from list_matches."),
         program_id: PROGRAM_ID,
@@ -1564,29 +1562,16 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
         }
         const scope = await resolveScope(program_id);
         const team = scope.kind === "team";
-        const { rows } = await runAskQuery(
-          scope,
-          oneMatchScope(match_id),
-          matchRowSql(team),
-        );
-        const row = rows[0];
-        if (!row) {
-          throw refusal(
-            "match_not_found",
-            team
-              ? "This match is not in the program's matches."
-              : "This match is not in your matches.",
-          );
-        }
+        const row = await matchInScope(scope, match_id);
 
         // A point list only when the caller asked for one: the rally range
         // and the numbers are read from ask.points, so a number that is not
         // a point of this match never reaches the link. Every value in the
         // SQL is an integer the schema already held to a range.
         const listed =
-          rally_min !== undefined || rally_max !== undefined
-            ? true
-            : (point_numbers?.length ?? 0) > 0;
+          rally_min !== undefined ||
+          rally_max !== undefined ||
+          (point_numbers?.length ?? 0) > 0;
         let numbers: number[] | null = null;
         if (listed) {
           const conditions = [
@@ -1622,23 +1607,55 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
             note: "No point of this match fits. Nothing to watch.",
           });
         }
+        // What the views can say about a video: an analysed match has the
+        // one it was analysed from; a SwingVision import has one only when
+        // it was attached in the app; a match entered by hand has none.
+        const source = row.source ?? null;
+        if (source === null) {
+          return json({
+            scope: scope.kind,
+            program_id: team ? scope.programId : null,
+            match_id,
+            source,
+            url: null,
+            has_video: "no",
+            point_count: numbers
+              ? Math.min(numbers.length, MAX_POINT_SET)
+              : null,
+            point_numbers: numbers ? numbers.slice(0, MAX_POINT_SET) : null,
+            note: "This match was entered by hand and has no video to watch.",
+          });
+        }
         const link = videoLink(match_id, filters, numbers);
+        const filtered = link.filters !== "";
+        const notes = [
+          ...(source === "video"
+            ? []
+            : [
+                "A SwingVision match has video only when one was attached in the app; without it the link has nothing to play.",
+              ]),
+          ...(numbers !== null && filtered
+            ? [
+                "The tab also applies the filters to this list, so fewer points may play than point_numbers holds: do not report its length as a count.",
+              ]
+            : []),
+        ];
         return json({
           scope: scope.kind,
           program_id: team ? scope.programId : null,
           match_id,
-          source: row.source ?? null,
+          source,
           url: link.url,
-          // Counted only for a point list: the tab applies the filters.
+          has_video: source === "video" ? "yes" : "unknown",
+          // Counted only for a point list alone: the tab applies the filters.
           point_count:
-            numbers === null
-              ? null
-              : link.filters === ""
-                ? Math.min(numbers.length, MAX_POINT_SET)
-                : null,
+            numbers !== null && !filtered
+              ? Math.min(numbers.length, MAX_POINT_SET)
+              : null,
           point_numbers: numbers ? numbers.slice(0, MAX_POINT_SET) : null,
           truncated: link.truncated,
-          filters_applied_by_the_tab: link.filters !== "",
+          filters_applied_by_the_tab: filtered,
+          ...(notes.length > 0 ? { note: notes.join(" ") } : {}),
         });
       },
     ),

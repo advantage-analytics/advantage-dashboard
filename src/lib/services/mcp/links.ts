@@ -155,7 +155,10 @@ export function visualizationLink(
     court: [...(args.court ?? [])],
     zone: [...(args.serve_zone ?? [])],
     pressure: (args.pressure ?? []).map((value) => PRESSURE[value]),
-    result: [...(args.result ?? [])],
+    // Aces are a filter of the serves card alone.
+    result: (args.result ?? []).filter(
+      (value) => value !== "ace" || cut === "serve",
+    ),
     rally: [...(args.rally ?? [])],
     error: (args.error ?? []).map((value) => ERRORS[value]),
   };
@@ -167,6 +170,10 @@ export function visualizationLink(
     if (!allowed.has(key as keyof VizFilters) && given(args[arg])) {
       ignored.push(arg);
     }
+  }
+
+  if (cut !== "serve" && (args.result ?? []).includes("ace")) {
+    ignored.push("result: ace");
   }
 
   const season: SeasonFilters | undefined =

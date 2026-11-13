@@ -1497,6 +1497,19 @@ test.describe("POST /api/mcp · the opponent's school", () => {
     });
   });
 
+  test("clearing the school and the link together is one request, not a refusal", async () => {
+    const { route, calls } = loadRoute(world());
+    const result = await callTool(route, "update_match", {
+      match_id: MATCH_A,
+      clear: ["opponent_program_id", "opponent_school"],
+    });
+    expect(result.isError).toBeUndefined();
+    expect(patchOf(calls)).toEqual({
+      opponent_program_id: null,
+      opponent_school: null,
+    });
+  });
+
   test("the reads return the linked school", async () => {
     const { route, calls } = loadRoute(world());
     const listed = await callTool(route, "list_matches", {});
@@ -2084,6 +2097,19 @@ test.describe("POST /api/mcp · open_visualization", () => {
     expect(url.searchParams.has("zone")).toBe(false);
     expect(url.searchParams.has("vsurf")).toBe(false);
     expect(structured.ignored.sort()).toEqual(["serve_zone", "surface"]);
+
+    // Aces are a filter of the serves card alone: left out, and said so.
+    const aces = await callTool(route, "open_visualization", {
+      match_id: MATCH_A,
+      cut: "return_placement",
+      result: ["won", "ace"],
+    });
+    const acesOut = aces.structuredContent as {
+      url: string;
+      ignored: string[];
+    };
+    expect(new URL(acesOut.url).searchParams.getAll("result")).toEqual(["won"]);
+    expect(acesOut.ignored).toEqual(["result: ace"]);
     expect(structured.target).toBe("match");
   });
 
@@ -2147,7 +2173,7 @@ test.describe("POST /api/mcp · open_visualization", () => {
 
 test.describe("POST /api/mcp · find_points", () => {
   /** The match row for the first query, the point numbers for the second. */
-  function pointsWorld(numbers: number[]) {
+  function pointsWorld(numbers: number[], source: string | null = "video") {
     return world({
       rpc: {
         ...world().rpc,
@@ -2158,7 +2184,7 @@ test.describe("POST /api/mcp · find_points", () => {
             : {
                 data: {
                   matches: [],
-                  rows: [{ match_id: MATCH_A, source: "video" }],
+                  rows: [{ match_id: MATCH_A, source }],
                 },
                 error: null,
               };
@@ -2230,6 +2256,53 @@ test.describe("POST /api/mcp · find_points", () => {
     expect(checkAskSql({ scopeSql: query.scope_sql, sql: query.sql }).ok).toBe(
       true,
     );
+  });
+
+  test("says what it knows about the video: none for a match entered by hand, unknown for a SwingVision import", async () => {
+    const { route } = loadRoute(pointsWorld([4, 9], null));
+    const hand = await callTool(route, "find_points", {
+      match_id: MATCH_A,
+      rally_min: 9,
+    });
+    expect(hand.isError).toBeUndefined();
+    expect(hand.structuredContent).toMatchObject({
+      url: null,
+      has_video: "no",
+      point_numbers: [4, 9],
+    });
+
+    const { route: imported } = loadRoute(pointsWorld([], "swingvision"));
+    const swing = await callTool(imported, "find_points", {
+      match_id: MATCH_A,
+      situation: ["break_point"],
+    });
+    const out = swing.structuredContent as {
+      url: string;
+      has_video: string;
+      note: string;
+    };
+    expect(out.has_video).toBe("unknown");
+    expect(out.url).toContain("tab=film");
+    expect(out.note).toContain("only when one was attached");
+  });
+
+  test("a point list with filters is not a count: the tab narrows it further, and the answer says so", async () => {
+    const { route } = loadRoute(pointsWorld([2, 30, 35]));
+    const result = await callTool(route, "find_points", {
+      match_id: MATCH_A,
+      rally_min: 9,
+      outcome: "won",
+    });
+    const out = result.structuredContent as {
+      point_count: number | null;
+      point_numbers: number[];
+      has_video: string;
+      note: string;
+    };
+    expect(out.point_numbers).toEqual([2, 30, 35]);
+    expect(out.point_count).toBeNull();
+    expect(out.has_video).toBe("yes");
+    expect(out.note).toContain("do not report its length as a count");
   });
 
   test("no point fits: no link; an upside-down range is refused before anything is read", async () => {

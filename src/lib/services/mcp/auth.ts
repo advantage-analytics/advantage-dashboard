@@ -82,6 +82,28 @@ export function isJwtShaped(token: string): boolean {
   );
 }
 
+/**
+ * Whether a JWT-shaped token's own `exp` is in the past. Decodes only, and
+ * trusts nothing: used after Supabase Auth has already refused the token,
+ * to tell a routine expiry (every client's cue to refresh) from a token
+ * that is refused for another reason. A token with no readable `exp` is not
+ * "expired". Pure, and never throws.
+ */
+export function jwtLooksExpired(token: string, nowMs: number): boolean {
+  try {
+    const payload: unknown = JSON.parse(
+      Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"),
+    );
+    const exp =
+      typeof payload === "object" && payload !== null
+        ? (payload as { exp?: unknown }).exp
+        : undefined;
+    return typeof exp === "number" && exp * 1000 <= nowMs;
+  } catch {
+    return false;
+  }
+}
+
 /** The URL's origin with no path, or the string as given when it is not a URL. */
 function originOf(url: string): string {
   try {
@@ -185,7 +207,6 @@ const CLIENT_AGENT_MARKS: readonly (readonly [string, McpClientName])[] = [
   ["chatgpt", "chatgpt"],
   ["cursor", "cursor"],
   ["gemini", "gemini"],
-  ["google", "gemini"],
   ["mistral", "le_chat"],
 ];
 

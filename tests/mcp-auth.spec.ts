@@ -23,6 +23,7 @@ import {
   authorizationServerMetadataUrl,
   isJwtShaped,
   MAX_BEARER_TOKEN_LENGTH,
+  jwtLooksExpired,
   mcpClientFromUserAgent,
   mcpResourceUrl,
   protectedResourceMetadata,
@@ -1007,6 +1008,10 @@ test.describe("which app is calling", () => {
     expect(mcpClientFromUserAgent("openai-mcp/1.0.0").client).toBe("chatgpt");
     expect(mcpClientFromUserAgent("Cursor/3.2 (darwin)").client).toBe("cursor");
     expect(mcpClientFromUserAgent("Google-Gemini-Apps").client).toBe("gemini");
+    // "google" alone is not the Gemini app: any Google-run fetcher says it.
+    expect(mcpClientFromUserAgent("Google-Cloud-Functions/1.0").client).toBe(
+      "other",
+    );
     expect(mcpClientFromUserAgent("SomeNewApp/9 extra words")).toEqual({
       client: "other",
       agent: "SomeNewApp",
@@ -1019,5 +1024,23 @@ test.describe("which app is calling", () => {
     expect(mcpClientFromUserAgent(`${"x".repeat(200)}/1`).agent).toHaveLength(
       40,
     );
+  });
+});
+
+test.describe("a refused token's expiry", () => {
+  const tokenWith = (payload: unknown) =>
+    `h.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.s`;
+  const NOW = 1_800_000_000_000;
+
+  test("is read from the token's own exp, to tell a routine refresh from a broken sign-in", () => {
+    expect(jwtLooksExpired(tokenWith({ exp: NOW / 1000 - 1 }), NOW)).toBe(true);
+    expect(jwtLooksExpired(tokenWith({ exp: NOW / 1000 + 60 }), NOW)).toBe(
+      false,
+    );
+    // No readable exp is not "expired": that refusal is worth reporting.
+    expect(jwtLooksExpired(tokenWith({}), NOW)).toBe(false);
+    expect(jwtLooksExpired(tokenWith({ exp: "soon" }), NOW)).toBe(false);
+    expect(jwtLooksExpired("a.b.c", NOW)).toBe(false);
+    expect(jwtLooksExpired("junk", NOW)).toBe(false);
   });
 });
