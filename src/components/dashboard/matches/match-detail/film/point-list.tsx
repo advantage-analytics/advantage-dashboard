@@ -637,7 +637,7 @@ export const PointList = memo(function PointList({
             clear (`FollowPill`). */}
               <div
                 ref={listRef}
-                className="flex min-h-0 flex-1 flex-col overflow-y-auto [&:has(+[data-follow-pill-room])]:pb-12"
+                className="relative flex min-h-0 flex-1 flex-col overflow-y-auto [&:has(+[data-follow-pill-room])]:pb-12"
               >
                 {groups.map((group) => (
                   <div key={group.key} className="flex flex-col">

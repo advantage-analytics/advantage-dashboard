@@ -196,8 +196,14 @@ export function DashboardShell({
                   {/* The gutter is reserved even when nothing overflows: with
                     always-visible scrollbars, a page whose height changes (a
                     skeleton swapping for its rows) would otherwise gain and
-                    lose 15px of width and slide every fluid table column. */}
-                  <div className="flex min-w-0 flex-1 flex-col overflow-y-auto scroll-smooth [scrollbar-gutter:stable] motion-reduce:scroll-auto">
+                    lose 15px of width and slide every fluid table column.
+                    `relative` makes this column the containing block for
+                    anything absolutely positioned inside a page that has no
+                    positioned parent of its own (an `sr-only` label, most
+                    often). Without it such an element is laid out against the
+                    document, escapes this scroller, and lets the whole shell
+                    scroll up into blank page background. */}
+                  <div className="relative flex min-w-0 flex-1 flex-col overflow-y-auto scroll-smooth [scrollbar-gutter:stable] motion-reduce:scroll-auto">
                     <Header activitySlot={activitySlot} greeting={greeting} />
                     {/* Grows to fill whatever the header leaves, so a page shorter
                     than the viewport can still push its own footer to the

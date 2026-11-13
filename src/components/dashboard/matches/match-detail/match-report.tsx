@@ -66,7 +66,7 @@ export function MatchReportRail({
   return (
     <aside
       aria-label={label}
-      className="flex min-h-0 [flex:0_0_300px] flex-col overflow-y-auto border-r border-[var(--border-hairline)] bg-[var(--surface-card)]"
+      className="relative flex min-h-0 [flex:0_0_300px] flex-col overflow-y-auto border-r border-[var(--border-hairline)] bg-[var(--surface-card)]"
     >
       {children}
     </aside>
@@ -89,6 +89,10 @@ export function MatchReportRailFooter({ children }: { children: ReactNode }) {
  * not to the window. It is the only unnamed container inside the pane; name it
  * (`@container/report`) if a nested one ever appears.
  *
+ * `relative` (here and on the rail): a scroller that is not a containing block
+ * lets an unanchored `sr-only` label escape it and add blank scroll to whatever
+ * positioned box is next up, or to the document on a share link.
+ *
  * `id="match-report-pane"`: this is the ONE scrollable ancestor for every
  * report view, and the filters drawer (`filter-rail.tsx`) reaches it by this
  * id. A `ref` can't cross this boundary cleanly since the views mount
@@ -102,7 +106,7 @@ export function MatchReportPane({ children }: { children: ReactNode }) {
   return (
     <div
       id="match-report-pane"
-      className="@container flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto"
+      className="@container relative flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto"
       // White, per design-system principle 6 ("the dashboard is white" — the
       // report and its rail are `--surface-card`, and the cards separate by
       // their hairline and shadow). F1 draws this pane on the grey page
