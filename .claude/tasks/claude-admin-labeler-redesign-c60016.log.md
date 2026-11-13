@@ -128,3 +128,16 @@ is the runner's. Newest entries at the bottom.
 2. No spec covers the Teams harness with `view: "pilots"`.
 3. Opening the Pilot players view records a look at the "teams" surface too, clearing its New dots.
 4. `countAdminPilots` is a second query on every Programs-view load.
+
+## T11 · Team loader: player join link and latest matches — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `AdminTeamData` gains `joinLink` (`{ url, mode }` or null, from the program's live `program_join_links` row), `latestMatches` (three newest, same status rule as Admin › Matches) and `matchCount`. Both reads sit in `getAdminTeam`'s `Promise.all` behind the admin check and degrade on failure. Pure mappers in the new `src/lib/data/admin-team-links.ts`; `admin-matches-server.ts` exports `latestMatchesForProgram` and shares `resolvedAnalysis`, `seatNames` and `compareNewestUpload` with the list. `tests/admin-team-links.spec.ts`.
+
+**follow-ups:**
+
+1. `latestMatchesForProgram` reads every match of the program to find the newest three, since `matches` has no `created_at`; a large program wants a SQL-side "newest upload".
+2. `joinLink === null` does not tell "no live link" from "read failed"; add a `joinLinkFailed` flag if the page needs to.
+3. `matchCount` includes practice matches; check it against what Matches filtered to the workspace shows.
+4. The two new reads have run only through their pure mappers, never against real data.

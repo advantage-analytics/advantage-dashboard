@@ -21,12 +21,19 @@ import {
 } from "@/lib/data/schedule-server";
 import { dualScore } from "@/lib/schedule/entry-state";
 import type { EventKind, EventSite } from "@/lib/schedule/types";
-import type {
-  MemberRole,
-  TeamIdentity,
-  TeamInvite,
-  TeamMember,
+import {
+  joinLinkUrl,
+  type MemberRole,
+  type TeamIdentity,
+  type TeamInvite,
+  type TeamMember,
 } from "@/lib/data/team-settings-server";
+import { latestMatchesForProgram } from "@/lib/data/admin-matches-server";
+import {
+  adminTeamJoinLink,
+  type AdminTeamJoinLink,
+  type AdminTeamLatestMatch,
+} from "@/lib/data/admin-team-links";
 import type { ProgramUsage } from "@/lib/data/usage-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
@@ -375,6 +382,16 @@ interface AdminTeamData {
   activity: AdminTeamActivityEntry[];
   /** The current billing month's ledger. */
   usage: ProgramUsage;
+  /**
+   * The live PLAYER join link (`/join/<token>`), or null — for a program with
+   * no live link and for a read that failed alike. Not the coach claim link
+   * (`/claim/<programKey>`), which the page builds from `program.programKey`.
+   */
+  joinLink: AdminTeamJoinLink | null;
+  /** The three newest uploads, newest first. Empty when the read failed. */
+  latestMatches: AdminTeamLatestMatch[];
+  /** Every match filed under the program; null when the read failed. */
+  matchCount: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1108,6 +1125,65 @@ async function readRoster(
 }
 
 // ---------------------------------------------------------------------------
+// Player join link and latest matches
+// ---------------------------------------------------------------------------
+
+/**
+ * The program's live player join link, or null.
+ *
+ * A read and nothing else: no link is minted for a program without one — that
+ * is staff's call, from Settings › Teams. Service role because the table is
+ * staff-only under RLS and an admin is usually not on the program's staff;
+ * `getAdminTeam` has already passed `requireAdminOrNotFound()`.
+ *
+ * The token is stored in plaintext, so the row never reaches a log: a failure
+ * logs the program id and the error message only.
+ */
+async function readJoinLink(
+  admin: SupabaseClient,
+  programId: string,
+): Promise<AdminTeamJoinLink | null> {
+  const { data, error } = await admin
+    .from("program_join_links")
+    .select("token, mode")
+    .eq("program_id", programId)
+    .is("revoked_at", null)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[admin team] could not read join link", {
+      programId,
+      error: error.message,
+    });
+    return null;
+  }
+  return adminTeamJoinLink(
+    data as { token: string; mode: string } | null,
+    joinLinkUrl,
+  );
+}
+
+/**
+ * The three newest matches and the program's match count, resolved by
+ * `admin-matches-server` so a match reads the same here as on Admin › Matches.
+ * That loader throws on a failed read; here it degrades to an empty list and
+ * an unknown count.
+ */
+async function readLatestMatches(
+  programId: string,
+): Promise<{ matches: AdminTeamLatestMatch[]; total: number | null }> {
+  try {
+    return await latestMatchesForProgram(programId);
+  } catch (error) {
+    console.error("[admin team] could not read latest matches", {
+      programId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { matches: [], total: null };
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Schedule — `readScheduleWithClient`, under the service role
 // ---------------------------------------------------------------------------
 
@@ -1242,6 +1318,8 @@ export const getAdminTeam = cache(
       conference,
       activity,
       contactsResult,
+      joinLink,
+      latest,
     ] = await Promise.all([
       crestUrl(row.crest_path),
       admin
@@ -1291,6 +1369,8 @@ export const getAdminTeam = cache(
         .select("id, email, name, role, source, was_emailed")
         .eq("program_id", programId)
         .order("email", { ascending: true }),
+      readJoinLink(admin, programId),
+      readLatestMatches(programId),
     ]);
 
     if (claimResult.error) {
@@ -1462,6 +1542,9 @@ export const getAdminTeam = cache(
       conference,
       activity,
       usage,
+      joinLink,
+      latestMatches: latest.matches,
+      matchCount: latest.total,
     };
   },
 );

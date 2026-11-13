@@ -153,7 +153,7 @@ ready).
 
 ## T11 · Team loader: player join link and latest matches
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** guess — src/lib/data/admin-team-server.ts, src/lib/data/admin-matches-server.ts, tests/admin-team-links.spec.ts (new)
 - **done when:**

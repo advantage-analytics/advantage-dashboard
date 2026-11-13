@@ -35,6 +35,14 @@ import { getMatchViews30d } from "@/lib/services/posthog/match-views-server";
 import { playedSets, type ScoreLineSet } from "@/lib/ui/score-format";
 import { jobVideoSeconds } from "@/lib/data/practice-server";
 import type { AdminLabelState } from "@/lib/data/admin-match-progress";
+import {
+  ADMIN_TEAM_LATEST_MATCHES,
+  adminTeamLatestMatches,
+  compareNewestUpload,
+  newestUploads,
+  type AdminTeamLatestMatch,
+  type AdminTeamMatchBucket,
+} from "@/lib/data/admin-team-links";
 
 /**
  * Admin › Matches — every match on Advantage, personal and team, through the
@@ -59,7 +67,7 @@ import type { AdminLabelState } from "@/lib/data/admin-match-progress";
 export const ADMIN_MATCHES_CAP = 2000;
 
 /** The page's filter buckets — the view pills. */
-export type AdminMatchBucket = "uploading" | "analyzing" | "failed" | "settled";
+export type AdminMatchBucket = AdminTeamMatchBucket;
 
 export type AdminMatchWorkspace =
   | {
@@ -285,7 +293,9 @@ function storedSets(score: MatchScore | null): ScoreLineSet[] {
  * in seat two, else seat one — the seat every upload path writes the athlete
  * into (a personal player's own login, a program's roster player).
  */
-function playerSeat(row: DbListMatch): "player1" | "player2" {
+function playerSeat(
+  row: Pick<DbListMatch, "created_by" | "player2_id">,
+): "player1" | "player2" {
   return row.created_by && row.created_by === row.player2_id
     ? "player2"
     : "player1";
@@ -421,17 +431,41 @@ async function analyses(
   return new Map(maps.flatMap((map) => [...map]));
 }
 
-function compareRows(
-  a: { uploadedAt: string | null; date: string | null; id: string },
-  b: { uploadedAt: string | null; date: string | null; id: string },
-): number {
-  if (a.uploadedAt && b.uploadedAt) {
-    const diff = Date.parse(b.uploadedAt) - Date.parse(a.uploadedAt);
-    if (diff !== 0) return diff;
-  } else if (a.uploadedAt) return -1;
-  else if (b.uploadedAt) return 1;
-  const day = (b.date ?? "").localeCompare(a.date ?? "");
-  return day !== 0 ? day : b.id.localeCompare(a.id);
+/**
+ * A match's analysis as every admin surface reads it: the job's, promoted to
+ * published once statistics exist. The one status rule — Admin › Matches and
+ * the team page's latest matches both come through here.
+ */
+function resolvedAnalysis(
+  jobAnalysis: Map<string, MatchAnalysis>,
+  withStats: Set<string>,
+  m: Pick<DbListMatch, "id" | "source_provider">,
+): MatchAnalysis {
+  const base = analysisFor(jobAnalysis, {
+    id: m.id,
+    sourceProvider: m.source_provider ?? undefined,
+  });
+  return {
+    ...base,
+    status: withStatsPublished(base.status, withStats.has(m.id)),
+  };
+}
+
+/** The row's two names, the "Player" seat first (`playerSeat`). */
+function seatNames(
+  m: Pick<
+    DbListMatch,
+    "created_by" | "player2_id" | "player1_name" | "player2_name"
+  >,
+): { seat: "player1" | "player2"; player: string; opponent: string } {
+  const seat = playerSeat(m);
+  const p1 = m.player1_name?.trim() || "Unknown player";
+  const p2 = m.player2_name?.trim() || "Unknown opponent";
+  return {
+    seat,
+    player: seat === "player1" ? p1 : p2,
+    opponent: seat === "player1" ? p2 : p1,
+  };
 }
 
 /**
@@ -472,7 +506,7 @@ export async function listAdminMatches(
   const ordered = matches
     .map((m) => ({ m, uploadedAt: moments.uploadedAt.get(m.id) ?? null }))
     .sort((a, b) =>
-      compareRows(
+      compareNewestUpload(
         { uploadedAt: a.uploadedAt, date: a.m.date, id: a.m.id },
         { uploadedAt: b.uploadedAt, date: b.m.date, id: b.m.id },
       ),
@@ -480,7 +514,7 @@ export async function listAdminMatches(
     .slice(0, ADMIN_MATCHES_CAP);
 
   const rows = ordered.map(({ m, uploadedAt }): AdminMatchRow => {
-    const seat = playerSeat(m);
+    const { seat, player, opponent } = seatNames(m);
     const sets = playedSets(storedSets(m.score)).map((set) =>
       seat === "player1"
         ? set
@@ -492,14 +526,7 @@ export async function listAdminMatches(
           },
     );
     const winner = scoreWinner(m.score);
-    const base = analysisFor(jobAnalysis, {
-      id: m.id,
-      sourceProvider: m.source_provider ?? undefined,
-    });
-    const analysis = {
-      ...base,
-      status: withStatsPublished(base.status, moments.withStats.has(m.id)),
-    };
+    const analysis = resolvedAnalysis(jobAnalysis, moments.withStats, m);
     // The job `analysis` describes; else the newest, for its video length.
     const job =
       (analysis.jobId && moments.jobs.get(analysis.jobId)) ||
@@ -507,12 +534,10 @@ export async function listAdminMatches(
     const bucket = bucketFor(analysis);
     const verification = verificationFor(m);
     const session = sessions.get(m.id);
-    const p1 = m.player1_name?.trim() || "Unknown player";
-    const p2 = m.player2_name?.trim() || "Unknown opponent";
     return {
       id: m.id,
-      player: seat === "player1" ? p1 : p2,
-      opponent: seat === "player1" ? p2 : p1,
+      player,
+      opponent,
       won: winner === null ? null : winner === seat,
       sets,
       workspace:
@@ -544,6 +569,88 @@ export async function listAdminMatches(
   });
 
   return { rows, total: matches.length, viewsMeasured: views !== null };
+}
+
+/** What the team page's latest matches read off a `matches` row. */
+type DbProgramMatch = Pick<
+  DbListMatch,
+  | "id"
+  | "player2_id"
+  | "player1_name"
+  | "player2_name"
+  | "created_by"
+  | "date"
+  | "source_provider"
+>;
+
+/**
+ * One program's newest matches and how many it has in all — the team page's
+ * "latest matches" block. Same upload moment, seat rule, analysis resolution
+ * and bucket as `listAdminMatches`, by calling the same helpers; nothing here
+ * decides a status of its own.
+ *
+ * Every match of the program is read for its upload moment (`matches` has no
+ * `created_at`, so "newest" cannot be an `order by`), but the analysis is
+ * resolved only for the few that are kept. Throws when a read fails — the
+ * caller decides how the page degrades.
+ */
+export async function latestMatchesForProgram(
+  programId: string,
+  limit: number = ADMIN_TEAM_LATEST_MATCHES,
+): Promise<{ matches: AdminTeamLatestMatch[]; total: number }> {
+  await requireAdminOrNotFound();
+  const db = createAdminClient();
+
+  const matches = await readAllPages<DbProgramMatch>(
+    db
+      .from("matches")
+      .select(
+        "id, player2_id, player1_name, player2_name, created_by, date, source_provider",
+      )
+      .eq("program_id", programId)
+      .order("id")
+      .returns<DbProgramMatch[]>(),
+    "program matches read failed",
+  );
+  if (matches.length === 0) return { matches: [], total: 0 };
+
+  const moments = await uploadMoments(
+    db,
+    matches.map((m) => m.id),
+  );
+  const newest = newestUploads(
+    matches.map((m) => ({
+      m,
+      id: m.id,
+      date: m.date,
+      uploadedAt: moments.uploadedAt.get(m.id) ?? null,
+    })),
+    limit,
+  );
+  const jobAnalysis = await analyses(
+    db,
+    newest.map((row) => row.id),
+  );
+
+  return {
+    total: matches.length,
+    matches: adminTeamLatestMatches(
+      newest.map(({ m, id, date, uploadedAt }) => {
+        const analysis = resolvedAnalysis(jobAnalysis, moments.withStats, m);
+        const { player, opponent } = seatNames(m);
+        return {
+          id,
+          date,
+          uploadedAt,
+          player,
+          opponent,
+          analysis,
+          bucket: bucketFor(analysis),
+        };
+      }),
+      limit,
+    ),
+  };
 }
 
 /**
