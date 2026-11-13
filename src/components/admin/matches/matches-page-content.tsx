@@ -534,9 +534,15 @@ function MatchRow({
 /**
  * The row's one status mark and its words — `RowLifecycle`'s vocabulary on a
  * single line: an upload's percentage rides beside the word rather than as a
- * track beneath it, which would make the row two lines.
+ * track beneath it, which would make the row two lines. Exported for the team
+ * page's latest matches, which pass `verification: null` (its loader reads no
+ * verification) and so print the plain status words.
  */
-function MatchStatus({ row }: { row: AdminMatchRow }) {
+export function MatchStatus({
+  row,
+}: {
+  row: Pick<AdminMatchRow, "analysis" | "verification">;
+}) {
   const { analysis, verification } = row;
   const { status } = analysis;
 
@@ -611,7 +617,13 @@ function VideoHours({ seconds }: { seconds: number | null }) {
  * ("Oct 27", "Oct 27, 2025"). A moment in the viewer's zone, so it is drawn
  * in the browser only (`useIsClient`, as `TwoLineDate` does).
  */
-function UploadedAt({ at, fresh }: { at: string | null; fresh: boolean }) {
+export function UploadedAt({
+  at,
+  fresh,
+}: {
+  at: string | null;
+  fresh: boolean;
+}) {
   const isClient = useIsClient();
   if (!at) {
     return <span className="text-[12px] text-[var(--ink-400)]">—</span>;

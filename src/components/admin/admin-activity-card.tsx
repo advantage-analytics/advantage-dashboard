@@ -9,9 +9,9 @@ import type { AdminTeamActivityEntry } from "@/lib/data/admin-team-server";
 /**
  * Admin › Teams › `#activity` — the Activity log card (T19).
  *
- * Not on the canvas: `TeamPage.dc.html` never drew this card, it exists so
- * the `Activity log` pill (`team-sections.ts`) lands somewhere real instead
- * of the `TeamSectionPlaceholder`. Shell and row rhythm match the other main
+ * Not on the canvas: `TeamPage.dc.html` never drew this card. It is the
+ * `?view=activity` view (`team-sections.ts`), reached from the team page's
+ * activity link. Shell and row rhythm match the other main
  * -column cards on this page — `SettingsCard` + `SettingsCardTitle`, rows
  * separated by a top hairline — rather than inventing a new one.
  *

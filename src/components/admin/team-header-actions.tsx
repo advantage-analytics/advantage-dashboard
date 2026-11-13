@@ -4,7 +4,6 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
 
-import { AdminTeamDetailsDialog } from "@/components/admin/admin-team-details-dialog";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { adminRemoveProgramCrest } from "@/lib/services/programs/admin-team-actions";
 import { actionRejected } from "@/lib/ui/action-rejected";
@@ -13,13 +12,15 @@ import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
 /**
- * The two controls at the right of the Admin › Teams detail header: the
- * outline `Edit details` button and the `⋯` menu beside it.
+ * The `⋯` menu at the right of the Admin › Teams detail header.
+ *
+ * `Edit details` used to sit beside it; it moved to the Details section
+ * (`admin-details-card.tsx`) so the page has one button for the one form.
  *
  * Its own client component rather than markup inside `team-page-header.tsx`,
  * which is a Server Component and stays one — it reads `programSubtitle` from
- * a `*-server.ts` module, and both of these controls need state (a dialog, a
- * popover, a pending action).
+ * a `*-server.ts` module, and this control needs state (a popover, a pending
+ * action).
  *
  * ── The menu holds three rows and no fourth ─────────────────────────────────
  * `Remove crest`, `Change conference`, `View in Teams list`. Nothing
@@ -45,7 +46,6 @@ import { cn } from "@/lib/utils";
  */
 export function TeamHeaderActions({ program }: { program: AdminTeamProgram }) {
   const router = useRouter();
-  const [editing, setEditing] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [removing, startRemoving] = useTransition();
@@ -63,14 +63,6 @@ export function TeamHeaderActions({ program }: { program: AdminTeamProgram }) {
 
   return (
     <div className="relative flex shrink-0 items-center gap-2.5">
-      <button
-        type="button"
-        className={advButton("outline", "md")}
-        onClick={() => setEditing(true)}
-      >
-        Edit details
-      </button>
-
       <FloatMenu
         open={menuOpen}
         onOpenChange={setMenuOpen}
@@ -81,7 +73,7 @@ export function TeamHeaderActions({ program }: { program: AdminTeamProgram }) {
             type="button"
             aria-label="More team actions"
             aria-expanded={menuOpen}
-            className={cn(advButton("outline", "md"), "size-9 p-0")}
+            className={cn(advButton("outline", "sm"), "size-8 p-0")}
           >
             <MoreHorizontal
               className="size-[15px]"
@@ -113,12 +105,6 @@ export function TeamHeaderActions({ program }: { program: AdminTeamProgram }) {
           }}
         />
       </FloatMenu>
-
-      <AdminTeamDetailsDialog
-        program={program}
-        open={editing}
-        onOpenChange={setEditing}
-      />
 
       {error && (
         <p

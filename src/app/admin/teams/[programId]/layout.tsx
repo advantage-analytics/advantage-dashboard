@@ -1,26 +1,21 @@
 import { notFound } from "next/navigation";
 
 import { AdminPage } from "@/components/admin/admin-page";
-import { TeamPageHeader } from "@/components/admin/team-page-header";
 import { getAdminTeam } from "@/lib/data/admin-team-server";
 
 /**
- * The Admin › Teams detail frame — the program's identity, above the one
- * page that holds everything else about it.
+ * The Admin › Teams detail frame — the centred column the page sits in.
  *
- * The tab bar this layout used to render is gone: the five sub-routes behind
- * it were collapsed into anchored sections of `page.tsx`, so what is left
- * here is the header and the column it sits in. The layout survives the
- * collapse because the header is genuinely frame — it is the answer to
- * "which program am I looking at", which no section owns.
+ * "Pages sit centred in their column. Not pushed to the left edge, not
+ * stretched edge to edge" (the owner, `2026-11-12-admin-strip/README.md`):
+ * the column is Today's 928px — the artboard's 1040px main less its gutters —
+ * centred inside `AdminPage`'s padding, its blocks 40px apart as the artboard
+ * stacks them. The header is the page's own (`page.tsx`), since it carries
+ * this month's hours and sits above every view.
  *
  * `getAdminTeam()` is `cache()`d, so this and the page beneath it share one
- * set of round trips rather than paying for the program twice.
- *
- * `requireAdminOrNotFound()` already runs inside `getAdminTeam()`, so this
- * layout does not re-gate on top of it — an unknown `programId` and a
- * non-admin viewer both resolve to the same `notFound()` a program row would
- * never distinguish for an admin anyway.
+ * set of round trips. `requireAdminOrNotFound()` already runs inside it, so
+ * an unknown `programId` and a non-admin viewer both resolve to `notFound()`.
  */
 export default async function AdminTeamLayout({
   children,
@@ -38,14 +33,9 @@ export default async function AdminTeamLayout({
 
   return (
     <AdminPage>
-      {/* The Overview pill's anchor — the top of the page, which is the
-          header rather than any one section. */}
-      <div id="top">
-        <TeamPageHeader program={data.program} claim={data.claim} />
+      <div className="mx-auto flex w-full max-w-[928px] flex-col gap-10">
+        {children}
       </div>
-      {/* The canvas' `.page` stacks its blocks 24px apart; `AdminPage` owns
-          the 28/56/72 padding, this owns the rhythm inside it. */}
-      <div className="flex flex-col gap-6 pt-6">{children}</div>
     </AdminPage>
   );
 }

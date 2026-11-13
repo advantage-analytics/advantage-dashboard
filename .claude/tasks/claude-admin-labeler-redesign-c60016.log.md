@@ -141,3 +141,16 @@ is the runner's. Newest entries at the bottom.
 2. `joinLink === null` does not tell "no live link" from "read failed"; add a `joinLinkFailed` flag if the page needs to.
 3. `matchCount` includes practice matches; check it against what Matches filtered to the workspace shows.
 4. The two new reads have run only through their pure mappers, never against real data.
+
+## T12 · Team detail: one centred column — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** the team page is one centred column (header, Details, People, Latest matches, activity link); `team-section-pills.tsx` and the 380px rail are gone. The header keeps the crest control and gains `TeamHours` (bar plus "Add hours" to `?view=usage`). `AdminDetailsCard` is a row of facts with one "Edit details" button and the player and coach links with Copy; the Conference card sits beneath it. New `TeamLatestMatches` links to `/admin/matches?program=`. `team-sections.ts` is now the `?view=` map (schedule, usage, activity, people; roster and unknown fall back to the default), pinned by `tests/admin-team-views.spec.ts`.
+
+**follow-ups:**
+
+1. The Conference card is still a full bordered card under Details; the artboard draws it as one fact with an inline Change.
+2. `team-latest-matches.tsx` imports `MatchStatus` and `UploadedAt` from the large `matches-page-content.tsx`; a small shared module would trim the team page's bundle.
+3. Details dropped the Program key fact (it is inside the coach link).
+4. Non-default views still render the full header, hours bar included, above their card.

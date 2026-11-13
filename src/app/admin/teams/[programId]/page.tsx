@@ -1,6 +1,9 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { AdminActivityCard } from "@/components/admin/admin-activity-card";
+import { activityLabel } from "@/components/admin/admin-activity-labels";
 import { AdminConferenceCard } from "@/components/admin/admin-conference-card";
 import { AdminContactsCard } from "@/components/admin/admin-contacts-card";
 import { AdminDetailsCard } from "@/components/admin/admin-details-card";
@@ -10,29 +13,38 @@ import { AdminRosterCard } from "@/components/admin/admin-roster-card";
 import { AdminScheduleCard } from "@/components/admin/admin-schedule-card";
 import { AdminUsageCard } from "@/components/admin/admin-usage-card";
 import { PilotUsageCard } from "@/components/admin/pilot-usage-card";
-import { quotaTierFor } from "@/lib/services/splitstep/quota";
-import { TeamSectionView } from "@/components/admin/team-section-pills";
+import { TeamLatestMatches } from "@/components/admin/team-latest-matches";
+import { TeamPageHeader } from "@/components/admin/team-page-header";
 import {
+  TEAM_PEOPLE_CARDS,
   teamViewFrom,
+  teamViewHref,
   teamViewTitle,
-  type TeamSectionId,
+  type TeamCardId,
 } from "@/components/admin/team-sections";
 import { getAdminTeam } from "@/lib/data/admin-team-server";
+import { shortDate } from "@/lib/data/match-utils";
 import { conferenceOptionsFor } from "@/lib/services/programs/admin-program-actions";
+import { quotaTierFor } from "@/lib/services/splitstep/quota";
 import { emailOrigin } from "@/lib/site-url";
 
+type ViewParam = { view?: string | string[] };
+
+function viewParam(view: ViewParam["view"]): string | null {
+  return typeof view === "string" ? view : null;
+}
+
 /**
- * "Centennial High School · Roster" — the program, then the view when it is
- * not Overview. The layout's `getAdminTeam` call is the same `cache()`d call,
- * so this costs no extra read. `TeamSectionView` keeps the title in step
- * after a client-side switch.
+ * "Centennial High School · Usage" — the program, then the view when it is
+ * not the default. The layout's `getAdminTeam` call is the same `cache()`d
+ * call, so this costs no extra read.
  */
 export async function generateMetadata({
   params,
   searchParams,
 }: {
   params: Promise<{ programId: string }>;
-  searchParams: Promise<{ view?: string | string[] }>;
+  searchParams: Promise<ViewParam>;
 }) {
   const [{ programId }, { view }] = await Promise.all([params, searchParams]);
   const data = await getAdminTeam(programId);
@@ -40,141 +52,242 @@ export async function generateMetadata({
   return {
     title: teamViewTitle(
       data.program.schoolName,
-      teamViewFrom(typeof view === "string" ? view : null),
+      teamViewFrom(viewParam(view)),
     ),
   };
 }
 
 /**
- * The Admin › Teams detail page — one program, on one page.
+ * The Admin › Teams detail page — one program, in one centred column
+ * (`docs/superpowers/specs/2026-11-12-admin-strip/TeamDetail.dc.html`).
  *
- * It used to be six routes: an Overview with three cards and five sibling
- * tabs, four of which rendered `ComingSoon`. The canvas
- * (`docs/superpowers/specs/2026-09-18-admin-team-page/TeamPage.dc.html`)
- * draws them as one page instead, and it is right to: an admin opening this
- * console is investigating a support case, and every tab boundary was a
- * round trip between two facts that only mean something next to each other —
- * who owns the program, and what it has spent. The tabs became the pill row
- * at the top, which filters the main column in place (`?view=`, decision
- * 2026-09-26) while the rail stays, and the old sub-route URLs redirect to
- * the matching view (`next.config.ts`).
+ * The default view reads top to bottom: the header (crest upload, name,
+ * facts, this month's hours with `Add hours`), Details (one row of facts, one
+ * `Edit details`, the two join links, and the Conference card with its own
+ * `Change` control), People, the three latest matches with a link to Matches
+ * filtered to this workspace, and a link to the activity log. No pill row and
+ * no rail: "keep it quiet" and "pages sit centred" are the owner's words.
  *
- * **The grid is settled in `TeamSectionView`.** `minmax(0,1fr) 380px`, 24px
- * gap, `items-start`, each column a 24px stack — the canvas' `.cols`/`.col`.
- * Tasks that fill the empty sections put a card inside the `<section>` that
- * is already there; none of them re-cuts this.
+ * The cards the artboard has no place for stay behind `?view=`
+ * (`team-sections.ts`): `schedule`, `usage` (Pilot + Usage — where `Add
+ * hours` goes), `activity`, and `people` (the People cards plus Contacts).
+ * Each renders alone under the header with a link back. `roster` and any
+ * unknown value are the default — the old `/admin/teams/<id>/<slug>` routes
+ * still redirect to `?view=<slug>` (`next.config.ts`), so every slug lands.
  *
- * `items-start` on purpose: a short card stretched to match a tall neighbour
- * traps empty surface at its foot, which reads worse than uneven columns.
- *
- * It calls `getAdminTeam()` again rather than taking the layout's copy. Next
- * gives a layout no way to hand data to `{children}`, and the alternative —
- * threading it through a context provider — is the pattern `matches/[matchId]`
- * uses because that page's data is read by components five levels deep. Here
- * it is read by cards this file renders directly, so the cheaper half of that
- * convention is enough: `getAdminTeam` is wrapped in React `cache()`, so the
- * layout's call and this one are the same call, deduped per request.
- *
- * `notFound()` for the null case even though the layout already did: the
- * layout is not guaranteed to have run first, and this narrows the type
- * besides.
+ * It calls `getAdminTeam()` again rather than taking the layout's copy:
+ * `getAdminTeam` is wrapped in React `cache()`, so the two are the same call,
+ * deduped per request. `notFound()` for the null case even though the layout
+ * already did: the layout is not guaranteed to have run first, and this
+ * narrows the type besides.
  */
 export default async function AdminTeamPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ programId: string }>;
+  searchParams: Promise<ViewParam>;
 }) {
-  const { programId } = await params;
+  const [{ programId }, { view: rawView }] = await Promise.all([
+    params,
+    searchParams,
+  ]);
   const data = await getAdminTeam(programId);
 
   if (!data) {
     notFound();
   }
 
+  const view = teamViewFrom(viewParam(rawView));
+
+  // The same URL the claim-invite email carries (`claim.ts`); only a
+  // directory program has a key, so a custom org has no coach link.
+  const coachLink = data.program.programKey
+    ? `${emailOrigin()}/claim/${encodeURIComponent(data.program.programKey)}`
+    : null;
+
+  /** Each card a view can show, built only when that view asks for it. */
+  const card = (id: TeamCardId): React.ReactNode => {
+    switch (id) {
+      case "requests":
+        return (
+          <AdminRequestsCard
+            joinRequests={data.joinRequests}
+            claim={data.claim}
+          />
+        );
+      case "people":
+        return (
+          <AdminPeopleCard
+            programId={programId}
+            programName={data.program.schoolName}
+            members={data.members}
+            invites={data.invites}
+            seats={data.seats}
+          />
+        );
+      case "roster":
+        return (
+          <AdminRosterCard
+            programId={programId}
+            roster={data.roster}
+            seats={data.seats}
+          />
+        );
+      case "contacts":
+        return (
+          <AdminContactsCard
+            contacts={data.contacts}
+            failed={data.contactsFailed}
+            joinLink={coachLink}
+          />
+        );
+      case "schedule":
+        return <AdminScheduleCard schedule={data.schedule} />;
+      case "pilot":
+        return (
+          <PilotUsageCard
+            programId={programId}
+            programName={data.program.schoolName}
+            usage={data.usage}
+            pilot={data.pilot}
+            orgType={data.program.orgType}
+            pilotEligible={data.program.pilotEligible}
+            teamPool={
+              quotaTierFor({
+                kind: "team",
+                orgType: data.program.orgType,
+                pilotEligible: data.program.pilotEligible,
+              }) === "program"
+            }
+          />
+        );
+      case "usage":
+        return (
+          <AdminUsageCard
+            usage={data.usage}
+            orgType={data.program.orgType}
+            pilotEligible={data.program.pilotEligible}
+            members={data.members}
+          />
+        );
+      case "activity":
+        return <AdminActivityCard activity={data.activity} />;
+    }
+  };
+
+  const header = (
+    <TeamPageHeader
+      program={data.program}
+      claim={data.claim}
+      usage={data.usage}
+    />
+  );
+
+  if (view.id !== "overview") {
+    return (
+      <>
+        {header}
+        <div className="flex flex-col gap-4">
+          <Link
+            href={teamViewHref(programId, "overview")}
+            className="inline-flex items-center gap-1 self-start text-[12px] text-[var(--ink-600)] transition-colors duration-200 hover:text-[var(--ink-900)]"
+          >
+            <ChevronLeft
+              aria-hidden="true"
+              className="size-3"
+              strokeWidth={1.75}
+            />
+            Back to {data.program.schoolName}
+          </Link>
+          <h2 className="text-[14px] font-medium text-[var(--ink-900)]">
+            {view.label}
+          </h2>
+          {view.cards.map((id) => (
+            <section key={id} id={id} className="scroll-mt-16">
+              {card(id)}
+            </section>
+          ))}
+        </div>
+      </>
+    );
+  }
+
   // The Conference card's `Change` menu — the create dialog's own list, for
   // the program's division (or the conference's, when the program row has
   // none). Read here rather than on open so the menu is never empty for a
-  // beat while it loads.
+  // beat while it loads. Only the default view shows the card.
   const conferenceOptions = await conferenceOptionsFor(
     data.program.division ?? data.conference?.division ?? null,
   );
 
-  /**
-   * Every section's card, rendered here on the server. `TeamSectionView`
-   * picks which of them each view shows (`team-sections.ts`).
-   */
-  const cards: Record<TeamSectionId, React.ReactNode> = {
-    people: (
-      <div className="flex flex-col gap-6">
-        <AdminPeopleCard
-          programId={programId}
-          programName={data.program.schoolName}
-          members={data.members}
-          invites={data.invites}
-          seats={data.seats}
-        />
-        <AdminContactsCard
-          contacts={data.contacts}
-          failed={data.contactsFailed}
-          // The same URL the claim-invite email carries (`claim.ts`); only a
-          // directory program has a key, so a custom org has no link.
-          joinLink={
-            data.program.programKey
-              ? `${emailOrigin()}/claim/${encodeURIComponent(data.program.programKey)}`
-              : null
-          }
-        />
-      </div>
-    ),
-    requests: (
-      <AdminRequestsCard joinRequests={data.joinRequests} claim={data.claim} />
-    ),
-    roster: (
-      <AdminRosterCard
-        programId={programId}
-        roster={data.roster}
-        seats={data.seats}
-      />
-    ),
-    schedule: <AdminScheduleCard schedule={data.schedule} />,
-    activity: <AdminActivityCard activity={data.activity} />,
-    pilot: (
-      <PilotUsageCard
-        programId={programId}
-        programName={data.program.schoolName}
-        usage={data.usage}
-        pilot={data.pilot}
-        orgType={data.program.orgType}
-        pilotEligible={data.program.pilotEligible}
-        teamPool={
-          quotaTierFor({
-            kind: "team",
-            orgType: data.program.orgType,
-            pilotEligible: data.program.pilotEligible,
-          }) === "program"
-        }
-      />
-    ),
-    usage: (
-      <AdminUsageCard
-        usage={data.usage}
-        orgType={data.program.orgType}
-        pilotEligible={data.program.pilotEligible}
-        members={data.members}
-      />
-    ),
-    conference: (
-      <AdminConferenceCard
-        programId={programId}
-        conference={data.conference}
-        currentLabel={data.program.conference}
-        options={conferenceOptions}
-      />
-    ),
-    details: <AdminDetailsCard program={data.program} />,
-  };
+  const lastActivity = data.activity[0] ?? null;
 
   return (
-    <TeamSectionView programName={data.program.schoolName} cards={cards} />
+    <>
+      {header}
+
+      <section
+        id="details"
+        aria-label="Details"
+        className="flex flex-col gap-4"
+      >
+        <AdminDetailsCard
+          program={data.program}
+          playerLink={data.joinLink}
+          coachLink={coachLink}
+        />
+        {/* `#conference` is the header's `⋯ › Change conference` anchor. */}
+        <div id="conference" className="scroll-mt-16">
+          <AdminConferenceCard
+            programId={programId}
+            conference={data.conference}
+            currentLabel={data.program.conference}
+            options={conferenceOptions}
+          />
+        </div>
+      </section>
+
+      <section
+        id="people"
+        aria-labelledby="team-people"
+        className="flex flex-col gap-3"
+      >
+        <h2
+          id="team-people"
+          className="text-[14px] font-medium text-[var(--ink-900)]"
+        >
+          People
+        </h2>
+        <div className="flex flex-col gap-6">
+          {TEAM_PEOPLE_CARDS.map((id) => (
+            <div key={id}>{card(id)}</div>
+          ))}
+        </div>
+      </section>
+
+      <TeamLatestMatches
+        programId={programId}
+        matches={data.latestMatches}
+        matchCount={data.matchCount}
+      />
+
+      <Link
+        href={teamViewHref(programId, "activity")}
+        className="inline-flex items-center gap-0.5 self-start text-[12px] text-[var(--ink-600)] transition-colors duration-200 hover:text-[var(--ink-900)]"
+      >
+        Activity log
+        {lastActivity
+          ? ` · last: ${activityLabel(lastActivity.action)}${
+              lastActivity.actorName ? ` by ${lastActivity.actorName}` : ""
+            }, ${shortDate(lastActivity.createdAt)}`
+          : ""}
+        <ChevronRight
+          aria-hidden="true"
+          className="size-3.5 text-[var(--ink-400)]"
+          strokeWidth={1.75}
+        />
+      </Link>
+    </>
   );
 }

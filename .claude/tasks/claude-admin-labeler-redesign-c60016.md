@@ -166,7 +166,7 @@ ready).
 
 ## T12 · Team detail: one centred column
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T11
 - **files:** guess — src/app/admin/teams/[programId]/page.tsx, src/app/admin/teams/[programId]/layout.tsx, src/components/admin/team-page-header.tsx, src/components/admin/team-sections.ts, src/components/admin/team-section-pills.tsx, src/components/admin/admin-details-card.tsx, tests/admin-team-views.spec.ts

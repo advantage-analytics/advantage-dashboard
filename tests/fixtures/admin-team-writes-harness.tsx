@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { AdminConferenceCard } from "@/components/admin/admin-conference-card";
+import { AdminDetailsCard } from "@/components/admin/admin-details-card";
 import { AdminPeopleCard } from "@/components/admin/admin-people-card";
 import { AdminRequestsCard } from "@/components/admin/admin-requests-card";
 import { AdminRosterCard } from "@/components/admin/admin-roster-card";
@@ -29,6 +30,10 @@ const program = {
   crestUrl: "/crest.png",
   orgType: "high_school",
   rosterPublic: false,
+  timeZone: "America/New_York",
+  uploadPolicy: "everyone",
+  eventsPolicy: "staff",
+  staffPageUrl: null,
 } as unknown as AdminTeamProgram;
 
 const member = (
@@ -77,6 +82,7 @@ createRoot(document.getElementById("root")!).render(
         />
         <TeamHeaderActions program={program} />
       </div>
+      <AdminDetailsCard program={program} playerLink={null} coachLink={null} />
       <AdminPeopleCard
         programId={PROGRAM_ID}
         programName={SCHOOL}

@@ -1,63 +1,66 @@
 import { expect, test } from "@playwright/test";
 
 import {
-  TEAM_MAIN_SECTIONS,
-  TEAM_RAIL_SECTIONS,
+  TEAM_PEOPLE_CARDS,
   TEAM_VIEWS,
-  teamRailFor,
   teamViewFrom,
+  teamViewHref,
   teamViewTitle,
 } from "@/components/admin/team-sections";
 
 /**
- * Admin › Teams › the pill row filters the main column (decision
- * 2026-09-26): Overview shows every main card, each other view only its own,
- * and the rail stays — minus any rail card the view has moved into the main
- * column, so nothing renders twice.
+ * Admin › Teams detail — one centred column (T12). The default view is the
+ * composed page; `?view=` shows the cards the artboard has no place for, one
+ * view at a time. `next.config.ts` redirects the five old sub-routes to
+ * `?view=<slug>` (`tests/admin-routes.spec.ts`), so every slug must land.
  */
 test.describe("admin team views", () => {
-  test("no or unknown ?view= is Overview, with every main card", () => {
-    for (const value of [null, undefined, "", "bogus"]) {
+  test("no, unknown or `roster` ?view= is the default view", () => {
+    for (const value of [null, undefined, "", "bogus", "roster"]) {
       const view = teamViewFrom(value);
       expect(view.id).toBe("overview");
-      expect(view.main).toEqual(TEAM_MAIN_SECTIONS);
+      expect(view.cards).toEqual([]);
     }
   });
 
-  test("each view names its own cards; People carries Requests", () => {
-    expect(teamViewFrom("people").main).toEqual(["people", "requests"]);
-    expect(teamViewFrom("roster").main).toEqual(["roster"]);
-    expect(teamViewFrom("schedule").main).toEqual(["schedule"]);
-    expect(teamViewFrom("activity").main).toEqual(["activity"]);
-    expect(teamViewFrom("usage").main).toEqual(["usage"]);
-  });
-
-  test("the rail stays on every view and never repeats a main card", () => {
-    expect(teamRailFor(teamViewFrom(null))).toEqual(TEAM_RAIL_SECTIONS);
-    expect(teamRailFor(teamViewFrom("usage"))).toEqual([
-      "pilot",
-      "conference",
-      "details",
+  test("each other view names its own cards", () => {
+    expect(teamViewFrom("people").cards).toEqual([
+      "requests",
+      "people",
+      "roster",
+      "contacts",
     ]);
-    for (const view of TEAM_VIEWS) {
-      const rail = teamRailFor(view);
-      for (const id of view.main) expect(rail).not.toContain(id);
+    expect(teamViewFrom("schedule").cards).toEqual(["schedule"]);
+    expect(teamViewFrom("usage").cards).toEqual(["pilot", "usage"]);
+    expect(teamViewFrom("activity").cards).toEqual(["activity"]);
+  });
+
+  test("the default People section is today's three cards, Contacts aside", () => {
+    expect(TEAM_PEOPLE_CARDS).toEqual(["requests", "people", "roster"]);
+  });
+
+  test("every old sub-route slug lands on a view", () => {
+    for (const slug of ["people", "roster", "schedule", "usage", "activity"]) {
+      const view = teamViewFrom(slug);
+      expect(TEAM_VIEWS).toContain(view);
+      expect(view.id).toBe(slug === "roster" ? "overview" : slug);
     }
   });
 
-  test("every section shows on Overview (main + rail)", () => {
-    const overview = teamViewFrom(null);
-    expect([...overview.main, ...teamRailFor(overview)].sort()).toEqual(
-      [...TEAM_MAIN_SECTIONS, ...TEAM_RAIL_SECTIONS].sort(),
+  test("view links: the default is the bare path", () => {
+    expect(teamViewHref("p1", "overview")).toBe("/admin/teams/p1");
+    expect(teamViewHref("p1", "usage")).toBe("/admin/teams/p1?view=usage");
+    expect(teamViewHref("p1", "activity")).toBe(
+      "/admin/teams/p1?view=activity",
     );
   });
 
-  test("the title is the program, then the view off Overview", () => {
+  test("the title is the program, then the view off the default", () => {
     expect(teamViewTitle("Centennial High School", teamViewFrom(null))).toBe(
       "Centennial High School",
     );
-    expect(
-      teamViewTitle("Centennial High School", teamViewFrom("roster")),
-    ).toBe("Centennial High School · Roster");
+    expect(teamViewTitle("Centennial High School", teamViewFrom("usage"))).toBe(
+      "Centennial High School · Usage",
+    );
   });
 });
