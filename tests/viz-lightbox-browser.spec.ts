@@ -169,10 +169,11 @@ test("the Points column lists the points behind the marks, headed by game; a row
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}/?tab=shots&cut=serve`);
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("button", { name: "Points" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  // A card opens on Statistics; Points is the second pane.
+  await expect(
+    dialog.getByRole("button", { name: "Statistics" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await dialog.getByRole("button", { name: "Points", exact: true }).click();
   const list = dialog.getByRole("list", { name: "Points" });
   const rows = list.locator("[data-point-id]");
   const n = await rows.count();
@@ -438,6 +439,7 @@ test("3 · narrowing the All serves card: the title stays the card's, the denomi
   await expect(
     dialog.getByRole("heading", { name: "All serves" }),
   ).toBeVisible();
+  await dialog.getByRole("button", { name: "Points", exact: true }).click();
   const count = dialog.getByLabel(/^\d+ of \d+ points$/);
   const read = async () =>
     (await count.getAttribute("aria-label"))!.match(/\d+/g)!.map(Number);
@@ -703,6 +705,8 @@ test("R3·3 · Watch → Video → Back keeps the wall's player and collection",
   );
   // An edited saved view (no `view=` left in its URL) still closes on Saved.
   await page.getByRole("button", { name: "Saved", exact: true }).click();
+  // The Saved wall shows one player's views: "Saved serve" is one of yours.
+  await page.getByRole("button", { name: "You", exact: true }).click();
   await page.getByRole("link", { name: /Saved serve/ }).click();
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Opponent" }).click();
@@ -726,13 +730,13 @@ test("R3·4 · Back/Forward between two saved views starts each fresh: pane, zoo
   await page.goto(`${origin}/?tab=shots&cut=serve&view=sv1`);
   const first = page.getByRole("dialog", { name: "Saved serve" });
   await expect(first).toBeVisible();
-  // Everything that is the view's own: a pick, a zoom, the Statistics pane.
+  // Everything that is the view's own: a pick, a zoom, the Points pane.
   await first
     .getByRole("group", { name: "Filter by outcome" })
     .getByRole("button", { name: /^Won/ })
     .click();
   await first.getByRole("button", { name: "Zoom in" }).click();
-  await first.getByRole("button", { name: "Statistics" }).click();
+  await first.getByRole("button", { name: "Points", exact: true }).click();
   await page.evaluate(() => {
     window.history.pushState(
       null,
@@ -743,20 +747,18 @@ test("R3·4 · Back/Forward between two saved views starts each fresh: pane, zoo
   });
   const second = page.getByRole("dialog", { name: "Saved returns" });
   await expect(second).toBeVisible();
-  await expect(second.getByRole("button", { name: "Points" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(
+    second.getByRole("button", { name: "Statistics" }),
+  ).toHaveAttribute("aria-pressed", "true");
   // Back at its 100% framing: no zoom level showing.
   await expect(second.getByText(/Drag to move around/)).toHaveCount(0);
   await expect(second.locator("[data-viz-filter-strip]")).toHaveCount(0);
   // Back to the first: fresh as well.
   await page.goBack();
   await expect(first).toBeVisible();
-  await expect(first.getByRole("button", { name: "Points" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(
+    first.getByRole("button", { name: "Statistics" }),
+  ).toHaveAttribute("aria-pressed", "true");
   // Back at its 100% framing: no zoom level showing.
   await expect(first.getByText(/Drag to move around/)).toHaveCount(0);
   await expect(
@@ -1436,6 +1438,10 @@ test("with reduced motion the glide is a jump; a Points row glides the court too
   await expect(mark).toHaveAttribute("aria-pressed", "false");
   await mark.focus();
   await page.keyboard.press("0");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Points", exact: true })
+    .click();
   const list = page.getByRole("dialog").getByRole("list", { name: "Points" });
   const row = list.locator("[data-point-id]").last();
   await row.click();
@@ -1494,6 +1500,10 @@ test("a second click on the selected mark watches that one point in the Video ta
   await page.setViewportSize({ width: 1512, height: 982 });
   for (const how of ["click", "enter"] as const) {
     await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watchall`);
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Points", exact: true })
+      .click();
     const stage = page.locator("[data-court-stage]");
     const mark = stage.locator("[data-viz-mark]").first();
     await mark.dispatchEvent("click");
@@ -1542,6 +1552,10 @@ test("a Points row: the lit row says click again to watch, and its second click 
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watchall`);
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Points", exact: true })
+    .click();
   const list = page.getByRole("dialog").getByRole("list", { name: "Points" });
   const row = list.locator("[data-point-id]").first();
   await expect(row).not.toContainText("Click again to watch");
@@ -1558,6 +1572,10 @@ test("a Points row: the lit row says click again to watch, and its second click 
 
   // Without video the lit row says nothing more, and a second click stays.
   await page.goto(`${origin}/?tab=shots&cut=serve`);
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Points", exact: true })
+    .click();
   const plain = list.locator("[data-point-id]").first();
   await plain.click();
   await expect(plain).toHaveAttribute("data-playing", "true");
@@ -1757,4 +1775,24 @@ test("R7·3 · at Full court, a stage that resizes re-fits the whole court: the 
     .not.toBe(before.height);
   // Still the whole court, fitted to the new stage: Full court stays spent.
   await expect(full).toBeDisabled();
+});
+
+test("Reset view puts a zoomed, dragged court back as it opened, and is spent there", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog");
+  const reset = dialog.getByRole("button", { name: "Reset view" });
+  await expect(reset).toBeDisabled();
+  const home = await courtTransform(page);
+  await dialog.getByRole("button", { name: "Zoom in" }).click();
+  await page.keyboard.press("ArrowRight");
+  await expect(dialog.getByText(/Drag to move around/)).toBeVisible();
+  await expect(reset).toBeEnabled();
+  await reset.click();
+  await expect(dialog.getByText(/Drag to move around/)).toHaveCount(0);
+  await expect(reset).toBeDisabled();
+  const back = await courtTransform(page);
+  expect(back.z).toBeCloseTo(home.z, 4);
 });

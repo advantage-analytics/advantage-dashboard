@@ -552,9 +552,15 @@ test("Saved: the workspace's views over the season; opening one names it, and cl
   await page.getByRole("button", { name: "Saved" }).click();
   const saved = page.locator('#root [role="list"][aria-label="Saved views"]');
   await expect(saved).toBeVisible();
-  await expect(saved.getByRole("listitem")).toHaveCount(2);
+  // The Saved wall lists one player's views, the You | Opponent chip's.
+  await expect(saved.getByRole("listitem")).toHaveCount(1);
   await expect(saved).toContainText("Second serves");
+  await expect(saved).not.toContainText("Their rally shots");
+  await page.getByRole("button", { name: "Opponent", exact: true }).click();
+  await expect(saved.getByRole("listitem")).toHaveCount(1);
   await expect(saved).toContainText("Their rally shots");
+  await page.getByRole("button", { name: "You", exact: true }).click();
+  await expect(saved).toContainText("Second serves");
   if (process.env.SEASON_SAVED_SHOT)
     await page.screenshot({ path: process.env.SEASON_SAVED_SHOT });
 

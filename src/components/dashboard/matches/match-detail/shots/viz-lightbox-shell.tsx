@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Maximize, Minus, Plus, X } from "lucide-react";
+import { Maximize, Minus, Plus, RotateCcw, X } from "lucide-react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
@@ -158,6 +158,13 @@ export interface VizLightboxShellProps {
 
   /* ── Words ───────────────────────────────────────────────────────────── */
   title: string;
+  /** The header's own action, immediately left of the close — an open saved
+   *  view's ⋯. Handed the lightbox's Esc step for its tooltip, as the close
+   *  and zoom tooltips get it: an open tooltip is the topmost layer and
+   *  would otherwise take the Esc meant for the lightbox. */
+  headerAction?: (ctx: { onTooltipEscape: () => void }) => ReactNode;
+  /** One line under the subtitle: a change to the view the server refused. */
+  notice?: string;
   subtitle: string;
   /** The strip's sentence for the filters (the shell adds the legend's and a
    *  Statistics row's pick). Empty: no strip unless a pick is on. */
@@ -266,6 +273,8 @@ export function VizLightboxShell({
   matchFor,
   watch,
   title,
+  headerAction,
+  notice,
   subtitle,
   filterPhrases,
   panelActive,
@@ -338,7 +347,8 @@ export function VizLightboxShell({
 
   /** The right column: the points behind the marks, or their statistics.
    *  Statistics alone when the host passes no points. */
-  const [paneState, setPane] = useState<"points" | "stats">("points");
+  // Statistics is the pane a card opens on; Points is one click away.
+  const [paneState, setPane] = useState<"points" | "stats">("stats");
   const pane = pointList ? paneState : "stats";
   /**
    * The legend's one choice (Won · Lost · Out · Ace), local to this card.
@@ -901,34 +911,54 @@ export function VizLightboxShell({
               className="flex items-start gap-2.5 px-6 pt-6 pb-5"
             >
               <div className="flex min-w-0 flex-col gap-1">
-                <DialogPrimitive.Title
-                  ref={titleRef}
-                  tabIndex={-1}
-                  className="m-0 truncate text-[16px] leading-[1.4] font-medium text-[var(--ink-900)] outline-none"
-                >
-                  {pending ? <LightboxTitlePending label={title} /> : title}
-                </DialogPrimitive.Title>
+                <div className="flex min-w-0 items-center gap-2">
+                  <DialogPrimitive.Title
+                    ref={titleRef}
+                    data-lightbox-title=""
+                    tabIndex={-1}
+                    className="m-0 truncate text-[16px] leading-[1.4] font-medium text-[var(--ink-900)] outline-none"
+                  >
+                    {pending ? <LightboxTitlePending label={title} /> : title}
+                  </DialogPrimitive.Title>
+                </div>
                 <p
                   id="viz-lightbox-subtitle"
                   className="m-0 text-[12px] text-[var(--ink-600)]"
                 >
                   {pending ? <LightboxSubtitlePending /> : subtitle}
                 </p>
+                {notice && !pending && (
+                  <p
+                    role="alert"
+                    className="m-0 text-[11px] text-[var(--error)]"
+                  >
+                    {notice}
+                  </p>
+                )}
               </div>
               <span className="flex-1" />
-              <ChromeTooltip
-                label="Close"
-                shortcut="Esc"
-                align="end"
-                onEscapeKeyDown={escapeFromTooltip}
-              >
-                <DialogPrimitive.Close
-                  aria-label="Close"
-                  className={LIGHTBOX_CLOSE_CLASS}
+              {/* The header's chrome, one cluster: the view's ⋯, then close. */}
+              <div className="flex shrink-0 items-center gap-1">
+                {!pending && headerAction && (
+                  <HeaderActionSlot
+                    render={headerAction}
+                    onTooltipEscape={escapeFromTooltip}
+                  />
+                )}
+                <ChromeTooltip
+                  label="Close"
+                  shortcut="Esc"
+                  align="end"
+                  onEscapeKeyDown={escapeFromTooltip}
                 >
-                  <X className="size-3.5" strokeWidth={1.5} aria-hidden />
-                </DialogPrimitive.Close>
-              </ChromeTooltip>
+                  <DialogPrimitive.Close
+                    aria-label="Close"
+                    className={LIGHTBOX_CLOSE_CLASS}
+                  >
+                    <X className="size-3.5" strokeWidth={1.5} aria-hidden />
+                  </DialogPrimitive.Close>
+                </ChromeTooltip>
+              </div>
             </div>
 
             {/* ── Body ───────────────────────────────────────────────── */}
@@ -1157,6 +1187,7 @@ export function VizLightboxShell({
                           onZoomIn={pz.zoomIn}
                           onZoomOut={pz.zoomOut}
                           onFullCourt={pz.fullCourt}
+                          onReset={pz.fit}
                           onEscape={escapeFromTooltip}
                         />
                       )
@@ -1209,6 +1240,12 @@ export function VizLightboxShell({
                       role="group"
                       aria-label="Right panel"
                     >
+                      <LifecycleChip
+                        pressed={pane === "stats"}
+                        onClick={() => setPane("stats")}
+                      >
+                        Statistics
+                      </LifecycleChip>
                       {pointList && (
                         <LifecycleChip
                           pressed={pane === "points"}
@@ -1217,12 +1254,6 @@ export function VizLightboxShell({
                           Points
                         </LifecycleChip>
                       )}
-                      <LifecycleChip
-                        pressed={pane === "stats"}
-                        onClick={() => setPane("stats")}
-                      >
-                        Statistics
-                      </LifecycleChip>
                     </div>
                     <span className="flex-1" />
                     {pane === "points" && pointList && !isDraft && (
@@ -1327,6 +1358,17 @@ export function VizLightboxShell({
   );
 }
 
+/** The host's header action, handed the lightbox's Esc step. */
+function HeaderActionSlot({
+  render,
+  onTooltipEscape,
+}: {
+  render: (ctx: { onTooltipEscape: () => void }) => ReactNode;
+  onTooltipEscape: () => void;
+}) {
+  return render({ onTooltipEscape });
+}
+
 /** The host's control-row menus, handed the band editor's opener. */
 function ControlsSlot({
   render,
@@ -1353,11 +1395,13 @@ function StageCard({ children }: { children: ReactNode }) {
 }
 
 /**
- * + / − / Full court, bottom-right of the court (canvas S11), and — only
- * while the court is off its 100% framing — the level, bottom-left: "150% ·
- * Drag to move around". Full court zooms out to the whole court (below 100%
- * on a landing cut, whose 100% is the half the shots land in) and is spent
- * there; `0` comes back to 100%.
+ * + / − / Reset view / Full court, bottom-right of the court (canvas S11),
+ * and — only while the court is off its 100% framing — the level,
+ * bottom-left: "150% · Drag to move around". Full court zooms out to the
+ * whole court (below 100% on a landing cut, whose 100% is the half the shots
+ * land in) and is spent there. Reset view (`0`) puts the court back as it
+ * opened — its zoom AND where it was dragged — and is spent while it is
+ * already there.
  */
 function ZoomControls({
   relative,
@@ -1366,6 +1410,7 @@ function ZoomControls({
   onZoomIn,
   onZoomOut,
   onFullCourt,
+  onReset,
   onEscape,
 }: {
   relative: number;
@@ -1374,6 +1419,7 @@ function ZoomControls({
   onZoomIn: () => void;
   onZoomOut: () => void;
   onFullCourt: () => void;
+  onReset: () => void;
   /** The lightbox's Esc step, for when a zoom button's tooltip holds Esc. */
   onEscape: () => void;
 }) {
@@ -1421,6 +1467,22 @@ function ZoomControls({
           aria-hidden="true"
           className="mx-0.5 h-4 w-px bg-[var(--border-medium)]"
         />
+        <ChromeTooltip
+          label="Reset view"
+          shortcut="0"
+          side="top"
+          onEscapeKeyDown={onEscape}
+        >
+          <button
+            type="button"
+            aria-label="Reset view"
+            onClick={onReset}
+            disabled={atHome}
+            className={button}
+          >
+            <RotateCcw className="size-3.5" strokeWidth={1.5} aria-hidden />
+          </button>
+        </ChromeTooltip>
         <ChromeTooltip label="Full court" side="top" onEscapeKeyDown={onEscape}>
           <button
             type="button"

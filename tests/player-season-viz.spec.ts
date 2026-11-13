@@ -802,7 +802,11 @@ async function renderView(
     savedCards?: SeasonCard[];
     lightbox: SeasonLightboxData | null;
     errorSplitJudged?: boolean;
-    saveView?: { savedViews: unknown[]; workspaceName: string };
+    saveView?: {
+      savedViews: unknown[];
+      workspaceName: string;
+      workspaceRole?: string;
+    };
   },
   query: string,
 ) {
@@ -1603,21 +1607,26 @@ test.describe("the Visualizations view, rendered", () => {
         side: "you",
         cards,
         lightbox,
-        saveView: { savedViews: [], workspaceName: "Test U" },
+        saveView: {
+          savedViews: [],
+          workspaceName: "Test U",
+          workspaceRole: "coach",
+        },
       },
       "tab=visualizations&cut=serve",
     );
     const footer = shellProps[0].footer as (args: unknown) => {
-      start: React.ReactElement<Record<string, unknown>>;
-      end: unknown;
+      start?: unknown;
+      end: React.ReactElement<Record<string, unknown>>;
     };
     expect(typeof footer).toBe("function");
+    // The footer's one group is on the right: nothing in the left slot.
     const { start, end } = footer({ matched: [], phrases: [] });
-    expect(end).toBeNull();
+    expect(start).toBeUndefined();
     // The button loads with the opened card (`React.lazy`), so the footer is
     // a Suspense boundary whose fallback reads "Save as view" while it
     // loads, around the button with this card's cut and workspace.
-    const boundary = start as React.ReactElement<{
+    const boundary = end as React.ReactElement<{
       fallback: React.ReactElement;
       children: React.ReactElement<Record<string, unknown>>;
     }>;
@@ -1688,9 +1697,14 @@ test.describe("the Visualizations view, rendered", () => {
     expect(html).toContain('aria-label="Saved views"');
     expect(html).not.toContain('aria-label="Default views"');
     expect(html).not.toContain("Saved views live on the match report");
-    for (const card of savedCards.filter((c) => c.total > 0)) {
-      expect(html).toContain(card.name);
-      expect(html).toContain(`view=${card.state.viewId}`);
+    // The wall lists one player's views, the You | Opponent chip's: here
+    // "you". The other side's stay off it until the chip is switched.
+    const drawable = savedCards.filter((c) => c.total > 0);
+    expect(drawable.some((c) => c.subject === "you")).toBe(true);
+    for (const card of drawable) {
+      const shown = card.subject === "you";
+      expect(html.includes(`view=${card.state.viewId}`)).toBe(shown);
+      if (shown) expect(html).toContain(card.name);
     }
     expect(html).toContain("Second serves, Maya Chen");
 

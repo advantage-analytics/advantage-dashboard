@@ -24,10 +24,10 @@ import {
   applyIdOrder,
   bandVisibility,
   canManageSavedView,
-  hasDuplicateViewName,
   mergeManageableOrder,
   moveItem,
   nextFocusId,
+  savedViewNamePool,
   tileDataKey,
 } from "@/lib/data/saved-views-logic";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
@@ -40,46 +40,52 @@ import {
   setSavedViewShared,
 } from "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions";
 import { useVizBands } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
-import { CourtTile } from "./court-tile";
-import { ManageableSavedViewTile } from "./manageable-saved-view-tile";
-import { savedViewNamePool } from "./save-view-dialog";
+import { depthBandRows } from "@/lib/data/viz-bands";
+import {
+  ManageableSavedViewTile,
+  type SavedViewCardData,
+} from "./manageable-saved-view-tile";
+import { SavedViewsStatusLine } from "./saved-views-status-line";
+import { WallCard } from "./wall-card";
+import { wallSummaryFor } from "./wall-summary";
+import type { SavedViewAction } from "./saved-view-title-menu";
 import { useVizState } from "./use-viz-state";
 import { usePrefersReducedMotion } from "@/components/dashboard/shared/use-reduced-motion";
 import type { VizState } from "./viz-url";
-import { activeFilterEntries, viewIdentityKey } from "./viz-url";
 import {
   computeViz,
   computeVizStats,
-  bandZonesFor,
   subjectFor,
-  tileCountLabel,
   EMPTY_VIZ_FILTERS,
+  type PlayerFilter,
 } from "./viz-model";
-import { VIZ_TILE_GRID_CLASS } from "./viz-labels";
+
+/** An open view's ask (`SavedViewAction`), numbered so each runs once. */
+export type SavedViewRequest = SavedViewAction & { n: number };
 
 /**
- * Task 9 (P1a band + Part B Manage mode): every saved view the viewer can
- * see — their own private ones plus the workspace's shared ones, in the
- * given order — as the same 3-col `CourtTile` grid the wall draws, plus a
- * dashed "Create view" tile. Mounted by `shots-tab.tsx` on both `VizWall` (via
- * its `savedViewsBand` slot) and `VizFocused` (ditto), so it is the SAME
- * band on both surfaces — one component, two mount points.
+ * The Saved wall: every saved view the viewer can see for the wall's player
+ * — their own private ones plus the workspace's shared ones, in the given
+ * order — drawn as the Default wall's own cards (`WallCard`) in its own
+ * two-column grid, then a dashed "Create view" card. Mounted by
+ * `shots-tab.tsx` in `VizWall`'s `savedViewsBand` slot, under the same
+ * toolbar the Default wall has.
  *
- * The `"wall"` band stays mounted under the Saved collection, even with zero
- * saved views. It has no separate section heading or divider; at zero views
- * the dashed "Create view" tile is the only item. The one
- * exception is transient: if deleting the LAST view leaves a status message
- * (the Undo window, or an error) on screen, the band renders status-only
- * (heading + status line, no tiles, no "Create view" tile either) until that
- * status clears — see `bandVisibility`. That keeps the 6-second Undo
- * affordance for the last view from being crowded out by the "Create view"
- * tile appearing in the same instant the delete lands.
+ * A view the viewer may manage shows a ⋯ on its card (hover or focus):
+ * Rename…, Duplicate, sharing in a team workspace, Reorder…, Delete view.
+ * Rename is a small popover (`rename-view-dialog.tsx`); Delete removes the
+ * card at once and leaves a "Deleted “name” from all matches · Undo" line
+ * above the grid.
  *
- * Manage mode (Part B) is entirely this component's own client state — on/off,
- * which tile's ⋯ menu is open, which tile is mid-rename, drag state, the
- * transient status line — never URL state, per the task's ruling. Toggled by
- * the "Manage views" / "Done" button in the header; only shown at all when at
- * least one view is `canManageSavedView`.
+ * "Reorder…" turns on reorder mode — this component's own client state,
+ * never URL state: the cards stop being links, can be dragged or moved with
+ * ⌥←/⌥→, and a hint with "Done" stands above the grid until it is left.
+ *
+ * The band stays mounted with zero saved views, where "Create view" is its
+ * only item. The one exception is transient: if deleting the LAST view
+ * leaves a status message on screen, the band renders that line alone until
+ * it clears (`bandVisibility`), so the Undo is not crowded by the dashed
+ * card arriving in the same instant.
  */
 export function SavedViewsBand({
   views,
@@ -87,6 +93,9 @@ export function SavedViewsBand({
   workspaceKind,
   canSaveViews,
   readOnly = false,
+  player,
+  request = null,
+  onRequestFailed,
 }: {
   /**
    * The public share page: the focused "Views" grid keeps its default tiles
@@ -99,15 +108,29 @@ export function SavedViewsBand({
   workspaceKind: WorkspaceKind;
   /**
    * `shotsWriteAccess(meta).canSaveViews`. `false` (a read-only report — the
-   * share page, the sample match) draws no "Create view" tile and no Manage
-   * mode: every view reads as unmanageable, so its tile is the plain
-   * navigating `CourtTile` and "Manage views" never appears.
+   * share page, the sample match) draws no "Create view" card and no ⋯:
+   * every view reads as unmanageable, so its card is the plain link.
    */
   canSaveViews: boolean;
+  /** The wall's You | Opponent: only that player's saved views are drawn. */
+  player: PlayerFilter;
+  /**
+   * A change asked for from outside the band — the open view's ⋯ menu
+   * (`shots-tab.tsx` bumps `n` per ask). It runs through the band's own
+   * handlers, so a delete's Undo line shows on the wall exactly as it does
+   * for a delete made here.
+   */
+  request?: SavedViewRequest | null;
+  /**
+   * A `request` the server refused, with the sentence to show. The wall's
+   * own status line sits under the lightbox's scrim, so whoever asked (the
+   * open view) says it where the reader is looking.
+   */
+  onRequestFailed?: (failure: { n: number; message: string }) => void;
 }) {
   const router = useRouter();
   const points = useVizPoints(useMatchData());
-  const { bands, unit, contactHidden } = useVizBands();
+  const { bands, unit } = useVizBands();
   const { you, opp } = useMatchSides();
   const { context: matchCtx } = useMatchFilters();
   const { hrefFor } = useVizState();
@@ -118,8 +141,6 @@ export function SavedViewsBand({
   const [optimisticViews, setOptimisticViews] = useState(views);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState("");
-  const [renameDuplicate, setRenameDuplicate] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
   const [status, setStatus] = useState<{
     text: string;
@@ -129,6 +150,7 @@ export function SavedViewsBand({
   const tileElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const menuTriggerElsRef = useRef<Map<string, HTMLButtonElement>>(new Map());
   const doneButtonRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   // Latest `optimisticViews.length`, kept current by an effect below so the
   // `setStatusMessage` expiry timer can read the count AT EXPIRY without
   // closing over a stale value from when the timer was scheduled.
@@ -189,9 +211,15 @@ export function SavedViewsBand({
         .map((v) => v.id),
     [optimisticViews, workspaceRole, canSaveViews],
   );
-  const canManageAny = !readOnly && manageableIds.length > 0;
+  // The wall shows one player's views at a time (its You | Opponent).
+  const visibleViews = optimisticViews.filter(
+    (v) => v.filters.player === player,
+  );
+  const visibleManageableIds = visibleViews
+    .filter((v) => manageableIds.includes(v.id))
+    .map((v) => v.id);
 
-  function tileDataFor(view: SavedViewRow) {
+  function tileDataFor(view: SavedViewRow): SavedViewCardData {
     const subjectIsPlayer1 = subjectFor(view.filters, you.isPlayer1);
     const result = computeViz(
       points,
@@ -201,54 +229,37 @@ export function SavedViewsBand({
       view.chart,
       matchCtx,
     );
-    const subjectName = view.filters.player === "you" ? you.name : opp.name;
-    const entries = activeFilterEntries(
-      {
-        cut: view.cut,
-        chart: view.chart,
-        filters: view.filters,
-        viewId: null,
-      },
-      { you: you.shortName, opponent: opp.shortName },
-      // Unjudged, the tile's pills say "Errors" as the strip does — the
-      // stored `error` array itself is read as is, never rewritten.
-      { errorSplitJudged: matchCtx.errorSplitJudged === true },
-    );
-    // Every active filter, unfolded — `CourtTile` folds by measured width.
-    const pills = entries.map((entry) => entry.label);
-    const countLabel = tileCountLabel(result);
-    const href = hrefFor({
+    const mine = view.filters.player === "you";
+    const state: VizState = {
       cut: view.cut,
       chart: view.chart,
       filters: view.filters,
       viewId: view.id,
-    });
+    };
     return {
-      subjectName,
-      pills,
-      countLabel,
+      subjectName: mine ? you.name : opp.name,
+      possessive: mine ? "your" : "their",
+      cut: view.cut,
       dots: result.dots,
-      zones: result.zoneStats ?? undefined,
-      bandZones:
-        view.chart === "zones"
-          ? bandZonesFor(
-              view.cut,
-              bands,
-              unit,
-              computeVizStats(
-                points,
-                view.cut,
-                view.filters,
-                subjectIsPlayer1,
-                result,
-                bands,
-                unit,
-              ),
-              contactHidden,
-            )
-          : null,
-      chart: view.chart,
-      href,
+      // The Default wall's own footer (`default-tiles.ts`), over this view's
+      // filters — the same stats the open view's Statistics column reads.
+      summary: wallSummaryFor(
+        view.cut,
+        result,
+        computeVizStats(
+          points,
+          view.cut,
+          view.filters,
+          subjectIsPlayer1,
+          result,
+          bands,
+          unit,
+          matchCtx,
+        ),
+        depthBandRows(bands, unit),
+      ),
+      href: hrefFor(state),
+      state,
     };
   }
 
@@ -278,8 +289,10 @@ export function SavedViewsBand({
   );
   const tileDataById = useMemo(() => {
     const map = new Map<string, ReturnType<typeof tileDataFor>>();
+    // Only the wall's player's cards draw; the other side computes on demand
+    // when `player` flips (`player` is a dependency below).
     for (const view of optimisticViews) {
-      map.set(view.id, tileDataFor(view));
+      if (view.filters.player === player) map.set(view.id, tileDataFor(view));
     }
     return map;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `viewsKey` already captures every view's id/cut/filters, order-independent; including `optimisticViews`/`tileDataFor` directly would recompute on every reorder, defeating the memo
@@ -290,10 +303,10 @@ export function SavedViewsBand({
     opp.name,
     hrefFor,
     viewsKey,
+    player,
     matchCtx,
     bands,
     unit,
-    contactHidden,
   ]);
 
   // FLIP: whenever the rendered order of tiles changes (a drag preview or a
@@ -383,13 +396,42 @@ export function SavedViewsBand({
     setManageMode((m) => !m);
     setOpenMenuId(null);
     setRenamingId(null);
-    setRenameDuplicate(false);
     setDragId(null);
   }
 
+  /**
+   * Where focus goes when no other manageable card is left: the wall's
+   * first link that is not inside the card being removed (that card is
+   * still mounted when the delete handler runs), or — when the removed view
+   * was the last one anywhere, so the grid gives way to the Undo line — the
+   * wall's pressed collection chip ("Saved"), which is always there.
+   */
+  function fallbackFocusTarget(removedId: string): HTMLElement | undefined {
+    const removedEl = tileElsRef.current.get(removedId);
+    const links = listRef.current?.querySelectorAll<HTMLElement>("a[href]");
+    const link =
+      optimisticViews.length > 1
+        ? Array.from(links ?? []).find((a) => !removedEl?.contains(a))
+        : undefined;
+    return (
+      link ??
+      listRef.current
+        ?.closest("[data-viz-wall]")
+        ?.querySelector<HTMLElement>(
+          '[role="group"][aria-label="View"] button[aria-pressed="true"]',
+        ) ??
+      undefined
+    );
+  }
+
   function focusAfterRemoval(removedId: string) {
-    const nextId = nextFocusId(manageableIds, removedId);
-    const nextEl = nextId ? menuTriggerElsRef.current.get(nextId) : undefined;
+    // Among the cards on screen: the other player's views are not mounted.
+    // With none left, the wall's first link ("Create view") takes focus
+    // rather than letting it fall to the page.
+    const nextId = nextFocusId(visibleManageableIds, removedId);
+    const nextEl =
+      (nextId ? menuTriggerElsRef.current.get(nextId) : undefined) ??
+      (manageMode ? undefined : fallbackFocusTarget(removedId));
     (nextEl ?? doneButtonRef.current)?.focus();
   }
 
@@ -398,15 +440,6 @@ export function SavedViewsBand({
   function startRename(view: SavedViewRow) {
     if (openMenuId === view.id) setOpenMenuId(null);
     setRenamingId(view.id);
-    setRenameValue(view.name);
-    setRenameDuplicate(false);
-  }
-
-  function cancelRename() {
-    const id = renamingId;
-    setRenamingId(null);
-    setRenameDuplicate(false);
-    if (id) menuTriggerElsRef.current.get(id)?.focus();
   }
 
   function candidatePoolNames(view: SavedViewRow): string[] {
@@ -416,46 +449,32 @@ export function SavedViewsBand({
     });
   }
 
-  function commitRename(view: SavedViewRow) {
-    const trimmed = renameValue.trim();
-    if (trimmed.length === 0) {
-      cancelRename();
-      return;
-    }
-    if (hasDuplicateViewName(trimmed, candidatePoolNames(view))) {
-      setRenameDuplicate(true);
-      return;
-    }
-
+  /** The dialog has already refused an empty, unchanged or taken name. */
+  function commitRename(
+    view: SavedViewRow,
+    name: string,
+    onFail?: (message: string) => void,
+  ) {
     const previousName = view.name;
     setOptimisticViews((prev) =>
-      prev.map((v) => (v.id === view.id ? { ...v, name: trimmed } : v)),
+      prev.map((v) => (v.id === view.id ? { ...v, name } : v)),
     );
     setRenamingId(null);
-    setRenameDuplicate(false);
-    // Enter commits and unmounts the rename field the same way Esc's
-    // `cancelRename` does — focus must return to the tile's ⋯ button here
-    // too, not just on cancel. The button itself is unaffected by
-    // `renamingId` (only the name slot swaps), so it's already mounted and
-    // `.focus()` lands immediately, before `router.refresh()` below re-renders
-    // the tile with the server-confirmed name.
-    menuTriggerElsRef.current.get(view.id)?.focus();
 
     startTransition(async () => {
-      const result = await renameSavedView(view.id, trimmed);
+      const result = await renameSavedView(view.id, name);
       if (!result.ok) {
         setOptimisticViews((prev) =>
           prev.map((v) =>
             v.id === view.id ? { ...v, name: previousName } : v,
           ),
         );
-        if (result.error === "duplicate_name") {
-          setRenamingId(view.id);
-          setRenameValue(trimmed);
-          setRenameDuplicate(true);
-        } else {
-          setStatusMessage("Couldn't save that change");
-        }
+        const message =
+          result.error === "duplicate_name"
+            ? `A view called “${name}” already exists.`
+            : "Couldn't save that change";
+        setStatusMessage(message);
+        onFail?.(message);
         return;
       }
       router.refresh();
@@ -464,18 +483,22 @@ export function SavedViewsBand({
 
   /* ── Duplicate ──────────────────────────────────────────────────────── */
 
-  function handleDuplicate(view: SavedViewRow) {
+  function handleDuplicate(
+    view: SavedViewRow,
+    onFail?: (message: string) => void,
+  ) {
     startTransition(async () => {
       const result = await duplicateSavedView(view.id);
       if (!result.ok) {
-        setStatusMessage(
-          // I3: the constraint permitting this cut/chart combination is
-          // committed but not yet applied to the live database — no
-          // "Try again", a retry can't succeed either.
+        // I3: the constraint permitting this cut/chart combination is
+        // committed but not yet applied to the live database — no
+        // "Try again", a retry can't succeed either.
+        const message =
           result.error === "unsupported_cut_chart"
             ? "This kind of view can't be saved yet."
-            : "Couldn't save that change",
-        );
+            : "Couldn't save that change";
+        setStatusMessage(message);
+        onFail?.(message);
         return;
       }
       router.refresh();
@@ -484,7 +507,7 @@ export function SavedViewsBand({
 
   /* ── Share / un-share ──────────────────────────────────────────────── */
 
-  function handleShare(view: SavedViewRow) {
+  function handleShare(view: SavedViewRow, onFail?: (message: string) => void) {
     setOptimisticViews((prev) =>
       prev.map((v) => (v.id === view.id ? { ...v, shared: true } : v)),
     );
@@ -494,18 +517,22 @@ export function SavedViewsBand({
         setOptimisticViews((prev) =>
           prev.map((v) => (v.id === view.id ? { ...v, shared: false } : v)),
         );
-        setStatusMessage(
+        const message =
           result.error === "duplicate_name"
             ? `A shared view is already called "${view.name}". Rename yours first.`
-            : "Couldn't save that change",
-        );
+            : "Couldn't save that change";
+        setStatusMessage(message);
+        onFail?.(message);
         return;
       }
       router.refresh();
     });
   }
 
-  function handleUnshare(view: SavedViewRow) {
+  function handleUnshare(
+    view: SavedViewRow,
+    onFail?: (message: string) => void,
+  ) {
     setOptimisticViews((prev) =>
       prev.map((v) => (v.id === view.id ? { ...v, shared: false } : v)),
     );
@@ -516,6 +543,7 @@ export function SavedViewsBand({
           prev.map((v) => (v.id === view.id ? { ...v, shared: true } : v)),
         );
         setStatusMessage("Couldn't save that change");
+        onFail?.("Couldn't save that change");
         return;
       }
       router.refresh();
@@ -540,12 +568,14 @@ export function SavedViewsBand({
       }
       const deleted = result.data;
       // Undo only ever restores the caller's OWN view — `restoreSavedView`
-      // refuses anything else server-side (transferring a shared view's
-      // ownership to whoever clicked Undo would be a bug, not a convenience).
+      // is only offered for one the caller owns (`deleted.mine`):
+      // transferring a shared view's ownership to whoever clicked Undo would be
+      // a bug, not a convenience.
       // A staff delete of a teammate's shared view gets the fact with no
       // offer to undo it.
       setStatusMessage(
-        deleted.mine ? "View deleted · Undo" : "View deleted",
+        // A view is not this match's alone: say where it went from.
+        `Deleted “${deleted.name}” from all matches`,
         deleted.mine ? () => handleUndo(deleted) : undefined,
       );
       router.refresh();
@@ -647,17 +677,24 @@ export function SavedViewsBand({
     else return;
     e.preventDefault();
 
-    const idx = manageableIds.indexOf(view.id);
-    if (idx === -1) return;
-    const newManageableOrder = moveItem(manageableIds, idx, idx + dir);
+    // One step among the cards on screen: the wall shows one player's
+    // views, so the neighbour is the next VISIBLE one, wherever it sits in
+    // the full order.
+    const pos = visibleManageableIds.indexOf(view.id);
+    const neighbour = visibleManageableIds[pos + dir];
+    if (pos === -1 || neighbour === undefined) return;
+    const newManageableOrder = moveItem(
+      manageableIds,
+      manageableIds.indexOf(view.id),
+      manageableIds.indexOf(neighbour),
+    );
     if (newManageableOrder.join("|") === manageableIds.join("|")) return;
 
     const preSnapshotIds = optimisticViews.map((v) => v.id);
     const merged = previewManageableOrder(newManageableOrder);
     commitReorder(merged, preSnapshotIds);
-    const newIdx = newManageableOrder.indexOf(view.id);
     setStatusMessage(
-      `Moved "${view.name}" to position ${newIdx + 1} of ${manageableIds.length}`,
+      `Moved "${view.name}" to position ${pos + dir + 1} of ${visibleManageableIds.length}`,
     );
   }
 
@@ -671,7 +708,7 @@ export function SavedViewsBand({
     e.currentTarget.setPointerCapture(e.pointerId);
 
     const snapshot = new Map<string, DOMRect>();
-    manageableIds.forEach((id) => {
+    visibleManageableIds.forEach((id) => {
       const el = tileElsRef.current.get(id);
       if (el) snapshot.set(id, el.getBoundingClientRect());
     });
@@ -748,41 +785,58 @@ export function SavedViewsBand({
     // than leaving two tiles in conflicting transient states at once.
     if (open && renamingId && renamingId !== id) {
       setRenamingId(null);
-      setRenameDuplicate(false);
     }
   }
 
-  /** One saved-view tile shared by the wall and focused grids. */
+  // A change asked for from the open view (`request`): the same handlers a
+  // card's own menu runs, once per request.
+  const handledRequestRef = useRef(request?.n ?? 0);
+  useEffect(() => {
+    if (!request || request.n === handledRequestRef.current) return;
+    handledRequestRef.current = request.n;
+    const view = optimisticViews.find((v) => v.id === request.id);
+    if (!view || !canManage(view)) return;
+    const n = request.n;
+    const failed = (message: string) => onRequestFailed?.({ n, message });
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- external ask (the open view's ⋯ menu), not a render-derivable value
+    if (request.kind === "rename") commitRename(view, request.name, failed);
+    else if (request.kind === "duplicate") handleDuplicate(view, failed);
+    else if (request.kind === "share") handleShare(view, failed);
+    else if (request.kind === "unshare") handleUnshare(view, failed);
+    else handleDelete(view);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the request alone; the handlers read current state when it fires
+  }, [request]);
+
+  /** One saved view, as the Default wall's own card. */
   function renderSavedTile(view: SavedViewRow) {
-    const manageable = canManage(view);
     const data = tileDataById.get(view.id) ?? tileDataFor(view);
 
-    if (manageMode && manageable) {
+    if (!readOnly && canManage(view)) {
       return (
         <ManageableSavedViewTile
           view={view}
           data={data}
+          reorderMode={manageMode}
           hintId={manageHintId}
           workspaceKind={workspaceKind}
           workspaceRole={workspaceRole}
           isDragging={dragId === view.id}
-          isRenaming={renamingId === view.id}
-          renameValue={renameValue}
-          renameDuplicate={renameDuplicate}
           menuOpen={openMenuId === view.id}
           onMenuOpenChange={(open) => handleMenuOpenChange(view.id, open)}
+          renameOpen={renamingId === view.id}
+          onRenameOpenChange={(open) => {
+            if (open) startRename(view);
+            else if (renamingId === view.id) setRenamingId(null);
+          }}
+          renamePool={candidatePoolNames(view)}
+          onRename={(name) => commitRename(view, name)}
           onRegisterTileEl={(el) => registerTileEl(view.id, el)}
           onRegisterMenuTriggerEl={(el) => registerMenuTriggerEl(view.id, el)}
-          onRenameValueChange={(value) => {
-            setRenameValue(value);
-            setRenameDuplicate(false);
-          }}
-          onRenameCommit={() => commitRename(view)}
-          onRenameCancel={cancelRename}
           onStartRename={() => startRename(view)}
           onDuplicate={() => handleDuplicate(view)}
           onShare={() => handleShare(view)}
           onUnshare={() => handleUnshare(view)}
+          onReorder={toggleManageMode}
           onDelete={() => handleDelete(view)}
           onPointerDownTile={(e) => handleTilePointerDown(e, view)}
           onPointerMoveTile={(e) => handleTilePointerMove(e, view)}
@@ -793,116 +847,103 @@ export function SavedViewsBand({
     }
 
     return (
-      <CourtTile
-        playerName={data.subjectName}
+      <WallCard
         name={view.name}
         nameAdornment={view.shared ? <SharedGlyph /> : undefined}
-        pills={data.pills}
-        countLabel={data.countLabel}
-        cut={view.cut}
+        playerName={data.subjectName}
+        possessive={data.possessive}
+        cut={data.cut}
         dots={data.dots}
-        zones={data.zones}
-        bandZones={data.bandZones}
-        chart={data.chart}
+        summary={data.summary}
         href={data.href}
-        navigateState={{
-          cut: view.cut,
-          chart: view.chart,
-          filters: view.filters,
-          viewId: view.id,
-        }}
+        navigateState={data.state}
       />
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
-      {(manageMode || canManageAny) && (
+      {/* Reorder mode's own line: how to move a card, and the way out. It is
+          entered from a card's ⋯ menu ("Reorder…"), so nothing stands here
+          at rest and the toolbar above stays the Default wall's. */}
+      {manageMode && (
         <div className="flex items-center justify-end gap-3">
-          {manageMode ? (
-            <div className="flex shrink-0 items-center gap-3">
-              <span id={manageHintId} className="text-micro whitespace-nowrap">
-                Drag a view to reorder, or focus it and press ⌥← / ⌥→ · ⋯ to
-                rename or delete
-              </span>
-              <button
-                type="button"
-                ref={doneButtonRef}
-                onClick={toggleManageMode}
-                className="shrink-0 cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] hover:text-[var(--blue-hover)]"
-              >
-                Done
-              </button>
-            </div>
-          ) : (
-            canManageAny && (
-              <button
-                type="button"
-                onClick={toggleManageMode}
-                className="shrink-0 cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] hover:text-[var(--blue-hover)]"
-              >
-                Manage views
-              </button>
-            )
-          )}
+          <span id={manageHintId} className="text-micro whitespace-nowrap">
+            Drag a view to reorder, or focus it and press ⌥← / ⌥→
+          </span>
+          <button
+            type="button"
+            ref={doneButtonRef}
+            onClick={toggleManageMode}
+            className="shrink-0 cursor-pointer text-[11px] font-medium whitespace-nowrap text-[var(--blue)] hover:text-[var(--blue-hover)]"
+          >
+            Done
+          </button>
         </div>
       )}
 
-      {/* Gated on `status !== null` alone, never `manageMode`: pressing Done
-          only toggles Manage mode off (`toggleManageMode` doesn't touch
-          `status`) and must not also hide a live status/Undo line — that
-          line stays reachable until it expires or Undo is clicked,
-          regardless of Manage mode. If Undo then restores a view, this
-          renders in the band's normal (non-manage) mode, same as any other
-          `full`-visibility render. */}
+      {/* Gated on `status !== null` alone, never `manageMode`: Done must not
+          hide a live status or Undo line — it stays until it expires or Undo
+          is pressed. */}
       {status !== null && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="text-micro flex items-center gap-1.5"
-        >
-          {status && (
-            <>
-              <span>{status.text}</span>
-              {status.undo && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const undo = status.undo;
-                    setStatus(null);
-                    undo?.();
-                  }}
-                  className="cursor-pointer font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
-                >
-                  Undo
-                </button>
-              )}
-            </>
-          )}
-        </div>
+        <SavedViewsStatusLine
+          status={status}
+          onDismiss={() => setStatus(null)}
+        />
       )}
 
       {visibility !== "status-only" && (
-        // Renders at `"hidden"` too (zero views, nothing pending) so the "Create
-        // view" tile stays reachable — `optimisticViews` is empty there,
-        // so the map below draws nothing and only the dashed tile shows.
+        // Renders at `"hidden"` too (zero views, nothing pending) so "Create
+        // view" stays reachable. The Default wall's own grid; rows stretch,
+        // so the dashed card beside a saved one is exactly its height.
         <div
+          ref={listRef}
           role="list"
           aria-label="Saved views"
-          className={VIZ_TILE_GRID_CLASS}
+          className="grid grid-cols-1 gap-4 @min-[640px]:grid-cols-2"
         >
-          {optimisticViews.map((view) => (
+          {visibleViews.map((view) => (
             <div key={view.id} role="listitem">
               {renderSavedTile(view)}
             </div>
           ))}
-          {canSaveViews && (
+          {canSaveViews && !manageMode && (
             <div role="listitem">
-              <NewViewTile hrefFor={hrefFor} />
+              <NewViewTile hrefFor={hrefFor} player={player} />
             </div>
           )}
         </div>
       )}
+
+      {/* Nothing saved for this player yet: say what saving does, since
+          "Create view" inside one match reads as this match's alone. */}
+      {visibility !== "status-only" &&
+        visibleViews.length === 0 &&
+        canSaveViews &&
+        !manageMode && (
+          <p className="text-micro">Views you save show up on every match.</p>
+        )}
+
+      {/* Honest zero: a viewer who cannot save (so has no "Create view"
+          card) on a player with no saved views would otherwise see a blank
+          wall under the toolbar. */}
+      {visibility !== "status-only" &&
+        visibleViews.length === 0 &&
+        !canSaveViews && (
+          <div
+            className="flex items-center justify-center rounded-[var(--radius-card)] border px-6 py-8 text-center"
+            style={{
+              borderColor: "var(--border-hairline)",
+              backgroundColor: "var(--surface-card)",
+            }}
+          >
+            <p className="text-[12px]" style={{ color: "var(--ink-500)" }}>
+              {player === "you"
+                ? "No saved views of your shots yet."
+                : "No saved views of the opponent's shots yet."}
+            </p>
+          </div>
+        )}
     </div>
   );
 }
@@ -930,13 +971,16 @@ export function SharedGlyph() {
  */
 function NewViewTile({
   hrefFor,
+  player,
 }: {
   hrefFor: (next: VizState) => string;
+  /** The wall's player: the blank court opens on them. */
+  player: PlayerFilter;
 }): ReactNode {
   const href = hrefFor({
     cut: "serve",
     chart: "scatter",
-    filters: EMPTY_VIZ_FILTERS,
+    filters: { ...EMPTY_VIZ_FILTERS, player },
     viewId: null,
     draft: true,
   });
@@ -944,10 +988,16 @@ function NewViewTile({
   return (
     <Link
       href={href}
-      className="relative block h-full overflow-hidden rounded-[var(--radius-card)] border border-dashed border-[var(--border-medium)] bg-[var(--surface-card)] transition-colors duration-200 ease-[var(--ease-primary)] hover:border-[var(--blue)] motion-reduce:transition-none"
+      className="relative flex h-full flex-col overflow-hidden rounded-[var(--radius-card)] border border-dashed border-[var(--border-medium)] bg-[var(--surface-card)] transition-colors duration-200 ease-[var(--ease-primary)] hover:border-[var(--blue)] motion-reduce:transition-none"
     >
-      <span aria-hidden="true" className="block aspect-[334/216] w-full" />
-      <span aria-hidden="true" className="block h-[77px]" />
+      {/* A wall card's own box — its court, then its label block — so the
+          dashed card is a card's size when it stands alone in a row. */}
+      <span
+        aria-hidden="true"
+        className="block max-h-[300px] w-full"
+        style={{ aspectRatio: "334 / 216" }}
+      />
+      <span aria-hidden="true" className="block h-[97px]" />
       <span className="absolute inset-0 flex flex-col items-center justify-center gap-2">
         <Plus
           className="size-4 shrink-0"

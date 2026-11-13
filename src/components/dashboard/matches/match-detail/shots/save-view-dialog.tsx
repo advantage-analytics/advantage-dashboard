@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/popover";
 import { advButton } from "@/lib/ui/adv-button";
 import type { FloatMenuTone } from "@/components/ui/float-menu";
-import { hasDuplicateViewName } from "@/lib/data/saved-views-logic";
+import {
+  hasDuplicateViewName,
+  savedViewNamePool,
+  savedViewScopeLine,
+} from "@/lib/data/saved-views-logic";
 import { createSavedView } from "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions";
 import type { SavedView, SavedViewRow } from "@/lib/data/saved-views-server";
 import type { WorkspaceKind } from "@/lib/workspace/types";
@@ -76,26 +80,6 @@ export function suggestedViewName(
   return first ? `${CUT_LABEL[cut]} · ${first.label}` : CUT_LABEL[cut];
 }
 
-/**
- * The pool of existing names a candidate must not collide with, scoped the
- * same way `hasDuplicateViewName`'s caller always scopes it: the workspace's
- * shared names, or the viewer's own private ones. Shared by this dialog (a
- * brand-new view, nothing to exclude) and `saved-views-band.tsx`'s rename
- * flow (`excludeId` leaves the view being renamed out of its own pool).
- */
-export function savedViewNamePool(
-  views: readonly SavedViewRow[],
-  opts: { shared: boolean; excludeId?: string },
-): string[] {
-  return views
-    .filter(
-      (v) =>
-        (opts.excludeId === undefined || v.id !== opts.excludeId) &&
-        (opts.shared ? v.shared : !v.shared && v.mine),
-    )
-    .map((v) => v.name);
-}
-
 export function SaveViewDialog({
   open,
   onOpenChange,
@@ -109,6 +93,7 @@ export function SaveViewDialog({
   onSaved,
   tone = "light",
   side = "bottom",
+  align = "start",
   names,
   note,
 }: {
@@ -124,6 +109,8 @@ export function SaveViewDialog({
   onSaved: (view: SavedView) => void;
   tone?: FloatMenuTone;
   side?: "top" | "bottom";
+  /** Which edge of the anchor the popover lines up with. */
+  align?: "start" | "end";
   /** The two sides' names for the dark tone's prefilled name. The dialog
    *  reads no match context of its own, so the player profile can draw it. */
   names?: PhraseNames;
@@ -265,11 +252,19 @@ export function SaveViewDialog({
         virtualRef={anchorRef as unknown as React.RefObject<HTMLButtonElement>}
       />
       <PopoverContent
-        align="start"
+        align={align}
         side={side}
         sideOffset={6}
         role="dialog"
         aria-label="Save this view"
+        // The popover hangs from a virtual anchor, so Radix has no trigger
+        // to hand focus back to: without this it falls to <body> on close,
+        // outside the lightbox's focus scope, and the next menu opened there
+        // is dismissed as the scope pulls focus back in.
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+          anchorRef.current?.focus();
+        }}
         className={cn(
           "w-[332px] rounded-[12px] p-4",
           dark
@@ -352,6 +347,17 @@ export function SaveViewDialog({
               }}
             >
               {definitionLine}
+            </p>
+            {/* Where it is kept: a view is a cut, a chart and filters — no
+                match — so it is there on every match, not only this one. */}
+            <p
+              data-save-view-scope=""
+              className="text-[11px]"
+              style={{
+                color: dark ? "rgba(255,255,255,0.45)" : "var(--ink-500)",
+              }}
+            >
+              {savedViewScopeLine(workspaceKind, shared)}
             </p>
             <p
               className="text-[11px]"

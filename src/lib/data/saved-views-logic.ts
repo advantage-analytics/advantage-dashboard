@@ -274,7 +274,7 @@ export function canManageSavedView(
  * never diverge from what `createSavedView`'s `duplicate_name` will actually
  * reject. `existingNames` must already be scoped to the right pool by the
  * caller (the workspace's shared names, or the viewer's own private ones —
- * see `save-view-dialog.tsx`); this function does no scoping of its own.
+ * see `savedViewNamePool`); this function does no scoping of its own.
  */
 export function hasDuplicateViewName(
   name: string,
@@ -283,6 +283,26 @@ export function hasDuplicateViewName(
   const normalized = name.trim().toLowerCase();
   if (normalized.length === 0) return false;
   return existingNames.some((n) => n.trim().toLowerCase() === normalized);
+}
+
+/**
+ * The pool of existing names a candidate must not collide with, scoped the
+ * same way `hasDuplicateViewName`'s caller always scopes it: the workspace's
+ * shared names, or the viewer's own private ones. Shared by `save-view-dialog.tsx` (a
+ * brand-new view, nothing to exclude) and `saved-views-band.tsx`'s rename
+ * flow (`excludeId` leaves the view being renamed out of its own pool).
+ */
+export function savedViewNamePool(
+  views: readonly SavedViewRow[],
+  opts: { shared: boolean; excludeId?: string },
+): string[] {
+  return views
+    .filter(
+      (v) =>
+        (opts.excludeId === undefined || v.id !== opts.excludeId) &&
+        (opts.shared ? v.shared : !v.shared && v.mine),
+    )
+    .map((v) => v.name);
 }
 
 /** `sort_order`'s safe range for a re-inserted row — see `restoreSavedView`. */
@@ -458,7 +478,7 @@ export function bandVisibility(
 
 /** One row of the ⋯ tile menu, in the order `manage-tile-menu.tsx` draws them. */
 export type ManageMenuRowKind =
-  "rename" | "duplicate" | "share" | "unshare" | "delete";
+  "rename" | "duplicate" | "share" | "unshare" | "reorder" | "delete";
 
 /**
  * Which rows the ⋯ menu draws for `view`, given the workspace it's in and
@@ -476,17 +496,24 @@ export type ManageMenuRowKind =
  * else's PRIVATE view too — a staff member should not be offered to
  * publish a teammate's still-private view to the whole roster. A personal
  * workspace never shows either row: there is no one else to share with.
+ * "Reorder…" shows only where the caller can enter reorder mode (`reorder`):
+ * a wall card's menu does, the open view's does not — there is no wall under
+ * it to drag on.
  * Delete is always last, after a divider `manage-tile-menu.tsx` draws
  * itself (this function returns rows only, not the divider).
  */
 export function manageMenuRows(
   view: { mine: boolean; shared: boolean },
-  { workspaceKind }: { workspaceKind: WorkspaceKind; role: ProgramRole },
+  {
+    workspaceKind,
+    reorder = false,
+  }: { workspaceKind: WorkspaceKind; role: ProgramRole; reorder?: boolean },
 ): ManageMenuRowKind[] {
   const rows: ManageMenuRowKind[] = ["rename", "duplicate"];
   if (workspaceKind === "team" && view.mine) {
     rows.push(view.shared ? "unshare" : "share");
   }
+  if (reorder) rows.push("reorder");
   rows.push("delete");
   return rows;
 }
@@ -551,4 +578,19 @@ export function nextFocusId(
 export function savedViewsCountFact(n: number): string {
   if (n <= 0) return "";
   return ` · ${n} saved view${n === 1 ? "" : "s"}`;
+}
+
+/**
+ * Who a view is saved for and where it shows: every match of the workspace
+ * (and, in a team, every player profile's season view), for the viewer alone
+ * unless it is shared.
+ */
+export function savedViewScopeLine(
+  workspaceKind: WorkspaceKind,
+  shared: boolean,
+): string {
+  if (workspaceKind !== "team") return "Saved to all your matches.";
+  return shared
+    ? "Saved for the team on every match and player profile."
+    : "Saved for you on every match and player profile.";
 }
