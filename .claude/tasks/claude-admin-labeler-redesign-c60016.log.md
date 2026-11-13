@@ -64,3 +64,15 @@ is the runner's. Newest entries at the bottom.
 3. A cancelled job is refused for an admin ("only sent again by the athlete"); confirm that is wanted.
 4. `quota` and `attempt_ceiling` are the two refusal codes worth their own copy in T8.
 5. The spec README still says no admin resubmit exists; it is a point-in-time record.
+
+## T6 · Matches loader: video hours and progress steps — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `AdminMatchRow` gains `videoSeconds` (the pay report's `jobVideoSeconds`), `failedJobId`, `sentForAnalysisAt`, `resultsLandedAt`, `labelState` and `verifiedAt`, all from the loader's existing batched reads. New pure `matchProgressSteps(row)` in `src/lib/data/admin-match-progress.ts` returns Uploaded, Sent for analysis, Results landed, Being labelled, Published, Checked with a state each; an import with no job yields Uploaded alone. `tests/admin-match-progress.spec.ts` pins the fixtures.
+
+**follow-ups:**
+
+1. `videoSeconds` can be 0 when a job has neither a trimmed span nor billable seconds; T7 decides whether 0 shows as "—".
+2. Being labelled has no moment; `label_sessions.started_at` and `submitted_at` exist if the panel wants one.
+3. A cancelled job has no mark of its own in the steps.

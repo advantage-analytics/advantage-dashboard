@@ -85,7 +85,7 @@ ready).
 
 ## T6 · Matches loader: video hours and progress steps
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** guess — src/lib/data/admin-matches-server.ts, src/lib/data/admin-match-progress.ts (new), tests/admin-match-progress.spec.ts (new)
 - **done when:**

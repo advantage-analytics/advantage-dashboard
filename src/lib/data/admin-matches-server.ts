@@ -33,6 +33,8 @@ import { programDisplayName } from "@/lib/data/programs-server";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import { getMatchViews30d } from "@/lib/services/posthog/match-views-server";
 import { playedSets, type ScoreLineSet } from "@/lib/ui/score-format";
+import { jobVideoSeconds } from "@/lib/data/practice-server";
+import type { AdminLabelState } from "@/lib/data/admin-match-progress";
 
 /**
  * Admin › Matches — every match on Advantage, personal and team, through the
@@ -92,6 +94,25 @@ export interface AdminMatchRow {
   fresh: boolean;
   /** The label console for this match, or the Labels list, or null. */
   labelHref: string | null;
+  /**
+   * Seconds of match video the analysis job covers — its trimmed span, else
+   * what was billed, as the pay report counts it (`jobVideoSeconds`). Null
+   * when the match has no video (no processing job).
+   */
+  videoSeconds: number | null;
+  /** The failed job "Resubmit" retries; null outside the `failed` bucket. */
+  failedJobId: string | null;
+  // The moments `matchProgressSteps()` (admin-match-progress.ts) reads, with
+  // `uploadedAt` and `analysis` above. All from the analysis job — the one
+  // `analysis` describes — and read in the list's batched reads.
+  /** `processing_jobs.submitted_at`, or null. */
+  sentForAnalysisAt: string | null;
+  /** `processing_jobs.completed_at`, or null. */
+  resultsLandedAt: string | null;
+  /** The match's own label session's status (never a practice copy). */
+  labelState: AdminLabelState | null;
+  /** `matches.verified_at` while the match is verified, else null. */
+  verifiedAt: string | null;
 }
 
 export interface AdminMatchesResult {
@@ -160,19 +181,37 @@ function earlier(a: string | null | undefined, b: string | null | undefined) {
   return Date.parse(a) <= Date.parse(b) ? a : b;
 }
 
+/** The job columns the list reads beyond the upload moment. */
+interface JobFacts {
+  id: string;
+  match_id: string;
+  created_at: string;
+  submitted_at: string | null;
+  completed_at: string | null;
+  start_time_seconds: number | string | null;
+  end_time_seconds: number | string | null;
+  billable_seconds: number | null;
+}
+
 /**
  * When each match was uploaded (file header), plus which have statistics —
- * the stats read answers both questions.
+ * the stats read answers both questions — and every job row by id, for the
+ * progress moments and the video's length.
  */
 async function uploadMoments(
   db: SupabaseClient,
   ids: string[],
-): Promise<{ uploadedAt: Map<string, string>; withStats: Set<string> }> {
+): Promise<{
+  uploadedAt: Map<string, string>;
+  withStats: Set<string>;
+  jobs: Map<string, JobFacts>;
+  newestJob: Map<string, JobFacts>;
+}> {
   const [jobs, files, stats] = await Promise.all([
-    readByIds<{ match_id: string; created_at: string }>(
+    readByIds<JobFacts>(
       db,
       "processing_jobs",
-      "match_id, created_at",
+      "id, match_id, created_at, submitted_at, completed_at, start_time_seconds, end_time_seconds, billable_seconds",
       "match_id",
       ids,
     ),
@@ -212,7 +251,19 @@ async function uploadMoments(
   for (const [id, at] of statsAt) {
     if (!uploadedAt.has(id)) uploadedAt.set(id, at);
   }
-  return { uploadedAt, withStats };
+  const newestJob = new Map<string, JobFacts>();
+  for (const job of jobs) {
+    const held = newestJob.get(job.match_id);
+    if (!held || Date.parse(job.created_at) > Date.parse(held.created_at)) {
+      newestJob.set(job.match_id, job);
+    }
+  }
+  return {
+    uploadedAt,
+    withStats,
+    jobs: new Map(jobs.map((job) => [job.id, job])),
+    newestJob,
+  };
 }
 
 /** Score sets as stored, player1-first. */
@@ -248,17 +299,29 @@ function bucketFor(analysis: MatchAnalysis): AdminMatchBucket {
   return "settled";
 }
 
+interface LabelSessionFacts {
+  id: string;
+  status: AdminLabelState | null;
+}
+
 /** Latest label session per match, an analyst's ahead of a player's own. */
 async function labelSessions(
   db: SupabaseClient,
   ids: string[],
-): Promise<Map<string, string>> {
+): Promise<Map<string, LabelSessionFacts>> {
   const rows = await readByIds<{
     id: string;
     match_id: string;
     kind: string | null;
+    status: string | null;
     created_at: string;
-  }>(db, "label_sessions", "id, match_id, kind, created_at", "match_id", ids);
+  }>(
+    db,
+    "label_sessions",
+    "id, match_id, kind, status, created_at",
+    "match_id",
+    ids,
+  );
   const best = new Map<string, (typeof rows)[number]>();
   const rank = (kind: string | null) => (kind === "analyst" ? 1 : 0);
   for (const row of rows) {
@@ -274,7 +337,20 @@ async function labelSessions(
       best.set(row.match_id, row);
     }
   }
-  return new Map([...best].map(([matchId, row]) => [matchId, row.id]));
+  return new Map(
+    [...best].map(([matchId, row]) => [
+      matchId,
+      { id: row.id, status: labelStateOf(row.status) },
+    ]),
+  );
+}
+
+function labelStateOf(status: string | null): AdminLabelState | null {
+  return status === "labelling" ||
+    status === "submitted" ||
+    status === "complete"
+    ? status
+    : null;
 }
 
 /**
@@ -424,6 +500,13 @@ export async function listAdminMatches(
       ...base,
       status: withStatsPublished(base.status, moments.withStats.has(m.id)),
     };
+    // The job `analysis` describes; else the newest, for its video length.
+    const job =
+      (analysis.jobId && moments.jobs.get(analysis.jobId)) ||
+      moments.newestJob.get(m.id);
+    const bucket = bucketFor(analysis);
+    const verification = verificationFor(m);
+    const session = sessions.get(m.id);
     const p1 = m.player1_name?.trim() || "Unknown player";
     const p2 = m.player2_name?.trim() || "Unknown opponent";
     return {
@@ -447,10 +530,16 @@ export async function listAdminMatches(
       uploadedAt,
       views: views ? (views.get(m.id) ?? 0) : null,
       analysis,
-      verification: verificationFor(m),
-      bucket: bucketFor(analysis),
+      verification,
+      bucket,
       fresh: isFresh(seen, matchSeenKey(m.id), uploadedAt),
-      labelHref: labelHrefFor(sessions.get(m.id), m.source_provider, analysis),
+      labelHref: labelHrefFor(session?.id, m.source_provider, analysis),
+      videoSeconds: job ? jobVideoSeconds(job) : null,
+      failedJobId: bucket === "failed" ? (analysis.jobId ?? null) : null,
+      sentForAnalysisAt: job?.submitted_at ?? null,
+      resultsLandedAt: job?.completed_at ?? null,
+      labelState: session?.status ?? null,
+      verifiedAt: verification?.verifiedAt ?? null,
     };
   });
 
@@ -630,7 +719,7 @@ export const getAdminMatchReport = cache(async function getAdminMatchReport(
           }
         : { kind: "personal" }),
     labelHref: labelHrefFor(
-      sessions.get(matchId),
+      sessions.get(matchId)?.id,
       row.source_provider,
       analysis,
     ),
