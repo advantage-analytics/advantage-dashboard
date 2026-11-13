@@ -400,7 +400,7 @@ export function VizLightbox({
         : CUT_LABEL[cut];
   const subjectWord = state.filters.player === "you" ? "You" : "Opponent";
   const subtitle = isDraft
-    ? "Pick a chart and filters, then save it as a view."
+    ? "Pick a chart and filters, then save it to reuse on any match."
     : `${CUT_LABEL[cut]} · ${subjectWord} · ${lightboxCountLine(
         cut,
         result,

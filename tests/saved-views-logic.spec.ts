@@ -15,6 +15,7 @@ import {
   resolveCopyName,
   rowToSavedView,
   rowToSavedViewRow,
+  savedViewScopeLine,
   savedViewsCountFact,
   tileDataKey,
   validateVizInput,
@@ -765,5 +766,19 @@ test("a saved view never carries the season's filters: vopp, vm and season are n
   expect(valid).not.toHaveProperty("season");
   expect(Object.keys(valid!.filters).sort()).toEqual(
     Object.keys(EMPTY_VIZ_FILTERS).sort(),
+  );
+});
+
+/* ── savedViewScopeLine ─────────────────────────────────────────────────── */
+
+test("savedViewScopeLine says a view is kept across matches, and for whom", () => {
+  expect(savedViewScopeLine("personal", false)).toBe(
+    "Saved to all your matches.",
+  );
+  expect(savedViewScopeLine("team", false)).toBe(
+    "Saved for you on every match and player profile.",
+  );
+  expect(savedViewScopeLine("team", true)).toBe(
+    "Saved for the team on every match and player profile.",
   );
 });

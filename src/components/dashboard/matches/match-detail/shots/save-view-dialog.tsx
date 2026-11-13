@@ -15,7 +15,10 @@ import {
 } from "@/components/ui/popover";
 import { advButton } from "@/lib/ui/adv-button";
 import type { FloatMenuTone } from "@/components/ui/float-menu";
-import { hasDuplicateViewName } from "@/lib/data/saved-views-logic";
+import {
+  hasDuplicateViewName,
+  savedViewScopeLine,
+} from "@/lib/data/saved-views-logic";
 import { createSavedView } from "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions";
 import type { SavedView, SavedViewRow } from "@/lib/data/saved-views-server";
 import type { WorkspaceKind } from "@/lib/workspace/types";
@@ -352,6 +355,17 @@ export function SaveViewDialog({
               }}
             >
               {definitionLine}
+            </p>
+            {/* Where it is kept: a view is a cut, a chart and filters — no
+                match — so it is there on every match, not only this one. */}
+            <p
+              data-save-view-scope=""
+              className="text-[11px]"
+              style={{
+                color: dark ? "rgba(255,255,255,0.45)" : "var(--ink-500)",
+              }}
+            >
+              {savedViewScopeLine(workspaceKind, shared)}
             </p>
             <p
               className="text-[11px]"

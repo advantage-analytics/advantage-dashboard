@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Maximize, Minus, Plus, X } from "lucide-react";
+import { Maximize, Minus, Plus, RotateCcw, X } from "lucide-react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
@@ -341,7 +341,8 @@ export function VizLightboxShell({
 
   /** The right column: the points behind the marks, or their statistics.
    *  Statistics alone when the host passes no points. */
-  const [paneState, setPane] = useState<"points" | "stats">("points");
+  // Statistics is the pane a card opens on; Points is one click away.
+  const [paneState, setPane] = useState<"points" | "stats">("stats");
   const pane = pointList ? paneState : "stats";
   /**
    * The legend's one choice (Won · Lost · Out · Ace), local to this card.
@@ -1163,6 +1164,7 @@ export function VizLightboxShell({
                           onZoomIn={pz.zoomIn}
                           onZoomOut={pz.zoomOut}
                           onFullCourt={pz.fullCourt}
+                          onReset={pz.fit}
                           onEscape={escapeFromTooltip}
                         />
                       )
@@ -1215,6 +1217,12 @@ export function VizLightboxShell({
                       role="group"
                       aria-label="Right panel"
                     >
+                      <LifecycleChip
+                        pressed={pane === "stats"}
+                        onClick={() => setPane("stats")}
+                      >
+                        Statistics
+                      </LifecycleChip>
                       {pointList && (
                         <LifecycleChip
                           pressed={pane === "points"}
@@ -1223,12 +1231,6 @@ export function VizLightboxShell({
                           Points
                         </LifecycleChip>
                       )}
-                      <LifecycleChip
-                        pressed={pane === "stats"}
-                        onClick={() => setPane("stats")}
-                      >
-                        Statistics
-                      </LifecycleChip>
                     </div>
                     <span className="flex-1" />
                     {pane === "points" && pointList && !isDraft && (
@@ -1359,11 +1361,13 @@ function StageCard({ children }: { children: ReactNode }) {
 }
 
 /**
- * + / − / Full court, bottom-right of the court (canvas S11), and — only
- * while the court is off its 100% framing — the level, bottom-left: "150% ·
- * Drag to move around". Full court zooms out to the whole court (below 100%
- * on a landing cut, whose 100% is the half the shots land in) and is spent
- * there; `0` comes back to 100%.
+ * + / − / Reset view / Full court, bottom-right of the court (canvas S11),
+ * and — only while the court is off its 100% framing — the level,
+ * bottom-left: "150% · Drag to move around". Full court zooms out to the
+ * whole court (below 100% on a landing cut, whose 100% is the half the shots
+ * land in) and is spent there. Reset view (`0`) puts the court back as it
+ * opened — its zoom AND where it was dragged — and is spent while it is
+ * already there.
  */
 function ZoomControls({
   relative,
@@ -1372,6 +1376,7 @@ function ZoomControls({
   onZoomIn,
   onZoomOut,
   onFullCourt,
+  onReset,
   onEscape,
 }: {
   relative: number;
@@ -1380,6 +1385,7 @@ function ZoomControls({
   onZoomIn: () => void;
   onZoomOut: () => void;
   onFullCourt: () => void;
+  onReset: () => void;
   /** The lightbox's Esc step, for when a zoom button's tooltip holds Esc. */
   onEscape: () => void;
 }) {
@@ -1427,6 +1433,22 @@ function ZoomControls({
           aria-hidden="true"
           className="mx-0.5 h-4 w-px bg-[var(--border-medium)]"
         />
+        <ChromeTooltip
+          label="Reset view"
+          shortcut="0"
+          side="top"
+          onEscapeKeyDown={onEscape}
+        >
+          <button
+            type="button"
+            aria-label="Reset view"
+            onClick={onReset}
+            disabled={atHome}
+            className={button}
+          >
+            <RotateCcw className="size-3.5" strokeWidth={1.5} aria-hidden />
+          </button>
+        </ChromeTooltip>
         <ChromeTooltip label="Full court" side="top" onEscapeKeyDown={onEscape}>
           <button
             type="button"

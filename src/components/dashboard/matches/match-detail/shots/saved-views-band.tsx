@@ -73,7 +73,8 @@ export type SavedViewRequest = SavedViewAction & { n: number };
  * A view the viewer may manage shows a ⋯ on its card (hover or focus):
  * Rename…, Duplicate, sharing in a team workspace, Reorder…, Delete view.
  * Rename is a small popover (`rename-view-dialog.tsx`); Delete removes the
- * card at once and leaves a "Deleted “name” · Undo" line above the grid.
+ * card at once and leaves a "Deleted “name” from all matches · Undo" line
+ * above the grid.
  *
  * "Reorder…" turns on reorder mode — this component's own client state,
  * never URL state: the cards stop being links, can be dragged or moved with
@@ -516,7 +517,8 @@ export function SavedViewsBand({
       // A staff delete of a teammate's shared view gets the fact with no
       // offer to undo it.
       setStatusMessage(
-        `Deleted “${deleted.name}”`,
+        // A view is not this match's alone: say where it went from.
+        `Deleted “${deleted.name}” from all matches`,
         deleted.mine ? () => handleUndo(deleted) : undefined,
       );
       router.refresh();
@@ -868,6 +870,15 @@ export function SavedViewsBand({
           )}
         </div>
       )}
+
+      {/* Nothing saved for this player yet: say what saving does, since
+          "Create view" inside one match reads as this match's alone. */}
+      {visibility !== "status-only" &&
+        visibleViews.length === 0 &&
+        canSaveViews &&
+        !manageMode && (
+          <p className="text-micro">Views you save show up on every match.</p>
+        )}
 
       {/* Honest zero: a viewer who cannot save (so has no "Create view"
           card) on a player with no saved views would otherwise see a blank

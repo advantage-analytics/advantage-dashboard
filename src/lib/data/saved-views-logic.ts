@@ -559,3 +559,18 @@ export function savedViewsCountFact(n: number): string {
   if (n <= 0) return "";
   return ` · ${n} saved view${n === 1 ? "" : "s"}`;
 }
+
+/**
+ * Who a view is saved for and where it shows: every match of the workspace
+ * (and, in a team, every player profile's season view), for the viewer alone
+ * unless it is shared.
+ */
+export function savedViewScopeLine(
+  workspaceKind: WorkspaceKind,
+  shared: boolean,
+): string {
+  if (workspaceKind !== "team") return "Saved to all your matches.";
+  return shared
+    ? "Saved for the team on every match and player profile."
+    : "Saved for you on every match and player profile.";
+}
