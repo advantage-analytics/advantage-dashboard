@@ -168,3 +168,16 @@ is the runner's. Newest entries at the bottom.
 3. The artboard's "Show 10 more" truncation for a long roster is not built.
 4. The header meta adds seats used to the artboard's count line; confirm it is wanted.
 5. Rename `admin-people-card.tsx`; it is no longer a card. The roster loader still computes `matchCount` and `lastMatch` that nothing shows.
+
+## T14 · Label match overview: checklist as the body — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** for the admin audience `LabelDashboard` renders one centred column: a "N flags left" line (score-moving and wrong data, no bar), the checklist as the body, and "Entered at upload" as one closed `<details>` row. "Left to check", "Statistics from the labels", "Score" and the "Every point checked" item are gone for the admin; each open check names its target (set, point or game) and opens it; a "Wrong data fixed" row carries the grey flags. The labeller audience renders as before. `session-status.ts` and `label-console.tsx` are untouched. `tests/label-console.spec.ts` and `tests/label-error-marking.spec.ts` updated.
+
+**follow-ups:**
+
+1. The console header in `label-console.tsx` still spans the full width and still says "N of M points checked" above the centred column.
+2. Once piece 2 records a starting flag count, the progress line becomes "X of Y flags resolved" with the artboard's bar.
+3. The artboard's checklist summary ("N open") beside "Before you publish" is not built.
+4. `AdminChecklist` repeats much of `PublishCheck`'s row markup, and `publishChecks` takes an `admin` boolean.

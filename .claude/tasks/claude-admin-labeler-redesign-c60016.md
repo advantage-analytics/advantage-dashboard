@@ -196,7 +196,7 @@ ready).
 
 ## T14 · Label match overview: checklist as the body
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** guess — src/components/admin/labels/label-dashboard.tsx, src/app/design/labels/labels-preview.tsx, tests/label-console.spec.ts, tests/label-console-labeller.spec.ts, tests/label-error-marking.spec.ts, tests/label-score-stall.spec.ts
 - **routes:** /admin/labels/[sessionId]

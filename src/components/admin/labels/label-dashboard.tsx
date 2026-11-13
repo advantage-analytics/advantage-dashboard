@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo, type ReactNode } from "react";
-import { ArrowUpRight, Check, CircleAlert } from "lucide-react";
+import {
+  ArrowUpRight,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  CircleAlert,
+} from "lucide-react";
 import type { LabelUploadInfo } from "@/lib/data/label-overview-server";
 import { buildAppliedRows, expectedStats } from "@/lib/services/labels/apply";
 import {
@@ -42,10 +48,23 @@ import { cn } from "@/lib/utils";
 /**
  * The label session outside full screen: the match's data, read. Nobody labels
  * here — there is no film, no court and no editable row — so the page answers
- * the questions asked before and after a labelling sitting, one card each:
+ * the questions asked before and after a labelling sitting.
+ *
+ * The admin's page is one centred column (2026-11-12, MatchOverview.dc.html):
+ *
+ *   a progress line counted in flags ("N flags left")
+ *   the publish checklist as the body, each open row naming the set, point
+ *     or game it concerns and opening full screen there
+ *   what was entered at upload, one row closed by default
+ *
+ * The admin works until the flags are resolved, not every point, so there is
+ * no "Every point checked" item and no points-checked count here.
+ *
+ * The labeller's page ("Before you submit") keeps its two columns, one card
+ * each:
  *
  *   left, the work     Left to check · Statistics from the labels
- *   right, the facts   Progress · Before you publish · Score · Entered at upload
+ *   right, the facts   Progress · Before you submit · Score · Entered at upload
  *
  * Every point number is a way in: it opens full screen on that point
  * (`onOpen`). The cards size to their content and none stretches to its
@@ -121,7 +140,9 @@ export function LabelDashboard(props: LabelDashboardProps) {
     matchScore,
     upload,
     startScore = null,
+    audience = "admin",
   } = props;
+  const admin = audience === "admin";
   const bestOf = upload?.bestOf ?? 3;
   const flagged = useMemo(
     () => (marks ? openFlags(points, marks) : []),
@@ -144,6 +165,8 @@ export function LabelDashboard(props: LabelDashboardProps) {
     entered: enteredScore(finalScore, matchScore),
     changes: useMemo(() => changeCounts(points), [points]),
     stats: useMemo(() => {
+      // The admin's page draws no statistics: nothing to count.
+      if (admin) return null;
       try {
         // The labeller's own marks: a partly marked session publishes no
         // forced string, and this still counts what they have marked so far.
@@ -155,9 +178,24 @@ export function LabelDashboard(props: LabelDashboardProps) {
       } catch {
         return null;
       }
-    }, [points, adScoring, bestOf, startScore]),
+    }, [admin, points, adScoring, bestOf, startScore]),
   };
   const widget = { ...props, reading };
+
+  if (admin) {
+    return (
+      <div
+        data-label-dashboard=""
+        className="-mr-14 flex min-h-0 flex-1 flex-col overflow-y-auto pr-14 pb-10"
+      >
+        <div className="mx-auto flex w-full max-w-[880px] flex-col gap-7">
+          <FlagsLeft {...widget} />
+          <AdminChecklist {...widget} />
+          <UploadDetails {...widget} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -628,29 +666,56 @@ interface CheckItem {
   state: CheckState;
   title: string;
   detail: string;
-  /** Where to go to deal with it. */
+  /** Where to go to deal with it: the labeller's "Open". */
   pointId?: string;
+  /**
+   * The admin's way in: the set, point or game the check concerns, named
+   * ("Set 1", "Point 57", "Game 9"), and the point full screen opens on.
+   */
+  target?: { label: string; pointId: string };
   /** A way in other than a point: a quiet link, or the card's one button. */
   link?: { label: string; onClick: () => void };
   button?: { label: string; onClick: () => void };
 }
 
-/** The route to publishing, as the things that must be true first. */
-function publishChecks({
-  points,
-  marks,
-  warnings,
-  videoEndsEarly,
-  reading,
-  errorsReady = false,
-  onMarkErrors,
-}: WidgetProps): CheckItem[] {
+/** The flag on the earliest point, in rail order. */
+function firstFlag(list: readonly OpenFlag[]): OpenFlag | undefined {
+  return list.reduce<OpenFlag | undefined>(
+    (min, flag) =>
+      min === undefined || flag.pointNumber < min.pointNumber ? flag : min,
+    undefined,
+  );
+}
+
+/**
+ * The route to publishing, as the things that must be true first. The
+ * labeller's list (`admin` false) is the one it has always been; the admin's
+ * drops "Every point checked", counts flags rather than marks, adds "Wrong
+ * data fixed", and names each open check's set, point or game (`target`).
+ */
+function publishChecks(
+  {
+    points,
+    marks,
+    warnings,
+    videoEndsEarly,
+    reading,
+    errorsReady = false,
+    onMarkErrors,
+  }: WidgetProps,
+  admin = false,
+): CheckItem[] {
   const { sets, entered, flagged } = reading;
   const { checked, total } = labelProgress(points);
   const live = points.filter((point) => point.status !== "deleted");
   const firstUnchecked = live.find((point) => point.checkedAt === null);
   const amber = flagged.filter((flag) => !flag.data);
-  const grey = flagged.length - amber.length;
+  const greyFlags = flagged.filter((flag) => flag.data);
+  const grey = greyFlags.length;
+  const pointTarget = (flag: OpenFlag | undefined) =>
+    flag
+      ? { label: `Point ${flag.pointNumber}`, pointId: flag.pointId }
+      : undefined;
   const differing = sets.flatMap((set, i) => {
     const want = entered?.[i];
     if (!want) return [];
@@ -666,6 +731,102 @@ function publishChecks({
   const partial = partialPublishWarnings(warnings);
   const plural = (n: number, one: string, many = `${one}s`) =>
     `${n} ${n === 1 ? one : many}`;
+  // The first such point, read off its sentence ("Point 9 isn't on…").
+  const partialPoint = partial
+    .map((warning) => /^Point (\d+)\b/.exec(warning))
+    .map((match) => (match ? Number(match[1]) : null))
+    .find((n): n is number => n !== null);
+  const partialId =
+    partialPoint === undefined
+      ? undefined
+      : live.find((point) => point.pointIndex + 1 === partialPoint)?.id;
+  // The first game left short or run over, opened on its first point.
+  const openGame = sets
+    .flatMap((set) => [...set.unfinished, ...set.overflow])
+    .sort((a, b) => a.setNumber - b.setNumber || a.gameNumber - b.gameNumber)
+    .at(0);
+  const openGamePoint = openGame
+    ? live
+        .filter(
+          (point) =>
+            point.setNumber === openGame.setNumber &&
+            point.gameNumber === openGame.gameNumber,
+        )
+        .reduce<LabelPoint | undefined>(
+          (min, point) =>
+            min === undefined || point.pointIndex < min.pointIndex
+              ? point
+              : min,
+          undefined,
+        )
+    : undefined;
+  const gameTarget =
+    openGame && openGamePoint
+      ? {
+          label:
+            sets.length > 1
+              ? `Set ${openGame.setNumber} · Game ${openGame.gameInSet}`
+              : `Game ${openGame.gameInSet}`,
+          pointId: openGamePoint.id,
+        }
+      : undefined;
+  const flagsOn = (list: readonly OpenFlag[]) =>
+    `${plural(list.length, "flag")} open on ${plural(new Set(list.map((f) => f.pointId)).size, "point")}.`;
+
+  const everyPointChecked: CheckItem =
+    checked < total
+      ? {
+          state: "open",
+          title: "Every point checked",
+          detail: `${total - checked} of ${total} still to check.`,
+          pointId: firstUnchecked?.id,
+        }
+      : {
+          state: "done",
+          title: "Every point checked",
+          detail: `All ${total} points checked.`,
+        };
+  const scoreFlags: CheckItem = admin
+    ? amber.length > 0
+      ? {
+          state: "open",
+          title: "Nothing open that can move the score",
+          detail: flagsOn(amber),
+          target: pointTarget(firstFlag(amber)),
+        }
+      : {
+          state: "done",
+          title: "Nothing open that can move the score",
+          detail: "No flag that can move the score is open.",
+        }
+    : amber.length > 0
+      ? {
+          state: "open",
+          title: "Nothing open that can move the score",
+          detail: `${plural(amber.length, "mark")} open on ${plural(new Set(amber.map((f) => f.pointId)).size, "point")}.`,
+          pointId: amber[0].pointId,
+        }
+      : {
+          state: "done",
+          title: "Nothing open that can move the score",
+          detail:
+            grey > 0
+              ? `${plural(grey, "wrong-data mark")} still open; none blocks a publish.`
+              : "No mark is open.",
+        };
+  const wrongData: CheckItem =
+    grey > 0
+      ? {
+          state: "open",
+          title: "Wrong data fixed",
+          detail: `${flagsOn(greyFlags)} None blocks publishing.`,
+          target: pointTarget(firstFlag(greyFlags)),
+        }
+      : {
+          state: "done",
+          title: "Wrong data fixed",
+          detail: "No wrong data is flagged.",
+        };
 
   return [
     videoEndsEarly === true
@@ -693,6 +854,10 @@ function publishChecks({
                 )
                 .join(". "),
               pointId: differing[0].set.lastPointId,
+              target: {
+                label: `Set ${differing[0].set.setNumber}`,
+                pointId: differing[0].set.lastPointId,
+              },
             }
           : {
               state: "done",
@@ -707,44 +872,26 @@ function publishChecks({
             partial.length === 1
               ? partial[0]
               : `${partial[0]} (and ${partial.length - 1} more)`,
+          target:
+            partialPoint !== undefined && partialId
+              ? { label: `Point ${partialPoint}`, pointId: partialId }
+              : undefined,
         }
       : {
           state: "done",
           title: "Every point can be written",
           detail: "No point is missing what a publish needs.",
         },
-    checked < total
-      ? {
-          state: "open",
-          title: "Every point checked",
-          detail: `${total - checked} of ${total} still to check.`,
-          pointId: firstUnchecked?.id,
-        }
-      : {
-          state: "done",
-          title: "Every point checked",
-          detail: `All ${total} points checked.`,
-        },
-    amber.length > 0
-      ? {
-          state: "open",
-          title: "Nothing open that can move the score",
-          detail: `${plural(amber.length, "mark")} open on ${plural(new Set(amber.map((f) => f.pointId)).size, "point")}.`,
-          pointId: amber[0].pointId,
-        }
-      : {
-          state: "done",
-          title: "Nothing open that can move the score",
-          detail:
-            grey > 0
-              ? `${plural(grey, "wrong-data mark")} still open; none blocks a publish.`
-              : "No mark is open.",
-        },
+    // The admin works until the flags are resolved, not every point.
+    ...(admin ? [] : [everyPointChecked]),
+    scoreFlags,
+    ...(admin ? [wrongData] : []),
     openGames > 0
       ? {
           state: "open",
           title: "Every game finished",
           detail: `${plural(openGames, "game")} unfinished or with points past its end.`,
+          target: gameTarget,
         }
       : {
           state: "done",
@@ -848,21 +995,261 @@ const LABELLER_CHECK_WORD: Record<CheckState, string> = {
   blocking: "Blocks submitting",
 };
 
+/** A check's state as a mark: a green tick, an empty ring, or an alert. */
+function CheckMark({ state, word }: { state: CheckState; word: string }) {
+  return (
+    <span
+      role="img"
+      aria-label={word}
+      className={cn(
+        "mt-px grid size-4 place-items-center rounded-full",
+        state === "done" &&
+          "text-[var(--success)] shadow-[inset_0_0_0_1.5px_var(--success)]",
+        state === "open" && "shadow-[inset_0_0_0_1.5px_var(--ink-300)]",
+        state === "blocking" && "text-[var(--warning-text)]",
+      )}
+    >
+      {state === "done" ? (
+        <Check className="size-2.5" strokeWidth={2.5} aria-hidden="true" />
+      ) : state === "blocking" ? (
+        <CircleAlert className="size-4" strokeWidth={1.5} aria-hidden="true" />
+      ) : null}
+    </span>
+  );
+}
+
+/** The sentence a published session reads instead of its checklist. */
+function Published() {
+  return (
+    <Card title="Published">
+      <Quiet>
+        These labels are the match’s points and statistics. Reopen the session
+        to change them.
+      </Quiet>
+    </Card>
+  );
+}
+
+// ── The admin's page ───────────────────────────────────────────────────────
+
+/**
+ * How far the work is, counted in flags — what `openFlags` still holds, split
+ * the way the rail splits it. Only the open count is stored on a session, not
+ * the count it started with, so there is no "of N" and no bar yet.
+ */
+function FlagsLeft({ marks, reading }: WidgetProps) {
+  const { flagged } = reading;
+  const data = flagged.filter((flag) => flag.data).length;
+  const score = flagged.length - data;
+  return (
+    <section data-dashboard-card="Progress" aria-label="Progress">
+      <p data-flags-left="" className="text-body tabular" style={INK[600]}>
+        {!marks ? (
+          "This session is labelled without marks, so nothing is flagged."
+        ) : flagged.length === 0 ? (
+          <span className="text-title" style={INK[900]}>
+            No flags left
+          </span>
+        ) : (
+          <>
+            <span className="text-title" style={INK[900]}>
+              {`${flagged.length} ${flagged.length === 1 ? "flag" : "flags"} left:`}
+            </span>{" "}
+            {`${score} can move the score, ${data} wrong data`}
+          </>
+        )}
+      </p>
+    </section>
+  );
+}
+
+/**
+ * The admin's way into a check: the set, point or game it concerns, named, or
+ * the check's own quiet link. The row is not one big link — a check can carry
+ * a button of its own.
+ */
+export function CheckTarget({
+  children,
+  label,
+  onClick,
+  onOpen,
+  target,
+}: {
+  children: React.ReactNode;
+  label?: string;
+  /** The check's own link. */
+  onClick?: () => void;
+  /** With `target`: full screen, on the target's point. */
+  onOpen?: (pointId?: string) => void;
+  target?: { label: string; pointId: string };
+}) {
+  return (
+    <button
+      type="button"
+      data-check-target={target?.label}
+      data-check-point={target?.pointId}
+      aria-label={label}
+      onClick={target ? () => onOpen?.(target.pointId) : onClick}
+      className="text-body-sm inline-flex cursor-pointer items-center gap-0.5 rounded-[var(--radius-button)] py-1 pr-1 pl-2 whitespace-nowrap transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+      style={INK[600]}
+    >
+      {children}
+      <ChevronRight
+        className="size-3.5"
+        strokeWidth={1.8}
+        style={{ color: "var(--ink-400)" }}
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
+
+/** "Before you publish", as the page's body. */
+function AdminChecklist(props: WidgetProps) {
+  const { complete, onOpen } = props;
+  if (complete) return <Published />;
+  const checks = publishChecks(props, true);
+  return (
+    <Card title="Before you publish">
+      <ul className="flex flex-col">
+        {checks.map((check) => (
+          <li
+            key={check.title}
+            data-publish-check={check.state}
+            data-check-title={check.title}
+            className="grid min-h-12 grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-x-3 border-t border-[var(--border-card)] py-2.5 first:border-t-0 first:pt-0 last:pb-0"
+          >
+            <CheckMark state={check.state} word={CHECK_WORD[check.state]} />
+            <div className="flex min-w-0 flex-col">
+              <span className="text-body" style={INK[900]}>
+                {check.title}
+              </span>
+              <span className="text-body-sm" style={INK[600]}>
+                {check.detail}
+              </span>
+              {check.button ? (
+                <button
+                  type="button"
+                  data-mark-errors=""
+                  onClick={check.button.onClick}
+                  className={cn(
+                    advButton("primary", "sm"),
+                    "mt-2.5 self-start",
+                  )}
+                >
+                  {check.button.label}
+                </button>
+              ) : null}
+            </div>
+            {check.target ? (
+              <CheckTarget
+                target={check.target}
+                label={`Open ${check.target.label}: ${check.title}`}
+                onOpen={onOpen}
+              >
+                {check.target.label}
+              </CheckTarget>
+            ) : check.link ? (
+              <CheckTarget onClick={check.link.onClick}>
+                {check.link.label}
+              </CheckTarget>
+            ) : (
+              <span />
+            )}
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
+/** Who started on the far side, by name; null when it was not entered. */
+function farSide(
+  upload: LabelUploadInfo,
+  names: Record<LabelSide, string>,
+): string | null {
+  return upload.topPlayerIsPlayer1 === null
+    ? null
+    : upload.topPlayerIsPlayer1
+      ? names.p1
+      : names.p2;
+}
+
+/**
+ * What was entered at upload, as one row closed by default: its summary names
+ * the scoring these labels count by, who starts on the far side and best-of.
+ * Opened, it holds the same facts and scoring control the labeller's card does.
+ */
+function UploadDetails(props: WidgetProps) {
+  const { upload, names, adScoring } = props;
+  const shell =
+    "rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)]";
+  const heading = (
+    <span className="text-body font-medium" style={INK[900]}>
+      Entered at upload
+    </span>
+  );
+  if (!upload) {
+    return (
+      <section
+        data-dashboard-card="Entered at upload"
+        className={cn(
+          shell,
+          "flex min-h-11 flex-wrap items-baseline gap-x-3 gap-y-0.5 px-4 py-2.5",
+        )}
+      >
+        {heading}
+        <span className="text-body-sm" style={INK[500]}>
+          The upload’s inputs could not be read.
+        </span>
+      </section>
+    );
+  }
+  const far = farSide(upload, names);
+  const summary = [
+    adScoring ? "Ad scoring" : "No-ad scoring",
+    far ? `${far} starts on the far side` : "Far side not entered",
+    upload.bestOf ? `best of ${upload.bestOf}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <details
+      data-dashboard-card="Entered at upload"
+      data-upload-details=""
+      className={cn(shell, "group")}
+    >
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-[var(--radius-card)] py-2.5 pr-3 pl-4 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none [&::-webkit-details-marker]:hidden">
+        <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
+          {heading}
+          <span
+            data-upload-summary=""
+            className="text-body-sm"
+            style={INK[600]}
+          >
+            {summary}
+          </span>
+        </span>
+        <ChevronDown
+          className="size-3.5 shrink-0 transition-transform duration-[var(--duration-hover)] group-open:rotate-180"
+          strokeWidth={1.8}
+          style={{ color: "var(--ink-400)" }}
+          aria-hidden="true"
+        />
+      </summary>
+      <div className="flex flex-col gap-3.5 px-4 pb-4">
+        <UploadFacts {...props} upload={upload} />
+      </div>
+    </details>
+  );
+}
+
 function PublishCheck(props: WidgetProps) {
   const { complete, onOpen, audience = "admin" } = props;
   const labeller = audience === "labeller";
   const say = labeller ? labellerWording : (text: string) => text;
   const checkWord = labeller ? LABELLER_CHECK_WORD : CHECK_WORD;
-  if (complete) {
-    return (
-      <Card title="Published">
-        <Quiet>
-          These labels are the match’s points and statistics. Reopen the session
-          to change them.
-        </Quiet>
-      </Card>
-    );
-  }
+  if (complete) return <Published />;
   const checks = publishChecks(props);
   return (
     <Card title={labeller ? "Before you submit" : "Before you publish"}>
@@ -873,32 +1260,7 @@ function PublishCheck(props: WidgetProps) {
             data-publish-check={check.state}
             className="grid grid-cols-[16px_minmax(0,1fr)] gap-x-2.5 border-t border-[var(--border-card)] py-2 first:border-t-0 first:pt-0 last:pb-0"
           >
-            <span
-              role="img"
-              aria-label={checkWord[check.state]}
-              className={cn(
-                "mt-px grid size-4 place-items-center rounded-full",
-                check.state === "done" &&
-                  "text-[var(--success)] shadow-[inset_0_0_0_1.5px_var(--success)]",
-                check.state === "open" &&
-                  "shadow-[inset_0_0_0_1.5px_var(--ink-300)]",
-                check.state === "blocking" && "text-[var(--warning-text)]",
-              )}
-            >
-              {check.state === "done" ? (
-                <Check
-                  className="size-2.5"
-                  strokeWidth={2.5}
-                  aria-hidden="true"
-                />
-              ) : check.state === "blocking" ? (
-                <CircleAlert
-                  className="size-4"
-                  strokeWidth={1.5}
-                  aria-hidden="true"
-                />
-              ) : null}
-            </span>
+            <CheckMark state={check.state} word={checkWord[check.state]} />
             <div className="flex min-w-0 flex-col">
               <span className="text-body" style={INK[900]}>
                 {check.title}
@@ -960,12 +1322,8 @@ const SCORING = [
  * the one fact here that can change: a wrong scoring is corrected for the
  * session's scoreboard and its publish, without resubmitting the video.
  */
-function UploadInputs({
-  upload,
-  names,
-  adScoring,
-  onAdScoringChange,
-}: WidgetProps) {
+function UploadInputs(props: WidgetProps) {
+  const { upload } = props;
   if (!upload) {
     return (
       <Card title="Entered at upload">
@@ -973,12 +1331,21 @@ function UploadInputs({
       </Card>
     );
   }
-  const far =
-    upload.topPlayerIsPlayer1 === null
-      ? null
-      : upload.topPlayerIsPlayer1
-        ? names.p1
-        : names.p2;
+  return (
+    <Card title="Entered at upload">
+      <UploadFacts {...props} upload={upload} />
+    </Card>
+  );
+}
+
+/** The upload's facts, two across, and who uploaded it. */
+function UploadFacts({
+  upload,
+  names,
+  adScoring,
+  onAdScoringChange,
+}: WidgetProps & { upload: LabelUploadInfo }) {
+  const far = farSide(upload, names);
   const window_ =
     upload.trim.start === null && upload.trim.end === null
       ? null
@@ -1050,7 +1417,7 @@ function UploadInputs({
     .filter(Boolean)
     .join(" on ");
   return (
-    <Card title="Entered at upload">
+    <>
       <dl data-upload-inputs="" className="grid grid-cols-2 gap-x-6">
         {facts.map(([label, value]) => (
           <div
@@ -1072,7 +1439,7 @@ function UploadInputs({
           {upload.program ? ` for ${upload.program}` : ""}.
         </p>
       ) : null}
-    </Card>
+    </>
   );
 }
 

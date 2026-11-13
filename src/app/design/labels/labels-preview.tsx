@@ -60,8 +60,9 @@ export function LabelsDesignPreview() {
             A match’s overview
           </h2>
           <p className="text-[13px] text-[var(--ink-600)]">
-            {NAMES.p1} vs {NAMES.p2}. Six cards: the work on the left, what it
-            is checked against on the right.
+            {NAMES.p1} vs {NAMES.p2}, as the admin reads it. One centred column:
+            the flags left, the publish checklist, and what was entered at
+            upload.
           </p>
         </div>
         {/* The dashboard bleeds 56px into the admin page's right gutter;
