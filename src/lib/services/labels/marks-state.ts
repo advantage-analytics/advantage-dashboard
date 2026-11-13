@@ -972,7 +972,15 @@ export function lastBallAgainstGame(
     landing_x: last.landingX,
     landing_y: last.landingY,
   });
-  if (read === null || read === last.result) return null;
+  // In against a miss, either way round: out read on a ball stored net (or
+  // the reverse) is a miss by both, and no reason to ask whether it was in.
+  if (
+    read === null ||
+    isMissedResult(read) === isMissedResult(last.result) ||
+    (read !== "in" && !isMissedResult(read))
+  ) {
+    return null;
+  }
   const call: "in" | "out" = isMissedResult(last.result) ? "in" : "out";
   const flipped = deriveEnding(
     {

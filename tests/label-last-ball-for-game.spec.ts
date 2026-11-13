@@ -215,6 +215,9 @@ test.describe("Was the last ball out? for a locked game", () => {
     expect(
       lastBallAgainstGame(rally("c", 2, "p2", "in", "none"), "p1", true),
     ).toBeNull();
+    // Stored net with a landing that reads out: a miss by both, not asked.
+    const netThenOut = rally("c", 2, "p1", "net", "with");
+    expect(lastBallAgainstGame(netThenOut, "p1", true)).toBeNull();
     // Lee's error stored out with a landing that reads out too: not asked.
     expect(
       lastBallAgainstGame(rally("c", 2, "p1", "out", "with"), "p1", true),
