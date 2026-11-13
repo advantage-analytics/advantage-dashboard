@@ -98,7 +98,7 @@ export function actionRejectedMessage(error: unknown): {
 export function actionRejectedWith(sentence: string) {
   return (error: unknown): { ok: false; error: string } => {
     const refusal = actionRejected(error);
-    return refusal.error === STALE_PAGE
+    return unstable_isUnrecognizedActionError(error)
       ? refusal
       : { ok: false, error: sentence };
   };
