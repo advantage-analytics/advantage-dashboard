@@ -58,7 +58,7 @@ ready).
 
 ## T4 · Today screen: per-row actions, no pills
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3
 - **files:** guess — src/components/admin/today/today-page-content.tsx, src/app/admin/page.tsx, src/app/admin/loading.tsx

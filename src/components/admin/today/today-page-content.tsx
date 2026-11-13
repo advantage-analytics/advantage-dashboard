@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
 import { markAdminRowSeen } from "@/app/admin/seen-actions";
 import {
   reopenTodayItem,
@@ -9,188 +16,65 @@ import {
   type ResolveResult,
 } from "@/app/admin/today-actions";
 import { AdminPage } from "@/components/admin/admin-page";
-import {
-  AdminMatchCell,
-  AdminPersonCell,
-  AgeText,
-  CountPills,
-  dayLabel,
-  scoredSets,
-  timeLabel,
-  useIsClient,
-} from "@/components/admin/admin-cells";
+import { AgeText } from "@/components/admin/admin-cells";
 import { useStartLabelling } from "@/components/admin/labels/start-labelling-button";
-import {
-  DRAWER_ATTR,
-  PeekDrawerFrame,
-} from "@/components/dashboard/matches/match-drawer";
 import {
   PendingBar,
   PendingRegion,
 } from "@/components/dashboard/loading/pending";
+import { approveClaim } from "@/lib/services/programs/admin-actions";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
-import type { TodayItem, TodayPipeline } from "@/lib/data/admin-today-server";
+import type {
+  TodayAction,
+  TodayItem,
+  TodayPipeline,
+} from "@/lib/data/admin-today-server";
 
 /**
- * Admin › Today (boards Today2 / TodayEmpty2): everything waiting on an
- * admin, oldest first, one table — "Waiting on you" · "Needs" · "Waiting" —
- * and a peek drawer a row opens with one primary action and one link.
+ * Admin › Today (artboard `AdminToday.dc.html`, 2026-11-12 admin strip): one
+ * list of what needs an admin, longest wait first — Kind · What · Waiting and
+ * a trailing track of the row's own actions (`TodayItem.actions`).
  *
- * The selection machine is `requests-page-content.tsx`'s (selected id, drawer
- * id and the 200ms closing state kept apart; ↑ ↓ step, Esc closes), minus the
- * URL mirror: a Today row is a pointer into another page, which owns the deep
- * link (`/admin/requests?id=…`, `/admin/ask?id=…`).
+ * No drawer and no filter pills: the title is a link to the item, and each
+ * row's buttons do the work in place — Approve a claim, open a label session,
+ * Reply, Add hours. The kinds with no natural end (a dead analysis, a flagged
+ * match, Ask feedback) keep a "Resolve" that opens the note form under the row,
+ * so nothing sits on Today forever. There is no Resolved view; a resolved row
+ * simply stops coming back from the loader.
  *
- * No crests on Today — the board says so; a match row's line 2 names its
- * workspace in text.
+ * The page sits centred in its column, as every stripped admin page does.
  */
 
 const CARD =
   "overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]";
-const ROW = "flex items-center gap-4";
-const COL = {
-  item: "min-w-0 flex-1",
-  need: "w-[150px] shrink-0",
-  age: "w-[120px] shrink-0",
-} as const;
-
-const rowDomId = (key: string) => `admin-today-${key.replace(/[^\w-]/g, "-")}`;
-
-type TodayView = "waiting" | "resolved";
+/** Centred, not pushed to the left edge — the artboard's 1040px main less its gutters. */
+const COLUMN = "mx-auto w-full max-w-[928px]";
+/** Kind · What · Waiting · actions — the header, every row and the skeleton share it. */
+const GRID =
+  "grid grid-cols-[140px_minmax(0,1fr)_72px_188px] items-center gap-x-4";
 
 export function TodayPageContent({
   items: waiting,
-  resolved,
   freshCount,
   pipeline,
 }: {
   items: TodayItem[];
-  resolved: TodayItem[];
   freshCount: number;
   pipeline: TodayPipeline | null;
 }) {
-  const [view, setView] = useState<TodayView>("waiting");
-  // Rows resolved or reopened here, hidden from the list they left until the
-  // refresh that follows the write brings the server's answer.
+  // Rows resolved here, hidden until the refresh that follows the write
+  // brings the server's answer.
   const [moved, setMoved] = useState<ReadonlySet<string>>(new Set());
   // The one row that can still be undone, and the line that offers it.
   const [undo, setUndo] = useState<{ key: string; title: string } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const items = useMemo(
-    () =>
-      (view === "waiting" ? waiting : resolved).filter(
-        (item) => !moved.has(item.key),
-      ),
-    [view, waiting, resolved, moved],
-  );
   const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [drawerKey, setDrawerKey] = useState<string | null>(null);
-  const [closing, setClosing] = useState(false);
-  const [openedByKeyboard, setOpenedByKeyboard] = useState(false);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const drawerItem = drawerKey
-    ? (items.find((item) => item.key === drawerKey) ?? null)
-    : null;
-  const drawerIndex = drawerItem ? items.indexOf(drawerItem) : -1;
-
-  // A refresh dropped the open row (it was dealt with): close quietly.
-  if (drawerKey && !drawerItem) {
-    setSelectedKey(null);
-    setDrawerKey(null);
-    setClosing(false);
-  }
-
-  const finishClose = useCallback(() => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-    setDrawerKey(null);
-    setClosing(false);
-  }, []);
-
-  const select = useCallback((item: TodayItem, viaKeyboard: boolean) => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-    setClosing(false);
-    setSelectedKey(item.key);
-    setDrawerKey(item.key);
-    setOpenedByKeyboard(viaKeyboard);
-    if (item.fresh) {
-      setOpened((prev) => new Set(prev).add(item.key));
-      void markAdminRowSeen("today", item.key).catch(() => {});
-    }
-  }, []);
-
-  const close = useCallback(
-    (returnFocusTo: string | null) => {
-      setSelectedKey(null);
-      setClosing(true);
-      closeTimer.current = setTimeout(finishClose, 240);
-      if (returnFocusTo)
-        document.getElementById(rowDomId(returnFocusTo))?.focus();
-    },
-    [finishClose],
+  const items = useMemo(
+    () => waiting.filter((item) => !moved.has(item.key)),
+    [waiting, moved],
   );
-
-  const step = useCallback(
-    (direction: 1 | -1) => {
-      if (!selectedKey) return;
-      const index = items.findIndex((item) => item.key === selectedKey);
-      const next = items[index + direction];
-      if (!next) return;
-      select(next, true);
-      document
-        .getElementById(rowDomId(next.key))
-        ?.scrollIntoView({ block: "nearest" });
-    },
-    [items, selectedKey, select],
-  );
-
-  useEffect(
-    () => () => {
-      if (closeTimer.current) clearTimeout(closeTimer.current);
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (!selectedKey) return;
-    function onKeyDown(event: KeyboardEvent) {
-      if (
-        event.defaultPrevented ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey
-      )
-        return;
-      const target = event.target as HTMLElement | null;
-      if (target) {
-        if (target.closest("input, textarea, select, [contenteditable=true]"))
-          return;
-        if (
-          target.closest(
-            `[role="dialog"]:not([${DRAWER_ATTR}] [role="dialog"])`,
-          )
-        )
-          return;
-        if (target.closest("[data-radix-popper-content-wrapper]")) return;
-      }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close(selectedKey);
-      } else if (event.key === "ArrowDown") {
-        event.preventDefault();
-        step(1);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        step(-1);
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedKey, close, step]);
 
   const freshNow = Math.max(
     0,
@@ -198,13 +82,11 @@ export function TodayPageContent({
       waiting.filter((i) => i.fresh && (opened.has(i.key) || moved.has(i.key)))
         .length,
   );
-  const waitingCount = waiting.filter((i) => !moved.has(i.key)).length;
-  const resolvedCount = resolved.filter((i) => !moved.has(i.key)).length;
 
   // A server refresh settles every optimistic move; the list is the truth.
-  const [settledFrom, setSettledFrom] = useState({ waiting, resolved });
-  if (settledFrom.waiting !== waiting || settledFrom.resolved !== resolved) {
-    setSettledFrom({ waiting, resolved });
+  const [settledFrom, setSettledFrom] = useState(waiting);
+  if (settledFrom !== waiting) {
+    setSettledFrom(waiting);
     setMoved(new Set());
   }
 
@@ -217,6 +99,13 @@ export function TodayPageContent({
     }, 10_000);
     return () => clearTimeout(timer);
   }, [undo, actionError]);
+
+  // Touching a row — its title or any of its actions — is a look at it.
+  const markOpened = useCallback((item: TodayItem) => {
+    if (!item.fresh) return;
+    setOpened((prev) => new Set(prev).add(item.key));
+    void markAdminRowSeen("today", item.key).catch(() => {});
+  }, []);
 
   // Hide the row at once, run the write, and put it back if the write fails.
   const moveRow = useCallback(
@@ -249,7 +138,6 @@ export function TodayPageContent({
 
   const resolve = useCallback(
     async (item: TodayItem, note: string | null) => {
-      close(null);
       const ok = await moveRow(
         item.key,
         () => resolveTodayItem(item.key, note),
@@ -257,135 +145,69 @@ export function TodayPageContent({
       );
       if (ok) setUndo({ key: item.key, title: item.title });
     },
-    [close, moveRow],
+    [moveRow],
   );
 
   const reopen = useCallback(
     async (key: string) => {
       setUndo(null);
-      if (drawerKey === key) close(null);
       await moveRow(
         key,
         () => reopenTodayItem(key),
         "Couldn’t reopen it. Try again.",
       );
     },
-    [close, drawerKey, moveRow],
+    [moveRow],
   );
 
   return (
-    <AdminPage
-      className={cn(drawerItem && "pr-10")}
-      rail={
-        drawerItem && (
-          <TodayDrawer
-            item={drawerItem}
-            index={drawerIndex}
-            total={items.length}
-            closing={closing}
-            autoFocus={openedByKeyboard}
-            onPrev={() => step(-1)}
-            onNext={() => step(1)}
-            onClose={() => close(drawerItem.key)}
-            onClosed={finishClose}
-            onResolve={(note) => void resolve(drawerItem, note)}
-            onReopen={() => void reopen(drawerItem.key)}
-          />
-        )
-      }
-    >
-      <h1 className="text-display">Today</h1>
-      <p className="text-body-sm mt-[9px]">{lede(waitingCount, freshNow)}</p>
+    <AdminPage>
+      <div className={COLUMN}>
+        <h1 className="text-display">Today</h1>
+        <p className="text-body-sm mt-[9px]">{lede(items.length, freshNow)}</p>
 
-      {resolved.length > 0 || view === "resolved" ? (
-        <div className="mt-6">
-          <CountPills
-            label="Today"
-            value={view}
-            onChange={(next) => {
-              close(null);
-              setView(next);
-            }}
-            options={[
-              { value: "waiting", label: "Waiting", count: waitingCount },
-              {
-                value: "resolved",
-                label: "Resolved",
-                count: resolvedCount,
-              },
-            ]}
-          />
-        </div>
-      ) : null}
-
-      {actionError ? (
-        <p role="alert" className="mt-4 text-[12px] text-[var(--danger)]">
-          {actionError}
-        </p>
-      ) : null}
-      {undo && !actionError ? (
-        <p
-          role="status"
-          className="mt-4 flex flex-wrap items-center gap-x-2.5 text-[12px] text-[var(--ink-700)]"
-        >
-          {undo ? (
-            <>
-              <span className="min-w-0 truncate">Resolved “{undo.title}”.</span>
-              <button
-                type="button"
-                onClick={() => void reopen(undo.key)}
-                className="cursor-pointer font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
-              >
-                Undo
-              </button>
-            </>
-          ) : null}
-        </p>
-      ) : null}
-
-      {items.length === 0 ? (
-        view === "resolved" ? (
-          <p className="mt-6 text-[13px] text-[var(--ink-600)]">
-            Nothing resolved in the last 30 days.
+        {actionError ? (
+          <p role="alert" className="mt-4 text-[12px] text-[var(--danger)]">
+            {actionError}
           </p>
-        ) : (
-          <EmptyCard />
-        )
-      ) : (
-        <div className={cn(CARD, "mt-6")}>
-          <div className="min-w-[660px] px-6 pt-0.5 pb-1.5">
-            <div
-              className={cn(
-                ROW,
-                "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-              )}
+        ) : null}
+        {undo && !actionError ? (
+          <p
+            role="status"
+            className="mt-4 flex flex-wrap items-center gap-x-2.5 text-[12px] text-[var(--ink-700)]"
+          >
+            <span className="min-w-0 truncate">Resolved “{undo.title}”.</span>
+            <button
+              type="button"
+              onClick={() => void reopen(undo.key)}
+              className="cursor-pointer font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
             >
-              <span className={cn(COL.item, "eyebrow-sm")}>
-                {view === "waiting" ? "Waiting on you" : "Was waiting on you"}
-              </span>
-              <span className={cn(COL.need, "eyebrow-sm")}>Needs</span>
-              <span className={cn(COL.age, "eyebrow-sm")}>
-                {view === "waiting" ? "Waiting" : "Resolved"}
-              </span>
-            </div>
-            {items.map((item) => (
-              <TodayRow
-                key={item.key}
-                item={item}
-                fresh={item.fresh && !opened.has(item.key)}
-                selected={item.key === selectedKey}
-                onSelect={(viaKeyboard) => {
-                  if (selectedKey === item.key)
-                    close(viaKeyboard ? item.key : null);
-                  else select(item, viaKeyboard);
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+              Undo
+            </button>
+          </p>
+        ) : null}
 
-      {pipeline ? <PipelineLine pipeline={pipeline} /> : null}
+        {items.length === 0 ? (
+          <EmptyCard />
+        ) : (
+          <div className={cn(CARD, "mt-6")}>
+            <div className="min-w-[680px] px-6 pt-0.5 pb-1.5">
+              <HeaderRow />
+              {items.map((item) => (
+                <TodayRow
+                  key={item.key}
+                  item={item}
+                  fresh={item.fresh && !opened.has(item.key)}
+                  onTouch={() => markOpened(item)}
+                  onResolve={(note) => void resolve(item, note)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {pipeline ? <PipelineLine pipeline={pipeline} /> : null}
+      </div>
     </AdminPage>
   );
 }
@@ -395,345 +217,243 @@ function lede(total: number, fresh: number): string {
   const head =
     total === 1
       ? "1 thing is waiting on you"
-      : `${total} things are waiting on you, oldest first`;
+      : `${total} things are waiting on you, longest wait first`;
   return fresh > 0
     ? `${head} · ${fresh} new since you last looked.`
     : `${head}.`;
 }
 
-function TodayRow({
-  item,
-  fresh,
-  selected,
-  onSelect,
-}: {
-  item: TodayItem;
-  fresh: boolean;
-  selected: boolean;
-  onSelect: (viaKeyboard: boolean) => void;
-}) {
+/** Kind · What · Waiting, and an unlabelled track over the row actions. */
+function HeaderRow() {
   return (
     <div
-      id={rowDomId(item.key)}
-      role="button"
-      tabIndex={0}
-      aria-pressed={selected}
-      onClick={(event) => onSelect(event.detail === 0)}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelect(true);
-        }
-      }}
       className={cn(
-        ROW,
-        "-mx-4 h-[60px] cursor-pointer rounded-[var(--radius-element)] px-4",
-        "transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-muted)]",
-        "focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none",
-        selected && "bg-[var(--surface-muted)]",
+        GRID,
+        "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
       )}
     >
-      <span className={cn(COL.item, "flex min-w-0")}>
-        <ItemCell item={item} fresh={fresh} />
-      </span>
-      <span
-        className={cn(
-          COL.need,
-          "truncate text-[12px] font-medium text-[var(--ink-900)]",
-        )}
-      >
-        {item.need}
-      </span>
-      {item.resolution ? (
-        <span
-          className={cn(COL.age, "flex min-w-0 flex-col gap-1 tabular-nums")}
-        >
-          <span className="truncate text-[13px] whitespace-nowrap text-[var(--ink-700)]">
-            <AgeText at={item.resolution.at} /> ago
-          </span>
-          <span className="truncate text-[12px] whitespace-nowrap text-[var(--ink-600)]">
-            by {item.resolution.by}
-          </span>
-        </span>
-      ) : (
-        <span
-          className={cn(COL.age, "flex min-w-0 flex-col gap-1 tabular-nums")}
-        >
-          <AgeText
-            at={item.since}
-            className={cn(
-              "truncate text-[13px] whitespace-nowrap",
-              fresh
-                ? "font-medium text-[var(--ink-900)]"
-                : "text-[var(--ink-700)]",
-            )}
-          />
-          <span className="truncate text-[12px] whitespace-nowrap text-[var(--ink-600)]">
-            <SinceText at={item.since} />
-          </span>
-        </span>
-      )}
+      <span className="eyebrow-sm">Kind</span>
+      <span className="eyebrow-sm">What</span>
+      <span className="eyebrow-sm">Waiting</span>
+      <span aria-hidden="true" />
     </div>
   );
 }
 
-function ItemCell({ item, fresh }: { item: TodayItem; fresh: boolean }) {
-  const cell = item.cell;
-  if (cell.type === "match") {
-    return (
-      <AdminMatchCell
-        player={cell.player}
-        opponent={cell.opponent}
-        won={cell.won}
-        sets={cell.sets}
-        fresh={fresh}
-        trailing={
-          <>
-            {scoredSets(cell.sets).length > 0 ? (
-              <span
-                aria-hidden="true"
-                className="text-[12px] text-[var(--ink-400)]"
-              >
-                ·
-              </span>
-            ) : null}
-            <span className="truncate text-[12px] text-[var(--ink-600)]">
-              {cell.context}
-            </span>
-          </>
-        }
-      />
-    );
-  }
-  return (
-    <AdminPersonCell
-      name={cell.name}
-      photoUrl={cell.photoUrl}
-      rest={cell.rest ?? undefined}
-      sub={cell.sub ?? undefined}
-      fresh={fresh}
-    />
+/** Where the title goes: the item's own link, else the row's first link action. */
+function titleHref(item: TodayItem): string | null {
+  if (item.link) return item.link.href;
+  const first = item.actions.find(
+    (a): a is Extract<TodayAction, { type: "link" }> => a.type === "link",
   );
+  return first?.href ?? null;
 }
 
-/** "since Oct 25", "since Yesterday, 4:10 pm", "since 9:30 am" — browser zone only. */
-function SinceText({ at }: { at: string }) {
-  const isClient = useIsClient();
-  if (!isClient) return <> </>;
-  const date = new Date(at);
-  const day = dayLabel(date);
-  const label =
-    day === "Today"
-      ? timeLabel(date)
-      : day === "Yesterday"
-        ? `Yesterday, ${timeLabel(date)}`
-        : day;
-  return <>since {label}</>;
-}
-
-function TodayDrawer({
+function TodayRow({
   item,
-  index,
-  total,
-  closing,
-  autoFocus,
-  onPrev,
-  onNext,
-  onClose,
-  onClosed,
+  fresh,
+  onTouch,
   onResolve,
-  onReopen,
 }: {
   item: TodayItem;
-  index: number;
-  total: number;
-  closing: boolean;
-  autoFocus: boolean;
-  onPrev: () => void;
-  onNext: () => void;
-  onClose: () => void;
-  onClosed: () => void;
+  fresh: boolean;
+  onTouch: () => void;
   onResolve: (note: string | null) => void;
-  onReopen: () => void;
 }) {
-  return (
-    <PeekDrawerFrame
-      kind="Item"
-      label={item.title}
-      index={index}
-      total={total}
-      canPrev={index > 0}
-      canNext={index < total - 1}
-      closing={closing}
-      autoFocus={autoFocus}
-      focusKey={item.key}
-      onPrev={onPrev}
-      onNext={onNext}
-      onClose={onClose}
-      onClosed={onClosed}
-      footer={
-        <>
-          <DrawerPrimary item={item} />
-          {item.link ? (
-            <Link
-              href={item.link.href}
-              className="self-center text-[13px] text-[var(--ink-700)] hover:text-[var(--ink-900)]"
-            >
-              {item.link.label}
-            </Link>
-          ) : null}
-        </>
-      }
-    >
-      <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-[22px] pt-6 pb-[22px]">
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[12px] text-[var(--ink-600)]">
-            {item.need} · waiting <AgeText at={item.since} />
-          </span>
-          <h2 className="text-title-lg [text-wrap:balance] break-words text-[var(--ink-900)]">
-            {item.title}
-          </h2>
-        </div>
-        <p className="text-[13px] leading-[1.55] break-words text-[var(--ink-700)]">
-          {item.body}
-        </p>
-        {item.resolution ? (
-          <ResolvedNote resolution={item.resolution} onReopen={onReopen} />
-        ) : item.resolvable ? (
-          <ResolveForm key={item.key} onResolve={onResolve} />
-        ) : null}
-      </div>
-    </PeekDrawerFrame>
+  const [resolving, setResolving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+  const [approving, startApprove] = useTransition();
+  const labelAction = item.actions.find(
+    (a): a is Extract<TodayAction, { type: "label" }> => a.type === "label",
   );
-}
+  // Called on every row (hooks run unconditionally); only a label row starts it.
+  const labelling = useStartLabelling(labelAction?.startLabellingJobId ?? "");
+  const rowError = approveError ?? labelling.error;
+  const href = titleHref(item);
 
-/**
- * The drawer's one primary, from the row's first navigating action. Approve
- * and Resolve are not drawn here (Resolve has its own form below); a claim
- * Today could approve keeps its link into the Requests drawer, labelled as
- * the review it is rather than its "Decline".
- */
-function DrawerPrimary({ item }: { item: TodayItem }) {
-  const action = item.actions.find(
-    (a) => a.type === "link" || a.type === "label",
+  const approve = (claimId: string) => {
+    onTouch();
+    setApproveError(null);
+    startApprove(async () => {
+      const result = await approveClaim(claimId).catch(actionRejected);
+      // On success the action's revalidatePath re-renders Today without it.
+      if (!result.ok) setApproveError(result.error);
+    });
+  };
+
+  const title = (
+    <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
+      {item.title}
+    </span>
   );
-  if (!action) return null;
-  if (action.type === "label") {
-    return (
-      <StartLabellingButton
-        key={action.startLabellingJobId}
-        jobId={action.startLabellingJobId}
-        label={action.label}
-      />
-    );
-  }
-  if (action.type !== "link") return null;
-  const approvable = item.actions.some((a) => a.type === "approve");
+
   return (
-    <Link
-      href={action.href}
-      className={cn(advButton("primary", "md"), "w-full")}
-    >
-      {approvable ? "Review claim" : action.label}
-    </Link>
+    <div className="py-2">
+      <div className={cn(GRID, "min-h-[44px]")}>
+        <span className="truncate text-[12px] text-[var(--ink-600)]">
+          {item.need}
+        </span>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="flex min-w-0 items-center gap-2">
+            {href ? (
+              <Link
+                href={href}
+                onClick={onTouch}
+                className="min-w-0 truncate rounded-[var(--radius-element)] hover:underline"
+              >
+                {title}
+              </Link>
+            ) : (
+              title
+            )}
+            {fresh ? (
+              <span
+                role="img"
+                aria-label="New"
+                className="size-[5px] shrink-0 rounded-full bg-[var(--blue)]"
+              />
+            ) : null}
+          </span>
+          <span className="truncate text-[12px] text-[var(--ink-600)]">
+            {item.body}
+          </span>
+        </span>
+        <AgeText
+          at={item.since}
+          className={cn(
+            "truncate text-[12px] whitespace-nowrap tabular-nums",
+            fresh
+              ? "font-medium text-[var(--ink-900)]"
+              : "text-[var(--ink-600)]",
+          )}
+        />
+        <span className="flex items-center justify-end gap-1.5">
+          {item.actions.map((action) => {
+            const key = `${action.type}:${action.label}`;
+            switch (action.type) {
+              case "link":
+                return (
+                  <Link
+                    key={key}
+                    href={action.href}
+                    onClick={onTouch}
+                    className={advButton("outline", "sm")}
+                  >
+                    {action.label}
+                  </Link>
+                );
+              case "approve":
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled={approving}
+                    onClick={() => approve(action.claimId)}
+                    className={advButton("outline", "sm")}
+                  >
+                    {approving ? "Approving…" : action.label}
+                  </button>
+                );
+              case "label":
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled={labelling.isPending}
+                    onClick={() => {
+                      onTouch();
+                      labelling.start();
+                    }}
+                    className={advButton("outline", "sm")}
+                  >
+                    {labelling.isPending ? "Opening…" : action.label}
+                  </button>
+                );
+              case "resolve":
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-expanded={resolving}
+                    onClick={() => {
+                      onTouch();
+                      setResolving((open) => !open);
+                    }}
+                    className={advButton("outline", "sm")}
+                  >
+                    {action.label}
+                  </button>
+                );
+            }
+          })}
+        </span>
+      </div>
+      {rowError ? (
+        <p
+          role="alert"
+          className="mt-1 ml-[156px] text-[12px] leading-[18px] text-[var(--danger)]"
+        >
+          {rowError}
+        </p>
+      ) : null}
+      {resolving ? (
+        <div className="mt-2 ml-[156px] max-w-[520px] pb-2">
+          <ResolveForm
+            onResolve={onResolve}
+            onCancel={() => setResolving(false)}
+          />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
 /**
  * The hand close for a row that has none of its own (a dead analysis, a
- * flagged match nobody will label, Ask feedback). Quiet on purpose: an
- * outline button under the facts, never a second primary beside the real one.
+ * flagged match nobody will label, Ask feedback), opened by the row's
+ * "Resolve". Quiet on purpose: outline buttons, never a second primary.
  */
 function ResolveForm({
   onResolve,
+  onCancel,
 }: {
   onResolve: (note: string | null) => void;
+  onCancel: () => void;
 }) {
   const [note, setNote] = useState("");
+  const noteId = useId();
   return (
-    <div className="flex flex-col gap-2 border-t border-[var(--border-hairline)] pt-4">
-      <label
-        htmlFor="today-resolve-note"
-        className="text-[12px] text-[var(--ink-600)]"
-      >
+    <div className="flex flex-col gap-2">
+      <label htmlFor={noteId} className="text-[12px] text-[var(--ink-600)]">
         Nothing left to do? Resolve it for every admin.
       </label>
       <textarea
-        id="today-resolve-note"
+        id={noteId}
         value={note}
         onChange={(event) => setNote(event.target.value)}
         maxLength={500}
         rows={2}
+        autoFocus
         placeholder="Note, optional — “player abandoned the upload”"
         className="w-full resize-none rounded-[var(--radius-element)] border border-[var(--border-hairline)] bg-[var(--surface-card)] px-2.5 py-2 text-[13px] text-[var(--ink-900)] outline-none placeholder:text-[var(--ink-400)] focus-visible:border-[var(--border-medium)]"
       />
-      <button
-        type="button"
-        onClick={() => onResolve(note.trim() || null)}
-        className={cn(advButton("outline", "md"), "self-start")}
-      >
-        Resolve
-      </button>
-    </div>
-  );
-}
-
-function ResolvedNote({
-  resolution,
-  onReopen,
-}: {
-  resolution: NonNullable<TodayItem["resolution"]>;
-  onReopen: () => void;
-}) {
-  return (
-    <div className="flex flex-col gap-2 border-t border-[var(--border-hairline)] pt-4">
-      <p className="text-[12px] text-[var(--ink-600)]">
-        Resolved by {resolution.by} · <AgeText at={resolution.at} /> ago
-      </p>
-      {resolution.note ? (
-        <p className="text-[13px] leading-[1.55] break-words text-[var(--ink-700)]">
-          “{resolution.note}”
-        </p>
-      ) : null}
-      <button
-        type="button"
-        onClick={onReopen}
-        className={cn(advButton("outline", "md"), "self-start")}
-      >
-        Reopen
-      </button>
-    </div>
-  );
-}
-
-function StartLabellingButton({
-  jobId,
-  label,
-}: {
-  jobId: string;
-  label: string;
-}) {
-  const { start, isPending, error } = useStartLabelling(jobId);
-  return (
-    <>
-      {error ? (
-        <p
-          role="alert"
-          className="text-[12px] leading-[18px] text-[var(--danger)]"
+      <span className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onResolve(note.trim() || null)}
+          className={advButton("outline", "sm")}
         >
-          {error}
-        </p>
-      ) : null}
-      <button
-        type="button"
-        disabled={isPending}
-        onClick={start}
-        className={cn(advButton("primary", "md"), "w-full")}
-      >
-        {isPending ? "Opening…" : label}
-      </button>
-    </>
+          Resolve
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className={advButton("ghost", "sm")}
+        >
+          Cancel
+        </button>
+      </span>
+    </div>
   );
 }
 
@@ -745,7 +465,8 @@ function EmptyCard() {
       </p>
       <p className="max-w-[520px] text-[13px] text-[var(--ink-600)]">
         Claims and program requests, failed analyses, flagged labels, pilots
-        near their hours and thumbs down on Ask show up here when they arrive.
+        near their hours, support messages and thumbs down on Ask show up here
+        when they arrive.
       </p>
     </div>
   );
@@ -789,40 +510,28 @@ function PipelineLine({ pipeline }: { pipeline: TodayPipeline }) {
 export function TodayPageSkeleton() {
   return (
     <AdminPage>
-      <h1 className="text-display">Today</h1>
-      <PendingBar className="mt-[13px] h-3 w-72" />
-      <div className={cn(CARD, "mt-6")}>
-        <div className="min-w-[660px] px-6 pt-0.5 pb-1.5">
-          <div
-            className={cn(
-              ROW,
-              "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-            )}
-          >
-            <span className={cn(COL.item, "eyebrow-sm")}>Waiting on you</span>
-            <span className={cn(COL.need, "eyebrow-sm")}>Needs</span>
-            <span className={cn(COL.age, "eyebrow-sm")}>Waiting</span>
-          </div>
-          <PendingRegion label="what is waiting on you">
-            {Array.from({ length: 4 }, (_, i) => (
-              <div key={i} className={cn(ROW, "h-[60px]")}>
-                <span className={cn(COL.item, "flex items-center gap-3")}>
-                  <PendingBar className="size-8 rounded-full" />
-                  <span className="flex flex-1 flex-col gap-1.5">
-                    <PendingBar className="h-3 w-48" />
-                    <PendingBar className="h-3 w-32" />
-                  </span>
-                </span>
-                <span className={COL.need}>
-                  <PendingBar className="h-3 w-24" />
-                </span>
-                <span className={cn(COL.age, "flex flex-col gap-1.5")}>
-                  <PendingBar className="h-3 w-12" />
+      <div className={COLUMN}>
+        <h1 className="text-display">Today</h1>
+        <PendingBar className="mt-[13px] h-3 w-72" />
+        <div className={cn(CARD, "mt-6")}>
+          <div className="min-w-[680px] px-6 pt-0.5 pb-1.5">
+            <HeaderRow />
+            <PendingRegion label="what is waiting on you">
+              {Array.from({ length: 4 }, (_, i) => (
+                <div key={i} className={cn(GRID, "min-h-[44px] py-2")}>
                   <PendingBar className="h-3 w-20" />
-                </span>
-              </div>
-            ))}
-          </PendingRegion>
+                  <span className="flex flex-col gap-1.5">
+                    <PendingBar className="h-3 w-48" />
+                    <PendingBar className="h-3 w-64" />
+                  </span>
+                  <PendingBar className="h-3 w-10" />
+                  <span className="flex justify-end gap-1.5">
+                    <PendingBar className="h-8 w-16 rounded-[var(--radius-element)]" />
+                  </span>
+                </div>
+              ))}
+            </PendingRegion>
+          </div>
         </div>
       </div>
     </AdminPage>

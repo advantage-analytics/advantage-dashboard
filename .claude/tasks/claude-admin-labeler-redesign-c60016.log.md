@@ -37,3 +37,16 @@ is the runner's. Newest entries at the bottom.
 2. Message rows have no link of their own and a generic sub-line; the latest message excerpt would need one more read.
 3. `readMessageDrafts` reads every thread with a player message, uncapped. Fine at current volume.
 4. `claimOffersApprove` copies the Requests drawer's rule by hand; the reviewer did not confirm the two match.
+
+## T4 · Today screen: per-row actions, no pills — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `today-page-content.tsx` rewritten: each row lists its `actions` in a trailing cell (links, Approve through `approveClaim` with a pending state and an inline refusal, the label action through `useStartLabelling`, Resolve opening `ResolveForm` under the row), the title links to the item, and `CountPills`, the Resolved view and `TodayDrawer` are gone. Header and skeleton share one `HeaderRow` (Kind, What, Waiting). `src/app/admin/page.tsx` stops passing `resolved`.
+
+**follow-ups:**
+
+1. `admin-today-server.ts` still builds the Resolved list that nothing reads now; drop that work.
+2. Every row action is an outline button; decide whether the first one should be primary.
+3. The artboard bolds overdue waits; there is no due time to drive that until piece 2.
+4. `/admin` has had no eyes-on check yet.
