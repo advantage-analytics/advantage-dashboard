@@ -19,9 +19,11 @@ import {
 } from "@/components/admin/admin-cells";
 import {
   MatchPeekDrawer,
+  resubmittableJobId,
   videoHoursLabel,
   workspaceName,
 } from "@/components/admin/matches/match-peek-drawer";
+import { ResubmitButton } from "@/components/admin/matches/resubmit-button";
 import { DRAWER_ATTR } from "@/components/dashboard/matches/match-drawer";
 import { VerifiedMark } from "@/components/dashboard/matches/verified-mark";
 import { AnalysisStatusLine } from "@/components/dashboard/shared/analysis-status-line";
@@ -479,6 +481,7 @@ function MatchRow({
   onSelect: () => void;
 }) {
   const against = row.opponent.trim();
+  const failedJobId = resubmittableJobId(row);
   return (
     <div
       id={rowDomId(row.id)}
@@ -516,8 +519,11 @@ function MatchRow({
       <span className="min-w-0">
         <WorkspaceCell workspace={row.workspace} ownerName={row.player} />
       </span>
-      <span className="flex min-w-0 overflow-hidden">
-        <MatchStatus row={row} />
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="flex min-w-0 overflow-hidden">
+          <MatchStatus row={row} />
+        </span>
+        {failedJobId ? <ResubmitButton jobId={failedJobId} /> : null}
       </span>
       <VideoHours seconds={row.videoSeconds} />
       <UploadedAt at={row.uploadedAt} fresh={fresh} />

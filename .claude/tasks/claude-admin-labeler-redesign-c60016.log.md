@@ -89,3 +89,16 @@ is the runner's. Newest entries at the bottom.
 2. `MatchStatus` repeats `RowLifecycle`'s branches; one shared "status to mark and words" helper would stop them drifting.
 3. The loader still fetches 30-day views for every row though only the drawer shows them.
 4. Search still matches `row.event` with the Event column gone.
+
+## T8 · Resubmit buttons on Matches and Today — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** new `ResubmitButton` (`src/components/admin/matches/resubmit-button.tsx`) calls `resubmitFailedAnalysisAction`, shows a pending label, prints the refusal inline (`quota` adds an "Add hours" link, `attempt_ceiling` disables the button) and refreshes on success. It renders on a failed Matches row and in its panel through the shared `resubmittableJobId(row)`, and on Today's "Analysis failed" rows through a new `resubmit` action type; "Analysis stuck" rows keep Open. `tests/admin-today-rows.spec.ts` asserts both.
+
+**follow-ups:**
+
+1. `input_rejected` can never succeed on retry either; give it the disabled treatment `attempt_ceiling` has.
+2. Success refreshes twice (the action's `revalidatePath` and `router.refresh()`).
+3. A refusal sentence under the button makes the one-line rows taller; check it on screen.
+4. `jobDrafts`' failed-or-stuck choice of `failedJobId` has no test (it reads the database).

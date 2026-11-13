@@ -8,6 +8,7 @@ import {
 } from "@/components/admin/admin-cells";
 import { PeekDrawerFrame } from "@/components/dashboard/matches/match-drawer";
 import { CopyButton } from "@/components/admin/matches/copy-button";
+import { ResubmitButton } from "@/components/admin/matches/resubmit-button";
 import {
   LABEL_INK,
   StepMark,
@@ -47,6 +48,17 @@ function subLine(row: AdminMatchRow): string {
   if (row.sets.length === 0) return where;
   const result = row.won === true ? "Won " : row.won === false ? "Lost " : "";
   return `${result}${formatScoreText(row.sets)} · ${where}`;
+}
+
+/**
+ * The job a Resubmit would retry: set only for a row in the `failed` bucket
+ * that carries its failed job's id. The row and the side panel both ask this,
+ * so the button is on the one exactly when it is on the other.
+ */
+export function resubmittableJobId(
+  row: Pick<AdminMatchRow, "bucket" | "failedJobId">,
+): string | null {
+  return row.bucket === "failed" && row.failedJobId ? row.failedJobId : null;
 }
 
 /** The 30-day views sentence; "—" when the count is not measured. */
@@ -90,6 +102,7 @@ export function MatchPeekDrawer({
   onClosed: () => void;
 }) {
   const title = `${row.player} vs ${row.opponent}`;
+  const failedJobId = resubmittableJobId(row);
   return (
     <PeekDrawerFrame
       kind="Match"
@@ -132,6 +145,11 @@ export function MatchPeekDrawer({
         </div>
 
         <MatchProgress row={row} />
+
+        {failedJobId ? (
+          // Keyed by the job: stepping to another failed match starts clean.
+          <ResubmitButton key={failedJobId} jobId={failedJobId} />
+        ) : null}
 
         <div className="flex items-center gap-2 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] py-1 pr-1 pl-3">
           <code

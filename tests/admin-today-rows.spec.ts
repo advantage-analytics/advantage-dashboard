@@ -104,12 +104,32 @@ test.describe("todayActions", () => {
     ]);
   });
 
-  test("a job opens Matches, then Resolve", () => {
+  test("an Analysis failed job gets Resubmit, then Resolve", () => {
     expect(RESOLVABLE_KINDS).toContain("job");
-    expect(todayActions({ kind: "job", matchId: ID })).toEqual([
+    const JOB = "99999999-8888-7777-6666-555555555555";
+    const actions = todayActions({
+      kind: "job",
+      matchId: ID,
+      failedJobId: JOB,
+    });
+    expect(actions).toEqual([
+      { type: "resubmit", label: "Resubmit", jobId: JOB },
+      { type: "resolve", label: "Resolve" },
+    ]);
+    expect(actions.some((a) => a.type === "link")).toBe(false);
+  });
+
+  test("an Analysis stuck job keeps Open into Matches, then Resolve", () => {
+    const actions = todayActions({
+      kind: "job",
+      matchId: ID,
+      failedJobId: null,
+    });
+    expect(actions).toEqual([
       { type: "link", label: "Open", href: `/admin/matches?id=${ID}` },
       { type: "resolve", label: "Resolve" },
     ]);
+    expect(actions.some((a) => a.type === "resubmit")).toBe(false);
   });
 
   test("a label starts labelling, then Resolve", () => {

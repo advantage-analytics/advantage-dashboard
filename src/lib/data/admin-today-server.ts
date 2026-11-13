@@ -103,7 +103,12 @@ export type TodayAction =
   /** One-click approve of a claim (`approveClaim(claimId)`). */
   | { type: "approve"; label: string; claimId: string }
   /** The hand close (`resolveTodayItem(key)`), for `RESOLVABLE_KINDS` only. */
-  | { type: "resolve"; label: string };
+  | { type: "resolve"; label: string }
+  /**
+   * Retry a failed analysis (`resubmitFailedAnalysisAction({ jobId })`),
+   * drawn by the Matches screen's own `ResubmitButton`.
+   */
+  | { type: "resubmit"; label: string; jobId: string };
 
 /** What `todayActions()` needs to know about a row, by kind. */
 export type TodayActionTarget =
@@ -116,7 +121,16 @@ export type TodayActionTarget =
       approvable: boolean;
     }
   | { kind: "request"; requestId: string }
-  | { kind: "job"; matchId: string }
+  | {
+      kind: "job";
+      matchId: string;
+      /**
+       * The failed job, for an "Analysis failed" row; null for "Analysis
+       * stuck" — an upload never sent is not failed, and `resubmitJob` retries
+       * only a failed job, so a stuck row keeps "Open".
+       */
+      failedJobId: string | null;
+    }
   | { kind: "label"; jobId: string }
   | { kind: "pilot" }
   | { kind: "ask"; feedbackId: string }
@@ -235,13 +249,21 @@ export function todayActions(target: TodayActionTarget): TodayAction[] {
           { type: "link", label: "Open", href: requestsHref(target.requestId) },
         ];
       case "job":
-        return [
-          {
-            type: "link",
-            label: "Open",
-            href: `/admin/matches?id=${encodeURIComponent(target.matchId)}`,
-          },
-        ];
+        return target.failedJobId
+          ? [
+              {
+                type: "resubmit",
+                label: "Resubmit",
+                jobId: target.failedJobId,
+              },
+            ]
+          : [
+              {
+                type: "link",
+                label: "Open",
+                href: `/admin/matches?id=${encodeURIComponent(target.matchId)}`,
+              },
+            ];
       case "label":
         return [
           { type: "label", label: "Open", startLabellingJobId: target.jobId },
@@ -527,7 +549,11 @@ async function jobDrafts(db: AdminClient, nowMs: number): Promise<Draft[]> {
       cell: matchCell(match),
       title: matchTitle(match),
       body: sentence(body),
-      actions: todayActions({ kind: "job", matchId: job.match_id }),
+      actions: todayActions({
+        kind: "job",
+        matchId: job.match_id,
+        failedJobId: stuck ? null : job.id,
+      }),
       link: { label: "Open match", href: `/admin/matches/${matchId}` },
     } satisfies Draft;
   });

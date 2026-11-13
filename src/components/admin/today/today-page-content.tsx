@@ -18,6 +18,7 @@ import {
 import { AdminPage } from "@/components/admin/admin-page";
 import { AgeText } from "@/components/admin/admin-cells";
 import { useStartLabelling } from "@/components/admin/labels/start-labelling-button";
+import { ResubmitButton } from "@/components/admin/matches/resubmit-button";
 import {
   PendingBar,
   PendingRegion,
@@ -39,7 +40,7 @@ import type {
  *
  * No drawer and no filter pills: the title is a link to the item, and each
  * row's buttons do the work in place — Approve a claim, open a label session,
- * Reply, Add hours. The kinds with no natural end (a dead analysis, a flagged
+ * Resubmit a failed analysis, Reply, Add hours. The kinds with no natural end (a dead analysis, a flagged
  * match, Ask feedback) keep a "Resolve" that opens the note form under the row,
  * so nothing sits on Today forever. There is no Resolved view; a resolved row
  * simply stops coming back from the loader.
@@ -327,7 +328,7 @@ function TodayRow({
               : "text-[var(--ink-600)]",
           )}
         />
-        <span className="flex items-center justify-end gap-1.5">
+        <span className="flex items-start justify-end gap-1.5">
           {item.actions.map((action) => {
             const key = `${action.type}:${action.label}`;
             switch (action.type) {
@@ -368,6 +369,14 @@ function TodayRow({
                   >
                     {labelling.isPending ? "Opening…" : action.label}
                   </button>
+                );
+              case "resubmit":
+                // The Matches screen's own button: its pending label, its
+                // refusal sentence under it, and the refresh on success.
+                return (
+                  <span key={key} onClickCapture={onTouch}>
+                    <ResubmitButton jobId={action.jobId} align="end" />
+                  </span>
                 );
               case "resolve":
                 return (

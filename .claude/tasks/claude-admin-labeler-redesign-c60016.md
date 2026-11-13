@@ -111,7 +111,7 @@ ready).
 
 ## T8 · Resubmit buttons on Matches and Today
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T4, T5, T7
 - **files:** guess — src/components/admin/matches/resubmit-button.tsx (new), src/components/admin/matches/matches-page-content.tsx, src/components/admin/matches/match-peek-drawer.tsx, src/lib/data/admin-today-server.ts, src/components/admin/today/today-page-content.tsx, tests/admin-today-rows.spec.ts
