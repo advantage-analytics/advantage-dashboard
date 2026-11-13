@@ -38,6 +38,18 @@ export interface AnalyticsEvents {
 
   // Upload flow (/dashboard/matches/new)
   upload_started: { provider: string | null };
+  // One per step a visitor lands on, and one more when they change the source
+  // on step 1. The last one before the visit ends is where they left from.
+  upload_step_viewed: {
+    step: string;
+    /** 1-based position in this provider's step order. */
+    step_number: number;
+    step_count: number;
+    provider: string | null;
+    /** A video or export is attached. A boolean only: never its name. */
+    file_attached: boolean;
+    time_since_upload_started_sec: number | null;
+  };
   video_selected: {
     file_size_mb: number;
     duration_sec: number | null;

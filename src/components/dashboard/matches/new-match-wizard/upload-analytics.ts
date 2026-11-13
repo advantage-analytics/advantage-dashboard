@@ -19,10 +19,45 @@ const transfers = new Map<
   { startedAt: number; bytes: number | null }
 >();
 
+// The last step view sent, so a re-render that changes nothing sends nothing.
+let lastStepView: string | null = null;
+
 export function trackUploadStarted(provider: string | null): void {
   wizardStartedAt = Date.now();
   selectedVideoBytes = null;
+  // A new run: its first step is a new view, even where it is the step and
+  // source the last run ended on.
+  lastStepView = null;
   track("upload_started", { provider });
+}
+
+/**
+ * The step now on screen. `upload_failed` only says where a refusal happened;
+ * a visitor who leaves without one left no trace of how far they got, and
+ * "opened the wizard, no match" could not be told from "reached the video
+ * step and had no file". Sent once per step and source, so Back and Continue
+ * each leave a mark and a re-render does not. `trackUploadStarted()` must
+ * have run first for this run: it starts the clock and clears the last view.
+ */
+export function trackUploadStepViewed(view: {
+  step: string;
+  stepNumber: number;
+  stepCount: number;
+  provider: string | null;
+  fileAttached: boolean;
+}): void {
+  const key = `${view.step}|${view.provider ?? ""}`;
+  if (key === lastStepView) return;
+  lastStepView = key;
+  track("upload_step_viewed", {
+    step: view.step,
+    step_number: view.stepNumber,
+    step_count: view.stepCount,
+    provider: view.provider,
+    file_attached: view.fileAttached,
+    time_since_upload_started_sec:
+      wizardStartedAt == null ? null : secondsSince(wizardStartedAt),
+  });
 }
 
 export function trackVideoSelected(file: File, durationSec: number | null) {
