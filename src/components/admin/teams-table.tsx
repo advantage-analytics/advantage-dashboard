@@ -40,7 +40,8 @@ import { COL, ROW, TEAMS_COLUMNS } from "@/components/admin/teams-table-layout";
  * trailing chevron and none of the drawer machinery the roster needs.
  *
  * AdminTeams's row (T9): crest, name over one facts line (squad · division ·
- * Pilot), members, this month's video hours as a bar with "X of Y h", owner.
+ * Pilot, then "N waiting to join" when a join request is open), members, this
+ * month's video hours as a bar with "X of Y h", owner.
  * Division, Conference, State and Plan stopped being columns; the facets the
  * toolbar still filters on read off the facts line instead.
  *
@@ -94,7 +95,14 @@ export function TeamsTable({
                 column.align === "right" && "text-right",
               )}
             >
-              {column.label}
+              {column.align === "right" ? (
+                // The eyebrow's 1.5px tracking trails the last letter too, so
+                // a right-aligned label ends 1.5px short of the digits under
+                // it. Pull the text, not the cell, back onto their edge.
+                <span className="-mr-[1.5px]">{column.label}</span>
+              ) : (
+                column.label
+              )}
             </span>
           ))}
           {/* The chevron's column. No label — it names nothing, it is the
@@ -153,11 +161,12 @@ function teamStatusLine(row: AdminTeamRow): string {
 }
 
 /**
- * Line 2 of the Program cell — "Men's · D-I · Pilot". Squad, division and
- * whether the program is in the pilot, each only when known; a row that knows
- * none of the three says where it stands instead of drawing an empty line.
+ * The grey half of the Program cell's line 2 — "Men's · D-I · Pilot". Squad,
+ * division and whether the program is in the pilot, each only when known; a
+ * row that knows none of the three says where it stands instead of drawing an
+ * empty line.
  */
-export function teamFactsLine(row: AdminTeamRow): string {
+export function teamFacts(row: AdminTeamRow): string {
   const facts = [
     squadLabel(row.team),
     row.division,
@@ -165,6 +174,51 @@ export function teamFactsLine(row: AdminTeamRow): string {
   ].filter((fact): fact is string => Boolean(fact));
   return facts.length > 0 ? facts.join(" · ") : teamStatusLine(row);
 }
+
+/**
+ * "2 waiting to join" — the open join requests that need this admin, or null
+ * when there are none. "N waiting to join" takes no number agreement, so one
+ * request and several read the same way. No badge, no colour: the row says it
+ * in ink-900 at medium weight after the grey facts, which is enough to find
+ * the rows that need someone while scanning down the names.
+ */
+export function teamWaitingLabel(row: AdminTeamRow): string | null {
+  const count = row.openRequestCount;
+  if (!(count > 0)) return null;
+  return `${count.toLocaleString("en-US")} waiting to join`;
+}
+
+/**
+ * Line 2 of the Program cell as one string — the facts, then the waiting
+ * count when there is one: "Men's · D-I · Pilot · 2 waiting to join".
+ */
+export function teamFactsLine(row: AdminTeamRow): string {
+  const waiting = teamWaitingLabel(row);
+  const facts = teamFacts(row);
+  return waiting ? `${facts} · ${waiting}` : facts;
+}
+
+/**
+ * How loud the "X of Y h" figure is. `quiet` (ink-500) for a program that has
+ * used nothing this month, so an idle row recedes from the busy ones; `plain`
+ * (ink-600) for ordinary use; `emphasis` (medium ink-900) from 80% of the cap
+ * upward, riding with the bar's amber and red so the state is never colour
+ * alone.
+ */
+export function hoursFigureTone(
+  usedSeconds: number,
+  capSeconds: number,
+): "quiet" | "plain" | "emphasis" {
+  const severity = hoursSeverity(usageFraction(usedSeconds, capSeconds));
+  if (severity !== "ok") return "emphasis";
+  return usedSeconds <= 0 ? "quiet" : "plain";
+}
+
+const FIGURE_TONE: Record<ReturnType<typeof hoursFigureTone>, string> = {
+  quiet: "text-[var(--ink-500)]",
+  plain: "text-[var(--ink-600)]",
+  emphasis: "font-medium text-[var(--ink-900)]",
+};
 
 function TeamRow({
   row,
@@ -205,9 +259,7 @@ function TeamRow({
             </span>
             {fresh ? <NewLabel /> : null}
           </span>
-          <span className="truncate text-[12px] leading-none text-[var(--ink-600)]">
-            {teamFactsLine(row)}
-          </span>
+          <FactsLine row={row} />
         </span>
         {row.plan === "approve" ? (
           <span className="flex shrink-0 items-center">
@@ -277,10 +329,33 @@ function TeamRow({
 }
 
 /**
+ * Line 2 of the Program cell: the grey facts, then — only when someone is
+ * waiting — "· N waiting to join" in medium ink-900. The facts truncate and
+ * the waiting count never does: on a narrow card it is the half of the line
+ * that needs the admin, so the squad and division give way first.
+ */
+function FactsLine({ row }: { row: AdminTeamRow }) {
+  const waiting = teamWaitingLabel(row);
+  return (
+    <span className="flex min-w-0 items-baseline text-[12px] leading-none text-[var(--ink-600)]">
+      <span className="truncate">{teamFacts(row)}</span>
+      {waiting ? (
+        <span className="shrink-0 whitespace-pre">
+          {" · "}
+          <span className="font-medium text-[var(--ink-900)]">{waiting}</span>
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/**
  * The hours cell: the program page's own `HoursMeter`, so the list and the
  * team page draw one bar, and "X of Y h" in `formatHoursShort`'s one-decimal
  * hours. Severity rides the fill (blue, amber from 80%, red at the cap) and
- * the figure steps from ink-600 to a medium ink-900 with it, so the state is never colour alone.
+ * the figure steps from ink-600 to a medium ink-900 with it, so the state is
+ * never colour alone; a month with nothing used drops the figure to ink-500
+ * over the empty track (`hoursFigureTone`).
  * Null values — the usage read failed — draw the dash and no bar: an empty
  * bar would claim the program has used nothing.
  */
@@ -303,12 +378,14 @@ function VideoHours({ row }: { row: AdminTeamRow }) {
           label={`${row.name} video hours this month`}
         />
       </div>
+      {/* A fixed slot (it only grows for a figure wider than "74.9 of 75 h"),
+          so every bar ends at one x and the bars share one scale — a figure
+          sized to its own text made "0 of 2 h" draw a longer empty track than
+          "1.5 of 75 h". */}
       <span
         className={cn(
-          "tabular shrink-0 text-[12px] whitespace-nowrap",
-          severity === "ok"
-            ? "text-[var(--ink-600)]"
-            : "font-medium text-[var(--ink-900)]",
+          "tabular min-w-[76px] shrink-0 text-[12px] whitespace-nowrap",
+          FIGURE_TONE[hoursFigureTone(used, cap)],
         )}
       >
         {formatHoursShort(used)} of {formatHoursShort(cap)} h
