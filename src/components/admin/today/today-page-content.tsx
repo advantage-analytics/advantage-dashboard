@@ -574,20 +574,7 @@ function TodayDrawer({
       onClosed={onClosed}
       footer={
         <>
-          {"href" in item.primary ? (
-            <Link
-              href={item.primary.href}
-              className={cn(advButton("primary", "md"), "w-full")}
-            >
-              {item.primary.label}
-            </Link>
-          ) : (
-            <StartLabellingButton
-              key={item.primary.startLabellingJobId}
-              jobId={item.primary.startLabellingJobId}
-              label={item.primary.label}
-            />
-          )}
+          <DrawerPrimary item={item} />
           {item.link ? (
             <Link
               href={item.link.href}
@@ -618,6 +605,38 @@ function TodayDrawer({
         ) : null}
       </div>
     </PeekDrawerFrame>
+  );
+}
+
+/**
+ * The drawer's one primary, from the row's first navigating action. Approve
+ * and Resolve are not drawn here (Resolve has its own form below); a claim
+ * Today could approve keeps its link into the Requests drawer, labelled as
+ * the review it is rather than its "Decline".
+ */
+function DrawerPrimary({ item }: { item: TodayItem }) {
+  const action = item.actions.find(
+    (a) => a.type === "link" || a.type === "label",
+  );
+  if (!action) return null;
+  if (action.type === "label") {
+    return (
+      <StartLabellingButton
+        key={action.startLabellingJobId}
+        jobId={action.startLabellingJobId}
+        label={action.label}
+      />
+    );
+  }
+  if (action.type !== "link") return null;
+  const approvable = item.actions.some((a) => a.type === "approve");
+  return (
+    <Link
+      href={action.href}
+      className={cn(advButton("primary", "md"), "w-full")}
+    >
+      {approvable ? "Review claim" : action.label}
+    </Link>
   );
 }
 

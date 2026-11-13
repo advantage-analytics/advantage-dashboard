@@ -31,6 +31,7 @@ import {
   currentBillingMonth,
 } from "@/lib/services/splitstep/config";
 import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
+import { waitingOn } from "@/lib/data/support-view";
 import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
 import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
@@ -61,12 +62,20 @@ import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
  *   ask              a thumbs down that is unread: `ask_feedback` has no read
  *                    state, so "unread" is the Ask page's own definition — set
  *                    after this admin's latest look at Admin › Ask and not
- *                    opened there since (key `ask:<id>`, as `countAskForNav`).
+ *                    opened there since (key `ask:<id>`, the "New" key Admin ›
+ *                    Ask writes).
+ *   message          a support thread waiting on staff: the player wrote last
+ *                    (`waitingOn(...) === "you"`, Admin › Messages' own rule).
+ *                    It waits from the player's latest message.
+ *
+ * Each row carries its own ordered `actions` (`todayActions()`); a kind in
+ * `RESOLVABLE_KINDS` ends with a "Resolve".
  *
  * Service role behind `requireAdminOrNotFound()`, like every admin loader.
  */
 
-export type TodayKind = "claim" | "request" | "job" | "label" | "pilot" | "ask";
+export type TodayKind =
+  "claim" | "request" | "job" | "label" | "pilot" | "ask" | "message";
 
 export type TodayCell =
   | {
@@ -86,10 +95,32 @@ export type TodayCell =
       context: string;
     };
 
-export type TodayPrimary =
-  | { label: string; href: string }
+/** One action a Today row offers, in the order the row shows them. */
+export type TodayAction =
+  | { type: "link"; label: string; href: string }
   /** Seeds the job's label session, then opens it (`useStartLabelling`). */
-  | { label: string; startLabellingJobId: string };
+  | { type: "label"; label: string; startLabellingJobId: string }
+  /** One-click approve of a claim (`approveClaim(claimId)`). */
+  | { type: "approve"; label: string; claimId: string }
+  /** The hand close (`resolveTodayItem(key)`), for `RESOLVABLE_KINDS` only. */
+  | { type: "resolve"; label: string };
+
+/** What `todayActions()` needs to know about a row, by kind. */
+export type TodayActionTarget =
+  | {
+      kind: "claim";
+      /** The Requests row id, for `/admin/requests?id=`. */
+      requestId: string;
+      claimId: string;
+      /** The Requests drawer offers a plain Approve (`claimOffersApprove`). */
+      approvable: boolean;
+    }
+  | { kind: "request"; requestId: string }
+  | { kind: "job"; matchId: string }
+  | { kind: "label"; jobId: string }
+  | { kind: "pilot" }
+  | { kind: "ask"; feedbackId: string }
+  | { kind: "message"; threadId: string };
 
 export interface TodayItem {
   /** The `admin_seen` key on the "today" surface: `claim:<id>`, `job:<id>`… */
@@ -105,7 +136,8 @@ export interface TodayItem {
   title: string;
   /** One sentence built from the row's own facts. */
   body: string;
-  primary: TodayPrimary;
+  /** Ordered: the first is the row's main action, "Resolve" (if any) last. */
+  actions: TodayAction[];
   link: { label: string; href: string } | null;
   /**
    * Can an admin resolve this row by hand? Only the kinds with no natural
@@ -155,6 +187,90 @@ const PILOT_NEARLY_OUT = 0.9;
 
 type Draft = Omit<TodayItem, "fresh" | "resolvable" | "resolution">;
 
+// ── Actions ─────────────────────────────────────────────────────────────────
+
+const requestsHref = (id: string) =>
+  `/admin/requests?id=${encodeURIComponent(id)}`;
+
+/**
+ * Does the Requests drawer offer this claim a plain Approve? The drawer's own
+ * two conditions (`request-drawer.tsx`): the claim is `pending_review`, and
+ * it is not "unvouched" — some signal exists (a clicked verification link, a
+ * recorded staff contact, a matching domain). An unvouched claim gets the
+ * drawer's "Approve anyway", which Today never offers in one click.
+ */
+export function claimOffersApprove(row: AdminRequestRow): boolean {
+  const detail = row.detail;
+  if (detail.source !== "claim" || row.status !== "pending_review") {
+    return false;
+  }
+  return Boolean(
+    detail.verifiedAt || detail.contactMatched || detail.domainMatched,
+  );
+}
+
+/** A row's actions, in order. Pure: the kind and ids decide everything. */
+export function todayActions(target: TodayActionTarget): TodayAction[] {
+  const actions: TodayAction[] = (() => {
+    switch (target.kind) {
+      case "claim":
+        return target.approvable
+          ? [
+              { type: "approve", label: "Approve", claimId: target.claimId },
+              {
+                type: "link",
+                label: "Decline",
+                href: requestsHref(target.requestId),
+              },
+            ]
+          : [
+              {
+                type: "link",
+                label: "Open",
+                href: requestsHref(target.requestId),
+              },
+            ];
+      case "request":
+        return [
+          { type: "link", label: "Open", href: requestsHref(target.requestId) },
+        ];
+      case "job":
+        return [
+          {
+            type: "link",
+            label: "Open",
+            href: `/admin/matches?id=${encodeURIComponent(target.matchId)}`,
+          },
+        ];
+      case "label":
+        return [
+          { type: "label", label: "Open", startLabellingJobId: target.jobId },
+        ];
+      case "pilot":
+        return [{ type: "link", label: "Add hours", href: "/admin/pilots" }];
+      case "ask":
+        return [
+          {
+            type: "link",
+            label: "Open",
+            href: `/admin/ask?id=${encodeURIComponent(target.feedbackId)}`,
+          },
+        ];
+      case "message":
+        return [
+          {
+            type: "link",
+            label: "Reply",
+            href: `/admin/messages?id=${encodeURIComponent(target.threadId)}`,
+          },
+        ];
+    }
+  })();
+  return RESOLVABLE_KINDS.includes(target.kind)
+    ? [...actions, { type: "resolve", label: "Resolve" }]
+    : actions;
+}
+
 // ── Requests ────────────────────────────────────────────────────────────────
 
 const REQUEST_NEED: Record<string, string> = {
@@ -167,8 +283,6 @@ const REQUEST_NEED: Record<string, string> = {
 function requestDrafts(rows: AdminRequestRow[]): Draft[] {
   return rows.map((row) => {
     const detail = row.detail;
-    const reviewHref = `/admin/requests?id=${encodeURIComponent(row.id)}`;
-
     if (detail.source === "claim") {
       return {
         key: `claim:${row.id}`,
@@ -184,7 +298,12 @@ function requestDrafts(rows: AdminRequestRow[]): Draft[] {
         },
         title: `${row.from.name} claims ${row.team}`,
         body: sentence(detail.reviewReason),
-        primary: { label: "Review claim", href: reviewHref },
+        actions: todayActions({
+          kind: "claim",
+          requestId: row.id,
+          claimId: detail.claimId,
+          approvable: claimOffersApprove(row),
+        }),
         link: {
           label: "Open team",
           href: `/admin/teams/${encodeURIComponent(detail.programId)}`,
@@ -224,7 +343,7 @@ function requestDrafts(rows: AdminRequestRow[]): Draft[] {
         (note
           ? `Their note: “${note}”`
           : `No note came with it; reply to ${row.from.email}.`) + point,
-      primary: { label: "Review request", href: reviewHref },
+      actions: todayActions({ kind: "request", requestId: row.id }),
       link: detail.match
         ? {
             label: "Open match",
@@ -408,10 +527,7 @@ async function jobDrafts(db: AdminClient, nowMs: number): Promise<Draft[]> {
       cell: matchCell(match),
       title: matchTitle(match),
       body: sentence(body),
-      primary: {
-        label: "Open in Matches",
-        href: `/admin/matches?id=${matchId}`,
-      },
+      actions: todayActions({ kind: "job", matchId: job.match_id }),
       link: { label: "Open match", href: `/admin/matches/${matchId}` },
     } satisfies Draft;
   });
@@ -508,7 +624,7 @@ async function labelDrafts(db: AdminClient): Promise<Draft[]> {
       cell: matchCell(match),
       title: matchTitle(match),
       body: `Nobody has started labelling this match, and the analysis flagged ${points} with a mark that can change the score.`,
-      primary: { label: "Open in label console", startLabellingJobId: job.id },
+      actions: todayActions({ kind: "label", jobId: job.id }),
       link: {
         label: "Open match",
         href: `/admin/matches/${encodeURIComponent(job.match_id)}`,
@@ -617,7 +733,7 @@ async function pilotDrafts(db: AdminClient): Promise<Draft[]> {
       },
       title: name,
       body: `${name} has used ${formatHoursShort(used)} of ${formatHoursShort(cap)} hours of personal video this month.`,
-      primary: { label: "Set hours", href: "/admin/pilots" },
+      actions: todayActions({ kind: "pilot" }),
       link: null,
     });
   }
@@ -698,13 +814,112 @@ async function askDrafts(
       },
       title: question ? `“${question}”` : `${name}’s question`,
       body,
-      primary: {
-        label: "Open in Ask",
-        href: `/admin/ask?id=${encodeURIComponent(row.id)}`,
-      },
+      actions: todayActions({ kind: "ask", feedbackId: row.id }),
       link: null,
     } satisfies Draft;
   });
+}
+
+// ── Support threads waiting on staff ────────────────────────────────────────
+
+/** A `support_threads` row, as much of it as a Today row needs. */
+export interface TodayThreadRow {
+  id: string;
+  user_id: string;
+  last_player_message_at: string | null;
+  last_staff_message_at: string | null;
+}
+
+/** The player behind a thread: display name and avatar URL. */
+export interface TodayThreadPerson {
+  name: string;
+  photoUrl: string | null;
+}
+
+/**
+ * One row per thread waiting on staff — the player wrote last, by Admin ›
+ * Messages' own `waitingOn(...) === "you"` — keyed `message:<threadId>` and
+ * waiting since the player's latest message. Pure.
+ */
+export function messageDrafts(
+  threads: TodayThreadRow[],
+  people: ReadonlyMap<string, TodayThreadPerson>,
+): Draft[] {
+  return threads.flatMap((thread) => {
+    const lastPlayer = thread.last_player_message_at;
+    if (
+      !lastPlayer ||
+      waitingOn({
+        lastPlayerMessageAt: lastPlayer,
+        lastStaffMessageAt: thread.last_staff_message_at,
+      }) !== "you"
+    ) {
+      return [];
+    }
+    const person = people.get(thread.user_id);
+    const name = person?.name ?? askerName(thread.user_id, null, null);
+    const answered = thread.last_staff_message_at !== null;
+    return [
+      {
+        key: `message:${thread.id}`,
+        kind: "message",
+        need: answered ? "Message reply" : "New message",
+        since: lastPlayer,
+        cell: {
+          type: "person",
+          name,
+          photoUrl: person?.photoUrl ?? null,
+          rest: null,
+          sub: "Support message",
+        },
+        title: `${name}’s message`,
+        body: answered
+          ? `${name} wrote back after our last reply and is waiting on an answer.`
+          : `${name} wrote in and nobody has replied yet.`,
+        actions: todayActions({ kind: "message", threadId: thread.id }),
+        link: null,
+      } satisfies Draft,
+    ];
+  });
+}
+
+/** A failed read throws, so `settle` turns it into no message rows. */
+async function readMessageDrafts(db: AdminClient): Promise<Draft[]> {
+  const { data, error } = await db
+    .from("support_threads")
+    .select("id, user_id, last_player_message_at, last_staff_message_at")
+    .not("last_player_message_at", "is", null);
+  if (error) throw new Error(`support threads: ${error.message}`);
+  const threads = ((data ?? []) as TodayThreadRow[]).filter(
+    (thread) =>
+      waitingOn({
+        lastPlayerMessageAt: thread.last_player_message_at,
+        lastStaffMessageAt: thread.last_staff_message_at,
+      }) === "you",
+  );
+  if (threads.length === 0) return [];
+
+  const { data: users, error: usersError } = await db
+    .from("users")
+    .select("id, first_name, last_name, avatar_path")
+    .in("id", [...new Set(threads.map((thread) => thread.user_id))]);
+  if (usersError) throw new Error(`support players: ${usersError.message}`);
+  const people = new Map<string, TodayThreadPerson>();
+  for (const user of (users ?? []) as {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    avatar_path: string | null;
+  }[]) {
+    people.set(user.id, {
+      name: askerName(user.id, user.first_name, user.last_name),
+      photoUrl: user.avatar_path
+        ? db.storage.from(USER_AVATARS_BUCKET).getPublicUrl(user.avatar_path)
+            .data.publicUrl
+        : null,
+    });
+  }
+  return messageDrafts(threads, people);
 }
 
 // ── The pipeline line ───────────────────────────────────────────────────────
@@ -769,10 +984,16 @@ async function loadDrafts(
     settle("labels", labelDrafts(db)),
     settle("pilots", pilotDrafts(db)),
     settle("ask", askDrafts(db, askSeen)),
+    settle("messages", readMessageDrafts(db)),
   ]);
-  return groups
-    .flat()
-    .sort((a, b) => Date.parse(a.since) - Date.parse(b.since));
+  return sortLongestWaitFirst(groups.flat());
+}
+
+/** Longest wait first: the oldest `since` leads. Returns a new array. */
+export function sortLongestWaitFirst<T extends { since: string }>(
+  rows: readonly T[],
+): T[] {
+  return [...rows].sort((a, b) => Date.parse(a.since) - Date.parse(b.since));
 }
 
 /** The page's read. Records this look at Today (moves the watermark). */

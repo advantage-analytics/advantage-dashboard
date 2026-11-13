@@ -46,7 +46,7 @@ ready).
 
 ## T3 · Today loader: support messages and per-row actions
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** guess — src/lib/data/admin-today-server.ts, src/lib/data/support-admin-server.ts, tests/admin-today-rows.spec.ts (new)
 - **done when:**

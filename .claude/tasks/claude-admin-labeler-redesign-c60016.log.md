@@ -24,3 +24,16 @@ is the runner's. Newest entries at the bottom.
 
 1. `src/lib/data/admin-today-server.ts` (around line 64) still names `countAskForNav` in a comment; it no longer exists.
 2. The five loaders that lost a helper may hold imports with no caller left; lint passed, but worth a look.
+
+## T3 · Today loader: support messages and per-row actions — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `admin-today-server.ts` adds the `message` kind (one row per support thread waiting on staff, key `message:<threadId>`), replaces `primary` with an ordered `actions` list built by the pure `todayActions`, and sorts through `sortLongestWaitFirst`; resolvable kinds carry a trailing Resolve. `today-page-content.tsx` got the minimal `DrawerPrimary` that keeps the current screen working. `tests/admin-today-rows.spec.ts` pins one fixture per kind.
+
+**follow-ups:**
+
+1. T4 wires the `approve` action to `approveClaim` and the `resolve` action to the resolve form, and removes the "Review claim" relabel in `DrawerPrimary`.
+2. Message rows have no link of their own and a generic sub-line; the latest message excerpt would need one more read.
+3. `readMessageDrafts` reads every thread with a player message, uncapped. Fine at current volume.
+4. `claimOffersApprove` copies the Requests drawer's rule by hand; the reviewer did not confirm the two match.
