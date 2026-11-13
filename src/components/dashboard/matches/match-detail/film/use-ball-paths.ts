@@ -9,9 +9,9 @@ import {
   parseBallPathsFile,
   type FilmBallPath,
 } from "./film-ball";
+import { useBallPathsEndpoint } from "./ball-paths-endpoint";
 import type { FilmClock } from "./film-timeline";
 import { lobShotKeys } from "../match-filters/net-game";
-import { useOptionalMatchReport } from "../match-report-context";
 
 /**
  * The match's derived ball paths, on the film clock — the room's only I/O for
@@ -64,15 +64,16 @@ function cachedFile(matchId: string): BallPathsFile | null {
  * The match's own route asks the reader's session whether they can see the
  * match, so a read-only mount (a share link, the sample) does not ask. The
  * admin report is read-only as well, but names a route of its own
- * (`MatchReportMeta.ballPathsEndpoint`), and with one a read-only mount reads
- * from that. `endpoint` is `undefined` for the match's own route. With no
- * report provider (a harness) only `readOnly` decides, as it always did.
+ * (`MatchReportMeta.ballPathsEndpoint`, read through `ball-paths-endpoint.ts`),
+ * and with one a read-only mount reads from that. `endpoint` is `undefined`
+ * for the match's own route. With no report provider (a harness) only
+ * `readOnly` decides, as it always did.
  */
 export function useBallPathsRoute(readOnly: boolean): {
   allowed: boolean;
   endpoint: string | undefined;
 } {
-  const named = useOptionalMatchReport()?.meta.ballPathsEndpoint ?? null;
+  const named = useBallPathsEndpoint();
   if (!readOnly) return { allowed: true, endpoint: undefined };
   return { allowed: named !== null, endpoint: named ?? undefined };
 }
