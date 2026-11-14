@@ -129,14 +129,14 @@ export interface QueueSessionRow {
   completed_at?: string | null;
   /**
    * The admin's check. Absent (not null) until
-   * `20261114070000_label_publish_check` is applied: every session completed
+   * `20261114091835_label_publish_check` is applied: every session completed
    * before it was published and checked in one step, so an absent check on a
    * `complete` session reads as checked, as the migration's backfill writes.
    */
   checked_at?: string | null;
-  /** Absent until `20261114070000_label_publish_check` is applied. */
+  /** Absent until `20261114091835_label_publish_check` is applied. */
   sent_back_at?: string | null;
-  /** Absent until `20261114070000_label_publish_check` is applied. */
+  /** Absent until `20261114091835_label_publish_check` is applied. */
   sent_back_note?: string | null;
   /** Who started the session, or the labeller who submitted it. */
   labeller: string | null;
@@ -626,7 +626,7 @@ export function toAdminLabelBoard(
 
 const SESSION_COLUMNS =
   "id, job_id, status, started_at, completed_at, open_counts, start_open_counts, assigned_to, assigned_at, claimed_at, submitted_at, labeller, assignee:users!assigned_to(id, email, first_name, last_name, avatar_path)";
-/** Added by `20261114070000_label_publish_check`. */
+/** Added by `20261114091835_label_publish_check`. */
 const CHECK_COLUMNS = "checked_at, sent_back_at, sent_back_note";
 /** Postgres `undefined_column`: the publish-check migration is not applied. */
 const UNDEFINED_COLUMN = "42703";

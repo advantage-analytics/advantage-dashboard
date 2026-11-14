@@ -510,7 +510,7 @@ test.describe("writeLabelSessionReopen", () => {
         // The check goes with the status: the CHECK
         // `label_sessions_checked_needs_complete` refuses `checked_at` on a
         // session that is not complete, and every session completed before
-        // 20261114070000 carries one.
+        // 20261114091835 carries one.
         values: {
           status: "labelling",
           completed_at: null,

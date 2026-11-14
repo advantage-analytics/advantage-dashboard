@@ -354,13 +354,13 @@ interface LabelSessionRow {
   status: string | null;
   created_at: string;
   completed_at: string | null;
-  /** Absent before `20261114070000_label_publish_check` is applied. */
+  /** Absent before `20261114091835_label_publish_check` is applied. */
   published_at?: string | null;
   checked_at?: string | null;
 }
 
 const SESSION_COLUMNS = "id, match_id, kind, status, created_at, completed_at";
-/** Added by `20261114070000_label_publish_check`. */
+/** Added by `20261114091835_label_publish_check`. */
 const PUBLISH_CHECK_COLUMNS = "published_at, checked_at";
 /** Postgres `undefined_column`: the publish-check migration is not applied. */
 const UNDEFINED_COLUMN = "42703";

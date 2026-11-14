@@ -1,6 +1,6 @@
 /**
  * The admin's two answers to a labeller's publish ("Published, to check" in
- * the console, `20261114070000_label_publish_check.sql`): Check passes it,
+ * the console, `20261114091835_label_publish_check.sql`): Check passes it,
  * Send back returns it to its labeller with a note.
  *
  * Both are admin-only (`requireAdminActor`, refused with `ADMIN_REQUIRED`)

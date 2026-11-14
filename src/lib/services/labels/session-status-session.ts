@@ -11,7 +11,7 @@
  * snapshot as `beforePublish` and without `checked`. So the lease, the
  * publish, the verify and the close below are the one path either way; what
  * differs is the close's `checked_at` / `checked_by`, written only when the
- * publish is an admin's (`20261114070000_label_publish_check.sql`).
+ * publish is an admin's (`20261114091835_label_publish_check.sql`).
  *
  * Complete is the ordinary gate (`checkSessionOpen`), then a lease: ONE update
  * (`claim_label_publish_lease`) stamping `publishing_since` with the
@@ -151,7 +151,7 @@ export async function writeLabelSessionComplete(params: {
   /**
    * The publish is also the admin's check: the close stamps `checked_at` and
    * `checked_by`. Unset for a labeller's publish, which an admin checks later
-   * (`20261114070000_label_publish_check.sql`).
+   * (`20261114091835_label_publish_check.sql`).
    */
   checked?: boolean;
   /**

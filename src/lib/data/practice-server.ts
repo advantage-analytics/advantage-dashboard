@@ -396,7 +396,7 @@ function dayAfter(day: string): string {
 // Lives in a dependency-free module so the label queue can use it client-side.
 export { jobVideoSeconds };
 
-/** Postgres `undefined_column`: `20261114070000_label_publish_check` is not applied. */
+/** Postgres `undefined_column`: `20261114091835_label_publish_check` is not applied. */
 const UNDEFINED_COLUMN = "42703";
 
 function isUndefinedColumn(error: unknown): boolean {
@@ -418,7 +418,7 @@ type PublishedSessionRow = {
   id: string;
   status: string;
   completed_at: string | null;
-  /** Absent before `20261114070000_label_publish_check` is applied. */
+  /** Absent before `20261114091835_label_publish_check` is applied. */
   published_at?: string | null;
   checked_at?: string | null;
   job: PayJob | null;
