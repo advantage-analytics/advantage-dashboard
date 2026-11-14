@@ -243,3 +243,9 @@ is the runner's. Newest entries at the bottom.
 1. The Programs footnote still says "Conferences are in the account menu".
 2. A harness case for the Teams page on `view: "conferences"` would let a browser spec check the hidden menus and the row links.
 3. `countAdminTeamViews` still runs on the Conferences view.
+
+## T20 · Point conference links at the conference page — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** in `AdminConferenceCard`'s `fact` variant the conference name links to `/admin/conferences/<id>` ("No conference yet" stays plain); the `card` variant's "View conference" link and the admin search's conference result point at the page too. `tests/admin-conference-card.spec.ts` and the search mock carry the new hrefs; no `/admin/conferences?id=` string is left under `src/`.

@@ -130,7 +130,7 @@ test.describe("AdminConferenceCard", () => {
     expect(out).not.toContain("Brown University");
     expect(out).toContain("2 more");
     expect(markup).toContain('href="/admin/teams/harvard"');
-    expect(markup).toContain('href="/admin/conferences?id=ivy"');
+    expect(markup).toContain('href="/admin/conferences/ivy"');
     expect(markup).not.toContain('href="/admin/teams/columbia"');
   });
 
@@ -151,6 +151,7 @@ test.describe("AdminConferenceCard", () => {
     expect(out).not.toContain("16 teams");
     expect(out).not.toContain("Harvard");
     expect(markup).toContain('aria-label="Change conference"');
+    expect(markup).toContain('href="/admin/conferences/ivy"');
   });
 
   test("as a fact with no conference: No conference yet and Set conference", () => {
@@ -158,6 +159,9 @@ test.describe("AdminConferenceCard", () => {
       html({ ...BASE, currentLabel: null, conference: null, variant: "fact" }),
     );
     expect(out).toContain("Conference No conference yet Set conference");
+    expect(
+      html({ ...BASE, currentLabel: null, conference: null, variant: "fact" }),
+    ).not.toContain("/admin/conferences");
     expect(out).not.toMatch(/\bChange\b/);
   });
 

@@ -134,14 +134,18 @@ export function AdminConferenceCard({
       <div id="conference" className="min-w-0 scroll-mt-16">
         <dt className="text-[12px] text-[var(--ink-600)]">Conference</dt>
         <dd className="mt-0.5 flex min-w-0 items-center gap-2.5 text-[13px]">
-          <span
-            className={cn(
-              "min-w-0 truncate",
-              conference ? "text-[var(--ink-900)]" : "text-[var(--ink-500)]",
-            )}
-          >
-            {conference ? conference.name : "No conference yet"}
-          </span>
+          {conference ? (
+            <Link
+              href={`/admin/conferences/${conference.id}`}
+              className="min-w-0 truncate rounded-[4px] text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-600)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+            >
+              {conference.name}
+            </Link>
+          ) : (
+            <span className="min-w-0 truncate text-[var(--ink-500)]">
+              No conference yet
+            </span>
+          )}
           {control}
         </dd>
         {error && (
@@ -223,7 +227,7 @@ function ConferenceBody({ conference }: { conference: AdminTeamConference }) {
             ·
           </span>
           <Link
-            href={`/admin/conferences?id=${conference.id}`}
+            href={`/admin/conferences/${conference.id}`}
             className="rounded-[4px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
           >
             View conference

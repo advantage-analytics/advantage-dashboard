@@ -282,7 +282,7 @@ ready).
 
 ## T20 · Point conference links at the conference page
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **needs:** T16
 - **files:** guess — src/components/admin/admin-conference-card.tsx, src/lib/data/admin-search-server.ts, tests/admin-conference-card.spec.ts, tests/fixtures/admin-search-actions-browser-mock.ts
