@@ -207,3 +207,102 @@ ready).
   - [ ] "Entered at upload" is one row, closed by default, whose summary names the scoring, the starting side and best-of; opened, it still holds the lines and the scoring control it has today
   - [ ] The progress line reads "N flags left" (N from `openFlags`, split into those that can move the score and wrong data) with no bar and no "points checked" text inside the dashboard, and a spec asserts the sentence
 - **notes:** Layout and copy from MatchOverview.dc.html. README: the button keeps "Mark complete" and today's behaviour ("Publish" is piece 3 wording), and "the progress line reads 'N flags left' with no bar" until piece 2 records a starting count. Admin audience only: the labeller's overview ("Before you submit", pinned by `tests/label-console-labeller.spec.ts`) is piece 2 and stays as it is. The console header's own "N of M points checked" lives in `label-console.tsx` and is not part of this task.
+
+## T15 · Conference loader: one conference, its teams, its latest matches
+
+- **status:** todo
+- **model:** fable
+- **files:** guess — src/lib/data/admin-conferences-server.ts, src/lib/data/admin-teams-server.ts, src/lib/data/admin-matches-server.ts, src/lib/data/admin-team-links.ts, tests/admin-team-links.spec.ts
+- **done when:**
+  - [ ] `AdminTeamsFilters` has a `conferenceId` field and `listAdminTeams` applies it as an equality on `programs.conference_id`; the existing text `conference` filter and its `?conference=` callers are unchanged
+  - [ ] `admin-matches-server.ts` exports `latestMatchesForPrograms(programIds, limit)`, which reads with `.in("program_id", …)`, returns `{ matches: [], total: 0 }` without a query for an empty id list, and puts `programId` on every match it returns; `latestMatchesForProgram` calls it instead of keeping a second copy of the body
+  - [ ] `admin-conferences-server.ts` exports `getAdminConference(conferenceId)`, which calls `requireAdminOrNotFound()` before any service-role read, returns null when the id is not a row of `listAdminConferences()`, and otherwise returns `{ conference, teams, latestMatches, matchCount }`: `conference` is that `AdminConferenceRow`, `teams` is `AdminTeamRow[]` from `listAdminTeams` (view `all`, the `conferenceId` filter, a limit that covers every team so no cursor is left), each latest match carries its `programId` and program name, and a failed matches read yields `latestMatches: []` with `matchCount: null` instead of throwing
+  - [ ] `admin-conferences-server.ts` exports `countAdminConferences()`, a guarded head count of `conferences` that returns null when the read fails
+  - [ ] `tests/admin-team-links.spec.ts` asserts that the pure latest-matches mapper keeps `programId` and that matches from two programs come back newest upload first across both
+- **notes:** No schema change and no new RPC. The conference row comes from the `cache()`d `listAdminConferences()`, so an id that is not a uuid never reaches a query. Use a named constant for the conference page's match count (5 assumed; the team page keeps 3). `readConferenceTeams` / `loadConferenceTeams` stay: `admin-team-server.ts` still uses them.
+
+## T16 · Conference page: route, header and Details
+
+- **status:** todo
+- **model:** opus
+- **needs:** T15
+- **files:** guess — src/app/admin/conferences/[conferenceId]/page.tsx (new), src/components/admin/conference-page-header.tsx (new), src/components/admin/conference-details.tsx (new), MAP.md, tests/admin-routes.spec.ts
+- **routes:** /admin/conferences/[conferenceId]
+- **done when:**
+  - [ ] `src/app/admin/conferences/[conferenceId]/page.tsx` exists, calls `getAdminConference()` and `notFound()` on null, renders inside `AdminPage` in a full-width column (no max-width or centring wrapper), and `MAP.md` is regenerated in the same diff with the `/admin/conferences/[conferenceId]` row
+  - [ ] The header renders a link back to `/admin/conferences`, the existing `ConferenceCrestControl` (upload, replace, remove), the conference name and the `conferenceMeta()` line
+  - [ ] The header's "⋯" menu holds "Merge into…" (the existing `MergeConferenceDialog`, fed `listAdminConferences()` rows; on success the router goes to `/admin/conferences/<targetId>`) and "Delete" only while the conference has no teams, with the drawer's `FloatMenuNote` in its place otherwise; a confirmed delete calls `deleteConference`, shows its error sentence in the confirm when refused, and goes to `/admin/conferences` on success. The diff adds no server action
+  - [ ] Details renders a row of facts (Division, Teams, On Advantage, and Website as a link when one is set) and exactly one Edit button, which opens a dialog with Name, Short name, Division and Website and one Save that calls `saveConference`; the dialog imports `conferenceChanged`, `storedConferenceFields` and `normalizeWebsite` from `conference-format.ts` and declares no validation of its own
+  - [ ] `tests/admin-routes.spec.ts` gains an unauthenticated GET `/admin/conferences/<id>` → 307 `/login` case beside the team-detail one
+- **notes:** Model: `src/app/admin/teams/[programId]/` (`layout.tsx`, `team-page-header.tsx`, `admin-details-card.tsx`). Full width is the 2026-11-13 decision in docs/superpowers/specs/2026-11-12-admin-strip/README.md. Read `.skills/advantage-analytics-design/SKILL.md` and the Next 16 docs for async `params` first. There is no separate rename action in the code: renaming is the Name field of the edit form, so the "⋯" menu carries Merge and Delete only (one editor, as on the team page). Lift what you need from `conference-drawer.tsx` but do not refactor it; T18 deletes it. Teams and Latest matches are T17.
+
+## T17 · Conference page: Teams and Latest matches
+
+- **status:** todo
+- **model:** opus
+- **needs:** T16
+- **files:** guess — src/app/admin/conferences/[conferenceId]/page.tsx, src/components/admin/conference-teams-section.tsx (new), src/components/admin/team-latest-matches.tsx, src/components/admin/teams-table.tsx, tests/conference-latest-matches.spec.ts (new)
+- **routes:** /admin/conferences/[conferenceId], /admin/teams/[programId]
+- **done when:**
+  - [ ] The Teams section renders `TeamsTable` imported from `teams-table.tsx` with the loader's `teams`; the diff adds no second table component and no copy of the row markup or of `teams-table-layout.ts`
+  - [ ] "Add team" sits in the Teams section header and is the existing `AddTeamPopover` (which calls `addTeamToConference`); a successful add calls `router.refresh()`; the diff adds no server action
+  - [ ] A row whose `plan` is `approve` does not draw a button that does nothing: either `onApprove` opens the existing `ApprovePilotPopover`, or `TeamsTable` gains a prop under which the chip is the static `ApprovePill`
+  - [ ] Latest matches renders `TeamLatestMatches` from `team-latest-matches.tsx`, parameterised rather than copied: on the conference page each row links to `/admin/matches?program=<that match's programId>&id=<matchId>` and prints the program's name, and the "All N in Matches" header link is not rendered; the team page's call site still passes `programId` and its header link and row hrefs are unchanged
+  - [ ] A new offline spec renders `TeamLatestMatches` both ways and asserts the conference rows' hrefs use each match's own `programId`, and that the team variant still renders `/admin/matches?program=<programId>`
+- **notes:** Admin › Matches filters by `?program=` only; there is no conference filter, which is why the header link is left off here rather than pointed at an unfiltered list. Empty states: "No teams in this conference yet" for the table, the component's own line for matches. The offline render pattern is `tests/admin-conference-card.spec.ts` (`fixtures/vm-modules`).
+
+## T18 · Conferences list opens the page; the drawer retires
+
+- **status:** todo
+- **model:** opus
+- **needs:** T16
+- **files:** guess — src/components/admin/conferences-table.tsx, src/components/admin/conferences-table-layout.ts, src/components/admin/conferences-page-content.tsx, src/components/admin/conference-drawer.tsx (delete), src/app/admin/conferences/page.tsx, tests/fixtures/admin-writes-harness.tsx, tests/admin-writes.spec.ts
+- **routes:** /admin/conferences, /admin/conferences?view=missing
+- **done when:**
+  - [ ] Each `ConferencesTable` row is a link to `/admin/conferences/<id>` with a trailing chevron; the `selectedId` and `onSelect` props and the `role="button"` row are gone
+  - [ ] `conference-drawer.tsx` is deleted and `conferences-page-content.tsx` no longer has the selection state, the `rail`, `syncUrl` or the Esc and arrow-key handler; the search, the three view pills (All, With teams on Advantage, Missing details), the Division menu, the sort menu, "Show all" and "Add conference" are still rendered
+  - [ ] `src/app/admin/conferences/page.tsx` redirects a request carrying `?id=<id>` to `/admin/conferences/<id>`
+  - [ ] After "Add conference" succeeds the router goes to `/admin/conferences/<newId>`
+  - [ ] `tests/fixtures/admin-writes-harness.tsx` no longer imports `ConferenceDrawer`; its `conference` surface renders the conference page's edit dialog and "⋯" actions from T16, and `tests/admin-writes.spec.ts` still has a save case and a delete case against it. The drawer-only "a conference's teams" load cases are removed
+- **notes:** Everything the drawer did has a home on the page after T16 and T17: crest, the four fields, Merge, Delete, the teams list and Add team. What goes with it is stepping row to row with the arrow keys, which was the quick way to fill gaps from the Missing details view; the view itself stays. Record rows navigate and carry a chevron (table law 3 in `.skills/advantage-analytics-design/reference/tables.md`). `AddConferenceDialog`'s doc comment mentions the drawer; update it.
+
+## T19 · Teams: Conferences as the third view pill
+
+- **status:** todo
+- **model:** opus
+- **needs:** T15, T18
+- **files:** guess — src/app/admin/teams/page.tsx, src/components/admin/teams-page-content.tsx, tests/admin-teams-views.spec.ts (new)
+- **routes:** /admin/teams?view=conferences, /admin/teams
+- **done when:**
+  - [ ] `/admin/teams` accepts `?view=conferences`, and the view row has exactly three pills in this order: Programs, Pilot players, Conferences
+  - [ ] On that view the page loads `listAdminConferences()` and does not call `listAdminTeams`, `listAdminTeamFacets` or `listAdminPilots`; on the other two views it calls `countAdminConferences()` for the pill and does not load the conference rows
+  - [ ] The view renders `ConferencesTable` imported from `conferences-table.tsx` (no second conferences table, no copied row markup), sorted with `sortConferences(rows, "most_teams")`; the Division and Conference facet menus and the teams sort menu are not rendered on it, and the cut stays in the URL as it does for Pilot players
+  - [ ] The pill-to-URL and URL-to-pill mapping is a pure exported function, and a new spec asserts all three pills round-trip and that an old `?view=in_pilot` link still reads as Programs
+- **notes:** `/admin/conferences` stays the full list (search, Missing details, sort, Add conference); this view is the plain table whose rows open the conference page, which T18 already made links. Update the doc comments in both files (they say "two views").
+
+## T20 · Point conference links at the conference page
+
+- **status:** todo
+- **model:** sonnet
+- **needs:** T16
+- **files:** guess — src/components/admin/admin-conference-card.tsx, src/lib/data/admin-search-server.ts, tests/admin-conference-card.spec.ts, tests/fixtures/admin-search-actions-browser-mock.ts
+- **routes:** /admin/teams/[programId]
+- **done when:**
+  - [ ] In `AdminConferenceCard`'s `fact` variant the conference name is a link to `/admin/conferences/<conference.id>`; "No conference yet" stays plain text and the `Change` / `Set conference` control is unchanged
+  - [ ] The `card` variant's link and the admin search's conference result both point at `/admin/conferences/<id>`
+  - [ ] `tests/admin-conference-card.spec.ts` asserts the fact variant's href and the card variant's new href, and the search mock fixture carries the new href
+  - [ ] No `/admin/conferences?id=` string remains under `src/`
+- **notes:** Old `?id=` bookmarks are covered by T18's redirect. Keep the fact quiet: one link on the name, no extra icon ("too cluttered and busy" was the verdict on a link on every fact).
+
+## T21 · Team detail: the activity log on the page
+
+- **status:** todo
+- **model:** opus
+- **files:** guess — src/app/admin/teams/[programId]/page.tsx, src/components/admin/admin-activity-card.tsx, src/components/admin/team-sections.ts, tests/admin-team-views.spec.ts, tests/admin-activity-card.spec.ts (new)
+- **routes:** /admin/teams/[programId], /admin/teams/[programId]?view=activity
+- **done when:**
+  - [ ] The default view in `page.tsx` renders the activity log as its last section, after Latest matches, through the existing `AdminActivityCard` (parameterised if needed, not a second copy of its row markup), and the standalone "Activity log" link to `?view=activity` is no longer rendered
+  - [ ] The section shows at most a named constant of the newest entries (8 assumed) until a "Show all" control expands the rest in place; the control is not rendered when there are that many entries or fewer, and an empty log prints the card's existing empty line
+  - [ ] `?view=activity` still lands on the page (it resolves to the default view, like `roster`), `tests/admin-team-views.spec.ts` pins that, and `next.config.ts` is unchanged
+  - [ ] A new offline spec renders the section with fewer than, exactly, and more than the constant's number of entries and asserts the entry count and whether "Show all" is present
+- **notes:** The owner's words: "the activity log should be able to be viewed on the same page". Full width, quiet, like the rest of the page (docs/superpowers/specs/2026-11-12-admin-strip/README.md). No new read: the loader already returns `activity`. Conferences record no activity of their own in the code read at add time, so the conference page has no such section.
