@@ -10,7 +10,8 @@ import { requireLabelViewerOrNotFound } from "@/lib/services/programs/admin-guar
  * `/label` — the labeller's board (`loadLabellerBoard`): To do, In progress
  * and Submitted, with no player, program, owner or match id anywhere on it.
  * Practice sets are not on the queue, so they still list below through
- * `AssignedSessionsList`, filtered to practice copies.
+ * `AssignedSessionsList`, filtered to practice copies; so does any assigned
+ * analyst session the queue does not carry ("Assigned to you").
  *
  * `force-dynamic`: every read is service-role and per-viewer.
  */
@@ -30,6 +31,19 @@ export default async function LabelHomePage() {
       : requireLabeller().then((labeller) => labeller !== null),
   ]);
   const practice = sessions.filter((session) => session.practice);
+  // A non-practice session the board does not show: one assigned before the
+  // queue, or on a match outside it (no job, analysed before
+  // `LABEL_QUEUE_FROM`). It still counts as the one the viewer holds, so it
+  // must stay reachable here or the board would refuse every claim with
+  // nothing to finish.
+  const onBoard = new Set(
+    [...board.inProgress, ...board.submitted].flatMap((row) =>
+      row.sessionId ? [row.sessionId] : [],
+    ),
+  );
+  const offBoard = sessions.filter(
+    (session) => !session.practice && !onBoard.has(session.id),
+  );
   // Read once, here, so every due text on the server's HTML and the browser's
   // first render is the same string.
   // eslint-disable-next-line react-hooks/purity -- a request-time clock, not a render-time one
@@ -40,6 +54,20 @@ export default async function LabelHomePage() {
     // chrome comes with it.
     <AdminPage className="gap-10">
       <LabelBoard board={board} now={now} canClaim={canClaim} />
+      {offBoard.length > 0 ? (
+        <section
+          aria-labelledby="label-assigned"
+          className="flex flex-col gap-3"
+        >
+          <h2
+            id="label-assigned"
+            className="text-[13px] font-semibold text-[var(--ink-900)]"
+          >
+            Assigned to you
+          </h2>
+          <AssignedSessionsList sessions={offBoard} />
+        </section>
+      ) : null}
       {practice.length > 0 ? (
         <section
           aria-labelledby="label-practice"
