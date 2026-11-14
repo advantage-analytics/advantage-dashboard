@@ -409,3 +409,12 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. `/label` page's on-board set should include `board.published` once T36 draws it, or the viewer's published session also lists under "Assigned to you".
+
+## T35 · Admin Labels board: "Published, to check" lane — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `/admin/labels` lanes To do, In progress, Published, to check (Submitted only while it has rows). To-check rows show labeller, "published … ago", On time / N h late, and quiet Check / Send back text actions; Send back opens `send-back-dialog.tsx` (ConfirmDialog, note required). Sent-back In progress rows show a "Sent back" pill, time and note. Lede "N published matches to check." plus overdue and sent-back counts; lane foot copy. `/design/labels` fixture gains sample rows.
+**follow-ups:**
+
+1. The dialog repeats the 2000-character note limit; move `SEND_BACK_NOTE_MAX` to a shared module.
+2. Not yet checked signed-in on the real `/admin/labels` (offline spec and design preview only).

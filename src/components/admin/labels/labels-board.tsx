@@ -30,9 +30,10 @@ import { LABEL_QUEUE_FROM } from "@/lib/services/labels/queue";
 import { cn } from "@/lib/utils";
 
 /**
- * Admin › Labels (AdminAudit artboard, without its piece-3 parts): the
- * labeller queue in three lanes — To do, In progress, Submitted — each a
- * quiet well of white rows with its "N matches · H.HH h" count. The lanes
+ * Admin › Labels (AdminAudit artboard): the labeller queue in lanes — To do,
+ * In progress, Published, to check, and Submitted only while it has rows (the
+ * sessions handed in before submit published) — each a quiet well of white
+ * rows with its "N matches · H.HH h" count. The lanes
  * are `loadAdminLabelBoard()`'s, so they hold only the queue: matches
  * analysed on or after `LABEL_QUEUE_FROM`. Older ones are labelled from
  * Admin › Matches, and the line under the lanes says so.
@@ -59,6 +60,10 @@ const LANES: readonly {
   id: string;
   title: string;
   empty: string;
+  /** A line under the lane's rows. */
+  foot?: string;
+  /** Drawn only while it has rows. */
+  onlyWithRows?: boolean;
 }[] = [
   {
     lane: "todo",
@@ -73,10 +78,19 @@ const LANES: readonly {
     empty: "Nobody is labelling a match.",
   },
   {
+    lane: "toCheck",
+    id: "admin-labels-to-check",
+    title: "Published, to check",
+    empty: "Nothing published is waiting for a check.",
+    foot: "These are already live for the player. Matches you publish yourself skip this list.",
+  },
+  {
+    // Sessions handed in before submit published; it empties out.
     lane: "submitted",
     id: "admin-labels-submitted",
     title: "Submitted",
     empty: "Nothing has been submitted.",
+    onlyWithRows: true,
   },
 ];
 
@@ -97,7 +111,7 @@ function LaneRows({
   labellers: readonly Labeller[];
 }) {
   const [expanded, setExpanded] = useState(false);
-  // Only To do runs long; the other two lanes are as long as the team.
+  // Only To do runs long; the other lanes are as long as the team.
   const visible =
     lane === "todo" && !expanded ? rows.slice(0, TODO_VISIBLE) : rows;
   const hidden = rows.length - visible.length;
@@ -142,8 +156,9 @@ export function LabelsBoard({
   return (
     <div data-labels-board="" className="flex flex-col gap-3">
       <div className="flex flex-wrap items-start gap-4">
-        {LANES.map(({ lane, id, title, empty }) => {
+        {LANES.map(({ lane, id, title, empty, foot, onlyWithRows }) => {
           const rows = board[lane];
+          if (onlyWithRows && rows.length === 0) return null;
           return (
             <Lane key={id} id={id} title={title} count={laneCount(rows)}>
               {rows.length === 0 ? (
@@ -156,6 +171,11 @@ export function LabelsBoard({
                   labellers={labellers}
                 />
               )}
+              {foot ? (
+                <p className="px-3 pb-2 text-[12px] leading-[1.5] text-[var(--ink-500)]">
+                  {foot}
+                </p>
+              ) : null}
             </Lane>
           );
         })}

@@ -486,7 +486,7 @@ ready).
 
 ## T35 · Admin Labels board: "Published, to check" lane
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T33, T34
 - **files:** guess — src/components/admin/labels/labels-board.tsx, src/components/admin/labels/send-back-dialog.tsx (new), src/app/admin/labels/page.tsx, tests/admin-labels-board.spec.ts

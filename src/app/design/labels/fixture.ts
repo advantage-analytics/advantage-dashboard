@@ -482,7 +482,7 @@ const boardRow = (
   ...overrides,
 });
 
-/** The admin's board on `/admin/labels`, three lanes of sample matches. */
+/** The admin's board on `/admin/labels`, every lane with sample matches. */
 export const BOARD: AdminLabelBoard = {
   todo: [
     boardRow(1, {
@@ -536,8 +536,46 @@ export const BOARD: AdminLabelBoard = {
       lastBeatAt: at(-0.2),
       flags: { left: 14 },
     }),
+    boardRow(7, {
+      player1Name: "Ruth Adeyemi",
+      player2Name: "Nina Kowalski",
+      videoSeconds: 4320,
+      dueAt: at(9),
+      sessionId: "board-s7",
+      labellerId: "sam-ortiz",
+      labellerName: "Sam Ortiz",
+      lastBeatAt: at(-1),
+      flags: { left: 2 },
+      sentBack: {
+        at: at(-2),
+        note: "Set 2, game 5 has two points merged into one.",
+      },
+    }),
   ],
-  toCheck: [],
+  toCheck: [
+    boardRow(8, {
+      player1Name: "Jo Castellanos",
+      player2Name: "Priya Natarajan",
+      videoSeconds: 4860,
+      dueAt: at(-14),
+      sessionId: "board-s8",
+      labellerId: "lena",
+      labellerName: "Lena Kovac",
+      publishedAt: at(-6),
+    }),
+    boardRow(9, {
+      player1Name: "Theo Marchetti",
+      player2Name: "Ivan Horvat",
+      programName: HARBOR,
+      urgency: "express",
+      videoSeconds: 3420,
+      dueAt: at(-1),
+      sessionId: "board-s9",
+      labellerId: "maya-rao",
+      labellerName: "Maya Rao",
+      publishedAt: at(-5),
+    }),
+  ],
   submitted: [
     boardRow(6, {
       player1Name: "Sam Arroyo",

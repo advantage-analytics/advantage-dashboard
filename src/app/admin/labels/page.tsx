@@ -22,7 +22,8 @@ import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 
 /**
  * Admin › Labels — the labeller queue as the admin sees it
- * (`loadAdminLabelBoard`): To do, In progress and Submitted, every row named
+ * (`loadAdminLabelBoard`): To do, In progress, Published, to check and (while
+ * it has rows) Submitted, every row named
  * and every row openable by the admin. Above the lanes, the matches a player
  * has asked us to look at again ("Requested reviews"), which are usually
  * published and so off the queue.
@@ -36,8 +37,34 @@ export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Labels" };
 
-const LEDE =
-  "Labelling a match replaces its points and statistics with what you saw on the video.";
+/**
+ * The lede, as the AdminAudit artboard writes it: what is waiting on the
+ * admin first, then what is late, then what is back with its labeller.
+ */
+function ledeText(toCheck: number, overdue: number, sentBack: number): string {
+  const parts = [
+    toCheck === 0
+      ? "No published matches to check."
+      : toCheck === 1
+        ? "1 published match to check."
+        : `${toCheck} published matches to check.`,
+  ];
+  if (overdue > 0) {
+    parts.push(
+      overdue === 1
+        ? "1 match is overdue for labelling."
+        : `${overdue} matches are overdue for labelling.`,
+    );
+  }
+  if (sentBack > 0) {
+    parts.push(
+      sentBack === 1
+        ? "1 is back with its labeller for fixes."
+        : `${sentBack} are back with their labellers for fixes.`,
+    );
+  }
+  return parts.join(" ");
+}
 
 /**
  * The reported matches' jobs, with what their rows show. Only read when a
@@ -89,6 +116,7 @@ export default async function AdminLabelsPage() {
   // eslint-disable-next-line react-hooks/purity -- a request-time clock, not a render-time one
   const now = Date.now();
   const overdue = board.todo.filter((row) => isOverdue(row.dueAt, now)).length;
+  const sentBack = board.inProgress.filter((row) => row.sentBack).length;
   const assignable = "ok" in labellers ? labellers.labellers : [];
 
   return (
@@ -104,9 +132,7 @@ export default async function AdminLabelsPage() {
           </Link>
         </div>
         <p className="text-body-sm mt-[9px]">
-          {overdue > 0
-            ? `${overdue === 1 ? "1 match is" : `${overdue} matches are`} overdue for labelling. ${LEDE}`
-            : LEDE}
+          {ledeText(board.toCheck.length, overdue, sentBack)}
         </p>
       </div>
 
