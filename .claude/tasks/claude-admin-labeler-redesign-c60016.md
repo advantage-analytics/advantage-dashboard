@@ -306,3 +306,125 @@ ready).
   - [ ] `?view=activity` still lands on the page (it resolves to the default view, like `roster`), `tests/admin-team-views.spec.ts` pins that, and `next.config.ts` is unchanged
   - [ ] A new offline spec renders the section with fewer than, exactly, and more than the constant's number of entries and asserts the entry count and whether "Show all" is present
 - **notes:** The owner's words: "the activity log should be able to be viewed on the same page". Full width, quiet, like the rest of the page (docs/superpowers/specs/2026-11-12-admin-strip/README.md). No new read: the loader already returns `activity`. Conferences record no activity of their own in the code read at add time, so the conference page has no such section.
+
+## T22 · Migration: label claims, starting flag count, stale-claim release
+
+- **status:** todo
+- **model:** fable
+- **files:** guess — supabase/migrations/<timestamp>_label_queue_claims.sql (new), tests/label-queue-migration.spec.ts (new)
+- **done when:**
+  - [ ] One new migration file adds `label_sessions.claimed_at timestamptz null` and `label_sessions.start_open_counts jsonb null`, with a CHECK that `start_open_counts` is null or an object whose `amber` and `grey` are non-negative integers, and a partial index on `label_sessions (assigned_to) where status = 'labelling' and kind = 'analyst'`
+  - [ ] The same file adds trigger function `public.label_sessions_record_start_open_counts()` and a `BEFORE UPDATE OF open_counts` trigger on `label_sessions` that sets `new.start_open_counts := new.open_counts` only when `old.open_counts is null`, `old.start_open_counts is null` and `new.open_counts is not null`
+  - [ ] It adds `public.claim_label_session(p_session_id uuid, p_user_id uuid) returns text` (`set search_path = ''`). It locks the `users` row for `p_user_id` `for update` and returns `'not_labeller'` unless `is_labeller` is true. It returns `'holding'` when another session with `kind = 'analyst'`, `status = 'labelling'` and `assigned_to = p_user_id` exists, and `'taken'` unless its one `update` matches `id = p_session_id and status = 'labelling' and kind = 'analyst' and assigned_to is null`. On a match it sets `assigned_to = p_user_id` and `assigned_at = claimed_at = now()`, then returns `'claimed'`
+  - [ ] It adds `public.release_stale_label_claims(p_idle interval) returns integer`. It sets `assigned_to`, `assigned_at` and `claimed_at` to null on sessions with `status = 'labelling'`, `kind = 'analyst'` and `claimed_at is not null`, where `greatest(claimed_at, max(label_work_beats.minute))` for beats on that session by `user_id = assigned_to` is older than `now() - p_idle`. It returns the row count. A `cron.schedule('release-stale-label-claims', '7 * * * *', $$select public.release_stale_label_claims(interval '48 hours')$$)` follows it. Both functions get `revoke execute … from public, anon, authenticated` and `grant execute … to service_role`
+  - [ ] `tests/label-queue-migration.spec.ts` reads the migration file and asserts the two columns, the trigger's three-condition guard, all four return words of `claim_label_session`, the `48 hours` cron job, and that neither function is granted to `anon` or `authenticated`
+- **notes:** WRITES THE MIGRATION FILE ONLY. Do NOT apply it to the live project or any branch database. Applying it is a separate step the owner approves. Never hand-format it (`.prettierignore`). The work signal is `label_work_beats`, not `label_sessions.updated_at`. The `label_sessions_touch_updated_at` trigger bumps `updated_at` on every update, including the console's `open_counts` save on mount (`label-console.tsx`, `recordOpenCounts` effect) and admin edits. Opening a match would therefore count as working on it, while a beat needs a key or pointer press in a visible tab (`work-beats.ts`). Only the claimer's own beats count, so an admin's review beats cannot keep a claim alive. Admin-assigned sessions (`claimed_at` null) are never released. The starting count is recorded on the console's first count, which happens on mount, before any work. Sessions already opened before this migration already hold `open_counts`, so they never get a start and keep "N flags left", as the rule asks. Model the function style on `20261010213300_claim_label_publish_lease.sql` and the cron on `20261025211338_schedule_vendor_job_reconcile.sql`. The `label_sessions_refuse_while_publishing` trigger still applies to both updates.
+
+## T23 · Queue rules: due time, who can enter, sort, the first three
+
+- **status:** todo
+- **model:** opus
+- **files:** guess — src/lib/services/labels/queue.ts (new), tests/label-queue.spec.ts (new)
+- **done when:**
+  - [ ] `queue.ts` exports `LABEL_DUE_WINDOW_HOURS = 36`, `LABEL_QUEUE_FROM = "2026-10-29T00:00:00Z"`, `LABEL_CLAIM_CHOICES = 3` and `labelDueAt(completedAt)`, which returns `completedAt` plus 36 h for every priority
+  - [ ] `labelDueText(dueAt, now)` returns "Due in N min" under an hour, "Due in N h" (floored) from one hour up, and "Overdue by N h" past due, with at least 1 h past due, while `isOverdue(dueAt, now)` is the boolean the boards style on
+  - [ ] `enterLabelQueue(job)` is true only when `completedAt >= LABEL_QUEUE_FROM`, the video length from `jobVideoSeconds` (`src/lib/data/practice-server.ts`) is above zero, the match's owner email fails `isTestAccountEmail` (`src/lib/services/notifications/internal-activity-mail.ts`), and the job's session is not `complete`
+  - [ ] `sortByDue` orders earliest due first with ties broken by job id, and `claimableJobIds(rows)` returns the ids of the first `LABEL_CLAIM_CHOICES` rows that have no session or an unassigned `labelling` one
+  - [ ] `tests/label-queue.spec.ts` covers the min/h/overdue boundaries, a job completed 2026-10-28T23:59Z left out, a zero-length video left out, a test-email owner left out, and a fourth unassigned row that is not claimable
+- **notes:** Pure module: no Supabase, no `Date.now()` inside (take `now`). `processing_jobs.priority` holds only 'standard' and 'express' and nothing sets it, so one window for every row is the settled launch rule. Also export `urgencyLevel(priority)`: 'express' becomes "express", anything else "standard". "Priority" exists only in the design until the tiers land. The test-workspace rule is an assumption awaiting the owner's answer.
+
+## T24 · Queue loader: two board projections
+
+- **status:** todo
+- **model:** fable
+- **needs:** T22, T23
+- **files:** guess — src/lib/data/label-queue-server.ts (new), src/lib/data/labels-server.ts, tests/label-queue-loader.spec.ts (new)
+- **done when:**
+  - [ ] `label-queue-server.ts` reads, service-role, completed Advantage Intelligence jobs with a results file, keeps the newest completed job per match, and filters and sorts through `enterLabelQueue` and `sortByDue` from `queue.ts`. A match whose newest job has a `complete` non-practice session does not appear
+  - [ ] `loadLabellerBoard()` calls `requireLabelViewerOrNotFound()` first and returns `{ todo, inProgress, submitted, holding }`. Its row type declares no player name, program, team, match id or owner field: a to-do row carries `jobId`, `videoSeconds`, `urgency`, `dueAt` and `claimable`. An in-progress or submitted row carries `sessionId` only when the session is assigned to the viewer, plus `mine`, the labeller's first name and photo url, and `flags`
+  - [ ] `loadAdminLabelBoard()` calls `requireAdminOrNotFound()` first and returns the same three lanes. Each row also carries `jobId`, `matchId`, both player names, the program name or "Personal", the assigned labeller's full name, `claimedAt`, and the last beat minute by the assignee
+  - [ ] `flags` on every row is `{ resolved, total }` when `start_open_counts` is set (total = start amber + grey, resolved = total − current amber − grey, floored at 0), `{ left }` when only `open_counts` is set, and null otherwise. A pure exported mapper does this
+  - [ ] `tests/label-queue-loader.spec.ts` asserts the mapper's three `flags` shapes, that the newest completed job per match wins, and that `JSON.stringify` of a labeller board built from a fixture holding player names contains neither name
+- **notes:** Keep the boundary `label-assignments-server.ts` holds today: a labeller row never names whose match it is. The to-do `jobId` is the claim key T25 takes. It grants nothing because the claim re-checks the queue on the server. Name the "In progress" lane for any `labelling` session with `assigned_to` set, claimed or admin-assigned, and "Submitted" for `submitted`. `holding` is true when the viewer has a `labelling` analyst session assigned. Practice copies (`kind = 'practice'`) never enter the lanes. Reuse `countLabelWorkMinutes` / `readOpenCounts` rather than copying them. The new columns exist only once T22's migration is applied, so this reads them through `.returns<>` types and no live-DB spec should run it before then.
+
+## T25 · Self-claim: seed, claim, admin assign clears the claim
+
+- **status:** todo
+- **model:** fable
+- **needs:** T22, T24
+- **files:** guess — src/lib/services/labels/claim-session.ts (new), src/app/label/actions.ts, src/lib/services/labels/assign-session.ts, tests/label-claim.spec.ts (new), tests/label-assign.spec.ts
+- **done when:**
+  - [ ] `claimLabelMatch(jobId, deps)` takes the viewer from the server-side session and refuses a non-labeller. It refuses with a named constant sentence when the viewer already holds a session or when `jobId` is not in the server-recomputed `claimableJobIds`. It never takes a user id from its caller
+  - [ ] For a job with no open session it calls `seedLabelSessionForJob({ supabase, jobId, labellerId: viewer.id })`, then calls the `claim_label_session` RPC with the session id and the viewer's id, maps each of `'holding'`, `'taken'` and `'not_labeller'` to its own sentence, and returns `{ sessionId }` only on `'claimed'`
+  - [ ] `src/app/label/actions.ts` exports `claimLabelMatchAction(jobId)`, which delegates to `claimLabelMatch` with default dependencies
+  - [ ] `assignLabelSession` writes `claimed_at: null` in the same update as `assigned_to` / `assigned_at`, and `tests/label-assign.spec.ts` asserts the written payload carries it
+  - [ ] `tests/label-claim.spec.ts` (fake dependencies) asserts: a holding viewer is refused before any seed; a fourth-due job is refused before any seed; an existing unassigned session is claimed without a seed call; a `'taken'` RPC answer yields its sentence and no `sessionId`
+- **notes:** The RPC goes through the service-role client with the gate's own id, the same pattern as `claim_label_publish_lease` and Ask's `database.ts`. Seeding is the existing path (results download, re-derive), so a claim is slow the first time. That is acceptable. A seed that loses the claim race leaves an unassigned `labelling` session, which stays in To do and is harmless. Refusal sentences sketch: "Submit your match before you claim another." / "Someone claimed that match first." / "That match is not one of the next three due." Piece 3 is out of scope: submit is unchanged.
+
+## T26 · Urgency mark component
+
+- **status:** todo
+- **model:** sonnet
+- **files:** guess — src/components/admin/labels/urgency-mark.tsx (new), tests/urgency-mark.spec.ts (new)
+- **done when:**
+  - [ ] `UrgencyMark({ level })` with `level: "express" | "priority" | "standard"` renders an `aria-hidden` 14×14 SVG of three rising bars (3, 2 and 1 of them filled for express, priority and standard) followed by the word "Express", "Priority" or "Standard"
+  - [ ] The file contains no hex or `rgb(` colour literal: fills and text colours are design-system CSS variables, and "Standard" uses the quieter ink
+  - [ ] `tests/urgency-mark.spec.ts` renders each level and asserts the word and the count of filled bars
+- **notes:** Shape from `docs/superpowers/specs/2026-11-12-admin-strip/Urgency.dc.html`. Its pink and purple are raw values, and the design system wins (read `.skills/advantage-analytics-design/SKILL.md` first). Built once and used by T27 and T28.
+
+## T27 · Labeller board on `/label`
+
+- **status:** todo
+- **model:** opus
+- **needs:** T24, T25, T26
+- **files:** guess — src/app/label/page.tsx, src/components/label/label-board.tsx (new), src/components/label/assigned-sessions-list.tsx, tests/label-board.spec.ts (new)
+- **routes:** /label
+- **done when:**
+  - [ ] `/label` renders from `loadLabellerBoard()` three sections headed "To do", "In progress" and "Submitted", each with a "N matches · H.HH h" count. Assigned practice sets still render through `AssignedSessionsList`, filtered to practice copies
+  - [ ] Each To do row shows the video hours, the `UrgencyMark` and the T23 due text, styled as overdue when `isOverdue`. A "Claim" button appears on exactly the `claimable` rows and on none while `holding`
+  - [ ] Clicking Claim calls `claimLabelMatchAction(jobId)`. On success it routes to `/label/<sessionId>`. On refusal it shows the returned sentence next to the row
+  - [ ] In progress lists the viewer's own session first, as a card with a "Continue labelling" link to `/label/<sessionId>`. When `flags` has a total, the card shows "X of Y flags resolved" with a `role="progressbar"` (`aria-valuenow` X, `aria-valuemax` Y), otherwise "N flags left". Every other row shows the labeller's first name and an `AdminAvatar`
+  - [ ] `tests/label-board.spec.ts` renders the board from fixtures and asserts: three Claim buttons on a five-row To do; none when `holding`; "Overdue by 1 h"; the progressbar values; and no player name anywhere in the markup
+- **notes:** Layout from LabDue.dc.html. Lane three is "Submitted", not the artboard's "Published, to be checked": submit does not publish until piece 3. Leave out the artboard's header stats ("checked hours", "Published, not checked yet"), which are piece 3 too. Lede sketch: "N matches to label", plus "N overdue." when any are, plus "Submit yours to claim the next one." while holding. The To do lane may show the first 8 with "Show N more".
+
+## T28 · Admin Labels board in lanes
+
+- **status:** todo
+- **model:** opus
+- **needs:** T24, T26
+- **files:** guess — src/app/admin/labels/page.tsx, src/components/admin/labels/labels-board.tsx, src/components/admin/labels-board/label-job-row.tsx, tests/admin-labels-board.spec.ts (new)
+- **routes:** /admin/labels
+- **done when:**
+  - [ ] `/admin/labels` renders from `loadAdminLabelBoard()` the lanes "To do", "In progress" and "Submitted", each with its "N matches · H.HH h" count. The "Requested reviews" section and the "Pay report" link are kept
+  - [ ] Every row shows "Player vs Player · Team" (or "· Personal"), hours, `UrgencyMark` and the due text. In progress and Submitted rows also show the labeller's name, and In progress rows show "X of Y flags resolved" or "N flags left"
+  - [ ] Every row in every lane opens the match for the admin through the existing `useStartLabelling(jobId)` (seed or reopen, then `/admin/labels/<sessionId>`), with no claim check and no limit
+  - [ ] Rows with a session keep the existing Assign menu (`assignLabelSessionAction`)
+  - [ ] `tests/admin-labels-board.spec.ts` renders the board from fixtures and asserts lane order, a team name on a row, the labeller name on an In progress row, and "3 of 10 flags resolved" for a row with a start count
+- **notes:** Layout from AdminAudit.dc.html, minus its piece-3 parts: no "Published, to check" lane, no Check or Send back. Optional, if cheap: "no work in N days" from the last beat on an In progress row, as the artboard shows. The board shows only the queue (analysed on or after 2026-10-29). Older matches are labelled from Admin › Matches (T29), so say so in one line under the lanes. If `listLabelJobs` has no caller left afterwards, delete it in the same diff. Otherwise leave it.
+
+## T29 · Admin › Matches panel: label any analysed match
+
+- **status:** todo
+- **model:** opus
+- **files:** guess — src/components/admin/matches/match-peek-drawer.tsx, src/lib/data/admin-matches-server.ts, tests/admin-matches-label-entry.spec.ts (new)
+- **routes:** /admin/matches
+- **done when:**
+  - [ ] The admin match row type carries `labelJobId`: the newest completed Advantage Intelligence job with a results file, else null
+  - [ ] The side panel shows a "Label this match" control only when `labelJobId` is set. It calls `useStartLabelling(labelJobId)` and shows its error sentence on refusal
+  - [ ] Nothing in the control reads the queue's cut-off date, so a match analysed before 2026-10-29 shows it too
+  - [ ] `tests/admin-matches-label-entry.spec.ts` asserts the control's presence with a `labelJobId` and its absence without one
+- **notes:** README rule: "Older waiting matches stay out of it but can still be labelled from Matches." Admin › Matches has no way into labelling today, and the panel has only Resubmit.
+
+## T30 · Match overview: "X of Y flags resolved" with a bar
+
+- **status:** todo
+- **model:** opus
+- **needs:** T22
+- **files:** guess — src/lib/data/labels-server.ts, src/lib/services/labels/session.ts, src/components/admin/labels/label-dashboard.tsx, tests/label-console.spec.ts
+- **routes:** /admin/labels/[sessionId]
+- **done when:**
+  - [ ] The session the console loads carries `startOpenCounts: FlagCounts | null`, read from `label_sessions.start_open_counts` through `readOpenCounts`
+  - [ ] With `startOpenCounts` set, `FlagsLeft` reads "X of Y flags resolved", where Y = start amber + grey and X = Y − the open flags it counts today, floored at 0. It renders a `role="progressbar"` with `aria-valuenow` X and `aria-valuemax` Y, and keeps the "N can move the score, N wrong data" split after it
+  - [ ] With `startOpenCounts` null, the line is unchanged: "N flags left: …" with no bar, and "No flags left" at zero
+  - [ ] `tests/label-console.spec.ts` asserts both forms and the progressbar's values
+- **notes:** Admin audience only, as in T14. The labeller's "Before you submit" overview is unchanged. Check that the dashboard's open count (`openFlags`) and the console's `openCounts` amber + grey count the same flags. If they differ, X takes the same source as Y (the `open_counts` pair) and the diff says why.
