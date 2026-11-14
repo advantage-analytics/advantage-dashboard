@@ -146,7 +146,12 @@ test.describe("LabelBoard", () => {
     const html = render(board());
     expect(html).toContain(">To do</span>");
     expect(html).toContain(">In progress</span>");
+    expect(html).toContain(">Published</span>");
+    // Old hand-ins still sit in Submitted, so the fourth lane shows.
     expect(html).toContain(">Submitted</span>");
+    expect(html).toContain(
+      "Publishing puts a match in front of the player straight away. It can still be sent back to you.",
+    );
     // 1.10 + 1.20 + 1.30 + 1.40 + 1.50 h of video.
     expect(html).toContain("5 matches · 6.50 h");
     expect(html).toContain("2 matches · 3.00 h");
@@ -286,6 +291,160 @@ test.describe("LabelBoard", () => {
     // The viewer's own session is still the one link the board carries.
     expect(html).toContain(`href="/label/${MY_SESSION}"`);
     expect(html).not.toContain("44444444-");
+  });
+
+  test("Submitted shows only while it has rows", () => {
+    const html = render(board({ submitted: [] }));
+    expect(html).toContain(">Published</span>");
+    expect(html).not.toContain(">Submitted</span>");
+    expect(html).not.toContain('data-label-lane="label-board-submitted"');
+  });
+
+  test("published rows read '<first name or You> · <ago>' with the avatar", () => {
+    const html = render(
+      board({
+        published: [
+          sessionRow({
+            labellerFirstName: "Maya",
+            publishedAt: iso(-2),
+          }),
+          sessionRow({
+            mine: true,
+            sessionId: "66666666-6666-4666-8666-666666666666",
+            labellerFirstName: "Sam",
+            publishedAt: iso(-26),
+          }),
+        ],
+      }),
+    );
+    expect(html.match(/data-label-published-row=""/g)).toHaveLength(2);
+    expect(html).toContain(">Maya · 2 h ago</span>");
+    expect(html).toContain(">You · 1 day ago</span>");
+    expect(html).toContain('data-name="Maya"');
+    expect(html).toContain('data-name="Sam"');
+    // A published row is not a way into the session.
+    expect(html).not.toContain('href="/label/66666666-');
+  });
+
+  test("a sent-back match leads In progress with the note and the link", () => {
+    const NOTE =
+      "Set 2, game 5 has two points merged into one. Split them and recheck the game score.";
+    const html = render(
+      board({
+        inProgress: [
+          sessionRow({ labellerFirstName: "Tobi" }),
+          sessionRow({
+            mine: true,
+            sessionId: MY_SESSION,
+            labellerFirstName: "Sam",
+            publishedAt: null,
+            sentBack: { at: iso(-2), note: NOTE },
+          }),
+        ],
+        // `holding` is the loader's; the sent-back row alone must stop claims.
+        holding: false,
+      }),
+    );
+    const card = html.indexOf("data-label-sent-back");
+    expect(card).toBeGreaterThan(-1);
+    expect(card).toBeLessThan(html.indexOf('data-name="Tobi"'));
+    expect(html).toContain("Sent back 2 h ago");
+    expect(html).toContain(NOTE);
+    expect(html).toContain(
+      "Your first version is still published. Publishing again replaces it.",
+    );
+    expect(html).toMatch(
+      new RegExp(`href="/label/${MY_SESSION}"[^>]*>Fix and publish again`),
+    );
+    expect(html).not.toContain("Continue labelling");
+    expect(html).toContain(
+      "A match was sent back to you. Fix and publish it again to claim the next one.",
+    );
+    expect(claimButtons(html)).toBe(0);
+  });
+
+  test("sent-back and published rows from the projection name no player", () => {
+    const NOTE = "Recheck the tiebreak.";
+    const projected = toLabellerBoard(
+      [
+        {
+          id: "00000007-0000-4000-8000-000000000000",
+          matchId: "99999997-9999-4999-8999-999999999999",
+          completedAt: iso(-40),
+          dueAt: iso(-4),
+          videoSeconds: 3600,
+          urgency: "standard",
+          player1Name: PLAYER_ONE,
+          player2Name: PLAYER_TWO,
+          programName: PROGRAM,
+          session: {
+            id: MY_SESSION,
+            status: "labelling",
+            assignedTo: VIEWER,
+            sentBackAt: iso(-1),
+            assignee: {
+              id: VIEWER,
+              firstName: "Sam",
+              fullName: "Sam Ortiz",
+              photoUrl: null,
+            },
+            assignedAt: iso(-30),
+            claimedAt: iso(-30),
+            submittedAt: null,
+            publishedAt: null,
+            sentBack: { at: iso(-1), note: NOTE },
+            flags: null,
+            labellerId: VIEWER,
+            lastBeatAt: null,
+            minutesWorked: 0,
+          },
+        },
+        {
+          id: "00000008-0000-4000-8000-000000000000",
+          matchId: "99999998-9999-4999-8999-999999999999",
+          completedAt: iso(-30),
+          dueAt: iso(6),
+          videoSeconds: 4200,
+          urgency: "standard",
+          player1Name: PLAYER_ONE,
+          player2Name: PLAYER_TWO,
+          programName: PROGRAM,
+          session: {
+            id: "88888888-8888-4888-8888-888888888888",
+            status: "complete",
+            assignedTo: OTHER,
+            assignee: {
+              id: OTHER,
+              firstName: "Tobi",
+              fullName: OTHER_FULL_NAME,
+              photoUrl: null,
+            },
+            assignedAt: iso(-20),
+            claimedAt: iso(-20),
+            submittedAt: null,
+            publishedAt: iso(-3),
+            sentBack: null,
+            flags: null,
+            labellerId: OTHER,
+            lastBeatAt: null,
+            minutesWorked: 0,
+          },
+        },
+      ],
+      VIEWER,
+      true,
+    );
+    const html = render(projected);
+    expect(html).toContain(NOTE);
+    expect(html).toContain(">Tobi · 3 h ago</span>");
+    for (const name of [PLAYER_ONE, PLAYER_TWO, PROGRAM, OTHER_FULL_NAME]) {
+      expect(html).not.toContain(name);
+    }
+    expect(html).not.toContain("Sam Ortiz");
+    expect(html).not.toContain("9999999");
+    expect(html).not.toContain("88888888-");
+    expect(html).toContain(`href="/label/${MY_SESSION}"`);
+    expect(claimButtons(html)).toBe(0);
   });
 
   test("shows the first eight with 'Show N more'", () => {

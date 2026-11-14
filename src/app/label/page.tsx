@@ -7,8 +7,9 @@ import { requireLabeller } from "@/lib/services/labels/claim-session";
 import { requireLabelViewerOrNotFound } from "@/lib/services/programs/admin-guard";
 
 /**
- * `/label` — the labeller's board (`loadLabellerBoard`): To do, In progress
- * and Submitted, with no player, program, owner or match id anywhere on it.
+ * `/label` — the labeller's board (`loadLabellerBoard`): To do, In progress,
+ * Published (and Submitted while old hand-ins remain), with no player,
+ * program, owner or match id anywhere on it.
  * Practice sets are not on the queue, so they still list below through
  * `AssignedSessionsList`, filtered to practice copies; so does any assigned
  * analyst session the queue does not carry ("Assigned to you").
@@ -37,8 +38,8 @@ export default async function LabelHomePage() {
   // must stay reachable here or the board would refuse every claim with
   // nothing to finish.
   const onBoard = new Set(
-    [...board.inProgress, ...board.submitted].flatMap((row) =>
-      row.sessionId ? [row.sessionId] : [],
+    [...board.inProgress, ...board.published, ...board.submitted].flatMap(
+      (row) => (row.sessionId ? [row.sessionId] : []),
     ),
   );
   const offBoard = sessions.filter(

@@ -33,7 +33,7 @@ import {
   jobStatusText,
   type FlagCounts,
 } from "@/lib/services/labels/job-groups";
-import { labelPublishedText } from "@/lib/services/labels/queue";
+import { agoText, labelPublishedText } from "@/lib/services/labels/queue";
 import { actionRejected } from "@/lib/ui/action-rejected";
 import { cn } from "@/lib/utils";
 
@@ -459,8 +459,6 @@ export function FlagLegend() {
 export type AdminLane = "todo" | "inProgress" | "toCheck" | "submitted";
 
 const DAY_MS = 86_400_000;
-const HOUR_MS = 3_600_000;
-const MINUTE_MS = 60_000;
 
 /**
  * "no work in N days" once the holder's newest work beat is a day old or
@@ -474,20 +472,6 @@ export function noWorkText(
   const days = Math.floor((now - Date.parse(lastBeatAt)) / DAY_MS);
   if (!(days >= 1)) return null;
   return days === 1 ? "no work in 1 day" : `no work in ${days} days`;
-}
-
-/**
- * How long ago a moment was, against the server's `now`: "just now",
- * "N min ago", "N h ago", then "N days ago". Floored, so it never runs
- * ahead; a moment in the future reads as "just now".
- */
-export function agoText(at: string, now: number): string {
-  const ms = now - Date.parse(at);
-  if (!(ms >= MINUTE_MS)) return "just now";
-  if (ms < HOUR_MS) return `${Math.floor(ms / MINUTE_MS)} min ago`;
-  if (ms < DAY_MS) return `${Math.floor(ms / HOUR_MS)} h ago`;
-  const days = Math.floor(ms / DAY_MS);
-  return days === 1 ? "1 day ago" : `${days} days ago`;
 }
 
 /** "3 of 10 flags resolved", or "4 flags left" before a start was counted. */

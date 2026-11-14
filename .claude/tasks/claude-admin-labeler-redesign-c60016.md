@@ -501,7 +501,7 @@ ready).
 
 ## T36 · Labeller board: Published lane and sent-back card
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T34
 - **files:** guess — src/components/label/label-board.tsx, src/app/label/page.tsx, tests/label-board.spec.ts

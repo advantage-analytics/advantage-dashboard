@@ -14,13 +14,16 @@ import type {
   LabellerSessionRow,
   LabellerTodoRow,
 } from "@/lib/data/label-queue-server";
-import { isOverdue, labelDueText } from "@/lib/services/labels/queue";
+import { agoText, isOverdue, labelDueText } from "@/lib/services/labels/queue";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
 /**
- * The labeller's board on `/label` (LabDue / AFree artboards): three lanes —
- * To do, In progress, Submitted — each a quiet well of white rows.
+ * The labeller's board on `/label` (LabDue / AFree / LabSentBack artboards):
+ * three lanes — To do, In progress, Published — each a quiet well of white
+ * rows, plus a fourth, Submitted, only while sessions handed in before submit
+ * published still sit in it. A match an admin sent back to the viewer leads
+ * In progress as a card carrying the admin's note.
  *
  * Nothing here can name a match: the rows (`toLabellerBoard`) carry video
  * length, urgency, due time, flags and, on a held row, the labeller's first
@@ -322,6 +325,108 @@ function MineCard({ row, now }: { row: LabellerSessionRow; now: number }) {
   );
 }
 
+/**
+ * The viewer's own match an admin sent back (LabSentBack): when, the admin's
+ * note, and the way back in. The first version stays published meanwhile.
+ */
+function SentBackCard({
+  row,
+  sentBack,
+  now,
+}: {
+  row: LabellerSessionRow;
+  sentBack: NonNullable<LabellerSessionRow["sentBack"]>;
+  now: number;
+}) {
+  const name = row.labellerFirstName;
+  return (
+    <article
+      data-label-mine=""
+      data-label-sent-back=""
+      className="flex flex-col gap-3 rounded-[var(--radius-element)] border border-[var(--border-field)] bg-[var(--surface-card)] px-3 pb-3"
+    >
+      <div className={cn(ROW_GRID, "h-[44px]")}>
+        <Hours seconds={row.videoSeconds} />
+        <UrgencyMark level={row.urgency} />
+        <span className="text-right text-[12px] font-semibold text-[var(--ink-900)]">
+          Your match
+        </span>
+        <span className="flex pl-2">
+          {name ? (
+            <AdminAvatar
+              name={name}
+              photoUrl={row.labellerPhotoUrl}
+              size={26}
+            />
+          ) : (
+            <span aria-hidden="true" className="size-[26px]" />
+          )}
+        </span>
+      </div>
+      <div className="flex flex-col gap-1 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] px-3 py-2.5 text-[12px]">
+        <p className="font-semibold text-[var(--ink-900)]">
+          Sent back {agoText(sentBack.at, now)}
+        </p>
+        {sentBack.note ? (
+          <p
+            data-label-sent-back-note=""
+            className="whitespace-pre-line text-[var(--ink-700)]"
+          >
+            {sentBack.note}
+          </p>
+        ) : null}
+      </div>
+      <p className="text-[12px] text-[var(--ink-500)]">
+        Your first version is still published. Publishing again replaces it.
+      </p>
+      {row.sessionId ? (
+        <Link
+          href={`/label/${row.sessionId}`}
+          className={cn(advButton("primary", "md"), "w-full gap-1")}
+        >
+          Fix and publish again
+          <ChevronRight
+            className="size-3.5"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+        </Link>
+      ) : null}
+    </article>
+  );
+}
+
+/** A published match: who published it and when, never the match. */
+function PublishedRow({ row, now }: { row: LabellerSessionRow; now: number }) {
+  const name = row.labellerFirstName;
+  const who = row.mine ? "You" : name;
+  const text = [who, row.publishedAt ? agoText(row.publishedAt, now) : null]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <div
+      data-label-published-row=""
+      className={cn(
+        ROW_GRID,
+        "h-[44px] rounded-[var(--radius-element)] bg-[var(--surface-card)] px-3",
+      )}
+    >
+      <Hours seconds={row.videoSeconds} />
+      <UrgencyMark level={row.urgency} />
+      <span className="min-w-0 truncate text-right text-[12px] text-[var(--ink-500)] tabular-nums">
+        {text}
+      </span>
+      <span className="flex pl-2">
+        {name ? (
+          <AdminAvatar name={name} photoUrl={row.labellerPhotoUrl} size={26} />
+        ) : (
+          <span aria-hidden="true" className="size-[26px]" />
+        )}
+      </span>
+    </div>
+  );
+}
+
 /** Someone's held or handed-in match: the labeller, never the match. */
 function SessionRow({ row }: { row: LabellerSessionRow }) {
   const name = row.labellerFirstName;
@@ -366,11 +471,21 @@ export function LabelBoard({
   canClaim: boolean;
 }) {
   const overdue = board.todo.filter((row) => isOverdue(row.dueAt, now)).length;
-  const mine = board.inProgress.filter((row) => row.mine);
+  // A sent-back match leads the lane; only the viewer's own row carries one.
+  const mine = board.inProgress
+    .filter((row) => row.mine)
+    .sort((a, b) => Number(Boolean(b.sentBack)) - Number(Boolean(a.sentBack)));
   const others = board.inProgress.filter((row) => !row.mine);
+  const sentBack = mine.some((row) => row.sentBack);
+  // A sent-back match is held like any other: no claim until it is published.
+  const holding = board.holding || sentBack;
   const lede = [
     overdue > 0 ? `${overdue} overdue.` : null,
-    board.holding ? "Submit yours to claim the next one." : null,
+    sentBack
+      ? "A match was sent back to you. Fix and publish it again to claim the next one."
+      : board.holding
+        ? "Submit yours to claim the next one."
+        : null,
   ]
     .filter(Boolean)
     .join(" ");
@@ -384,50 +499,84 @@ export function LabelBoard({
         {lede ? <p className="text-body-sm mt-[9px]">{lede}</p> : null}
       </div>
 
-      <div className="flex flex-wrap items-start gap-4">
-        <TodoLane
-          rows={board.todo}
-          now={now}
-          canClaim={canClaim && !board.holding}
-        />
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-start gap-4">
+          <TodoLane
+            rows={board.todo}
+            now={now}
+            canClaim={canClaim && !holding}
+          />
 
-        <Lane
-          id="label-board-in-progress"
-          title="In progress"
-          count={laneCount(board.inProgress)}
-        >
-          <div className="flex flex-col gap-1">
-            {mine.map((row, i) => (
-              <MineCard
-                key={row.sessionId ?? `mine-${i}`}
-                row={row}
-                now={now}
-              />
-            ))}
-            {mine.length === 0 ? (
-              <LaneEmpty>Claim a match and it appears here.</LaneEmpty>
-            ) : null}
-            {others.map((row, i) => (
-              <SessionRow key={i} row={row} />
-            ))}
-          </div>
-        </Lane>
-
-        <Lane
-          id="label-board-submitted"
-          title="Submitted"
-          count={laneCount(board.submitted)}
-        >
-          {board.submitted.length === 0 ? (
-            <LaneEmpty>Nothing has been submitted yet.</LaneEmpty>
-          ) : (
+          <Lane
+            id="label-board-in-progress"
+            title="In progress"
+            count={laneCount(board.inProgress)}
+          >
             <div className="flex flex-col gap-1">
-              {board.submitted.map((row, i) => (
-                <SessionRow key={row.sessionId ?? i} row={row} />
+              {mine.map((row, i) =>
+                row.sentBack ? (
+                  <SentBackCard
+                    key={row.sessionId ?? `mine-${i}`}
+                    row={row}
+                    sentBack={row.sentBack}
+                    now={now}
+                  />
+                ) : (
+                  <MineCard
+                    key={row.sessionId ?? `mine-${i}`}
+                    row={row}
+                    now={now}
+                  />
+                ),
+              )}
+              {mine.length === 0 ? (
+                <LaneEmpty>Claim a match and it appears here.</LaneEmpty>
+              ) : null}
+              {others.map((row, i) => (
+                <SessionRow key={i} row={row} />
               ))}
             </div>
-          )}
-        </Lane>
+          </Lane>
+
+          <Lane
+            id="label-board-published"
+            title="Published"
+            count={laneCount(board.published)}
+          >
+            {board.published.length === 0 ? (
+              <LaneEmpty>Nothing is published yet.</LaneEmpty>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {board.published.map((row, i) => (
+                  <PublishedRow
+                    key={row.sessionId ?? `published-${i}`}
+                    row={row}
+                    now={now}
+                  />
+                ))}
+              </div>
+            )}
+          </Lane>
+
+          {/* Sessions handed in before submit published; gone once drained. */}
+          {board.submitted.length > 0 ? (
+            <Lane
+              id="label-board-submitted"
+              title="Submitted"
+              count={laneCount(board.submitted)}
+            >
+              <div className="flex flex-col gap-1">
+                {board.submitted.map((row, i) => (
+                  <SessionRow key={row.sessionId ?? i} row={row} />
+                ))}
+              </div>
+            </Lane>
+          ) : null}
+        </div>
+        <p className="text-[12px] text-[var(--ink-500)]">
+          Publishing puts a match in front of the player straight away. It can
+          still be sent back to you.
+        </p>
       </div>
     </div>
   );

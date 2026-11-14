@@ -29,6 +29,7 @@ export const LABEL_CLAIM_CHOICES = 3;
 /** A moment as the boards hold it: an ISO string, a `Date` or epoch ms. */
 export type Moment = string | number | Date;
 
+const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 const MINUTE_MS = 60_000;
 
@@ -176,4 +177,19 @@ export function labelPublishedText(publishedAt: Moment, dueAt: Moment): string {
   const late = toMs(publishedAt) - toMs(dueAt);
   if (late <= 0) return "On time";
   return `${Math.max(1, Math.floor(late / HOUR_MS))} h late`;
+}
+
+/**
+ * How long ago a moment was, against the server's `now`: "just now",
+ * "N min ago", "N h ago", then "N days ago". Floored, so it never runs
+ * ahead; a moment in the future reads as "just now". Both boards print
+ * publishes and send-backs with it.
+ */
+export function agoText(at: Moment, now: Moment): string {
+  const ms = toMs(now) - toMs(at);
+  if (!(ms >= MINUTE_MS)) return "just now";
+  if (ms < HOUR_MS) return `${Math.floor(ms / MINUTE_MS)} min ago`;
+  if (ms < DAY_MS) return `${Math.floor(ms / HOUR_MS)} h ago`;
+  const days = Math.floor(ms / DAY_MS);
+  return days === 1 ? "1 day ago" : `${days} days ago`;
 }

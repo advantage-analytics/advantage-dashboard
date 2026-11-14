@@ -418,3 +418,11 @@ is the runner's. Newest entries at the bottom.
 
 1. The dialog repeats the 2000-character note limit; move `SEND_BACK_NOTE_MAX` to a shared module.
 2. Not yet checked signed-in on the real `/admin/labels` (offline spec and design preview only).
+
+## T36 · Labeller board: Published lane and sent-back card — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `/label` third lane "Published" ("You / first name · time ago", avatar); Submitted lane only while it has rows. The viewer's sent-back match leads In progress as a card with the note, "Your first version is still published…" and "Fix and publish again". Sent-back lede and footer copy; Claim hidden while a sent-back match is held. `agoText` moved to `queue.ts` and shared by both boards; `/label` page counts `board.published` as on the board.
+**follow-ups:**
+
+1. The ordinary holding lede still says "Submit yours to claim the next one" (folded into T37's dispatch).
