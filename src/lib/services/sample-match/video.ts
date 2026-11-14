@@ -41,7 +41,6 @@ import type { NextResponse } from "next/server";
 
 import {
   matchVideoError,
-  type ActiveAttachment,
   type PlaybackMetadata,
   type PlaybackMetadataResult,
 } from "@/lib/match-video/types";
