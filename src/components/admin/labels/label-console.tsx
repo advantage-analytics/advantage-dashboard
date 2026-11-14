@@ -4792,6 +4792,8 @@ export function LabelConsole({
           games={scores.games}
           adScoring={adScoring}
           startScore={startScore}
+          startOpenCounts={session.startOpenCounts ?? null}
+          openCounts={openCounts}
           names={names}
           audience={viewerKind}
           finalScore={sessionFields.finalScore}

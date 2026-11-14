@@ -362,3 +362,14 @@ is the runner's. Newest entries at the bottom.
 1. The panel's "Open in Labels" link leads to a list that omits matches before the cut-off; hide it when "Label this match" shows.
 2. The list row and Today could offer the same button, as Resubmit does.
 3. The provider/status/results-file filter now exists in three places; one shared predicate would do.
+
+## T30 · Match overview: "X of Y flags resolved" with a bar — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `getLabelSession` reads `label_sessions.start_open_counts` in its own small read (`readStartOpenCounts`; a missing column or any error reads as null), and the console passes it with its `openCounts` to the dashboard. With a starting count, the admin `FlagsLeft` line reads "X of Y flags resolved" with a progressbar, then "N left: A can move the score, G wrong data"; without one (or a start of zero) it is unchanged. Submit, publish and the labeller overview are untouched. `tests/label-console.spec.ts` covers both forms.
+
+**follow-ups:**
+
+1. Add a loader spec for `readStartOpenCounts` (42703 gives null; a stored pair comes through).
+2. The console's amber count includes the "score doesn't add up" stop and `openFlags` does not, so the two differ by one; make every board count the same flags.

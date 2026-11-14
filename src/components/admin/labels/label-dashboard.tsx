@@ -22,6 +22,7 @@ import {
   type FlagGroup,
   type OpenFlag,
 } from "@/lib/services/labels/flag-nav";
+import type { FlagCounts } from "@/lib/services/labels/job-groups";
 import type { LabelMarks } from "@/lib/services/labels/marks";
 import type { LabelGameBand } from "@/lib/services/labels/score";
 import {
@@ -53,7 +54,8 @@ import { cn } from "@/lib/utils";
  * The admin's page is one column across the full width of the admin page
  * (2026-11-12, MatchOverview.dc.html; full width since 2026-11-13):
  *
- *   a progress line counted in flags ("N flags left")
+ *   a progress line counted in flags, "X of Y flags resolved" over a bar
+ *     once the session has a starting count, else "N flags left"
  *   the publish checklist as the body, each open row naming the set, point
  *     or game it concerns and opening full screen there
  *   what was entered at upload, one row closed by default
@@ -92,6 +94,18 @@ export interface LabelDashboardProps {
   adScoring: boolean;
   /** Where the video starts in the match; null or absent: at the beginning. */
   startScore?: LabelStartScore | null;
+  /**
+   * The flags open when the console first counted them
+   * (`LabelSession.startOpenCounts`). Null or absent: no starting count, and
+   * the admin's progress line reads "N flags left" with no bar.
+   */
+  startOpenCounts?: FlagCounts | null;
+  /**
+   * The console's open count now, amber and grey — the pair it saves as
+   * `open_counts`, the same rule `startOpenCounts` was copied from. Absent:
+   * counted from `openFlags` here.
+   */
+  openCounts?: FlagCounts | null;
   names: Record<LabelSide, string>;
   /**
    * Who reads it. A labeller submits and never publishes, so the checklist
@@ -1036,14 +1050,65 @@ function Published() {
 // ── The admin's page ───────────────────────────────────────────────────────
 
 /**
- * How far the work is, counted in flags — what `openFlags` still holds, split
- * the way the rail splits it. Only the open count is stored on a session, not
- * the count it started with, so there is no "of N" and no bar yet.
+ * How far the work is, counted in flags, split the way the rail splits it.
+ *
+ * With a starting count (`startOpenCounts`, the first `open_counts` the
+ * console saved) it reads "X of Y flags resolved" over a bar: Y is the start's
+ * amber + grey, X is Y less what is open now, floored at 0 since work can raise
+ * flags past the start. Without one it reads "N flags left", no bar.
+ *
+ * What is open now is the console's `openCounts` when it hands them in, not
+ * `openFlags` here: the two differ. The console's amber also counts the set
+ * that doesn't add up (`sessionScoreMismatch`), one stop `openFlags` never
+ * holds, and the start was copied from that pair — so X takes the same source
+ * as Y, and so does the split after it. With no `openCounts` (or no start) the
+ * line counts `openFlags`, as it always has.
  */
-function FlagsLeft({ marks, reading }: WidgetProps) {
+function FlagsLeft({
+  marks,
+  reading,
+  startOpenCounts,
+  openCounts,
+}: WidgetProps) {
   const { flagged } = reading;
   const data = flagged.filter((flag) => flag.data).length;
   const score = flagged.length - data;
+  const total = startOpenCounts
+    ? startOpenCounts.amber + startOpenCounts.grey
+    : 0;
+  // A start of zero has nothing to count from: the line reads as without one.
+  if (marks && startOpenCounts && total > 0) {
+    const open = openCounts ?? { amber: score, grey: data };
+    const left = open.amber + open.grey;
+    const resolved = Math.max(0, total - left);
+    return (
+      <section
+        data-dashboard-card="Progress"
+        aria-label="Progress"
+        className="flex flex-col gap-2"
+      >
+        <p data-flags-left="" className="text-body tabular" style={INK[600]}>
+          <span className="text-title" style={INK[900]}>
+            {`${resolved} of ${total} ${total === 1 ? "flag" : "flags"} resolved`}
+          </span>{" "}
+          {`${left} left: ${open.amber} can move the score, ${open.grey} wrong data`}
+        </p>
+        <div
+          role="progressbar"
+          aria-label="Flags resolved"
+          aria-valuemin={0}
+          aria-valuemax={total}
+          aria-valuenow={resolved}
+          className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-subtle)]"
+        >
+          <div
+            className="h-full rounded-full bg-[var(--ink-900)]"
+            style={{ width: `${(resolved / total) * 100}%` }}
+          />
+        </div>
+      </section>
+    );
+  }
   return (
     <section data-dashboard-card="Progress" aria-label="Progress">
       <p data-flags-left="" className="text-body tabular" style={INK[600]}>

@@ -557,17 +557,20 @@ export async function getLabelSession(
         });
         return null;
       }),
-    ]).then(([marksFetch, video]) => ({
+      readStartOpenCounts(db, row.id),
+    ]).then(([marksFetch, video, startOpenCounts]) => ({
       marksFetch,
       video,
+      startOpenCounts,
       assignedTo: row.assigned_to ?? null,
     })),
   );
   if (!read) return { ok: false, reason: "not-found" };
-  const { marksFetch, video, assignedTo } = read.beside;
+  const { marksFetch, video, startOpenCounts, assignedTo } = read.beside;
   // Whoever opens it, by either route: someone else's work to this viewer.
   read.session.assignedToOther =
     assignedTo !== null && assignedTo !== viewer.id;
+  read.session.startOpenCounts = startOpenCounts;
 
   return {
     ok: true,
@@ -575,6 +578,39 @@ export async function getLabelSession(
     video,
     marks: marksFetch ? joinMarks(marksFetch, read.session) : null,
   };
+}
+
+/** Postgres `undefined_column`: `20261114022117_label_queue_claims` is not applied yet. */
+const UNDEFINED_COLUMN = "42703";
+
+/**
+ * `label_sessions.start_open_counts` for the console, by `readOpenCounts`. A
+ * read of its own, beside the rows, so the shared row read
+ * (`readLabelSessionRows`, which the submit and the publish take too) is left
+ * as it was. Before the claims migration the column does not exist (42703):
+ * the session then has no start, which is what it is. Any other failure is
+ * logged and also reads as no start — a progress line never stops the
+ * console from opening.
+ */
+async function readStartOpenCounts(
+  db: AdminClient,
+  sessionId: string,
+): Promise<FlagCounts | null> {
+  const { data, error } = await db
+    .from("label_sessions")
+    .select("start_open_counts")
+    .eq("id", sessionId)
+    .maybeSingle<{ start_open_counts: unknown }>();
+  if (error) {
+    if (error.code !== UNDEFINED_COLUMN) {
+      console.error("[labels] could not read the session's starting count", {
+        sessionId,
+        message: error.message,
+      });
+    }
+    return null;
+  }
+  return readOpenCounts(data?.start_open_counts);
 }
 
 /**

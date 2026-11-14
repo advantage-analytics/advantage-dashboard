@@ -1970,7 +1970,11 @@ test.describe("the admin's overview, read off the design fixture", () => {
    * and set 1 no longer matches the record. Its own marks hold a flag that
    * can move the score on point 39 and wrong data from point 35.
    */
-  const page = (audience?: "admin" | "labeller", complete = false) => {
+  const page = (
+    audience?: "admin" | "labeller",
+    complete = false,
+    extra: Record<string, unknown> = {},
+  ) => {
     const { points: all, marks } = fixtureMatch();
     const game3 = all.filter((p) => p.gameNumber === 3);
     const cut = game3[game3.length - 1];
@@ -1996,6 +2000,7 @@ test.describe("the admin's overview, read off the design fixture", () => {
           complete,
           upload: UPLOAD,
           onOpen: () => {},
+          ...extra,
         }),
       ),
     };
@@ -2032,17 +2037,88 @@ test.describe("the admin's overview, read off the design fixture", () => {
     expect(opened).toEqual(["p-57"]);
   });
 
-  test("the progress line counts flags left, with no bar", () => {
-    const { html } = page();
-    const line = html.slice(
+  /** The admin's progress line, up to the checklist. */
+  const progressLine = (html: string) =>
+    html.slice(
       html.indexOf('data-dashboard-card="Progress"'),
       html.indexOf('data-dashboard-card="Before you publish"'),
     );
+
+  test("the progress line counts flags left, with no bar", () => {
+    // No starting count, given as null or not given at all: today's line.
+    for (const extra of [{}, { startOpenCounts: null }]) {
+      const { html } = page("admin", false, extra);
+      const line = progressLine(html);
+      expect(text(line)).toContain(
+        "69 flags left: 5 can move the score, 64 wrong data",
+      );
+      expect(text(line)).not.toContain("resolved");
+      expect(line).not.toContain('role="img"');
+      expect(line).not.toContain('role="progressbar"');
+      expect(text(html)).not.toContain("points checked");
+    }
+  });
+
+  test("with nothing open and no starting count, the line reads No flags left", () => {
+    // No points, so nothing for the marks to flag.
+    const { html } = page("admin", false, {
+      points: [],
+      games: [],
+      marks: { points: {}, shots: {}, suggestions: [], serveSides: {} },
+      startOpenCounts: null,
+    });
+    const line = progressLine(html);
+    expect(text(line)).toContain("No flags left");
+    expect(line).not.toContain('role="progressbar"');
+  });
+
+  test("with a starting count the line reads X of Y flags resolved, over a bar", () => {
+    // Y = 8 + 70 = 78 at the start; 69 open now (openFlags: 5 + 64), so 9.
+    const { html } = page("admin", false, {
+      startOpenCounts: { amber: 8, grey: 70 },
+    });
+    const line = progressLine(html);
     expect(text(line)).toContain(
-      "69 flags left: 5 can move the score, 64 wrong data",
+      "9 of 78 flags resolved 69 left: 5 can move the score, 64 wrong data",
     );
-    expect(line).not.toContain('role="img"');
-    expect(text(html)).not.toContain("points checked");
+    expect(text(line)).not.toContain("flags left:");
+    expect(count(line, /role="progressbar"/g)).toBe(1);
+    expect(line).toContain('aria-valuenow="9"');
+    expect(line).toContain('aria-valuemax="78"');
+    expect(line).toContain('aria-valuemin="0"');
+  });
+
+  test("X counts the console's open pair, the same source as Y, and floors at 0", () => {
+    // The console's amber counts the set that doesn't add up, which openFlags
+    // leaves out: 6 + 64 = 70 open of 78, so 8 — and the split says 6.
+    const counted = progressLine(
+      page("admin", false, {
+        startOpenCounts: { amber: 8, grey: 70 },
+        openCounts: { amber: 6, grey: 64 },
+      }).html,
+    );
+    expect(text(counted)).toContain(
+      "8 of 78 flags resolved 70 left: 6 can move the score, 64 wrong data",
+    );
+    expect(counted).toContain('aria-valuenow="8"');
+    expect(counted).toContain('aria-valuemax="78"');
+
+    // More open now than at the start: nothing resolved, never below zero.
+    const raised = progressLine(
+      page("admin", false, { startOpenCounts: { amber: 1, grey: 1 } }).html,
+    );
+    expect(text(raised)).toContain("0 of 2 flags resolved");
+    expect(raised).toContain('aria-valuenow="0"');
+    expect(raised).toContain('aria-valuemax="2"');
+  });
+
+  test("the labeller's overview draws no flags-resolved line, start or none", () => {
+    const { html } = page("labeller", false, {
+      startOpenCounts: { amber: 8, grey: 70 },
+    });
+    expect(html).not.toContain("data-flags-left");
+    expect(html).not.toContain('role="progressbar"');
+    expect(text(html)).not.toContain("flags resolved");
   });
 
   test("a complete session reads Published, with no flags-left line above it", () => {

@@ -417,7 +417,7 @@ ready).
 
 ## T30 · Match overview: "X of Y flags resolved" with a bar
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T22
 - **files:** guess — src/lib/data/labels-server.ts, src/lib/services/labels/session.ts, src/components/admin/labels/label-dashboard.tsx, tests/label-console.spec.ts
