@@ -893,7 +893,13 @@ const MarkLayer = memo(function MarkLayer({
             role="button"
             aria-label={label}
             aria-pressed={dot.id === selectedId}
-            className="cursor-pointer outline-none"
+            // A mark that joins the court (a pick or filter let go, "Back
+            // to all points") fades in rather than popping; one already on
+            // court keeps its node (keyed by id) and never re-runs it. A
+            // dim or undim eases too. Opacity only: no stagger, no travel —
+            // 200 marks choreographed would be noise, and the counts and
+            // bands are what say the numbers changed.
+            className="animate-[fadeIn_var(--duration-hover)_var(--ease-chart)] cursor-pointer transition-opacity duration-[var(--duration-hover)] outline-none"
             opacity={dimmed ? UNSELECTED_OPACITY : undefined}
             onMouseEnter={() => onActivate(dot.id, false)}
             onMouseLeave={() => onDeactivate(dot.id)}

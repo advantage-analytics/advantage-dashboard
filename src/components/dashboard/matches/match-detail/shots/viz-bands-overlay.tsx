@@ -12,6 +12,7 @@ import {
   heatBoundsFor,
   zoneOpacity,
 } from "./court-geometry";
+import { useTweenedNumber } from "./use-tweened-number";
 import type { StatRow, VizBandZones } from "./viz-model";
 
 /**
@@ -121,6 +122,52 @@ function bandEditingLabel(row: BandRow): string {
   return `${row.label.toUpperCase()} ${row.rangeLabel}`;
 }
 
+/** A band's wash eases to its new weight (Zones) with the counts beside it,
+ *  rather than snapping — `--duration-reveal` on `--ease-chart`. An opacity
+ *  change, so reduced motion keeps it. */
+const BAND_WASH_TRANSITION = {
+  transition: "fill-opacity var(--duration-reveal) var(--ease-chart)",
+} as const;
+
+/**
+ * A band's `% · n`, counting to new values as the Statistics column's rows
+ * do (`useTweenedNumber`), so a pick or a filter reads as the bands
+ * changing. A rate that appears — a band that had no shots — fades in
+ * (the global `fadeIn` keyframe, opacity only).
+ */
+function BandRate({
+  y,
+  pct,
+  count,
+}: {
+  y: number;
+  pct: number;
+  count: number;
+}) {
+  const shownPct = useTweenedNumber(pct);
+  const shownCount = useTweenedNumber(count);
+  return (
+    <text
+      x={BAND_RATE_X}
+      y={y}
+      fill={LINE_COLOR}
+      fillOpacity={0.8}
+      fontFamily="var(--font-sans)"
+      fontSize={BAND_RATE_SIZE}
+      className="animate-[fadeIn_var(--duration-enter)_var(--ease-chart)]"
+    >
+      {shownPct}%
+      <tspan
+        fontFamily="var(--font-mono)"
+        fontSize={BAND_COUNT_SIZE}
+        fillOpacity={0.6}
+      >
+        {` · ${shownCount}`}
+      </tspan>
+    </text>
+  );
+}
+
 export interface VizBandsOverlayProps {
   kind: "depth" | "contact";
   /** The scheme's dividers, ascending, feet from the baseline. */
@@ -199,6 +246,7 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
                   ? zoneOpacity(stat?.count ?? 0, maxCount)
                   : bandOpacity(index)
               }
+              style={BAND_WASH_TRANSITION}
             />
             <text
               x={BAND_LABEL_X}
@@ -213,23 +261,7 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
               {caps}
             </text>
             {hasRate && (
-              <text
-                x={BAND_RATE_X}
-                y={labelY}
-                fill={LINE_COLOR}
-                fillOpacity={0.8}
-                fontFamily="var(--font-sans)"
-                fontSize={BAND_RATE_SIZE}
-              >
-                {stat.winPct}%
-                <tspan
-                  fontFamily="var(--font-mono)"
-                  fontSize={BAND_COUNT_SIZE}
-                  fillOpacity={0.6}
-                >
-                  {` · ${stat.count}`}
-                </tspan>
-              </text>
+              <BandRate y={labelY} pct={stat.winPct ?? 0} count={stat.count} />
             )}
           </g>
         );
@@ -299,6 +331,7 @@ export function CourtBandZones({
               height={bounds.yMax - bounds.yMin}
               fill={LINE_COLOR}
               fillOpacity={zoneOpacity(stat?.count ?? 0, maxCount)}
+              style={BAND_WASH_TRANSITION}
             />
             {labels && Math.abs(b - a) > 8 && (
               <g transform={`rotate(${placement ? 90 : -90} ${cx} ${cy})`}>
