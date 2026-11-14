@@ -600,7 +600,7 @@ ready).
 
 ## T43 · Lists: pending in the row state, gallery card and Home
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T42
 - **files:** src/components/dashboard/matches/row-state.tsx, src/components/dashboard/matches/match-card-list.tsx, src/components/dashboard/matches/match-card-gallery.tsx, src/components/dashboard/home/recent-matches.tsx, src/components/dashboard/matches/match-metadata-row.tsx, tests/matches-row-state.spec.ts — guess

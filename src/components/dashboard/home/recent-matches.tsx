@@ -337,6 +337,7 @@ export default function RecentMatches({
           matchType={event.matchType ?? undefined}
           courtType={event.courtType ?? undefined}
           verification={event.verification}
+          verificationPending={event.verificationPending}
         />
       </motion.div>
 

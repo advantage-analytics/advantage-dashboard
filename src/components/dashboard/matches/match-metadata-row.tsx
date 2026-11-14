@@ -2,6 +2,7 @@ import { Calendar, Crosshair, Swords } from "lucide-react";
 import Image from "next/image";
 import { VerifiedMark } from "@/components/dashboard/matches/verified-mark";
 import {
+  VERIFICATION_PENDING,
   VERIFIED_BY_ADVANTAGE,
   type MatchVerification,
 } from "@/lib/data/match-verification";
@@ -12,6 +13,8 @@ interface MatchMetadataRowProps {
   courtType?: string;
   /** Verified by Advantage (`verificationFor`), or null. */
   verification?: MatchVerification | null;
+  /** Waiting on a labeller (`showsVerificationPending`); verified wins. */
+  verificationPending?: boolean;
 }
 
 export function MatchMetadataRow({
@@ -19,6 +22,7 @@ export function MatchMetadataRow({
   matchType,
   courtType,
   verification,
+  verificationPending = false,
 }: MatchMetadataRowProps): React.JSX.Element {
   // The v3 metadata row as the locked Platform Audit frames draw it: 13px
   // icons at --ink-400, `text-micro` labels (11px, --ink-500 — the token, not
@@ -79,11 +83,18 @@ export function MatchMetadataRow({
         </div>
       )}
 
-      {verification && (
+      {verification ? (
         <div className="flex items-center gap-[5px]">
           <VerifiedMark />
           <p className="text-micro">{VERIFIED_BY_ADVANTAGE}</p>
         </div>
+      ) : (
+        verificationPending && (
+          <div className="flex items-center gap-[5px]">
+            <VerifiedMark pending />
+            <p className="text-micro">{VERIFICATION_PENDING}</p>
+          </div>
+        )
       )}
     </div>
   );

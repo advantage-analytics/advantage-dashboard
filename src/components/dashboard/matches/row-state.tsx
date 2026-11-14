@@ -16,6 +16,7 @@ import {
   type MatchAnalysis,
 } from "@/lib/data/match-analysis";
 import {
+  VERIFICATION_PENDING,
   VERIFIED_BY_ADVANTAGE,
   type MatchVerification,
 } from "@/lib/data/match-verification";
@@ -36,11 +37,18 @@ export function RowLifecycle({
   /** Names the match in the progress bar's accessible label. */
   label,
   verification,
+  verificationPending = false,
 }: {
   analysis?: MatchAnalysis;
   label: string;
   /** Verified by Advantage: a settled row says so in place of its outcome. */
   verification?: MatchVerification | null;
+  /**
+   * Waiting on a labeller (`showsVerificationPending`). Read only on a
+   * settled, unverified row whose statistics stand; every other state keeps
+   * its own words.
+   */
+  verificationPending?: boolean;
 }): React.JSX.Element | null {
   if (!analysis) return null;
   const { status } = analysis;
@@ -137,11 +145,19 @@ export function RowLifecycle({
   }
   // Verified by Advantage outranks "Analyzed": a person checked every point.
   // The product's verified-check takes the mark's slot, at the mark's size.
-  if (verification && analysis.recovery !== "stats_unavailable") {
+  // Verification pending (CustList artboard) is the same line with the mark
+  // greyed: the check that is coming. Verified wins when both are set.
+  if (
+    (verification || verificationPending) &&
+    analysis.recovery !== "stats_unavailable"
+  ) {
+    const pending = !verification;
     return (
       <span className="inline-flex min-w-0 items-center gap-2 text-[11px] leading-none whitespace-nowrap text-[var(--ink-700)]">
-        <VerifiedMark size={14} />
-        <span className="min-w-0 truncate">{VERIFIED_BY_ADVANTAGE}</span>
+        <VerifiedMark size={14} pending={pending} />
+        <span className="min-w-0 truncate">
+          {pending ? VERIFICATION_PENDING : VERIFIED_BY_ADVANTAGE}
+        </span>
       </span>
     );
   }

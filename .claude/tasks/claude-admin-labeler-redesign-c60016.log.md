@@ -478,3 +478,12 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. Nobody has looked at the greyed mark and open popover on screen yet.
+
+## T43 · Lists: pending in the row state, gallery card and Home — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `RowLifecycle` takes `verificationPending` and shows the greyed mark with "Verification pending" in the Verified line's markup (verified wins; in-flight, failed, cancelled, not analysed, stats unavailable and uploading unchanged). The gallery card shows the greyed mark labelled "Verification pending". Home's event row passes the flag to `MatchMetadataRow` (Home renders no `RowState`). New cases in `tests/matches-row-state.spec.ts`.
+**follow-ups:**
+
+1. No spec renders the gallery card or Home's `MatchMetadataRow` with the flag set.
+2. `tournament-detail.tsx` and `dual-detail.tsx` render `RowLifecycle` without the pending flag.
