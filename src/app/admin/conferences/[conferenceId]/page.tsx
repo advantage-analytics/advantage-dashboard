@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { AdminPage } from "@/components/admin/admin-page";
 import { ConferenceDetails } from "@/components/admin/conference-details";
 import { ConferencePageHeader } from "@/components/admin/conference-page-header";
+import { ConferenceTeamsSection } from "@/components/admin/conference-teams-section";
+import { TeamLatestMatches } from "@/components/admin/team-latest-matches";
 import {
   getAdminConference,
   listAdminConferences,
@@ -32,8 +34,9 @@ export async function generateMetadata({ params }: { params: Params }) {
  *
  * Top to bottom: the header (back to Conferences, the crest control, the name
  * and the `conferenceMeta()` line, and the `⋯` menu with Merge into… and
- * Delete), then Details (one row of facts and the one Edit button). The Teams
- * table and the latest matches go below Details.
+ * Delete), then Details (one row of facts and the one Edit button), then
+ * Teams (the Teams list's own table, with Add a team) and the conference's
+ * latest matches (the team page's list, each row naming its program).
  *
  * `getAdminConference()` runs `requireAdminOrNotFound()` first, so a
  * non-admin viewer and an unknown id both land on `notFound()`. The merge
@@ -76,8 +79,16 @@ export default async function AdminConferencePage({
           />
         </section>
 
-        {/* Teams (`data.teams`) and Latest matches (`data.latestMatches`,
-            `data.matchCount`) are the next sections down. */}
+        <section id="teams" aria-label="Teams">
+          <ConferenceTeamsSection
+            conference={data.conference}
+            teams={data.teams}
+          />
+        </section>
+
+        {/* No "All N in Matches" link: Admin › Matches filters by program
+            only, so each row links into its own program instead. */}
+        <TeamLatestMatches scope="conference" matches={data.latestMatches} />
       </div>
     </AdminPage>
   );

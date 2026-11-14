@@ -238,7 +238,7 @@ ready).
 
 ## T17 · Conference page: Teams and Latest matches
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T16
 - **files:** guess — src/app/admin/conferences/[conferenceId]/page.tsx, src/components/admin/conference-teams-section.tsx (new), src/components/admin/team-latest-matches.tsx, src/components/admin/teams-table.tsx, tests/conference-latest-matches.spec.ts (new)

@@ -206,3 +206,15 @@ is the runner's. Newest entries at the bottom.
 1. `getAdminConference()` is not wrapped in `cache()`; a later layout or metadata caller would read twice.
 2. The merge dialog and delete confirm are duplicated between the drawer and this header until T18 deletes the drawer.
 3. The new route spec case is live-DB and was not run in the gate.
+
+## T17 · Conference page: Teams and Latest matches — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** the conference page renders a Teams section (`conference-teams-section.tsx`: the shared `TeamsTable` with the loader's teams, `AddTeamPopover` in the header refreshing on add, Approve chips opening `ApprovePilotPopover`) and `TeamLatestMatches` with a new `scope: "conference"` variant (each row links to its own program's matches and prints the program name; no "All N in Matches" link). The team page's call site is unchanged. New `tests/conference-latest-matches.spec.ts`.
+
+**follow-ups:**
+
+1. The Approve-popover wiring is now in both `teams-page-content.tsx` and `conference-teams-section.tsx`; one shared hook would do.
+2. A conference filter on Admin › Matches would let the conference variant show "All N in Matches".
+3. `TeamLatestMatches` reads `programName` through a cast, not a narrowed type.
