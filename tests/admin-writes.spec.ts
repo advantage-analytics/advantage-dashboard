@@ -1,6 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { DROPPED_CONNECTION, SERVER_FAILED } from "@/lib/ui/action-rejected";
-import { LOAD_TEAMS_ERROR } from "@/lib/services/programs/conference-format";
 import {
   boundaryErrors,
   capturedExceptions,
@@ -41,12 +40,16 @@ const CASES: {
   run: (page: Page) => Promise<Locator>;
 }[] = [
   {
-    name: "Save changes on a conference",
+    name: "Save on a conference's Edit dialog",
     surface: "conference",
     run: async (page) => {
-      await page.getByLabel("Short name").fill("IVY");
-      await page.getByRole("button", { name: "Save changes" }).click();
-      return page.locator("body");
+      await page.getByRole("button", { name: "Edit" }).click();
+      const dialog = dialogOf(page);
+      await dialog
+        .getByRole("textbox", { name: "Short name", exact: true })
+        .fill("IVY");
+      await dialog.getByRole("button", { name: "Save", exact: true }).click();
+      return dialog;
     },
   },
   {
@@ -162,34 +165,6 @@ test("a throw on a write reads as ours and reaches PostHog", async ({
   await expect(page.getByText(SERVER_FAILED)).toBeVisible();
   expect(await boundaryErrors(page)).toEqual([]);
   expect(await capturedExceptions(page)).toHaveLength(1);
-});
-
-// The drawer loads its teams as it opens, so the failure has to be set first.
-const failFromTheStart = (page: Page, failure: string) =>
-  page.addInitScript((kind) => {
-    (window as unknown as { __actionFailure: string }).__actionFailure = kind;
-  }, failure);
-
-test.describe("a conference's teams", () => {
-  test("a failed load keeps the section's own sentence", async ({ page }) => {
-    await failFromTheStart(page, "server");
-    await openHarness(page, harness.origin, [], "/?surface=conference");
-
-    await expect(page.getByText(LOAD_TEAMS_ERROR)).toBeVisible();
-    expect(await boundaryErrors(page)).toEqual([]);
-    expect(await capturedExceptions(page)).toHaveLength(1);
-  });
-
-  test("notFound() from the admin check reaches Next's boundary", async ({
-    page,
-  }) => {
-    await failFromTheStart(page, "notFound");
-    await openHarness(page, harness.origin, [], "/?surface=conference");
-
-    await expect
-      .poll(() => boundaryErrors(page))
-      .toEqual(["NEXT_HTTP_ERROR_FALLBACK;404"]);
-  });
 });
 
 test.describe("the admin error screen", () => {

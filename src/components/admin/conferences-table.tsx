@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Network } from "lucide-react";
 import { ConferenceMark } from "@/components/admin/conference-mark";
 import { RowChevron } from "@/components/admin/admin-cells";
@@ -18,41 +19,32 @@ import {
   COL,
   CONFERENCES_COLUMNS,
   ROW,
-  conferenceRowId,
 } from "@/components/admin/conferences-table-layout";
 
 /**
  * The Admin › Conferences table.
  *
- * Built on `requests-table.tsx`'s shape: a conference opens a peek drawer
- * rather than a report of its own, so the row is a `role="button"` with no
- * `<Link>`; click or Enter/Space calls `onSelect`, and the wash persists on
- * the open row. Conferences2 draws a trailing chevron on every row, so it
- * carries one (`RowChevron`) — the redesign's board over the older
- * container-row rule.
+ * Built on `teams-table.tsx`'s shape: a conference is a **record row** (Data
+ * Table law 3, `tables.md`), so clicking one is a full navigation to its page,
+ * `/admin/conferences/[id]`, and every row carries a trailing chevron
+ * (`RowChevron`). Each row is a `<Link>`, so Enter, ⌘-click and a middle click
+ * all behave as links do; the hover wash is transient, with no selection to
+ * hold.
  *
- * `onSelect` defaults to a no-op and `selectedId` to nothing selected, so the
- * table renders correctly before the drawer is wired to it.
- *
- * A client component: the row's `onClick`/`onKeyDown` need real handlers. It
- * imports `AdminConferenceRow` from the client-safe `admin-conferences-view.ts`
- * — the loader module is server-only and must not reach this bundle.
+ * A client component for the same reason `TeamsTable` is: `next/link` and the
+ * shared empty body. It imports `AdminConferenceRow` from the client-safe
+ * `admin-conferences-view.ts` — the loader module is server-only and must not
+ * reach this bundle.
  */
 export function ConferencesTable({
   rows,
   emptyTitle = "No conferences match this view",
   emptyAction,
-  selectedId = null,
-  onSelect,
 }: {
   rows: readonly AdminConferenceRow[];
   /** Named cut for the empty state — see `TableEmptyBody`. */
   emptyTitle?: string;
   emptyAction?: TableEmptyAction;
-  /** The row currently open in the peek drawer, if any. */
-  selectedId?: string | null;
-  /** Called with the row after it's clicked or activated by keyboard. No-op if omitted. */
-  onSelect?: (row: AdminConferenceRow) => void;
 }) {
   return (
     <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
@@ -81,55 +73,26 @@ export function ConferencesTable({
             action={emptyAction}
           />
         ) : (
-          rows.map((row) => (
-            <ConferenceRow
-              key={row.id}
-              row={row}
-              selected={row.id === selectedId}
-              onSelect={onSelect}
-            />
-          ))
+          rows.map((row) => <ConferenceRow key={row.id} row={row} />)
         )}
       </div>
     </div>
   );
 }
 
-function ConferenceRow({
-  row,
-  selected,
-  onSelect,
-}: {
-  row: AdminConferenceRow;
-  selected: boolean;
-  onSelect?: (row: AdminConferenceRow) => void;
-}) {
+function ConferenceRow({ row }: { row: AdminConferenceRow }) {
   const division = divisionLabel(row.division);
   const share =
     row.teams > 0 ? Math.round((row.onAdvantage / row.teams) * 100) : 0;
 
   return (
-    <div
-      id={conferenceRowId(row.id)}
-      role="button"
-      tabIndex={0}
-      aria-pressed={selected}
-      onClick={() => onSelect?.(row)}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onSelect?.(row);
-        }
-      }}
+    <Link
+      href={`/admin/conferences/${encodeURIComponent(row.id)}`}
       className={cn(
         ROW,
-        "-mx-4 h-[52px] cursor-pointer rounded-[var(--radius-element)] px-4",
+        "-mx-4 h-[52px] rounded-[var(--radius-element)] px-4",
         "transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-muted)]",
         "focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none",
-        // The peek drawer's selection wash persists on the open row — see
-        // tables.md rule 3 ("the wash persists on the selected row").
-        selected && "bg-[var(--surface-muted)]",
       )}
     >
       {/* Conference — 32px mark, then name over website. */}
@@ -210,6 +173,6 @@ function ConferenceRow({
       <span className={cn(COL.chevron, "flex items-center")}>
         <RowChevron />
       </span>
-    </div>
+    </Link>
   );
 }

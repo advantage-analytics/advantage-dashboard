@@ -25,9 +25,9 @@ import { cn } from "@/lib/utils";
  * Admin › Conferences › Add conference.
  *
  * `create-team-dialog.tsx`'s shape at one step: a conference has nothing to
- * offer after it exists that the drawer does not already hold, so success
- * closes the dialog and hands the new id to the page, which selects the row
- * once the refresh brings it in. `createConference()` carries the rules
+ * offer after it exists that its own page does not already hold, so success
+ * closes the dialog and hands the new id to the list, which goes to
+ * `/admin/conferences/<id>`. `createConference()` carries the rules
  * (trimming, website normalisation, the duplicate-name sentence); this
  * collects the four fields and shows what it said.
  *
@@ -36,7 +36,7 @@ import { cn } from "@/lib/utils";
  * uploads through `adminUploadConferenceCrest`. If that one step fails the
  * conference is already in — so the dialog stays open on the problem with a
  * single "Done" (never a second "Add", which would try to create it twice),
- * and the crest can be added from the drawer.
+ * and the crest can be added from the conference's page.
  *
  * Fields are the underline vocabulary with `data-focus-ring="none"` — the
  * active rule thickening to 2px blue is the focus mark (`focus.md`).
@@ -55,8 +55,8 @@ export function AddConferenceDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /**
-   * The new conference's id, before the refresh — the page mirrors it into
-   * `?id=` and opens its drawer once the row arrives.
+   * The new conference's id — the list navigates to its page,
+   * `/admin/conferences/<id>`.
    */
   onCreated: (id: string) => void;
 }) {
@@ -131,7 +131,7 @@ export function AddConferenceDialog({
         if (!uploaded.ok) {
           setCreatedId(result.id);
           setProblem(
-            `The conference was added, but its crest wasn't: ${uploaded.error} Add it from the conference's panel.`,
+            `The conference was added, but its crest wasn't: ${uploaded.error} Add it from the conference's page.`,
           );
           return;
         }

@@ -218,3 +218,16 @@ is the runner's. Newest entries at the bottom.
 1. The Approve-popover wiring is now in both `teams-page-content.tsx` and `conference-teams-section.tsx`; one shared hook would do.
 2. A conference filter on Admin › Matches would let the conference variant show "All N in Matches".
 3. `TeamLatestMatches` reads `programName` through a cast, not a narrowed type.
+
+## T18 · Conferences list opens the page; the drawer retires — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** each `ConferencesTable` row is a link to `/admin/conferences/<id>` with a chevron; `conference-drawer.tsx` is deleted and the list page loses its selection state, rail, `syncUrl` and key handler while keeping search, the three view pills, Division, sort, "Show all" and "Add conference". `/admin/conferences?id=<id>` redirects to the page; a created conference lands on its page. The write harness renders `ConferencePageHeader` and `ConferenceDetails`, keeping the save and delete cases; the drawer-only teams-load cases are gone.
+
+**follow-ups:**
+
+1. `admin-conference-card.tsx`, `admin-search-server.ts` and the search mock still link to `/admin/conferences?id=`; T20 points them at the page.
+2. Two comments in `tests/fixtures/admin-team-harness-server.ts` still mention the conference drawer.
+3. `AddConferenceDialog` calls `router.refresh()` right after the caller's `router.push`.
+4. Arrow-key stepping through Missing details is gone; a "next missing" link on the conference page would bring it back.

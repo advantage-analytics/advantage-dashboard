@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { listAdminConferences } from "@/lib/data/admin-conferences-server";
 import type {
   AdminConferencesSort,
@@ -15,8 +16,10 @@ import { ConferencesPageContent } from "@/components/admin/conferences-page-cont
  *
  * All rows load at once — there are ~137, so there is no cursor. View, sort
  * and the division filter are URL state read here and applied on the client
- * by `ConferencesPageContent`, which also renders `AdminPage` so the drawer
- * can sit in its rail.
+ * by `ConferencesPageContent`.
+ *
+ * `?id=<id>` is the address the retired peek drawer wrote. A conference has
+ * its own page now, so a bookmark or a shared link carrying one is sent there.
  */
 export const dynamic = "force-dynamic";
 
@@ -38,6 +41,9 @@ export default async function AdminConferencesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
+
+  const id = one(params.id);
+  if (id) redirect(`/admin/conferences/${encodeURIComponent(id)}`);
 
   // Anything unrecognised falls back to the default rather than 404ing: a
   // hand-edited or stale URL should still show the page it names.
@@ -61,7 +67,6 @@ export default async function AdminConferencesPage({
       view={view}
       sort={sort}
       division={division}
-      initialSelectedId={one(params.id)}
     />
   );
 }

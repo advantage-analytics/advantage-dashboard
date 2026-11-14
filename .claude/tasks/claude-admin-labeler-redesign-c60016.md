@@ -253,7 +253,7 @@ ready).
 
 ## T18 · Conferences list opens the page; the drawer retires
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T16
 - **files:** guess — src/components/admin/conferences-table.tsx, src/components/admin/conferences-table-layout.ts, src/components/admin/conferences-page-content.tsx, src/components/admin/conference-drawer.tsx (delete), src/app/admin/conferences/page.tsx, tests/fixtures/admin-writes-harness.tsx, tests/admin-writes.spec.ts

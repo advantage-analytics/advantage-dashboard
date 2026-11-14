@@ -3,7 +3,8 @@ import { createRoot } from "react-dom/client";
 import AdminError from "@/app/admin/error";
 import { AddConferenceDialog } from "@/components/admin/add-conference-dialog";
 import { ApprovePilotPopover } from "@/components/admin/approve-pilot-popover";
-import { ConferenceDrawer } from "@/components/admin/conference-drawer";
+import { ConferenceDetails } from "@/components/admin/conference-details";
+import { ConferencePageHeader } from "@/components/admin/conference-page-header";
 import { HistoryActionButton } from "@/components/admin/history-action-button";
 import { useStartLabelling } from "@/components/admin/labels/start-labelling-button";
 import { MergeConferenceDialog } from "@/components/admin/merge-conference-dialog";
@@ -14,8 +15,11 @@ import { HarnessBoundary } from "./admin-team-harness-boundary";
 
 /**
  * The admin writes outside /admin/teams/[programId], one surface per `?surface=`
- * so a page need not hold two drawers, with the server actions swapped for
+ * so a page need not hold two of them, with the server actions swapped for
  * `admin-team-actions-browser-mock.ts`. `tests/admin-writes.spec.ts` drives it.
+ *
+ * `conference` is the conference page's two writing blocks: the header, whose
+ * `⋯` menu holds Merge into… and Delete, and Details, whose Edit dialog saves.
  */
 const conference = (id: string, name: string): AdminConferenceRow => ({
   id,
@@ -77,23 +81,10 @@ function Surface({ params }: { params: URLSearchParams }) {
   switch (params.get("surface")) {
     case "conference":
       return (
-        <ConferenceDrawer
-          row={ivy}
-          index={0}
-          total={1}
-          canPrev={false}
-          canNext={false}
-          closing={false}
-          autoFocus={false}
-          onPrev={noop}
-          onNext={noop}
-          onClose={noop}
-          onClosed={noop}
-          onChanged={noop}
-          conferences={[ivy, patriot]}
-          onMerged={noop}
-          onDeleted={noop}
-        />
+        <>
+          <ConferencePageHeader conference={ivy} conferences={[ivy, patriot]} />
+          <ConferenceDetails conference={ivy} />
+        </>
       );
     case "merge":
       return (
