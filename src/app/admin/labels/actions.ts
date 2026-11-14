@@ -91,6 +91,10 @@ import {
 } from "@/lib/services/labels/session-status-session";
 import { submitLabelSession } from "@/lib/services/labels/submit-session";
 import {
+  checkLabelSession,
+  sendBackLabelSession,
+} from "@/lib/services/labels/check-session";
+import {
   redoLabelOp,
   undoLabelOp,
   type LabelRedoResult,
@@ -571,6 +575,33 @@ export async function reopenLabelSessionAction(
   sessionId: string,
 ): Promise<LabelSessionStatusResult> {
   return reopenLabelSession(sessionId);
+}
+
+/**
+ * The Labels list's "Check": pass a labeller's published session. Stamps
+ * `checked_at` / `checked_by` on a complete analyst session not yet checked;
+ * the match is not touched. Admin only.
+ */
+export async function checkLabelSessionAction(
+  sessionId: string,
+): Promise<LabelSessionStatusResult> {
+  const result = await checkLabelSession(sessionId);
+  if ("ok" in result) revalidatePath("/admin/labels");
+  return result;
+}
+
+/**
+ * The Labels list's "Send back": a published session back to `labelling` for
+ * its labeller, with the admin's note (trimmed, 1 to 2000 characters). The
+ * match keeps its published labels and Verified by Advantage. Admin only.
+ */
+export async function sendBackLabelSessionAction(
+  sessionId: string,
+  note: string,
+): Promise<LabelSessionStatusResult> {
+  const result = await sendBackLabelSession(sessionId, note);
+  if ("ok" in result) revalidatePath("/admin/labels");
+  return result;
 }
 
 /**

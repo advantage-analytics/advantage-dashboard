@@ -458,7 +458,7 @@ ready).
 
 ## T33 · Admin Check and Send back actions
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T31
 - **files:** guess — src/lib/services/labels/check-session.ts (new), src/app/admin/labels/actions.ts, tests/label-check-session.spec.ts (new)

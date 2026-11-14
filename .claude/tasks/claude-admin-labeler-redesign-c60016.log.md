@@ -393,3 +393,11 @@ is the runner's. Newest entries at the bottom.
 1. After a labeller publishes, the console holds `complete` but `requireLabelReader` admits labellers only on `labelling`/`submitted`, so a reload 404s; send the labeller back to `/label` after publishing (folded into T37's dispatch).
 2. Reopen now selects `checked_at`/`checked_by`, so Reopen also needs T31 applied.
 3. The labeller console does not show the `published` summary (points, shots, left out).
+
+## T33 · Admin Check and Send back actions — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New `src/lib/services/labels/check-session.ts` (`checkLabelSession`, `sendBackLabelSession`, admin-gated single-row updates, note trimmed and limited to 1–2000 chars, no match/points/shots writes); `checkLabelSessionAction` and `sendBackLabelSessionAction` in `src/app/admin/labels/actions.ts`; spec `tests/label-check-session.spec.ts`.
+**follow-ups:**
+
+1. `ANOTHER_SESSION_OPEN` says "before reopening this one", which reads oddly after Send back.
