@@ -13,6 +13,7 @@ import {
   applyShotsRemoved,
   applyShotsRestored,
   deadBallReason,
+  deadBallRun,
   deadBallsAfterMiss,
   destinationServerIn,
   gameServer,
@@ -29,6 +30,7 @@ import {
   planPointRestore,
   planShotDelete,
   planShotRestore,
+  suggestedDeleteReason,
   hitterAfter,
   switchedHitter,
 } from "@/lib/services/labels/operations";
@@ -212,6 +214,122 @@ test.describe("dead balls after a ball marked out", () => {
   const shots = orderLabelShots(POINT_1_SHOTS);
   const back = shots.find((s) => s.id === "s-return")!;
 
+  test("the delete dialog opens on the reason the strokes before it give", () => {
+    const row = (
+      id: string,
+      videoTime: number,
+      stroke: LabelShot["stroke"],
+      result: LabelShot["result"],
+    ): LabelShot => ({
+      ...POINT_1_SHOTS[0],
+      id,
+      videoTime,
+      stroke,
+      result,
+      status: "kept",
+      siteRemoval: null,
+    });
+    const rally = (results: LabelShot["result"][]) => [
+      row("serve", 1, "first_serve", results[0]),
+      row("second", 2, "second_serve", results[1]),
+      row("ball", 3, "forehand", results[2]),
+      row("dead", 4, "backhand", "in"),
+    ];
+    // After a rally ball out: the point had ended.
+    expect(
+      suggestedDeleteReason(rally(["net", "in", "out"]), "dead", true),
+    ).toBe("dead_ball_after_point");
+    // After a second serve out: a double fault.
+    expect(
+      suggestedDeleteReason(rally(["net", "out", "in"]), "ball", true),
+    ).toBe("dead_ball_after_fault");
+    // Straight after a faulted first serve: the returner swung at it.
+    expect(
+      suggestedDeleteReason(rally(["out", "in", "in"]), "second", true),
+    ).toBe("dead_ball_after_fault");
+    // Nothing before it says the ball was dead: the labeller picks.
+    expect(
+      suggestedDeleteReason(rally(["net", "in", "in"]), "dead", true),
+    ).toBeNull();
+    expect(
+      suggestedDeleteReason(rally(["in", "in", "in"]), "nope", true),
+    ).toBeNull();
+    // A miss the vendor's bounce read further back, with the rally carrying
+    // on after it, says nothing: only the ball straight before, or one the
+    // labeller called.
+    const long = [
+      row("serve", 1, "first_serve", "in"),
+      row("stale", 2, "forehand", "out"),
+      row("on", 3, "backhand", "in"),
+      row("dead", 4, "forehand", "in"),
+    ];
+    expect(suggestedDeleteReason(long, "dead", true)).toBeNull();
+    expect(
+      suggestedDeleteReason(
+        long.map((s) => (s.id === "stale" ? { ...s, resultCalled: true } : s)),
+        "dead",
+        true,
+      ),
+    ).toBe("dead_ball_after_point");
+  });
+
+  test("the strokes a miss call took, to put back when the call is taken back", () => {
+    const row = (
+      id: string,
+      videoTime: number,
+      over: Partial<LabelShot> = {},
+    ): LabelShot => ({
+      ...POINT_1_SHOTS[0],
+      id,
+      videoTime,
+      status: "kept",
+      siteRemoval: null,
+      deleteReason: null,
+      ...over,
+    });
+    const dead = (id: string, t: number, reason = "dead_ball_after_point") =>
+      row(id, t, {
+        status: "deleted",
+        deleteReason: reason as LabelShot["deleteReason"],
+      });
+    // Everything after the ball is a dead-ball tombstone: all of it.
+    expect(
+      deadBallRun(
+        [row("a", 1), row("b", 2), dead("c", 3), dead("d", 4)],
+        "b",
+        true,
+      ),
+    ).toEqual(["c", "d"]);
+    // A live stroke after it, or one deleted for another reason: nothing —
+    // what follows was not that call's alone.
+    expect(
+      deadBallRun(
+        [row("a", 1), row("b", 2), dead("c", 3), row("d", 4)],
+        "b",
+        true,
+      ),
+    ).toEqual([]);
+    expect(
+      deadBallRun(
+        [row("a", 1), row("b", 2), dead("c", 3, "not_a_stroke")],
+        "b",
+        true,
+      ),
+    ).toEqual([]);
+    // The last stroke, or one not in the point: nothing to put back.
+    expect(deadBallRun([row("a", 1), row("b", 2)], "b", true)).toEqual([]);
+    expect(deadBallRun([row("a", 1)], "nope", true)).toEqual([]);
+    // A ghost the site removed is no stroke with marks on: it neither blocks
+    // the run nor comes back with it. With marks off it is a live stroke.
+    const ghost = row("g", 5, {
+      siteRemoval: "hit_after_fault" as LabelShot["siteRemoval"],
+      siteRemovalRestoredAt: null,
+    });
+    const withGhost = [row("a", 1), row("b", 2), dead("c", 3), ghost];
+    expect(deadBallRun(withGhost, "b", true)).toEqual(["c"]);
+    expect(deadBallRun(withGhost, "b", false)).toEqual([]);
+  });
+
   test("the live strokes after one, in video order; a tombstone or an unknown stroke counts for nothing", () => {
     // Serve, return, the deleted phantom, the added forehand.
     expect(liveShotsAfter(shots, "s-serve", true).map((s) => s.id)).toEqual([
@@ -263,6 +381,22 @@ test.describe("dead balls after a ball marked out", () => {
     expect(deadBallsAfterMiss(more(2), "s-return", back, out, true)).toEqual(
       [],
     );
+    // The labeller's own call (N, a Result override, a hint's yes) ends the
+    // point there: every stroke after it goes, however many.
+    const called = { result: "net" as const, result_called: true };
+    expect(
+      deadBallsAfterMiss(more(2), "s-return", back, called, true),
+    ).toHaveLength(3);
+    expect(
+      deadBallsAfterMiss(more(5), "s-return", back, called, true),
+    ).toHaveLength(6);
+    // Still nothing after a first serve, or on a ball already a miss.
+    expect(
+      deadBallsAfterMiss(more(5), "s-serve", { result: "in" }, called, true),
+    ).toEqual([]);
+    expect(
+      deadBallsAfterMiss(more(5), "s-return", { result: "out" }, called, true),
+    ).toEqual([]);
   });
 
   test("a second serve newly out or in the net is a double fault: the strokes after it go and the ending follows; a first serve's fault takes nothing", () => {

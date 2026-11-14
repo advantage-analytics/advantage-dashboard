@@ -33,8 +33,10 @@ import type {
   LabelShotPatch,
 } from "@/lib/services/labels/edit";
 import {
+  gameCombineOptions,
   gameOverflow,
   planGameShift,
+  type GameCombineDirection,
   type GameOverflow,
   type GameShiftSummary,
 } from "@/lib/services/labels/game-shift";
@@ -86,7 +88,9 @@ import { LabelFlagSummary } from "./label-flag-summary";
 import { acceptedHint, pointHints } from "./label-black-mark";
 import { BlackTextAction, gameSlot } from "./label-black-parts";
 import {
-  dropBeforePoint,
+  gameDropPoints,
+  gameStartPoint,
+  nearestGameDrop,
   planGameBoundary,
 } from "@/lib/services/labels/game-boundary";
 import { tiebreakFolds } from "@/lib/services/labels/tiebreak-fold";
@@ -234,6 +238,7 @@ export function LabelBlackRail({
   onGoToPoint,
   onClearEnteredScore,
   onPullGame,
+  onCombineGames,
   onAddPoint,
 }: {
   player1Name: string;
@@ -404,6 +409,12 @@ export function LabelBlackRail({
    */
   onPullGame?: (gameKey: string) => void;
   onAddPoint?: (afterPointId: string) => void;
+  /**
+   * On an editable rail, "Combine with game above / below" in each band's
+   * game menu (game-shift.ts `planGameCombine`): the game's key and which
+   * neighbour.
+   */
+  onCombineGames?: (gameKey: string, direction: GameCombineDirection) => void;
 }) {
   // The shots well unfolds for every point the labeller or the film opens,
   // never for the one already open when this rail mounted (the page loading, or
@@ -613,6 +624,12 @@ export function LabelBlackRail({
     () => bandsBeforePoints(points, scores.games),
     [points, scores],
   );
+  // The neighbours each game can be combined with, for its band's menu.
+  const combineOptions = useMemo(
+    () =>
+      editable && onCombineGames ? gameCombineOptions(scores.games) : null,
+    [editable, onCombineGames, scores],
+  );
   // The slots still waiting for an answer, by the point whose row follows.
   const slotBefore = useMemo(
     () => openPointSuggestions(points, marks),
@@ -652,20 +669,34 @@ export function LabelBlackRail({
         : null,
     [editable, onMoveGameBoundary],
   );
+  // Where the band in the air can land, planned once per drag.
+  const dropPoints = useMemo(
+    () => (draggedGame ? gameDropPoints(points, draggedGame) : null),
+    [points, draggedGame],
+  );
+  // Where the band already sits: nearest it, the drop is the band put back.
+  const dragStart = useMemo(
+    () => (draggedGame ? gameStartPoint(points, draggedGame) : null),
+    [points, draggedGame],
+  );
+  // The drop position nearest the cursor, read off the gap markers drawn
+  // between the rows while a band is dragged (`data-game-gap`), not off the
+  // row under the cursor: a tall open point, a band or a slot is no point
+  // row, and the line would jump past it or vanish.
   const dropTarget = (event: React.DragEvent): string | null => {
-    if (!draggedGame || !(event.target instanceof Element)) return null;
-    const row = event.target.closest<HTMLElement>('[data-row="point"]');
-    const id = row?.dataset.pointId;
-    if (!row || !id) return null;
-    const { top, height } = row.getBoundingClientRect();
-    const before = dropBeforePoint(
-      points,
-      id,
-      event.clientY < top + Math.min(height, 44) / 2,
-    );
-    if (before === null) return null;
-    const plan = planGameBoundary(points, draggedGame, before);
-    return "ok" in plan && plan.write.pointIds.length > 0 ? before : null;
+    if (!dropPoints || dropPoints.size === 0) return null;
+    const gaps: { pointId: string; y: number }[] = [];
+    for (const gap of event.currentTarget.querySelectorAll<HTMLElement>(
+      "[data-game-gap]",
+    )) {
+      const pointId = gap.dataset.gameGap;
+      if (pointId && (dropPoints.has(pointId) || pointId === dragStart)) {
+        gaps.push({ pointId, y: gap.getBoundingClientRect().top });
+      }
+    }
+    const nearest = nearestGameDrop(gaps, event.clientY);
+    // Back where it started: no line, and the drop moves nothing.
+    return nearest === dragStart ? null : nearest;
   };
   // The tiebreaks off their serve order, by the first point that is off it.
   const serveOrderBefore = useMemo(
@@ -675,12 +706,13 @@ export function LabelBlackRail({
   );
   // The games served by the same player as the game beside them, by their
   // first point.
-  const serveRepeatBefore = useMemo(
-    () =>
-      gameServeRepeatBeforePoints(
-        editable ? gameServeRepeats(points, foldedPointIds(folds)) : [],
-      ),
+  const serveRepeats = useMemo(
+    () => (editable ? gameServeRepeats(points, foldedPointIds(folds)) : []),
     [editable, points, folds],
+  );
+  const serveRepeatBefore = useMemo(
+    () => gameServeRepeatBeforePoints(serveRepeats),
+    [serveRepeats],
   );
   // The games whose points have the players at each other's end, by the
   // first point to switch: only in a set whose games make the entered score,
@@ -696,10 +728,13 @@ export function LabelBlackRail({
               matchScore,
               videoEndsEarly,
               startScore,
+              // The same-server slot stands for both on a game with each.
+              serveRepeats,
             }),
           )
         : NO_COURT_END,
     [
+      serveRepeats,
       editable,
       onSwitchPlayersByEnd,
       points,
@@ -1241,13 +1276,18 @@ export function LabelBlackRail({
                 const accepts = open ? acceptRow?.kind : undefined;
                 return (
                   <Fragment key={point.id}>
-                    {bandDrag?.before === point.id ? (
+                    {bandDrag ? (
                       <div
-                        data-game-drop=""
+                        data-game-gap={point.id}
+                        data-game-drop={
+                          bandDrag.before === point.id ? "" : undefined
+                        }
                         aria-hidden="true"
                         className="pointer-events-none relative h-0"
                       >
-                        <span className="absolute inset-x-2 -top-px h-0.5 rounded-full bg-[var(--blue)]" />
+                        {bandDrag.before === point.id ? (
+                          <span className="absolute inset-x-2 -top-px h-0.5 rounded-full bg-[var(--blue)]" />
+                        ) : null}
                       </div>
                     ) : null}
                     {band ? (
@@ -1262,6 +1302,8 @@ export function LabelBlackRail({
                         }
                         onSetGameType={editable ? onSetGameType : undefined}
                         onSetGameServer={editable ? onSetGameServer : undefined}
+                        combine={combineOptions?.get(gameKey(band))}
+                        onCombineGames={onCombineGames}
                         drag={
                           bandDragHandlers && band !== scores.games[0]
                             ? bandDragHandlers

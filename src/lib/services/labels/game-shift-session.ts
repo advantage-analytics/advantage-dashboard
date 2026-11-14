@@ -41,6 +41,7 @@ import {
   type GameRow,
 } from "./game-operations-session";
 import {
+  planGameCombine,
   planGamePull,
   planGameShift,
   planGameSplit,
@@ -154,6 +155,7 @@ function groupWrites(
       values.status,
       presence("winner", values),
       presence("ended_by", values),
+      "game_start_locked" in values,
       was,
     ]);
     const group = groups.get(key);
@@ -465,6 +467,51 @@ export async function writeLabelGamePull(params: {
       return "kind" in plan ? { error: NO_PULL } : plan;
     },
     "Could not pull the points in",
+  );
+}
+
+/**
+ * Combine the game `gameKey` with the game above or below it
+ * (game-shift.ts `planGameCombine`), planned on the rows as they stand now.
+ * Never throws.
+ */
+export async function writeLabelGameCombine(params: {
+  supabase: AdminClient;
+  sessionId: unknown;
+  gameKey: unknown;
+  direction: unknown;
+}): Promise<LabelGameShiftResult> {
+  const sessionId = normaliseId(params.sessionId);
+  if (!sessionId) return { error: "Invalid session id." };
+  const key = params.gameKey;
+  if (typeof key !== "string" || !GAME_KEY.test(key)) {
+    return { error: "Invalid game." };
+  }
+  const { direction } = params;
+  if (direction !== "above" && direction !== "below") {
+    return { error: "Invalid direction." };
+  }
+  return runGamePlan(
+    params.supabase,
+    sessionId,
+    (points, adScoring, _tiebreakSet, start) =>
+      planGameCombine(points, key, direction, adScoring, start),
+    "Could not combine the games",
+  );
+}
+
+export function combineLabelGames(
+  sessionId: unknown,
+  gameKey: unknown,
+  direction: unknown,
+  deps: LabelWriteDependencies = defaultLabelWriteDependencies,
+): Promise<LabelGameShiftResult> {
+  return gated(
+    deps,
+    (supabase) =>
+      writeLabelGameCombine({ supabase, sessionId, gameKey, direction }),
+    "combine the games",
+    { sessionId: targetId(sessionId) },
   );
 }
 

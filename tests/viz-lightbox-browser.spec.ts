@@ -46,15 +46,35 @@ test("a wall card opens the lightbox over the wall, and Esc puts focus back on t
   expect(errors).toEqual([]);
 });
 
+test("a reader who is not the player sees two surnames, never You: the wall's chips, the card's chips and its subtitle", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&observer=1`);
+  const wallChips = page.locator('[role="group"][aria-label="Player"] button');
+  await expect(wallChips).toHaveText(["Kim", "Rivera"]);
+  await expect(page.getByRole("button", { name: "You" })).toHaveCount(0);
+  await expect(wallChips.first()).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
+  const dialog = page.getByRole("dialog", { name: "All serves" });
+  await expect(dialog).toContainText("Serve placement · Kim ·");
+  await expect(
+    dialog.locator('[role="group"][aria-label="Player"] button'),
+  ).toHaveText(["Kim", "Rivera"]);
+  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await expect(page).toHaveURL(/player=opponent/);
+  await expect(dialog).toContainText("Serve placement · Rivera ·");
+});
+
 test("a player switched inside the lightbox does not leak onto the wall", async ({
   page,
 }) => {
   await page.goto(`${origin}/?tab=shots&cut=serve&ball=first`);
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Opponent" }).click();
+  await dialog.getByRole("button", { name: "Rivera" }).click();
   await expect(page).toHaveURL(/player=opponent/);
-  await expect(dialog).toContainText("Serve placement · Opponent");
+  await expect(dialog).toContainText("Serve placement · Rivera");
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page).not.toHaveURL(/player=opponent/);
@@ -336,7 +356,7 @@ test("the legend's pick survives a You / Opponent switch but not a cut change", 
     "aria-pressed",
     "true",
   );
-  await dialog.getByRole("button", { name: "Opponent" }).click();
+  await dialog.getByRole("button", { name: "Rivera" }).click();
   await expect(legend.getByRole("button", { name: /^Won/ })).toHaveAttribute(
     "aria-pressed",
     "true",
@@ -398,7 +418,7 @@ test("1 · a filter edit or a player switch keeps the lightbox mounted: popover,
   await expect(won).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");
   await dialog.getByRole("button", { name: "Statistics" }).click();
-  await dialog.getByRole("button", { name: "Opponent" }).click();
+  await dialog.getByRole("button", { name: "Rivera" }).click();
   await expect(won).toHaveAttribute("aria-pressed", "true");
   await expect(
     dialog.getByRole("button", { name: "Statistics" }),
@@ -504,7 +524,7 @@ test("4 · a legend or Statistics pick is dropped on a switch, not hidden until 
     .first();
   await row.click();
   await expect(row).toHaveAttribute("aria-pressed", "true");
-  await dialog.getByRole("button", { name: "Opponent" }).click();
+  await dialog.getByRole("button", { name: "Rivera" }).click();
   await dialog.getByRole("button", { name: "You" }).click();
   await expect(
     dialog.locator('button[aria-pressed="true"][aria-label$="points won"]'),
@@ -539,7 +559,7 @@ test("6 · an edited saved view closes back onto the Saved collection", async ({
   const dialog = page.getByRole("dialog", { name: "Saved serve" });
   await expect(dialog).toBeVisible();
   // An edit writes viewId: null.
-  await dialog.getByRole("button", { name: "Opponent" }).click();
+  await dialog.getByRole("button", { name: "Rivera" }).click();
   await expect(page).not.toHaveURL(/view=sv1/);
   await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
   await expect(
@@ -665,7 +685,7 @@ test("R3·5 · Watch names the player in the Video strip when the points are the
 }) => {
   await page.goto(`${origin}/?tab=shots&cut=serve&ball=first&fixture=watchall`);
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Opponent" }).click();
+  await dialog.getByRole("button", { name: "Rivera" }).click();
   await expect(page).toHaveURL(/player=opponent/);
   await dialog.getByRole("button", { name: /^Watch these/ }).click();
   await expect(page).toHaveURL(/tab=film/);
@@ -688,7 +708,7 @@ test("R3·3 · Watch → Video → Back keeps the wall's player and collection",
   await page.goto(`${origin}/?tab=shots&fixture=watchall`);
   const dialog = page.getByRole("dialog");
   // The Opponent's wall, a card of theirs, and Watch.
-  await page.getByRole("button", { name: "Opponent" }).click();
+  await page.getByRole("button", { name: "Rivera" }).click();
   await page.getByRole("link", { name: /^All serves, Blake Rivera/ }).click();
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: /^Watch these/ }).click();
@@ -699,7 +719,7 @@ test("R3·3 · Watch → Video → Back keeps the wall's player and collection",
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Opponent" })).toHaveAttribute(
+  await expect(page.getByRole("button", { name: "Rivera" })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
@@ -709,7 +729,7 @@ test("R3·3 · Watch → Video → Back keeps the wall's player and collection",
   await page.getByRole("button", { name: "You", exact: true }).click();
   await page.getByRole("link", { name: /Saved serve/ }).click();
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Opponent" }).click();
+  await dialog.getByRole("button", { name: "Rivera" }).click();
   await expect(page).not.toHaveURL(/view=sv1/);
   await dialog.getByRole("button", { name: /^Watch these/ }).click();
   await expect(page).toHaveURL(/tab=film/);
@@ -995,7 +1015,7 @@ test("R6·2 · Clear for the other player keeps the reader's chart: the view doe
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}/?tab=shots&cut=serve&view=sv1`);
   const dialog = page.getByRole("dialog", { name: "Saved serve" });
-  await dialog.getByRole("button", { name: "Opponent" }).click();
+  await dialog.getByRole("button", { name: "Rivera" }).click();
   await dialog.getByRole("button", { name: "Scatter" }).click();
   await page.getByRole("menuitemradio", { name: /Heat/ }).click();
   await expect(page).toHaveURL(/chart=heat/);

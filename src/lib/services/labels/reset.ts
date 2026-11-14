@@ -21,12 +21,14 @@ import { letResultError } from "./edit";
 import type { Planned } from "./operations";
 import {
   applyShotSwaps,
+  moveSwapsPlayers,
   planShotHitter,
   type ShotSwapWrite,
   type SwapShot,
 } from "./player-swap";
 import {
   isWithdrawnAdd,
+  opponent,
   type LabelPoint,
   type LabelPointSeedValues,
   type LabelPointStatus,
@@ -44,9 +46,13 @@ export type ShotResetWrite = LabelShotSeedValues & {
   result_called: false;
 };
 
-/** The columns a point reset writes: its seed (less the game type), and `unchanged`. */
+/**
+ * The columns a point reset writes: its seed (less the game type), and
+ * `unchanged` — or, for a point that sits in another game than it was seeded
+ * in, the game it sits in now and `edited` (see `planPointReset`).
+ */
 export type PointResetWrite = Omit<LabelPointSeedValues, "game_type"> & {
-  status: "unchanged";
+  status: "unchanged" | "edited";
 };
 
 /** The whole point reset: its own columns, and each stroke whose hitter goes back. */
@@ -88,7 +94,8 @@ export function planShotReset(current: {
 }
 
 /**
- * Reset a point's own fields to its seed — see {@link planShotReset} — and
+ * Reset a point's own fields to its seed — see {@link planShotReset} — less
+ * its place in the match when it has been moved to another game — and
  * each of its strokes' hitter to the stroke's seed. A stroke already hit by
  * its seeded hitter, or with no seed, gets no write; one that goes back
  * takes the status a hitter patch gives it (`planShotHitter`), a tombstone
@@ -98,6 +105,13 @@ export function planPointReset(current: {
   status: LabelPointStatus;
   seed: LabelPointSeedValues | null;
   shots: readonly SwapShot[];
+  /**
+   * Where the point sits now. A point moved to another game than its seed's
+   * — a boundary dragged, games combined, a set cut or joined — stays there.
+   */
+  setNumber?: number | null;
+  gameNumber?: number | null;
+  server?: LabelPointSeedValues["server"];
 }): PlannedPointReset {
   if (current.status === "deleted") {
     return { error: "Restore this point before resetting it." };
@@ -111,14 +125,63 @@ export function planPointReset(current: {
         "This point's original values were not stored, so it cannot be reset.",
     };
   }
+  const { game_type: _gameType, ...values } = current.seed;
+  const { setNumber, gameNumber } = current;
+  const moved =
+    setNumber != null &&
+    gameNumber != null &&
+    (setNumber !== values.set_number || gameNumber !== values.game_number);
+  const server = moved ? (current.server ?? values.server) : values.server;
+  // A moved point keeps its game's server. Where that is not the server it
+  // was seeded under and the seeded serve is the other player's, the seeded
+  // rows are the wrong way round for the game: the players switch, as a move
+  // into that game switches them (player-swap.ts `moveSwapsPlayers`).
+  const seeded: SwapShot[] = current.shots.map((shot) =>
+    shot.seed === null ? shot : { ...shot, hitter: shot.seed.hitter },
+  );
+  const switched =
+    moved &&
+    moveSwapsPlayers(
+      {
+        server: values.server,
+        winner: values.winner,
+        endedBy: values.ended_by,
+        shots: seeded,
+      },
+      server,
+    );
+  const side = (hitter: SwapShot["hitter"]) =>
+    switched && hitter !== null ? opponent(hitter) : hitter;
   const shots: ShotSwapWrite[] = [];
   for (const shot of current.shots) {
-    if (shot.seed === null || shot.seed.hitter === shot.hitter) continue;
-    shots.push(planShotHitter(shot, shot.seed.hitter));
+    if (shot.seed === null) continue;
+    const hitter = side(shot.seed.hitter);
+    if (hitter === shot.hitter) continue;
+    shots.push(planShotHitter(shot, hitter));
   }
   // The seeded game type is for the opening scorecard, never a value Reset
   // puts back: a game's type is set for the whole game by its own operation.
-  const { game_type: _gameType, ...values } = current.seed;
+  // Which game a point belongs to is the game's to say, not the point's:
+  // the labeller moved it there with a game operation, and putting its
+  // seeded set and game back would lift it out of the game its neighbours
+  // are in — one row scored against a game elsewhere in the match. So a
+  // moved point keeps its set, its game and that game's server, and is
+  // still `edited`: it differs from its seed by where it sits.
+  if (moved) {
+    return {
+      ok: true,
+      write: {
+        ...values,
+        set_number: setNumber,
+        game_number: gameNumber,
+        server,
+        winner: side(values.winner),
+        ended_by: side(values.ended_by),
+        status: "edited",
+      },
+      shots,
+    };
+  }
   return { ok: true, write: { ...values, status: "unchanged" }, shots };
 }
 

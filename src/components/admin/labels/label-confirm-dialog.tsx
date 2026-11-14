@@ -35,7 +35,10 @@ export function LabelConfirmDialog({
   onConfirm: (confirm: LabelConfirm, reason: LabelDeleteReason | null) => void;
   /** The second answer, on the confirms that have one (`alternativeLabel`). */
   onAlternative?: (confirm: LabelConfirm) => void;
-  /** A reason already chosen on first render — for specs. None by default. */
+  /**
+   * The reason already chosen when a stroke delete opens: what the strokes
+   * before it say (`suggestedDeleteReason`). None by default.
+   */
   initialReason?: LabelDeleteReason | null;
 }) {
   // Keyed by the question, so a second delete never inherits the first's

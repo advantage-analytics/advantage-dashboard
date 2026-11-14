@@ -94,6 +94,11 @@ export interface GameShiftWrite {
   /** Present only when the point's players switch (player-swap.ts). */
   winner?: LabelSide | null;
   ended_by?: LabelSide | null;
+  /**
+   * Present, and false, only on a row that can no longer be a game's first:
+   * a combine's moved rows (`planGameCombine`), which let go of any lock.
+   */
+  game_start_locked?: false;
 }
 
 /** A game as the console names it: its set and its rank within the set. */
@@ -140,8 +145,13 @@ export interface GameUnderflow {
 }
 
 export interface GamePullSummary {
-  /** Rows pulled in. */
+  /** Rows moved in all: into the short game, and on down the cascade. */
   points: number;
+  /**
+   * Rows pulled into the short game itself — the slot's count. Fewer than
+   * `points` when the donor, left short, takes rows from its own next game.
+   */
+  first: number;
   /** Games the rows were pulled FROM — the cascade's length, 1 or 2. */
   games: number;
   /** The first game pulled from — the slot's words. */
@@ -582,6 +592,7 @@ export function applyGameShift<
       status: write.status,
       winner: "winner" in write ? (write.winner ?? null) : point.winner,
       endedBy: "ended_by" in write ? (write.ended_by ?? null) : point.endedBy,
+      ...("game_start_locked" in write ? { gameStartLocked: false } : {}),
     };
   });
 }
@@ -724,6 +735,7 @@ export function planGamePullFrom(
   /** The games pulled from, in order; a game is listed once. */
   const donors: string[] = [];
   let fromGame: GameShiftGameRef | null = null;
+  let first = 0;
 
   // Bounded for safety: every step either pulls a row or ends the loop.
   const bound = working.filter((p) => p.status !== "deleted").length + 2;
@@ -762,17 +774,18 @@ export function planGamePullFrom(
       fromGame ??= ref(to);
     }
     const donorRows = byGame.get(donorKey) ?? [];
-    const first = original.get(donorRows[0].id);
-    if (!first) return { kind: "add_point" };
-    const { write, swap } = shiftWrite(first, {
+    const lead = original.get(donorRows[0].id);
+    if (!lead) return { kind: "add_point" };
+    const { write, swap } = shiftWrite(lead, {
       setNumber: current.setNumber,
       gameNumber: current.gameNumber,
       gameType: "game",
       server: gameFirstServer(rows),
       opened: false,
     });
-    writes.set(first.id, write);
-    swaps.set(first.id, swap);
+    writes.set(lead.id, write);
+    swaps.set(lead.id, swap);
+    if (gameKey(current) === gameKey(from)) first += 1;
     working = applyGameShift(working, [...writes.values()]);
 
     // The donor given whole without settling the game: a point is missing,
@@ -793,6 +806,163 @@ export function planGamePullFrom(
     ok: true,
     writes: [...writes.values()],
     shots,
-    summary: { points: writes.size, games: donors.length, fromGame, swapped },
+    summary: {
+      points: writes.size,
+      first,
+      games: donors.length,
+      fromGame,
+      swapped,
+    },
   };
+}
+
+// ── Combine a game with the one above or below it ────────────────────────────────────
+
+/** Which neighbour a game is combined with, as the band's menu names it. */
+export type GameCombineDirection = "above" | "below";
+
+/** The neighbours a game can be combined with, by their place in the set. */
+export interface GameCombineOption {
+  above?: number;
+  below?: number;
+}
+
+export interface GameCombineSummary {
+  /** Rows that change game. */
+  points: number;
+  /** The game they join: the upper of the two. */
+  into: GameShiftGameRef;
+  /** The game that goes: the lower of the two. */
+  from: GameShiftGameRef;
+  /** Moved rows whose players switch with the game's server. */
+  swapped: number;
+}
+
+export type PlannedGameCombine =
+  | {
+      ok: true;
+      writes: GameShiftWrite[];
+      shots: ShotSwapWrite[];
+      summary: GameCombineSummary;
+    }
+  | { error: string };
+
+/**
+ * Combine game `key` (`"{set}·{game}"`) with the game above or below it in
+ * rail order: two games the vendor cut from one. The LOWER game's live rows
+ * all join the upper — its set, number, type and server — so the upper game
+ * keeps its name and its start, and the lower one is gone from the rows.
+ * Each row whose serving stroke contradicts the upper game's server switches
+ * its players, as a pull does (`shiftWrite`).
+ *
+ * Ordinary games of one set only: a tiebreak's pieces are folded
+ * (tiebreak-fold.ts), and a game is never carried across a set — that is the
+ * set cut's and join's to move (set-cut.ts). A lock on the lower game's old
+ * first row is let go in the same write: the game it locked no longer
+ * exists, and left on it would lock the upper game if that row ever became
+ * its first.
+ *
+ * What follows the merge is not planned here. The games below now sit one
+ * turn off, which "Same server two games in a row" flags (it counts a game
+ * emptied this way as on the video, game-serve-order.ts), and the set, now
+ * a game short, takes the next set's first game by itself (set-cut.ts
+ * `setJoin`).
+ */
+export function planGameCombine(
+  points: readonly ShiftPoint[],
+  key: string,
+  direction: GameCombineDirection,
+  adScoring: boolean,
+  /** Where the video starts in the match; null: at the beginning. */
+  start: LabelStartScore | null = null,
+): PlannedGameCombine {
+  const live = liveRows(points);
+  const bands = labelScores(live, adScoring, start).games;
+  const at = bands.findIndex((band) => gameKey(band) === key);
+  if (at === -1) return { error: "That game is not in this session." };
+  const upper = direction === "above" ? bands[at - 1] : bands[at];
+  const lower = direction === "above" ? bands[at] : bands[at + 1];
+  if (!upper || !lower) {
+    return {
+      error: `There is no game ${direction} this one to combine it with.`,
+    };
+  }
+  if (upper.setNumber !== lower.setNumber) {
+    return {
+      error: `The game ${direction} is in another set: only games of one set combine.`,
+    };
+  }
+  if (upper.gameType !== "game" || lower.gameType !== "game") {
+    return { error: "A tiebreak is not combined with a game." };
+  }
+  const byGame = rowsByGame(live);
+  const kept = byGame.get(gameKey(upper)) ?? [];
+  const moved = byGame.get(gameKey(lower)) ?? [];
+  if (kept.length === 0 || moved.length === 0) {
+    return { error: "That game has no points to combine." };
+  }
+  const to: Destination = {
+    setNumber: upper.setNumber,
+    gameNumber: upper.gameNumber,
+    gameType: "game",
+    server: gameFirstServer(kept),
+    opened: false,
+  };
+  const writes: GameShiftWrite[] = [];
+  const swaps = new Map<string, PlayerSwap | null>();
+  for (const point of moved) {
+    const { write, swap } = shiftWrite(point, to);
+    // The lower game is gone, and its lock with it: left on, it would make
+    // the upper game a locked one the moment this row became its first. No
+    // moved row is the upper game's first, so each lets go — written whether
+    // or not it held one, since the server's rows do not carry the lock.
+    writes.push({ ...write, game_start_locked: false });
+    swaps.set(point.id, swap);
+  }
+  const { shots, swapped } = flippedShots(swaps);
+  const ref = (band: LabelGameBand): GameShiftGameRef => ({
+    set: band.setNumber,
+    gameInSet: band.gameInSet,
+  });
+  return {
+    ok: true,
+    writes,
+    shots,
+    summary: {
+      points: writes.length,
+      into: ref(upper),
+      from: ref(lower),
+      swapped,
+    },
+  };
+}
+
+/**
+ * Which neighbours each game can be combined with, read off the scoreboard's
+ * bands alone — `planGameCombine`'s own refusals, without its rows: the game
+ * above or below in the same set, both ordinary games. Keyed by `gameKey`;
+ * each value names the neighbour's place in the set, for the menu's words.
+ * A game with neither is left out.
+ */
+export function gameCombineOptions(
+  bands: readonly LabelGameBand[],
+): Map<string, GameCombineOption> {
+  const options = new Map<string, GameCombineOption>();
+  const pair = (a: LabelGameBand | undefined, b: LabelGameBand) =>
+    a !== undefined &&
+    a.setNumber === b.setNumber &&
+    a.gameType === "game" &&
+    b.gameType === "game";
+  bands.forEach((band, i) => {
+    const above = bands[i - 1];
+    const below = bands[i + 1];
+    const option = {
+      ...(pair(above, band) ? { above: above.gameInSet } : {}),
+      ...(pair(below, band) ? { below: below.gameInSet } : {}),
+    };
+    if (option.above !== undefined || option.below !== undefined) {
+      options.set(gameKey(band), option);
+    }
+  });
+  return options;
 }

@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import {
   errorKindKeyPatch,
   errorKindShotId,
+  flagKeyShot,
   frameTimePatch,
   hasEarlierServe,
   isErrorKindKey,
@@ -370,11 +371,46 @@ test.describe("A adds a shot, C switches contact and landing", () => {
     // A shot key acts on the open point's stroke: a selection left in
     // another point gives way to the open point's first.
     expect(source).toMatch(
-      /const keyShot = \(\s*accept: \(shot: LabelShot\) => boolean = \(\) => true,\s*\): LabelShot \| null =>/,
+      /const keyShot = \(\s*accept: \(shot: LabelShot\) => boolean = \(\) => true,\s*unselected: "first" \| "last" = "first",\s*\): LabelShot \| null =>/,
     );
+    // N ends a point: with no stroke selected it takes the last one, and a
+    // split lets go of the stroke it was asked from so that N reaches it.
+    expect(source).toContain(
+      'const shot = keyShot((s) => netKeyPatch(s) !== null, "last");',
+    );
+    expect(source).toContain(
+      ') ?? (unselected === "last" ? strokes.at(-1) : strokes[0]);',
+    );
+    expect(source).toContain(
+      "if (anchor.shots.some((shot) => shot.id === placement.shotId)) {",
+    );
+    // N again takes the call back, and the strokes that call removed with it.
+    // Only where the call given back leaves the ball in play, and only after
+    // the call's own write has landed: each settles the point's ending.
+    expect(source).toContain("owner && !isMissedResult(patch.result)");
+    expect(source).toContain(
+      "void patchShot(shot.id, patch).then((saved) => {",
+    );
+    expect(source).toContain("if (saved) restoreShots(owner.id, run);");
     expect(source).toContain(
       "if (kept && expanded.shots.some((shot) => shot.id === kept.id))",
     );
+    // With none selected, a flag's own stroke comes before the point's
+    // first: "Extra shots?" lands on the last shot with nothing selected,
+    // and its keys must not go to the serve.
+    // Once the question is answered the court lets the stroke go; a key
+    // pressed then (a spin, say) is still about the stroke it landed on.
+    expect(source).toContain(
+      "reviewMode ? (step?.target.shotId ?? landedShotId.current) : null,",
+    );
+    expect(source).toContain(
+      "landedShotId.current = step?.target.shotId ?? null;",
+    );
+    const rally = [{ id: "serve" }, { id: "return" }, { id: "last" }];
+    expect(flagKeyShot(rally, "last")).toEqual({ id: "last" });
+    // No question about a stroke, or one no longer live: the first, as before.
+    expect(flagKeyShot(rally, null)).toBeNull();
+    expect(flagKeyShot(rally, "gone")).toBeNull();
     expect(source).toContain(
       "if (expanded && owner.id !== expanded.id) return false;",
     );

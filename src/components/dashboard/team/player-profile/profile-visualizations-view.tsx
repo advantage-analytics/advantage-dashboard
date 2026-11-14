@@ -11,6 +11,8 @@ import {
 
 import { LegendMark } from "@/components/dashboard/matches/match-detail/shots/legend-mark";
 import { LifecycleChip } from "@/components/dashboard/matches/match-detail/shots/lifecycle-chip";
+import type { PlayerChipLabels } from "@/components/dashboard/matches/match-detail/shots/player-chip-labels";
+import { PlayerChips } from "@/components/dashboard/matches/match-detail/shots/player-chips";
 import { useVizState } from "@/components/dashboard/matches/match-detail/shots/use-viz-state";
 import { wallLegendItems } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
 import {
@@ -82,6 +84,7 @@ import {
 export function ProfileVisualizationsView({
   playerName,
   firstName,
+  chipLabels,
   analyzed,
   side,
   cards,
@@ -95,6 +98,9 @@ export function ProfileVisualizationsView({
   playerName: string;
   /** Their given name, for the empty sentences. */
   firstName: string;
+  /** The player switch's two words (`seasonPlayerChipLabels`): "You" only
+   *  when the viewer is this player, else their surname. */
+  chipLabels: PlayerChipLabels;
   /** Matches with points — the season's size; `0` draws the empty wall. */
   analyzed: number;
   /** The side the server computed `cards` for (`?player=`). */
@@ -164,6 +170,7 @@ export function ProfileVisualizationsView({
       writesInPlace={writesInPlace}
     >
       <SeasonVizBody
+        chipLabels={chipLabels}
         cardsBySide={cache.bySide}
         playerName={playerName}
         firstName={firstName}
@@ -196,7 +203,10 @@ function SeasonVizBody({
   errorSplitJudged,
   saveView,
   cardsBySide,
+  chipLabels,
 }: {
+  /** The player switch's two words, on the wall and in an opened card. */
+  chipLabels: PlayerChipLabels;
   /** Each side's wall cards that are in the browser (`side`'s always). */
   cardsBySide: Partial<Record<PlayerFilter, SeasonCard[]>>;
   playerName: string;
@@ -247,6 +257,7 @@ function SeasonVizBody({
   return (
     <>
       <SeasonWall
+        chipLabels={chipLabels}
         playerName={playerName}
         firstName={firstName}
         analyzed={analyzed}
@@ -259,6 +270,7 @@ function SeasonVizBody({
         manage={manage}
       />
       <SeasonVizLightbox
+        playerLabels={chipLabels}
         data={lightbox}
         wallPlayer={player}
         analyzed={analyzed}
@@ -281,7 +293,9 @@ function SeasonWall({
   busy,
   saveView,
   manage,
+  chipLabels,
 }: {
+  chipLabels: PlayerChipLabels;
   /** The workspace's views and the viewer's role; absent, Saved is read-only. */
   saveView?: SeasonSaveView;
   manage: SeasonSavedViewActions;
@@ -360,17 +374,11 @@ function SeasonWall({
             className="h-4 w-px"
             style={{ backgroundColor: "var(--border-medium)" }}
           />
-          <div className="flex gap-2" role="group" aria-label="Player">
-            {(["you", "opponent"] as const).map((value) => (
-              <LifecycleChip
-                key={value}
-                pressed={player === value}
-                onClick={() => choosePlayer(value)}
-              >
-                {value === "you" ? "You" : "Opponent"}
-              </LifecycleChip>
-            ))}
-          </div>
+          <PlayerChips
+            value={player}
+            onChange={choosePlayer}
+            labels={chipLabels}
+          />
           <div className="flex-1" />
           <div
             role="group"

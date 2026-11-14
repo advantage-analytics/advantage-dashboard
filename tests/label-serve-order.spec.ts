@@ -2,7 +2,9 @@ import { expect, test } from "@playwright/test";
 
 import { labelConfirmCopy } from "@/components/admin/labels/label-confirm";
 import {
-  dropBeforePoint,
+  gameDropPoints,
+  gameStartPoint,
+  nearestGameDrop,
   planGameBoundary,
 } from "@/lib/services/labels/game-boundary";
 import {
@@ -16,13 +18,18 @@ import {
   firstServeFaultAlone,
   serveByReceiver,
   markState,
+  pointEndedEarly,
   serveInLandingOut,
+  serveLandingHint,
 } from "@/lib/services/labels/marks-state";
 import {
   openFlags,
+  consoleSlotStops,
+  courtEndStops,
   slotStops,
   tiebreakServeStops,
 } from "@/lib/services/labels/flag-nav";
+import { labelScores } from "@/lib/services/labels/score";
 import {
   liveRowMarks,
   withLiveScoreMarks,
@@ -426,9 +433,35 @@ test.describe("a game's header dragged to where the game starts", () => {
         unlockPointIds: [],
       },
     });
-    expect(dropBeforePoint(withGap, "p2", false)).toBe("p4");
-    expect(dropBeforePoint(withGap, "p2", true)).toBe("p2");
-    expect(dropBeforePoint(withGap, "p7", false)).toBeNull();
+    // The positions the header can land on: only those that move something,
+    // and never a deleted row.
+    const drops = gameDropPoints(withGap, game2);
+    expect(drops.has("p2")).toBe(true);
+    expect(drops.has("p3")).toBe(false);
+    for (const id of drops) {
+      const plan = planGameBoundary(withGap, game2, id);
+      expect("ok" in plan && plan.write.pointIds.length > 0).toBe(true);
+    }
+    // The line goes to the position nearest the cursor: through a tall open
+    // point (p2's rows run from 100 to 700) it stays on p2 until the cursor
+    // is nearer p4, and holds on the last one when the cursor goes past it.
+    const gaps = [
+      { pointId: "p2", y: 100 },
+      { pointId: "p4", y: 700 },
+      { pointId: "p5", y: 744 },
+    ];
+    expect(nearestGameDrop(gaps, 120)).toBe("p2");
+    expect(nearestGameDrop(gaps, 399)).toBe("p2");
+    expect(nearestGameDrop(gaps, 401)).toBe("p4");
+    expect(nearestGameDrop(gaps, 730)).toBe("p5");
+    expect(nearestGameDrop(gaps, 2000)).toBe("p5");
+    expect(nearestGameDrop(gaps, -50)).toBe("p2");
+    expect(nearestGameDrop([], 100)).toBeNull();
+    // The band's own place is measured too, and is never a drop position:
+    // released nearest it, the band is put back and nothing moves.
+    const start = gameStartPoint(withGap, game2);
+    expect(start).not.toBeNull();
+    expect(drops.has(start!)).toBe(false);
   });
 
   test("the dragged game's lock: its new first point takes it, its old first lets go", () => {
@@ -596,6 +629,23 @@ test("every amber slot between the rows is a stop", () => {
     ["p5", "Game already won, with points after it"],
     ["p7", "Game 2 isn’t finished at 30–0"],
   ]);
+  // The console's one pass reads the folds and the servers once and gives
+  // the same stops; with no entered score the wrong-end stops add none.
+  const input = {
+    points: rows,
+    games: labelScores(rows, true).games,
+    finalScore: null,
+    matchScore: null,
+    videoEndsEarly: null,
+    startScore: null,
+    adScoring: true,
+    matchTiebreakSet: null,
+  };
+  expect(consoleSlotStops(input, false)).toEqual(slotStops(rows, true));
+  expect(consoleSlotStops(input, true)).toEqual([
+    ...slotStops(rows, true),
+    ...courtEndStops(input),
+  ]);
 });
 
 test.describe("a serve stored in whose landing is outside the box", () => {
@@ -631,6 +681,26 @@ test.describe("a serve stored in whose landing is outside the box", () => {
     expect(serveInLandingOut({ shots }, true)).toBeNull();
     expect(firstServeFaultAlone({ shots, ending: null }, true)?.code).toBe(
       "first_serve_fault_alone",
+    );
+  });
+
+  test("one question, not two: “Did the point end here?” on that serve stands for this hint until it is dismissed", () => {
+    // A second serve stored in, landing long, with the return after it: the
+    // one bounce raises both, and the point-ended question is the one drawn.
+    const shots = [
+      placed("in", LONG, "second_serve"),
+      { ...shot("b", "p2", "forehand", 2), result: "in" } as LabelShot,
+    ];
+    expect(pointEndedEarly({ shots }, true)?.params.shotId).toBe("a");
+    expect(serveInLandingOut({ shots }, true)).not.toBeNull();
+    expect(serveLandingHint({ shots }, true)).toBeNull();
+    // Dismissed, the landing is still to place: this hint is asked again.
+    const dismissed = { shots, dismissed: ["point_ended:a"] };
+    expect(pointEndedEarly(dismissed, true)).toBeNull();
+    expect(serveLandingHint(dismissed, true)?.params.shotId).toBe("a");
+    // With no stroke after it nothing else asks: the hint stands.
+    expect(serveLandingHint({ shots: [placed("in", LONG)] }, true)?.code).toBe(
+      "serve_in_landing_out",
     );
   });
 

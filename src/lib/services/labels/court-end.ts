@@ -13,8 +13,9 @@
  * 91.2%, because a wrong game boundary flips the ends of every game after it.
  * That is why this is a console slot and not a derivation rule: it is offered
  * only on games the labeller has vouched for — a game whose start they locked
- * (`gameStartLocked`), or any game of a set whose labelled games already make
- * the entered score (`settledSets`, from set-scores.ts).
+ * (`gameStartLocked`) with the game count before it sound
+ * (`trustedLockedGames`), or any game of a set whose labelled games already
+ * make the entered score (`settledSets`, from set-scores.ts).
  *
  * Per set, which player owns which end is read from the rows themselves: the
  * majority of the set's strokes, each one's end turned by the changeovers
@@ -38,9 +39,10 @@ import { BASELINE_M } from "@/lib/services/splitstep/derivation/court";
 import { swapsInSet } from "@/lib/services/splitstep/derivation/position";
 import type { SwapShot } from "./player-swap";
 import type { LabelGame } from "./operations";
-import type { LabelGameBand, ScorablePoint } from "./score";
+import { gameKey, type LabelGameBand, type ScorablePoint } from "./score";
 import {
   isLiveShot,
+  isNonPointEnding,
   type LabelPoint,
   type LabelShot,
   type LabelSide,
@@ -70,7 +72,9 @@ export type CourtEndPoint = Pick<
   | "gameNumber"
   | "gameType"
   | "gameStartLocked"
-> & { shots: readonly CourtEndShot[] };
+> &
+  // A replayed let is no point of a tiebreak's six (`playedBefore`).
+  Partial<Pick<LabelPoint, "ending">> & { shots: readonly CourtEndShot[] };
 
 export type CourtEndShot = Pick<
   SwapShot,
@@ -100,6 +104,11 @@ export function courtEndSwaps(
     settledSets: ReadonlySet<number>;
     /** Where the video starts in the match; null at the beginning. */
     startScore?: LabelStartScore | null;
+    /**
+     * The locked games whose lock is enough (`trustedLockedGames`), by
+     * `gameKey`. Left out, every locked game is: the pure rule's reading.
+     */
+    trustedLocks?: ReadonlySet<string>;
   },
 ): CourtEndSwap[] {
   const sets = new Map<number, Map<number, CourtEndPoint[]>>();
@@ -132,13 +141,18 @@ export function courtEndSwaps(
       const pointsBefore =
         tiebreak && i === 0 && start ? start.points[0] + start.points[1] : 0;
       const changes = Math.floor((gamesBefore + gameInSet) / 2);
+      // A tiebreak changes ends every six POINTS: a let that was replayed
+      // is not one, so it and the point after it sit at the same end — as
+      // the serve order counts them (game-operations.ts `rotateServers`).
+      const played = playedBefore(live);
       return {
         game: { setNumber, gameNumber },
         gameInSet,
         live,
         turned: live.map((_, k) =>
           tiebreak
-            ? changes + Math.floor((pointsBefore + k) / TIEBREAK_CHANGE_EVERY)
+            ? changes +
+              Math.floor((pointsBefore + played[k]) / TIEBREAK_CHANGE_EVERY)
             : changes,
         ),
       };
@@ -182,7 +196,7 @@ export function courtEndSwaps(
                 ? {
                     games: setGames,
                     tiebreakPoints:
-                      last.live.length +
+                      last.live.filter(isPlayedPoint).length +
                       (games.length === 1 && start
                         ? start.points[0] + start.points[1]
                         : 0),
@@ -194,7 +208,15 @@ export function courtEndSwaps(
 
     const settled = options.settledSets.has(setNumber);
     for (const { game, gameInSet, live, turned } of games) {
-      if (!settled && !live[0].gameStartLocked) continue;
+      if (
+        !settled &&
+        !(
+          live[0].gameStartLocked &&
+          (options.trustedLocks?.has(gameKey(game)) ?? true)
+        )
+      ) {
+        continue;
+      }
       const wrong = live.filter((point, k) =>
         pointIsTurned(point, turned[k], p1OwnsKey),
       );
@@ -210,6 +232,21 @@ export function courtEndSwaps(
     }
   }
   return swaps.sort((a, b) => a.pointNumber - b.pointNumber);
+}
+
+/** A point that counts toward a tiebreak's six: not a replayed let or a non-point. */
+function isPlayedPoint(point: CourtEndPoint): boolean {
+  return !isNonPointEnding(point.ending ?? null);
+}
+
+/** For each of `live`, how many played points come before it in the game. */
+function playedBefore(live: readonly CourtEndPoint[]): number[] {
+  let played = 0;
+  return live.map((point) => {
+    const before = played;
+    if (isPlayedPoint(point)) played += 1;
+    return before;
+  });
 }
 
 /**
@@ -282,17 +319,76 @@ export function sessionCourtEndSwaps(input: {
   matchScore: MatchScore | null;
   videoEndsEarly: boolean | null;
   startScore: LabelStartScore | null;
+  /**
+   * The games flagged "Same server two games in a row"
+   * (game-serve-order.ts `gameServeRepeats`). A game with that flag gets no
+   * slot here: the wrong server is why its players read as at the wrong
+   * end, and giving the game to the other player switches them too.
+   */
+  serveRepeats?: readonly { game: LabelGame }[];
 }): CourtEndSwap[] {
-  const settledSets = settledSetNumbers(
-    labelSetScores(input.points, input.games, input.startScore),
+  const entered =
     input.videoEndsEarly === true
       ? null
-      : enteredScore(input.finalScore, input.matchScore),
+      : enteredScore(input.finalScore, input.matchScore);
+  const settledSets = settledSetNumbers(
+    labelSetScores(input.points, input.games, input.startScore),
+    entered,
+  );
+  const repeated = new Set(
+    (input.serveRepeats ?? []).map((repeat) => gameKey(repeat.game)),
   );
   return courtEndSwaps(input.points, {
     settledSets,
     startScore: input.startScore,
-  });
+    trustedLocks: trustedLockedGames(
+      input.games,
+      settledSets,
+      entered !== null,
+    ),
+  }).filter((swap) => !repeated.has(gameKey(swap.game)));
+}
+
+/**
+ * The games whose end the game count before them can name, in a set that is
+ * not settled yet: those with every set before theirs settled — so their set
+ * starts where the rows say — and every game before them in their set
+ * decided on its last row. Which end a player is at turns on how many games
+ * the set has had, so one game upstream that is really two, or half of one,
+ * puts every later game's players "at the wrong end" with nothing wrong with
+ * them. A lock vouches for where one game starts, not for the count before
+ * it: Lagaev v Laki, 2026-11-13, offered to switch three points of a locked
+ * set-3 game while set 2 was still a game short of its score.
+ */
+export function trustedLockedGames(
+  games: readonly LabelGameBand[],
+  settledSets: ReadonlySet<number>,
+  /**
+   * Whether there is an entered score to settle a set against. Without one
+   * (none entered, or the video ends early) no set is ever settled, so a set
+   * before counts as sound when every game of it is decided.
+   */
+  scored = true,
+): Set<string> {
+  const trusted = new Set<string>();
+  const sets = [...new Set(games.map((band) => band.setNumber))].sort(
+    (a, b) => a - b,
+  );
+  const sound = (setNumber: number) =>
+    scored
+      ? settledSets.has(setNumber)
+      : games
+          .filter((band) => band.setNumber === setNumber)
+          .every((band) => band.outcome.kind === "decided");
+  for (const [i, setNumber] of sets.entries()) {
+    if (!sets.slice(0, i).every(sound)) break;
+    for (const band of games) {
+      if (band.setNumber !== setNumber) continue;
+      trusted.add(gameKey(band));
+      if (band.outcome.kind !== "decided") break;
+    }
+  }
+  return trusted;
 }
 
 /** The sets whose labelled games make the entered score, from set-scores.ts. */

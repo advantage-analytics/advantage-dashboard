@@ -71,6 +71,7 @@ export function memberShotId(
     case "shot_after_point_end":
     case "second_serve_as_first":
     case "serve_after_serve_in":
+    case "serves_from_both_sides":
     case "serve_in_landing_out":
     case "serve_by_receiver":
     case "placement_missing":
@@ -88,6 +89,15 @@ const ENDING_ONLY: ReadonlySet<LabelMarkCode> = new Set([
   "ending_stale",
   "ending_contradicts_winner",
   "result_type_unknown",
+]);
+
+/**
+ * Item 4's members asked of the ball before the winner (`memberTarget`): a
+ * line call on it, and a winner its bounce reads as an error.
+ */
+export const BALL_BEFORE_WINNER: ReadonlySet<LabelMarkCode> = new Set([
+  "ending_suspect_line",
+  "winner_to_error_by_bounce",
 ]);
 
 /**
@@ -157,6 +167,7 @@ function memberTarget(
     case "same_player_consecutive":
     case "shot_after_point_end":
     case "serve_after_serve_in":
+    case "serves_from_both_sides":
     case "second_serve_as_first":
     case "serve_by_receiver":
       return [memberShotId(member, point, marks), null];

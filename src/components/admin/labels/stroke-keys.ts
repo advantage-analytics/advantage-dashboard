@@ -228,6 +228,21 @@ export function errorKindShotId(point: ErrorKindPoint): string | null {
   return markableErrorStroke(point)?.id ?? null;
 }
 
+/**
+ * The stroke a shot key takes when none of the open point's is selected and
+ * a flag's question is about one (`ReviewStep.target.shotId`): that stroke,
+ * while it is still live. A question with nothing to place — "Extra shots?"
+ * on the last shot, a winner pick — lands with no stroke selected, and its
+ * keys are meant for the stroke it asks about, not the serve. Null with no
+ * such stroke: the caller falls back to the point's first.
+ */
+export function flagKeyShot<T extends { id: string }>(
+  live: readonly T[],
+  shotId: string | null | undefined,
+): T | null {
+  return shotId ? (live.find((shot) => shot.id === shotId) ?? null) : null;
+}
+
 /** E's next kind: forced when unmarked, then unforced, then forced again. */
 export function nextErrorKind(current: LabelErrorKind | null): LabelErrorKind {
   return current === "forced" ? "unforced" : "forced";

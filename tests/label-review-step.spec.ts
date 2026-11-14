@@ -612,19 +612,36 @@ test.describe("end-of-point answers", () => {
     ]);
   });
 
-  test("the replay starts at the stroke the question is about and runs through the last", () => {
+  test("the replay plays the last ball, whichever stroke the question is about", () => {
     // A disputed winner asks about the last ball: the film goes straight to it.
     expect(step(rally(), disputed())?.replay).toEqual({
       fromShotId: "d",
       toShotId: "d",
     });
-    // A line call asks about the ball before the winner.
+    // A line call asks about the ball before the winner: the court opens on
+    // it, and the film still goes to the last shot.
     const line = step(
       rally(),
       marksOf({ [POINT]: [mark("ending_suspect_line", {})] }),
     );
     expect(line?.target.shotId).toBe("c");
-    expect(line?.replay).toEqual({ fromShotId: "c", toShotId: "d" });
+    expect(line?.replay).toEqual({ fromShotId: "d", toShotId: "d" });
+    // The real last ball with a phantom swing after it: the film starts at
+    // the ball asked about, not on the swing that follows it.
+    const phantom = step(
+      rally({}, ["d", { result: null }]),
+      marksOf({
+        [POINT]: [
+          mark("last_call_overruled", { vendorCall: "out", eventId: 103 }),
+        ],
+      }),
+    );
+    expect(phantom?.target.shotId).toBe("c");
+    expect(phantom?.replay).toEqual({ fromShotId: "c", toShotId: "d" });
+    // A last stroke with no time: the nearest timed stroke before it starts.
+    expect(
+      step(rally({}, ["d", { videoTime: null }]), disputed())?.replay,
+    ).toEqual({ fromShotId: "c", toShotId: "d" });
     // Not an ending question: no replay.
     expect(
       step(rally(), marksOf({ [POINT]: [mark("pick_winner", {})] }))?.replay,
@@ -753,5 +770,37 @@ test.describe("the shank reading", () => {
     // An end missing: nothing to read.
     expect(landedOnOwnSide({ ...far, contactY: null })).toBe(false);
     expect(landedOnOwnSide({})).toBe(false);
+  });
+});
+
+test.describe("the serves item's split", () => {
+  test("one Split here, at the earliest serve the two serve checks name", () => {
+    // A serve in play, a second serve straight after it from the same side,
+    // then a third from the other side: "Serve after a serve in play" names
+    // the second and "Serves from both sides" the third.
+    const serve = (id: string, n: number, contactX: number) =>
+      stroke(id, n, {
+        hitter: "p1",
+        stroke: "first_serve",
+        contactX,
+        contactY: 1,
+        landingX: -2,
+        landingY: 17,
+      });
+    const point = labelPoint(POINT, 0, {
+      winner: "p2",
+      ending: "winner",
+      endedBy: "p2",
+      shots: [
+        serve("a", 1, 1.2),
+        serve("b", 3, 1.2),
+        serve("c", 5, -1.2),
+        stroke("d", 6),
+      ],
+    });
+    const s = step(point);
+    const splits = s!.answers.filter((a) => a.label === "Split here");
+    expect(splits).toHaveLength(1);
+    expect(splits[0].writes).toEqual([{ write: "split", shotId: "b" }]);
   });
 });

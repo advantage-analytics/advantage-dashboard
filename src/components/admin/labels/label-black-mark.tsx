@@ -34,7 +34,9 @@ import {
   reviewItemQuestion,
   secondServeAsFirst,
   serveAfterServeIn,
-  serveInLandingOut,
+  servesFromBothSides,
+  withoutRepeatedLastCall,
+  serveLandingHint,
   staleEndingPatch,
   stateHoverParts,
   strokeHintKey,
@@ -346,7 +348,8 @@ export function pointHints(
     secondServeAsFirst(point, ghosts),
     lastLandingMissing(point, ghosts),
     serveAfterServeIn(point, ghosts),
-    serveInLandingOut(point, ghosts),
+    servesFromBothSides(point, ghosts),
+    serveLandingHint(point, ghosts),
     placementMissing(point, ghosts),
   ];
   const { hints: own, count } = pointRowMarkList(point, marks);
@@ -366,8 +369,11 @@ export function pointHints(
     ...(lastCall ? [lastCall.mark] : []),
     // "Net or out?" asks about the same last ball; with that answer offered
     // it is one question too many.
+    // …and a locked game's "Was the last ball out?" is the same question.
     ...(lastCall
-      ? own.filter((mark) => mark.code !== "net_hit_contradicts_height")
+      ? withoutRepeatedLastCall(own, lastCall).filter(
+          (mark) => mark.code !== "net_hit_contradicts_height",
+        )
       : own),
     ...live.filter((mark): mark is LabelMark => mark !== null),
   ];
@@ -438,6 +444,7 @@ function hintShotId(
       return mark.params.shotId;
     case "second_serve_as_first":
     case "serve_after_serve_in":
+    case "serves_from_both_sides":
     case "serve_in_landing_out":
     case "placement_missing":
       return mark.params.shotId;
@@ -480,15 +487,13 @@ export function acceptedHint(
   return answerable.toSorted((a, b) => at(a) - at(b))[0] ?? null;
 }
 
-/** A hint's first answer as its row orders them: a split before the rest. */
+/**
+ * The answer the accept key gives a hint: its yes — "Yes, remove N" under
+ * "Did the point end here?", not the split its row draws before it. A split
+ * is the answer only where it is the one offered.
+ */
 export function firstHintAction(hint: PointHint): PointHintAction | null {
-  return (
-    hint.actions.find(
-      (action) => action.label === HINT_ACTION_LABEL.shot_after_point_end,
-    ) ??
-    hint.actions[0] ??
-    null
-  );
+  return hint.actions[0] ?? null;
 }
 
 /**
@@ -610,10 +615,8 @@ function hintActions(
       ];
     }
     case "serve_after_serve_in":
-      return splitAt(
-        HINT_ACTION_LABEL.serve_after_serve_in,
-        mark.params.shotId,
-      );
+    case "serves_from_both_sides":
+      return splitAt(HINT_ACTION_LABEL[mark.code], mark.params.shotId);
     default:
       return [];
   }

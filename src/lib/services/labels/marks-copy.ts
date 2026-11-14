@@ -38,6 +38,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   first_serve_fault_alone: "Fault, no second serve",
   serve_in_landing_out: "Serve in, landing outside the box",
   serve_after_serve_in: "Serve after a serve in play",
+  serves_from_both_sides: "Serves from both sides",
   serve_by_receiver: "Serve by the receiver",
   placement_missing: "No placement",
   pick_winner: "Pick the winner",
@@ -211,7 +212,7 @@ export function hintLabel(mark: LabelMark, names?: MarkNames): string {
  */
 export const REVIEW_ITEM_QUESTION = {
   1: "Missing shot?",
-  2: "Extra shots / two points in one?",
+  2: "Extra shots?",
   3: "Serves",
   4: "How did the last ball end?",
   5: "Who won?",
@@ -235,6 +236,7 @@ export const HINT_ACTION_LABEL = {
   second_serve_as_first: "Make it a second serve",
   shot_after_point_end: "Split here",
   serve_after_serve_in: "Split here",
+  serves_from_both_sides: "Split here",
 } as const;
 
 /** "Was the last ball in?"'s answer: the vendor's own call on that ball. */
@@ -363,6 +365,11 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
     case "serve_fault":
       return "The first serve was called out and only one or two shots followed, with no second serve. It may be a fault the returner hit anyway.";
     case "shot_after_point_end":
+      // Several strokes follow only a miss the labeller called (marks-state.ts
+      // `pointEndedEarly`): the call is theirs, so nothing is left to mark.
+      if (mark.params.after.length > 1) {
+        return `This shot is marked as a miss, yet ${mark.params.after.length} more strokes follow it. If the point ended here, answer yes to remove them, or split them into their own point. If the call is wrong, change the result or dismiss this.`;
+      }
       return "This shot reads as out, yet one more stroke follows it. If the point ended here, answer yes to mark it out and remove that stroke, or split it into its own point. If the call is wrong, fix the landing or dismiss this.";
     case "last_call_overruled": {
       if (mark.params.vendorCall === "in") {
@@ -376,9 +383,6 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
       return `This game doesn’t add up where you set its start: ${names[gameWinner]} should win this point. If the last ball was ${call}, the point goes to ${names[gameWinner]}.`;
     }
     case "last_shot_untracked":
-      if (mark.params.fit === "poor") {
-        return "The ball off the last shot was not tracked well. About four times in ten the point really ends on another shot: this one is a swing at a dead ball to delete, or the rally went on past it.";
-      }
       return "No ball was tracked off the last shot. Most often it isn’t a shot at all, just a swing at a dead ball: delete it, and the point ends on the shot before.";
     case "net_by_trajectory":
       if (mark.params.by === "landing") {
@@ -410,6 +414,8 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
         : "The serve counts as in, but its landing is outside the service box. It publishes as in with no placement: place the bounce in the box to count where it went.";
     case "serve_after_serve_in":
       return "A let that was played, or two points in one rally.";
+    case "serves_from_both_sides":
+      return "The same player serves from the deuce side and from the ad side in this point. A server only changes sides for a new point, so this is most often two points in one: split at the second of them.";
     case "serve_by_receiver": {
       const { hitter, server } = mark.params;
       return `${names[hitter]} is typed as hitting a serve, but ${names[server]} is serving this point. If it is a rally shot, retype it: mid-rally it is most often an overhead. If the serve is ${names[server]}’s, change who hit it. If ${names[hitter]} did serve, change the server.`;

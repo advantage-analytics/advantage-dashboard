@@ -164,18 +164,55 @@ export function planGameBoundary(
 }
 
 /**
- * The point a drop at `pointId`'s row lands above: the row itself for its
- * upper half, the next live row for its lower. Null below the last row.
+ * The live points game `game`'s header can be dropped above: every one whose
+ * plan moves something (`planGameBoundary`). What the rail offers as drop
+ * positions while the band is in the air.
  */
-export function dropBeforePoint(
+export function gameDropPoints(
   points: readonly BoundaryPoint[],
-  pointId: string,
-  upperHalf: boolean,
+  game: LabelGame,
+): Set<string> {
+  const drops = new Set<string>();
+  for (const point of points) {
+    if (point.status === "deleted") continue;
+    const plan = planGameBoundary(points, game, point.id);
+    if ("ok" in plan && plan.write.pointIds.length > 0) drops.add(point.id);
+  }
+  return drops;
+}
+
+/**
+ * Game `game`'s own first live point: where its header already sits. A drop
+ * nearest it is the band put back — no move — so the rail measures it beside
+ * `gameDropPoints` and treats it as a cancel.
+ */
+export function gameStartPoint(
+  points: readonly BoundaryPoint[],
+  game: LabelGame,
 ): string | null {
-  if (upperHalf) return pointId;
-  const live = points.filter((point) => point.status !== "deleted");
-  const at = live.findIndex((point) => point.id === pointId);
-  return at === -1 ? null : (live[at + 1]?.id ?? null);
+  return (
+    points.find((point) => point.status !== "deleted" && inGame(point, game))
+      ?.id ?? null
+  );
+}
+
+/**
+ * The drop position nearest the cursor: of `gaps` — each a point a header can
+ * land above, with the height its drop line is drawn at — the one whose line
+ * is closest to `y`, the earlier on a tie. Null with none. The line follows
+ * the cursor through a tall open point, the bands and the slots between
+ * rows, and holds at the game's last position when the cursor goes past it,
+ * where reading the row under the cursor made it jump or vanish.
+ */
+export function nearestGameDrop(
+  gaps: readonly { pointId: string; y: number }[],
+  y: number,
+): string | null {
+  let best: { pointId: string; y: number } | null = null;
+  for (const gap of gaps) {
+    if (!best || Math.abs(gap.y - y) < Math.abs(best.y - y)) best = gap;
+  }
+  return best?.pointId ?? null;
 }
 
 // ── Locked games ───────────────────────────────────────────────────────────

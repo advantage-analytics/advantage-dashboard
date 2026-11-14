@@ -81,9 +81,23 @@ export async function handleGetBallPaths(
     return errorResponse(access.error);
   }
 
+  return respondWithBallPaths(access.value.match.id, deps.loadBallPathsBody);
+}
+
+/**
+ * The stored file for a match the caller has ALREADY been allowed to read —
+ * everything in {@link handleGetBallPaths} below the visibility check, so the
+ * admin report's route (`/admin/matches/[matchId]/ball-paths`, gated by
+ * `is_admin` instead of the caller's RLS) answers exactly as this one does.
+ * Never call it before a gate: it asks nothing about the caller.
+ */
+export async function respondWithBallPaths(
+  matchId: string,
+  loadBallPathsBody: BallPathsAccessDeps["loadBallPathsBody"],
+): Promise<NextResponse> {
   let loaded: HttpResult<string | null>;
   try {
-    loaded = await deps.loadBallPathsBody(access.value.match.id);
+    loaded = await loadBallPathsBody(matchId);
   } catch (cause) {
     console.error(`${LOG} unhandled failure`, { matchId, cause });
     return errorResponse(transportError("internal_error", "unhandled"));

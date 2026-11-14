@@ -11,7 +11,7 @@ export const points = [
 export function useMatchData() {
   return {
     // A SwingVision match: `useVizPoints` reads the provider off it.
-    match: { sourceProvider: "swingvision" },
+    match: { sourceProvider: "swingvision", viewerIsYou: true },
     points: window.location.search.includes("fixture=long")
       ? [...ASYMMETRIC_SERVES, ...RALLY_POINTS]
       : window.location.search.includes("fixture=watch")
