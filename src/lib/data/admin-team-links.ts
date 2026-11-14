@@ -6,6 +6,7 @@
  */
 
 import type { MatchAnalysis } from "@/lib/data/match-analysis";
+import type { MatchVerification } from "@/lib/data/match-verification";
 import type { JoinLinkMode } from "@/lib/services/programs/join-links";
 
 // ---------------------------------------------------------------------------
@@ -112,6 +113,8 @@ export interface AdminTeamLatestMatch {
   analysis: MatchAnalysis;
   /** Admin › Matches' bucket for `analysis` — what a status chip keys on. */
   bucket: AdminTeamMatchBucket;
+  /** Verified by Advantage, as Admin › Matches reads it; null when not. */
+  verification: MatchVerification | null;
 }
 
 /** A match with everything `adminTeamLatestMatches` reads, before trimming. */
@@ -121,6 +124,7 @@ export interface AdminTeamMatchFacts extends UploadOrderKey {
   opponent: string;
   analysis: MatchAnalysis;
   bucket: AdminTeamMatchBucket;
+  verification: MatchVerification | null;
 }
 
 /**
@@ -141,5 +145,6 @@ export function adminTeamLatestMatches(
     uploadedAt: row.uploadedAt,
     analysis: row.analysis,
     bucket: row.bucket,
+    verification: row.verification,
   }));
 }

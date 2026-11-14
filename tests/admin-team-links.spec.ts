@@ -56,6 +56,7 @@ function match(
     date: "2026-11-01T00:00:00+00:00",
     player: `Player ${id}`,
     opponent: `Opponent ${id}`,
+    verification: null,
     analysis: {
       status: "completed",
       providerId: "splitstep",
@@ -72,6 +73,7 @@ test("three matches come back newest upload first", () => {
     match("b", "2026-11-05T10:00:00.000Z", {
       analysis: { status: "failed", providerId: "splitstep", jobId: "job-b" },
       bucket: "failed",
+      verification: null,
     }),
     match("c", "2026-11-03T10:00:00.000Z"),
   ];
@@ -86,6 +88,7 @@ test("three matches come back newest upload first", () => {
       uploadedAt: "2026-11-05T10:00:00.000Z",
       analysis: { status: "failed", providerId: "splitstep", jobId: "job-b" },
       bucket: "failed",
+      verification: null,
     },
     {
       id: "c",
@@ -99,6 +102,7 @@ test("three matches come back newest upload first", () => {
         jobId: "job-c",
       },
       bucket: "settled",
+      verification: null,
     },
     {
       id: "a",
@@ -112,6 +116,7 @@ test("three matches come back newest upload first", () => {
         jobId: "job-a",
       },
       bucket: "settled",
+      verification: null,
     },
   ]);
   // The caller's array is left in the order it was given.

@@ -647,6 +647,8 @@ type DbProgramMatch = Pick<
   | "created_by"
   | "date"
   | "source_provider"
+  | "verified"
+  | "verified_at"
 >;
 
 /**
@@ -679,7 +681,7 @@ export async function latestMatchesForPrograms(
         db
           .from("matches")
           .select(
-            "id, program_id, player2_id, player1_name, player2_name, created_by, date, source_provider",
+            "id, program_id, player2_id, player1_name, player2_name, created_by, date, source_provider, verified, verified_at",
           )
           .in("program_id", chunk)
           .order("id")
@@ -728,6 +730,7 @@ export async function latestMatchesForPrograms(
             opponent,
             analysis,
             bucket: bucketFor(analysis),
+            verification: verificationFor(m),
           },
         ];
       }),

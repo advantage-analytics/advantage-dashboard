@@ -1075,6 +1075,19 @@ function FlagsLeft({
   const total = startOpenCounts
     ? startOpenCounts.amber + startOpenCounts.grey
     : 0;
+  // The console's amber also holds the score that doesn't add up, which the
+  // checklist shows as its own "Score adds up" row. Named apart, the "can move
+  // the score" figure is the checklist's flags on points, and the total still
+  // matches the boards.
+  const split = (counts: FlagCounts) => {
+    const unbalanced = Math.max(0, counts.amber - score);
+    const onPoints = counts.amber - unbalanced;
+    return [
+      `${onPoints} can move the score`,
+      ...(unbalanced > 0 ? ["the score doesn't add up"] : []),
+      `${counts.grey} wrong data`,
+    ].join(", ");
+  };
   // A start of zero has nothing to count from: the line reads as without one.
   if (marks && startOpenCounts && total > 0) {
     const open = openCounts ?? { amber: score, grey: data };
@@ -1090,7 +1103,7 @@ function FlagsLeft({
           <span className="text-title" style={INK[900]}>
             {`${resolved} of ${total} ${total === 1 ? "flag" : "flags"} resolved`}
           </span>{" "}
-          {`${left} left: ${open.amber} can move the score, ${open.grey} wrong data`}
+          {`${left} left: ${split(open)}`}
         </p>
         <div
           role="progressbar"
@@ -1126,7 +1139,7 @@ function FlagsLeft({
             <span className="text-title" style={INK[900]}>
               {`${left} ${left === 1 ? "flag" : "flags"} left:`}
             </span>{" "}
-            {`${now.amber} can move the score, ${now.grey} wrong data`}
+            {split(now)}
           </>
         )}
       </p>

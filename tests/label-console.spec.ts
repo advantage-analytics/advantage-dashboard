@@ -2068,7 +2068,7 @@ test.describe("the admin's overview, read off the design fixture", () => {
     });
     const line = progressLine(html);
     expect(text(line)).toContain(
-      "70 flags left: 6 can move the score, 64 wrong data",
+      "70 flags left: 5 can move the score, the score doesn't add up, 64 wrong data",
     );
     expect(line).not.toContain('role="progressbar"');
   });
@@ -2104,7 +2104,8 @@ test.describe("the admin's overview, read off the design fixture", () => {
 
   test("X counts the console's open pair, the same source as Y, and floors at 0", () => {
     // The console's amber counts the set that doesn't add up, which openFlags
-    // leaves out: 6 + 64 = 70 open of 78, so 8 — and the split says 6.
+    // leaves out: 6 + 64 = 70 open of 78, so 8. The split names that one
+    // apart, so "can move the score" says 5, as the checklist's row does.
     const counted = progressLine(
       page("admin", false, {
         startOpenCounts: { amber: 8, grey: 70 },
@@ -2112,7 +2113,7 @@ test.describe("the admin's overview, read off the design fixture", () => {
       }).html,
     );
     expect(text(counted)).toContain(
-      "8 of 78 flags resolved 70 left: 6 can move the score, 64 wrong data",
+      "8 of 78 flags resolved 70 left: 5 can move the score, the score doesn't add up, 64 wrong data",
     );
     expect(counted).toContain('aria-valuenow="8"');
     expect(counted).toContain('aria-valuemax="78"');

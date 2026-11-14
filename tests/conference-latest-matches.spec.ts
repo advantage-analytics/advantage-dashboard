@@ -16,7 +16,11 @@ import { createLoader } from "./fixtures/vm-modules";
  * what is asserted is the hrefs and the words around them.
  */
 
-function load() {
+function load(
+  matchStatus: (props: {
+    row: { verification: unknown };
+  }) => React.ReactNode = () => null,
+) {
   const loader = createLoader({
     stubs: {
       "next/link": {
@@ -32,7 +36,7 @@ function load() {
       },
       "@/components/admin/admin-people-card": { TEAM_LIST_GRID: "grid" },
       "@/components/admin/matches/matches-page-content": {
-        MatchStatus: () => null,
+        MatchStatus: matchStatus,
         UploadedAt: () => null,
       },
     },
@@ -42,8 +46,11 @@ function load() {
   };
 }
 
-function html(props: Record<string, unknown>): string {
-  const { TeamLatestMatches } = load();
+function html(
+  props: Record<string, unknown>,
+  matchStatus?: Parameters<typeof load>[0],
+): string {
+  const { TeamLatestMatches } = load(matchStatus);
   return renderToStaticMarkup(React.createElement(TeamLatestMatches, props));
 }
 
@@ -58,6 +65,7 @@ function match(
     programName,
     player: `Player ${id}`,
     opponent: `Opponent ${id}`,
+    verification: null,
     uploadedAt: "2026-11-10T12:00:00Z",
     analysis: {
       kind: "none",
@@ -98,6 +106,30 @@ test.describe("TeamLatestMatches", () => {
     );
     // The team page prints no program name: every row is its own program.
     expect(markup).not.toContain("Stanford Women");
+  });
+
+  test("each row hands Admin › Matches' status its own verification", () => {
+    // The stub says what it was handed, so the row cannot pass a constant.
+    const status = ({ row }: { row: { verification: unknown } }) =>
+      row.verification ? "Verified by Advantage" : "Analyzed";
+    const analysed = match("m1", "stanford", "Stanford Women's Tennis");
+    const verified = html(
+      {
+        programId: "stanford",
+        matches: [
+          { ...analysed, verification: { verifiedAt: "2026-11-11T09:00:00Z" } },
+        ],
+        matchCount: 1,
+      },
+      status,
+    );
+    expect(verified).toContain("Verified by Advantage");
+    const unverified = html(
+      { programId: "stanford", matches: [analysed], matchCount: 1 },
+      status,
+    );
+    expect(unverified).toContain("Analyzed");
+    expect(unverified).not.toContain("Verified by Advantage");
   });
 
   test("the team variant says All in Matches when the count failed", () => {

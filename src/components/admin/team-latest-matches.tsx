@@ -130,7 +130,10 @@ export function TeamLatestMatches(props: TeamLatestMatchesProps) {
                 )}
                 <span className="flex min-w-0 overflow-hidden">
                   <MatchStatus
-                    row={{ analysis: match.analysis, verification: null }}
+                    row={{
+                      analysis: match.analysis,
+                      verification: match.verification,
+                    }}
                   />
                 </span>
                 <span className="flex justify-end">
