@@ -13,7 +13,10 @@ import {
   withPointRows,
 } from "@/components/dashboard/matches/match-detail/head-to-head-card";
 import { applyFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
-import type { MatchFilterContext } from "@/components/dashboard/matches/match-detail/match-filters/model";
+import {
+  type MatchFilterContext,
+  NET_ZONE_DEPTH_M,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 import {
   DRAWN_IN_DEPTH_M,
   DRAWN_IN_RUN_IN_M,
@@ -273,6 +276,18 @@ test.describe("netEntryOf", () => {
       }),
       true,
     );
+
+  test("a ball met at the furthest drawn-in point is still a net shot", () => {
+    // Past the net zone the shot is not N, so the rule could never fire there.
+    expect(DRAWN_IN_DEPTH_M + DRAWN_IN_RUN_IN_M).toBeLessThanOrEqual(
+      NET_ZONE_DEPTH_M,
+    );
+    // A millimetre inside each limit: 11.885 − 3.2 does not round-trip.
+    const bounce = NET - DRAWN_IN_DEPTH_M + 0.001;
+    expect(ranOnto(bounce, bounce - DRAWN_IN_RUN_IN_M + 0.001)).toBe(
+      "drawn-in",
+    );
+  });
 
   test("drawn in is the depth threshold", () => {
     expect(ranOnto(NET - DRAWN_IN_DEPTH_M + 0.01, 8)).toBe("drawn-in");

@@ -45,6 +45,11 @@ export const DRAWN_IN_DEPTH_M = 3.2;
  * the video: the two labelled drawn-in points were met 1.3 m and 2.0 m from
  * the bounce, the labelled approaches 4.9 m to 10.2 m, and one the labeller
  * called either way 5.0 m. Seven points; tune against more labelled matches.
+ *
+ * Keep `DRAWN_IN_DEPTH_M + DRAWN_IN_RUN_IN_M` within `NET_ZONE_DEPTH_M`
+ * (`model.ts`): a ball met further back than that is not a net shot, so the
+ * side's first net shot is a later one and the rule never sees it. The net
+ * game spec checks this.
  */
 export const DRAWN_IN_RUN_IN_M = 3;
 
@@ -70,7 +75,7 @@ const isServeOrFeed = (shot: Pick<MatchShot, "shotType">) =>
  *   earlier shot of theirs other than a serve or a pre-serve feed) AND N is a
  *   volley by type (product decision, 2026-11-13). A server's first ball
  *   struck inside the service line as a groundstroke, or an overhead, is not
- *   one: it is read by the two rules below like any other net shot.
+ *   one: it is read by the rules below like any other net shot.
  * - `drawn-in` — N is a groundstroke (not a volley or overhead: those take
  *   the ball out of the air, so it never bounced) answering an opponent's
  *   ball that bounced on the side's own half within `DRAWN_IN_DEPTH_M` of the
@@ -103,13 +108,7 @@ export function netEntryOf(
 
   if (nType.includes("volley") || nType === "overhead") return "approach";
 
-  let answered: MatchShot | undefined;
-  for (let i = n - 1; i >= 0; i -= 1) {
-    if (shots[i].isPlayer1 !== isPlayer1) {
-      answered = shots[i];
-      break;
-    }
-  }
+  const answered = shots.slice(0, n).findLast((s) => s.isPlayer1 !== isPlayer1);
   const bounce = answered?.landingY ?? null;
   const contact = shots[n].contactY;
   if (bounce === null || contact === null) return "approach";
@@ -117,9 +116,7 @@ export function netEntryOf(
   // Signed from the net: the same sign is the same half of the court.
   const bounceFromNet = bounce - NET_Y_M;
   const contactFromNet = contact - NET_Y_M;
-  const onOwnHalf =
-    bounceFromNet !== 0 &&
-    Math.sign(bounceFromNet) === Math.sign(contactFromNet);
+  const onOwnHalf = bounceFromNet * contactFromNet > 0;
   if (
     onOwnHalf &&
     Math.abs(bounceFromNet) <= DRAWN_IN_DEPTH_M &&
@@ -245,8 +242,8 @@ export const DROP_SHOT_FROM_M = 8;
  * A drop shot: a forehand or backhand (never a serve, volley or overhead)
  * struck with backspin from at least `DROP_SHOT_FROM_M` from the net that
  * lands within `DRAWN_IN_DEPTH_M` of it — the same short-ball line the
- * drawn-in rule uses (which reads the bounce and where it was met, not the
- * spin, so it does not depend on this). Backspin is "backspin" on an Advantage
+ * drawn-in rule uses. `netEntryOf` does not call this: drawn in is read from
+ * the bounce and where the ball was met, not the spin. Backspin is "backspin" on an Advantage
  * Intelligence match and "Slice" on a SwingVision import; a shot with no
  * spin, contact or landing recorded is never one. Unvalidated against
  * labelled matches: on 2026-11-07 it matched 356 of 18,920 video rally
