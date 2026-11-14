@@ -335,7 +335,7 @@ ready).
 
 ## T24 · Queue loader: two board projections
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T22, T23
 - **files:** guess — src/lib/data/label-queue-server.ts (new), src/lib/data/labels-server.ts, tests/label-queue-loader.spec.ts (new)

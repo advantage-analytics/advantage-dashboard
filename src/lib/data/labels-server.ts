@@ -412,6 +412,41 @@ export async function countLabelWorkMinutes(
   return minutes;
 }
 
+/**
+ * The newest work beat each session's holder posted on it: the minute
+ * `release_stale_label_claims` measures a claim's idleness from. Only the
+ * named user's beats count, as there — an admin reviewing the session is not
+ * the labeller working it. A session with no beat by that user has no entry.
+ *
+ * One `limit 1` read per session, run together: the board asks for the
+ * sessions somebody holds, a handful, where one read of every beat would be
+ * thousands of rows to keep one each.
+ */
+export async function readLastLabelBeats(
+  db: AdminClient,
+  sessions: readonly { id: string; userId: string }[],
+): Promise<Map<string, string>> {
+  const found = await Promise.all(
+    sessions.map(async (session) => {
+      const { data, error } = await db
+        .from("label_work_beats")
+        .select("minute")
+        .eq("session_id", session.id)
+        .eq("user_id", session.userId)
+        .order("minute", { ascending: false })
+        .limit(1)
+        .returns<{ minute: string }[]>();
+      if (error) {
+        throw new Error(`Could not read the last label beat: ${error.message}`);
+      }
+      return [session.id, data?.[0]?.minute ?? null] as const;
+    }),
+  );
+  const last = new Map<string, string>();
+  for (const [id, minute] of found) if (minute) last.set(id, minute);
+  return last;
+}
+
 /* -------------------------------------------------------------------------
  * One session, for the console
  * ---------------------------------------------------------------------- */

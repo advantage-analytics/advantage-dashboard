@@ -285,3 +285,18 @@ is the runner's. Newest entries at the bottom.
 1. The three choices skip matches someone else holds, so a fourth open match can be a choice; counting held ones instead is a one-line change in `claimableJobIds`.
 2. A `submitted` session still enters the queue; piece 3 may want those dropped.
 3. The named-test-program rule awaits the owner; it goes in `isTestOwner` and needs the program on the job.
+
+## T24 · Queue loader: two board projections — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** new `src/lib/data/label-queue-server.ts`: `readLabelQueue` (service-role, newest completed Advantage Intelligence job per match, filtered and sorted through `queue.ts`), `loadLabellerBoard()` (guard first; rows carry no player, program, team, match id or owner) and `loadAdminLabelBoard()` (guard first; names, team, labeller, claim and last beat), pure `boardFlags`. `labels-server.ts` gains `readLastLabelBeats`. `tests/label-queue-loader.spec.ts` (15 tests).
+
+**follow-ups:**
+
+1. Remove the 42703 fallback in `readQueueSessions` once the T22 migration is live.
+2. A labeller's held session outside the queue makes `holding` true with no "mine" row; keep the assigned list beside the board or add one.
+3. Other labellers' rows have no id; add an opaque key if the board needs stable keys.
+4. `readLabelQueue` reads every newest job since the cut-off before filtering.
+5. Retire `listLabelJobs` once T28 moves `/admin/labels` onto the new loader.
+6. Add a live-DB spec for `readLabelQueue` after the migration is applied.
