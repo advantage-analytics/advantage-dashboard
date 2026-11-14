@@ -73,7 +73,7 @@ test("groups are the items in order, each point once, counted in points", () => 
   ]);
   expect(groups.map((g) => [g.name, g.count])).toEqual([
     ["Missing shot?", 1],
-    ["Extra shots / two points in one?", 1],
+    ["Extra shots?", 1],
     ["Serves", 1],
     ["How did the last ball end?", 2],
     ["Who won?", 1],
@@ -125,7 +125,7 @@ test.describe("openFlags", () => {
       pointNumber: 1,
       data: false,
     });
-    expect(open[0].items.map((i) => i.id)).toEqual([2, 4, 5]);
+    expect(open[0].items.map((i) => i.id)).toEqual([3, 4, 5]);
   });
 
   test("a demoted point has none; a grey one kept is data", () => {

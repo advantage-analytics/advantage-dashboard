@@ -7,7 +7,7 @@ import { useMatchFilters } from "@/components/dashboard/matches/match-detail/mat
 import type { MatchFilterContext } from "@/components/dashboard/matches/match-detail/match-filters/model";
 
 import { useFilmReadOnly } from "./film-read-only";
-import { useLobShotKeys } from "./use-ball-paths";
+import { useBallPathsRoute, useLobShotKeys } from "./use-ball-paths";
 
 /**
  * The shared filter context (`useMatchFilters().context`) with the match's lob
@@ -19,17 +19,19 @@ import { useLobShotKeys } from "./use-ball-paths";
  * The lobs come off the ball-paths file, fetched as silently as the room's own
  * paths (`useLobShotKeys`, the same one-entry cache). Only an Advantage
  * Intelligence match has one, and never on a read-only mount: the route asks
- * for a session. Until it lands — or with none — the context carries no lob
- * keys, so a lobbed cut admits nothing and "passed" keeps its lob-blind
- * meaning.
+ * for a session (the admin report names its own, `useBallPathsRoute`). Until
+ * it lands — or with none — the context carries no lob keys, so a lobbed cut
+ * admits nothing and "passed" keeps its lob-blind meaning.
  */
 export function useFilmFilterContext(): MatchFilterContext {
   const { match } = useMatchData();
   const { context } = useMatchFilters();
   const readOnly = useFilmReadOnly();
+  const route = useBallPathsRoute(readOnly);
   const lobKeys = useLobShotKeys({
     matchId: match.id,
-    enabled: match.sourceProvider === "splitstep" && !readOnly,
+    enabled: match.sourceProvider === "splitstep" && route.allowed,
+    endpoint: route.endpoint,
   });
   return useMemo(
     () => (lobKeys ? { ...context, lobKeys } : context),

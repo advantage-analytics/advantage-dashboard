@@ -3,10 +3,13 @@ import { expect, test } from "@playwright/test";
 import {
   courtEndSwapReason,
   courtEndSwaps,
+  sessionCourtEndSwaps,
+  trustedLockedGames,
   settledSetNumbers,
   type CourtEndPoint,
   type CourtEndShot,
 } from "@/lib/services/labels/court-end";
+import { labelScores } from "@/lib/services/labels/score";
 import type { LabelGameType, LabelSide } from "@/lib/services/labels/session";
 
 // Players at each other's end (court-end.ts): each stroke's end, turned by
@@ -124,6 +127,65 @@ test.describe("players at the wrong end", () => {
     ]);
   });
 
+  test("a game flagged for its server gets no wrong-end slot: the server fix switches its players too", () => {
+    const rows = setOne({ swappedGame3: [0, 1, 2], lockGame3: true });
+    type Session = Parameters<typeof sessionCourtEndSwaps>[0];
+    const points = rows as unknown as Session["points"];
+    const session: Session = {
+      points,
+      // Every game decided on its last row: the count before game 3 is sound.
+      games: labelScores(points, false).games.map((band) => ({
+        ...band,
+        outcome: {
+          kind: "decided" as const,
+          winner: "p1" as const,
+          score: "4–0",
+        },
+      })),
+      finalScore: null,
+      matchScore: null,
+      videoEndsEarly: null,
+      startScore: null,
+    };
+    const [swap] = sessionCourtEndSwaps(session);
+    expect(swap.gameInSet).toBe(3);
+    // The same game flagged "Same server two games in a row": one slot.
+    expect(
+      sessionCourtEndSwaps({ ...session, serveRepeats: [{ game: swap.game }] }),
+    ).toEqual([]);
+    // …and none while a game before it in the set is not decided on its
+    // last row: the count of games names the end, and it is not sound yet.
+    const games = session.games.map((band, i) =>
+      i === 0
+        ? { ...band, outcome: { kind: "unfinished" as const, score: "30–15" } }
+        : band,
+    );
+    expect(sessionCourtEndSwaps({ ...session, games })).toEqual([]);
+    expect([...trustedLockedGames(games, new Set())]).toEqual([
+      `${games[0].setNumber}·${games[0].gameNumber}`,
+    ]);
+    // With no score entered no set is ever settled: a set before then counts
+    // as sound when every game of it is decided, so a later set keeps its slot.
+    const two = [
+      { ...games[1], setNumber: 1, gameNumber: 1 },
+      { ...games[1], setNumber: 2, gameNumber: 2 },
+    ];
+    expect([...trustedLockedGames(two, new Set(), true)]).toEqual(["1·1"]);
+    expect([...trustedLockedGames(two, new Set(), false)]).toEqual([
+      "1·1",
+      "2·2",
+    ]);
+    // A repeat on another game leaves this one's slot.
+    expect(
+      sessionCourtEndSwaps({
+        ...session,
+        serveRepeats: [
+          { game: { ...swap.game, gameNumber: swap.game.gameNumber + 1 } },
+        ],
+      }),
+    ).toHaveLength(1);
+  });
+
   test("a hitter the labeller gave stands: the point is theirs", () => {
     const rows = setOne({ swappedGame3: [1] });
     const point = rows.find((p) => p.id === "set1-g3-p2")!;
@@ -204,6 +266,28 @@ test.describe("players at the wrong end", () => {
     ];
     const [swap] = courtEndSwaps(rows, SETTLED);
     expect(swap.pointIds).toEqual(["set1-g13-p7"]);
+  });
+
+  test("a replayed let is no point of the six: the ends change after six PLAYED points", () => {
+    // Ten rows of a tiebreak, two of them lets that were replayed, so the
+    // players change ends before the ninth row — the seventh played point —
+    // not before the seventh row.
+    const tiebreak = { gameType: "tiebreak" as const };
+    const rows = [
+      ...game(1, 13, 12, 6, { ...tiebreak, count: 6 }),
+      ...game(1, 13, 18, 6, { ...tiebreak, count: 2 }),
+      ...game(1, 13, 20, 7, { ...tiebreak, count: 2 }),
+    ].map((point, k) => ({
+      ...point,
+      id: `tb-${k + 1}`,
+      ending: k === 1 || k === 4 ? ("let_replayed" as const) : null,
+    }));
+    expect(courtEndSwaps([...setOne(), ...rows], SETTLED)).toEqual([]);
+    // Counted as points, the same rows read as two points at the wrong end:
+    // what the slot said before, against the serve order, which skips lets.
+    const counted = rows.map((point) => ({ ...point, ending: null }));
+    const [swap] = courtEndSwaps([...setOne(), ...counted], SETTLED);
+    expect(swap.pointIds).toEqual(["tb-7", "tb-8"]);
   });
 
   test("a start score moves the changeovers: the video's first game is game 2", () => {

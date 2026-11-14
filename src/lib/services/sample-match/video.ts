@@ -41,10 +41,10 @@ import type { NextResponse } from "next/server";
 
 import {
   matchVideoError,
-  type ActiveAttachment,
   type PlaybackMetadata,
   type PlaybackMetadataResult,
 } from "@/lib/match-video/types";
+import { SAMPLE_VIDEO_ATTACHMENT } from "@/lib/sample-match/video-attachment";
 import {
   errorResponse,
   jsonResponse,
@@ -68,26 +68,11 @@ export const SAMPLE_VIDEO_BLOB = "sample/match-v1.mp4";
 /** Thirty minutes — the pipeline's playback default, stated here explicitly. */
 export const SAMPLE_VIDEO_TTL_SECONDS = 30 * 60;
 
-/**
- * The attachment metadata the sample answers with. Fixed, because the hook's
- * refresh contract compares `id` and `version` across polls: a stable pair
- * reads as "nothing changed, only the URL was refreshed", which is always the
- * truth here. The id is a placeholder in the fixture's own
- * `00000000-0000-4000-8000-` range and names no row anywhere.
- *
- * `durationSeconds` is the one field the Film timeline reads for its clock.
- * `0` means "unknown" to `clockOf()` (the player then uses the element's own
- * duration), and stays until the clip is cut and measured.
- */
-export const SAMPLE_VIDEO_ATTACHMENT: ActiveAttachment = {
-  id: "00000000-0000-4000-8000-5a4d504c4531",
-  version: 1,
-  offsetSeconds: 0,
-  confirmedVideoTimeSeconds: 0,
-  durationSeconds: 0,
-  contentType: "video/mp4",
-  filename: "sample-match.mp4",
-};
+// `SAMPLE_VIDEO_ATTACHMENT` lives in `@/lib/sample-match/video-attachment`:
+// the sample page's client bundle reads it, and this module imports
+// `next/server` (through `match-video/http`), which a browser bundle cannot
+// run. Re-exported so the route and its specs keep one import.
+export { SAMPLE_VIDEO_ATTACHMENT };
 
 /* -------------------------------------------------------------------------
  * Seams

@@ -44,9 +44,15 @@ import { playedSets } from "@/lib/ui/score-format";
  *
  * Built from the same parts as `/dashboard/matches/[matchId]` under
  * `MatchReportProvider readOnly` — the public share page's recipe — so Share,
- * Ask and the ⋯ menu are not drawn, and the film room records no view
- * (`FilmTab readOnly` never sends `/video/viewed`). PostHog counts this visit
- * under `/admin/matches/…`, a path the match's view count never reads.
+ * Ask and the ⋯ menu are not drawn, and the film room records no view (a
+ * read-only room never sends `/video/viewed`). No `match_viewed` or
+ * `video_played` event is sent either (`recordView={false}`, and `FilmTab`
+ * without its `readOnly` prop, which would mark the room a shared link):
+ * PostHog sees this visit only as a page view under `/admin/matches/…`, a
+ * path the match's view count never reads.
+ * The ball-paths file behind the lob and Passed figures is read from this
+ * page's own route (`ballPathsEndpoint`): the match's route asks the caller's
+ * RLS, which an admin in neither seat nor the program does not pass.
  *
  * The analysing short-circuit stands (guardrails §3.3): a match still in
  * flight, or failed, renders the analysis steps — never a report of zeroes —
@@ -213,6 +219,8 @@ export default async function AdminMatchReportPage({
                 canEditBands={false}
                 unit={unit}
                 readOnly
+                recordView={false}
+                ballPathsEndpoint={`/admin/matches/${encodeURIComponent(match.id)}/ball-paths`}
               >
                 <MatchReportFrame>
                   <MatchReportRail>
@@ -240,10 +248,13 @@ export default async function AdminMatchReportPage({
                     </MatchReportWhen>
                     {video && (
                       <MatchReportWhen view="film">
+                        {/* No `readOnly` prop: that one means "a shared
+                            link" (its plays are counted, its refusals blame
+                            the link). The provider's `readOnly` above already
+                            turns every write in the room off. */}
                         <FilmTab
                           video={video}
                           unit={unit}
-                          readOnly
                           playbackEndpoint={`/admin/matches/${encodeURIComponent(match.id)}/playback`}
                         />
                       </MatchReportWhen>

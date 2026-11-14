@@ -15,6 +15,7 @@
  */
 
 import type { LabelPointPatch } from "./edit";
+import { SIDE_DEAD_ZONE_M } from "../splitstep/derivation/flags";
 import { landingTakesContact } from "./volley-link";
 import {
   deriveEnding,
@@ -51,7 +52,9 @@ import {
   type LabelSide,
 } from "./session";
 import {
+  deriveShotResult,
   effectiveShotResult,
+  labellerCall,
   inServeLandingMiss,
   isServeByReceiver,
   pastNet,
@@ -364,6 +367,12 @@ export function drawsGhosts(marks: LabelMarks | null | undefined): boolean {
  * the incoming one on the hitter's own side, which reads as a net ball. Held to
  * the second-to-last stroke, an out read ended the point 25 times in 47, and
  * a net read 6 times in 40.
+ *
+ * A miss the labeller called is no read (`calledMissPlayedOn`): out or net,
+ * anywhere in the rally, with any number of strokes after it. Marking a ball
+ * out takes one or two strokes with it (operations.ts `deadBallsAfterMiss`);
+ * three or more stay, and this is where "Yes, remove N" and "Split here" are
+ * offered for them.
  */
 export function pointEndedEarly(
   point: Pick<LabelPoint, "shots"> & Partial<Pick<LabelPoint, "dismissed">>,
@@ -371,38 +380,71 @@ export function pointEndedEarly(
 ): Extract<LabelMark, { code: "shot_after_point_end" }> | null {
   const live = liveShotsInOrder(point, ghosts);
   if (live.length < 2) return null;
+  // The question at `live[i]`, unless it is settled: the labeller has looked
+  // at this stroke or one after it — dismissed the question there, or
+  // edited, added or deleted a stroke after it.
+  const askedAt = (
+    i: number,
+    called: boolean,
+  ): Extract<LabelMark, { code: "shot_after_point_end" }> | null => {
+    const shot = live[i];
+    const ordered = orderLabelShots(point.shots);
+    const dismissed = new Set(point.dismissed ?? []);
+    const at = ordered.findIndex((s) => s.id === shot.id);
+    const settled =
+      dismissed.has(pointEndedKey(shot.id)) ||
+      ordered.slice(at + 1).some(
+        (s) =>
+          dismissed.has(pointEndedKey(s.id)) ||
+          s.status === "edited" ||
+          s.status === "added" ||
+          // A stroke added and deleted by mistake was never looked at. After
+          // a miss the labeller called, deleting one stroke of several
+          // answers nothing about the rest: the question stays while any is
+          // live.
+          (!called && s.status === "deleted" && !isWithdrawnAdd(s)),
+      );
+    if (settled) return null;
+    return {
+      code: "shot_after_point_end",
+      tier: "hint",
+      scope: "point",
+      params: {
+        shotId: shot.id,
+        after: live.slice(i + 1).map((s) => s.id),
+      },
+    };
+  };
+  // A miss the labeller called comes first; once that one is settled, the
+  // end of the rally is still read as before.
+  const called = calledMissPlayedOn(live);
+  const asked = called === -1 ? null : askedAt(called, true);
+  if (asked) return asked;
   const i = live.length - 2;
+  if (i === called) return null;
   const shot = live[i];
   if (!endsPointWhenMissed(shot.stroke)) return null;
   if (effectiveShotResult(shot) !== "out") return null;
   // Met in the air where it reads out: played on, not a point over.
   if (landingTakesContact(shot, live[i + 1], false)) return null;
-  // Settled once the labeller has looked at this stroke or one after it:
-  // dismissed the question there, or edited, added or deleted a stroke
-  // after it.
-  const ordered = orderLabelShots(point.shots);
-  const dismissed = new Set(point.dismissed ?? []);
-  const at = ordered.findIndex((s) => s.id === shot.id);
-  const settled =
-    dismissed.has(pointEndedKey(shot.id)) ||
-    ordered.slice(at + 1).some(
-      (s) =>
-        dismissed.has(pointEndedKey(s.id)) ||
-        s.status === "edited" ||
-        s.status === "added" ||
-        // A stroke added and deleted by mistake was never looked at.
-        (s.status === "deleted" && !isWithdrawnAdd(s)),
-    );
-  if (settled) return null;
-  return {
-    code: "shot_after_point_end",
-    tier: "hint",
-    scope: "point",
-    params: {
-      shotId: shot.id,
-      after: live.slice(i + 1).map((s) => s.id),
-    },
-  };
+  return askedAt(i, false);
+}
+
+/**
+ * The index in `live` of the first stroke the labeller called out or into the
+ * net that ends the point (`endsPointWhenMissed`) and still has a live stroke
+ * after it; -1 when there is none. The stored call, and the labeller's
+ * (`labellerCall`): a seeded miss is the vendor's read, which
+ * `pointEndedEarly` trusts only at the end.
+ */
+function calledMissPlayedOn(live: readonly LabelShot[]): number {
+  return live.findIndex(
+    (shot, at) =>
+      at < live.length - 1 &&
+      endsPointWhenMissed(shot.stroke) &&
+      isMissedResult(shot.result) &&
+      labellerCall(shot),
+  );
 }
 
 /** A stroke with no landing placed, the labeller not having called it unclear. */
@@ -748,6 +790,49 @@ export function serveAfterServeIn(
 }
 
 /**
+ * "Serves from both sides": two live serves by one player, one after the
+ * other among the point's serves, hit from different sides of the centre
+ * mark — a server changes sides only for a new point, so the vendor most
+ * likely ran two points into one rally. Both contacts must be placed and
+ * clear of the centre (`SIDE_DEAD_ZONE_M`, as the serve-side marks read
+ * it). The later serve is named: the action splits the point there.
+ * Not where "Serve after a serve in play" already asks at that serve.
+ *
+ * Measured 2026-11-13 on the 31 complete analyst sessions, over each pair
+ * of successive serves the vendor put in one rally: from different sides,
+ * the labeller split the point between them on 8 of 11; from the same
+ * side, on 21 of 1,138.
+ */
+export function servesFromBothSides(
+  point: Pick<LabelPoint, "shots">,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "serves_from_both_sides" }> | null {
+  const serves = liveShotsInOrder(point, ghosts).filter((shot) =>
+    isServeStroke(shot.stroke),
+  );
+  const side = (shot: LabelShot): number =>
+    shot.contactX === null || Math.abs(shot.contactX) < SIDE_DEAD_ZONE_M
+      ? 0
+      : Math.sign(shot.contactX);
+  for (let i = 1; i < serves.length; i += 1) {
+    const before = serves[i - 1];
+    const serve = serves[i];
+    if (before.hitter === null || before.hitter !== serve.hitter) continue;
+    if (side(before) === 0 || side(before) + side(serve) !== 0) continue;
+    if (serveAfterServeIn(point, ghosts)?.params.shotId === serve.id) {
+      return null;
+    }
+    return {
+      code: "serves_from_both_sides",
+      tier: "hint",
+      scope: "shot",
+      params: { shotId: serve.id },
+    };
+  }
+  return null;
+}
+
+/**
  * "Different ending?": the point's stored ending is not what its strokes
  * derive (`deriveEnding`) — the ending or the ended-by differ, none is
  * stored at all, or the two agree but the point's winner is the player the
@@ -852,7 +937,9 @@ export function lastCallAnswer(
  * opposite call on that ball would: In to Out for a ball the other side hit
  * in, Out or Net to In for one `gameWinner` missed. A dragged boundary is the
  * labeller's word, so the winner the game needs is likelier right than the
- * call on the last ball. Null otherwise — a point the strokes already give to
+ * call on the last ball — unless that call is the labeller's own, or the
+ * ball's coordinates read the same as its stored call (2026-11-13: asked only
+ * where the landing and the call disagree). Null otherwise — a point the strokes already give to
  * `gameWinner` is "Different ending?"'s, and one whose last ball settles
  * nothing has no call to flip. Offered on a click, never applied: the answer
  * writes the call (`result_called`), and the ending and winner follow it.
@@ -869,6 +956,31 @@ export function lastBallAgainstGame(
     .filter((shot) => !isLetServe(shot))
     .at(-1);
   if (!last || last.result === null) return null;
+  // A call the labeller made on this ball is theirs (`labellerCall`): they
+  // answered "Was the last ball out?" or set it themself, and asking the
+  // opposite straight after only invites them to undo it. The band's "Check
+  // N points" still says the game does not add up.
+  if (labellerCall(last)) return null;
+  // Only where the ball's own coordinates read differently from its stored
+  // call: with the landing and the call agreeing there is nothing on the
+  // court to doubt, and a ball with an end unplaced has no reading to
+  // disagree. The band's "Check N points" covers the game either way.
+  const read = deriveShotResult({
+    stroke: last.stroke,
+    contact_x: last.contactX,
+    contact_y: last.contactY,
+    landing_x: last.landingX,
+    landing_y: last.landingY,
+  });
+  // In against a miss, either way round: out read on a ball stored net (or
+  // the reverse) is a miss by both, and no reason to ask whether it was in.
+  if (
+    read === null ||
+    isMissedResult(read) === isMissedResult(last.result) ||
+    (read !== "in" && !isMissedResult(read))
+  ) {
+    return null;
+  }
   const call: "in" | "out" = isMissedResult(last.result) ? "in" : "out";
   const flipped = deriveEnding(
     {
@@ -886,6 +998,44 @@ export function lastBallAgainstGame(
     scope: "point",
     params: { shotId: last.id, call, gameWinner },
   };
+}
+
+/**
+ * "Serve in, landing outside the box" as the well and the flag lists draw it:
+ * `serveInLandingOut`, unless "Did the point end here?" already asks about
+ * that same serve. A second serve stored in whose landing reads out raises
+ * both off the one bounce, and the first is the question that settles it:
+ * answered yes, the serve is a double fault and no placement is owed;
+ * dismissed, this one is asked again.
+ */
+export function serveLandingHint(
+  point: Pick<LabelPoint, "shots"> & Partial<Pick<LabelPoint, "dismissed">>,
+  ghosts: boolean,
+): ReturnType<typeof serveInLandingOut> {
+  const outside = serveInLandingOut(point, ghosts);
+  if (!outside) return null;
+  return pointEndedEarly(point, ghosts)?.params.shotId === outside.params.shotId
+    ? null
+    : outside;
+}
+
+/**
+ * The point's own hints less a locked game's "Was the last ball out?" where
+ * the vendor's call already asks the same of the same ball
+ * (`lastCallAnswer`): one question, one answer. Kept when the two ask
+ * opposite calls — then they disagree, and the labeller sees both.
+ */
+export function withoutRepeatedLastCall(
+  own: readonly LabelMark[],
+  lastCall: ReturnType<typeof lastCallAnswer>,
+): LabelMark[] {
+  if (!lastCall) return [...own];
+  return own.filter(
+    (mark) =>
+      mark.code !== "last_ball_against_game" ||
+      mark.params.shotId !== lastCall.shotId ||
+      mark.params.call !== lastCall.mark.params.vendorCall,
+  );
 }
 
 /**
@@ -977,7 +1127,8 @@ export function openHintMarks(
     secondServeAsFirst(point, ghosts),
     lastLandingMissing(point, ghosts),
     serveAfterServeIn(point, ghosts),
-    serveInLandingOut(point, ghosts),
+    servesFromBothSides(point, ghosts),
+    serveLandingHint(point, ghosts),
     placementMissing(point, ghosts),
     // Not twice: the derivation's own "Into the net?" already asks.
     own.some((mark) => mark.code === "net_by_trajectory") ||
@@ -987,7 +1138,9 @@ export function openHintMarks(
   ];
   return [
     ...(lastCall
-      ? own.filter((mark) => mark.code !== "net_hit_contradicts_height")
+      ? withoutRepeatedLastCall(own, lastCall).filter(
+          (mark) => mark.code !== "net_hit_contradicts_height",
+        )
       : own),
     ...live.filter((mark): mark is LabelMark => mark !== null),
   ].filter((mark) => {
@@ -1193,12 +1346,7 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
   {
     id: 2,
     question: REVIEW_ITEM_QUESTION[2],
-    codes: [
-      "shot_after_point_end",
-      "last_shot_untracked",
-      "serve_after_serve_in",
-      "reserve_after_in",
-    ],
+    codes: ["shot_after_point_end", "last_shot_untracked"],
   },
   {
     id: 3,
@@ -1209,6 +1357,11 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
       "serve_by_receiver",
       "second_serve_called_out",
       "serve_in_landing_out",
+      // A serve after a serve in play is a question about the serves, not
+      // about a stroke too many at the end: asked here, apart from item 2.
+      "serve_after_serve_in",
+      "serves_from_both_sides",
+      "reserve_after_in",
     ],
   },
   {
@@ -1350,9 +1503,10 @@ function isDemoted(tone: MarkTone, items: readonly ReviewItem[]): boolean {
 /**
  * An item's tone from its members. Item 1 is `markTone`'s call (a missing
  * stroke near the end of the rally decides who hit the last ball); item 2 is
- * never amber ("Serve replayed" moved the winner on 22% of its points, the
- * base rate, 2026-11-05); item 3 only for a double
- * fault in question or a point stopping on a faulted first serve; item 4
+ * never amber; item 3 only for a double
+ * fault in question or a point stopping on a faulted first serve — not for
+ * "Serve replayed", which moved the winner on 22% of its points, the base
+ * rate (2026-11-05); item 4
  * when a counted mark or "Was the last ball out?" for a locked game
  * (`last_ball_against_game`) sits under it, or the point's winner is the
  * player its strokes say lost; item 5 is always the score; item 6 only for "Game cut
@@ -1384,10 +1538,12 @@ function reviewItemTone(
     case 2:
       return "data";
     case 3:
+      // Two points in one is a point missing from the score.
       return has(
         "second_serve_called_out",
         "first_serve_fault_alone",
         "serve_by_receiver",
+        "serves_from_both_sides",
       )
         ? "score"
         : "data";

@@ -220,6 +220,7 @@ function Harness() {
         <ProfileVisualizationsView
           playerName="Avery Kim"
           firstName="Avery"
+          chipLabels={{ you: "Kim", opponent: "Opponents" }}
           analyzed={SEASON.length}
           {...answer.props}
         />

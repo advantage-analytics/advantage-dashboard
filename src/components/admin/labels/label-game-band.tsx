@@ -4,6 +4,7 @@ import { memo, useMemo, useState } from "react";
 import { ChevronDown, GripVertical, Lock } from "lucide-react";
 import {
   FloatMenu,
+  FloatMenuDivider,
   FloatMenuItem,
   FloatMenuLabel,
   type FloatMenuTone,
@@ -14,6 +15,10 @@ import {
   gameTypeOf,
   livePointsOfGame,
 } from "@/lib/services/labels/game-operations";
+import type {
+  GameCombineDirection,
+  GameCombineOption,
+} from "@/lib/services/labels/game-shift";
 import type { LabelGame } from "@/lib/services/labels/operations";
 import {
   gameKey,
@@ -122,6 +127,52 @@ const GAME_TYPE_ORDER: readonly LabelGameType[] = [
   "match_tiebreak",
 ];
 
+/** An action in the game menu, under its type rows: it does, it is not a state. */
+export interface GameBandMenuAction {
+  key: string;
+  label: string;
+  description: string;
+  run: () => void;
+}
+
+/**
+ * "Combine with game above / below" for the game menu, where the game has
+ * that neighbour (`combine`, game-shift.ts `gameCombineOptions`). The lower
+ * game's points always join the upper, so the words say which game goes.
+ */
+export function gameBandCombineActions(
+  game: LabelGame,
+  combine: GameCombineOption | undefined,
+  onCombineGames:
+    ((gameKey: string, direction: GameCombineDirection) => void) | undefined,
+): GameBandMenuAction[] {
+  if (!combine || !onCombineGames) return [];
+  const key = gameKey(game);
+  const after = "The servers and scores after it are checked again";
+  return [
+    ...(combine.above === undefined
+      ? []
+      : [
+          {
+            key: "combine-above",
+            label: "Combine with game above",
+            description: `This game’s points join game ${combine.above}. ${after}`,
+            run: () => onCombineGames(key, "above"),
+          },
+        ]),
+    ...(combine.below === undefined
+      ? []
+      : [
+          {
+            key: "combine-below",
+            label: "Combine with game below",
+            description: `Game ${combine.below}’s points join this game. ${after}`,
+            run: () => onCombineGames(key, "below"),
+          },
+        ]),
+  ];
+}
+
 export interface GameBandMenuRow {
   key: string;
   label: string;
@@ -213,6 +264,8 @@ export const LabelGameBand = memo(function LabelGameBand({
   outcome,
   onSetGameType,
   onSetGameServer,
+  combine,
+  onCombineGames,
   drag,
   dragging = false,
   gripTrack = false,
@@ -226,6 +279,10 @@ export const LabelGameBand = memo(function LabelGameBand({
   /** Both absent: no menus, the band only reads. */
   onSetGameType?: (game: LabelGame, type: LabelGameType) => void;
   onSetGameServer?: (game: LabelGame, server: LabelSide) => void;
+  /** The neighbours this game can be combined with; absent, none. */
+  combine?: GameCombineOption;
+  /** Present with `combine`: the game menu offers the combine actions. */
+  onCombineGames?: (gameKey: string, direction: GameCombineDirection) => void;
   /**
    * Present: the band can be dragged to where the game starts (the rail owns
    * the drop). It gains a grip in the rows' number track, and its name
@@ -336,6 +393,11 @@ export const LabelGameBand = memo(function LabelGameBand({
             menuLabel="Game type"
             align="start"
             rows={menus.type}
+            actions={gameBandCombineActions(
+              model.game,
+              combine,
+              onCombineGames,
+            )}
             menu={menu}
             ink={PAINT.labelInk}
             // With no set before it, the trigger's text starts the band.
@@ -387,6 +449,8 @@ export const LabelGameBand = memo(function LabelGameBand({
   );
 });
 
+const NO_ACTIONS: readonly GameBandMenuAction[] = [];
+
 /**
  * One of the band's triggers and its menu. The trigger is 22px tall for the
  * pointer and takes 14px of the band (`-my-1`), so a band with menus is exactly
@@ -399,11 +463,14 @@ function BandMenu({
   caption,
   align,
   rows,
+  actions = NO_ACTIONS,
   menu,
   ink,
   className,
   children,
 }: {
+  /** Actions under the rows, past a divider: the game menu's combines. */
+  actions?: readonly GameBandMenuAction[];
   kind: "type" | "server";
   /** The trigger's accessible name: what it is, and what it is set to. */
   name: string;
@@ -460,6 +527,18 @@ function BandMenu({
           onSelect={() => {
             setOpen(false);
             row.run();
+          }}
+        />
+      ))}
+      {actions.length > 0 ? <FloatMenuDivider /> : null}
+      {actions.map((action) => (
+        <FloatMenuItem
+          key={action.key}
+          label={action.label}
+          description={action.description}
+          onSelect={() => {
+            setOpen(false);
+            action.run();
           }}
         />
       ))}

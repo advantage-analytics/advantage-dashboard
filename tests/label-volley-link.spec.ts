@@ -78,6 +78,60 @@ test.describe("isAirStroke", () => {
   });
 });
 
+test.describe("an air stroke after a ball the vendor's bounce reads out", () => {
+  // A lob before an overhead never bounced: the bounce the vendor predicted
+  // lies past the baseline, so the ball is seeded out.
+  const lob = (over: Partial<LabelShot> = {}) =>
+    shot("a", {
+      ...BACK,
+      landingX: 0,
+      landingY: 25.2,
+      result: "out",
+      status: "kept",
+      ...over,
+    });
+  const smash = () =>
+    shot("b", { hitter: "p2", contactX: AT_NET.x, contactY: AT_NET.y });
+
+  for (const stroke of ["overhead", "forehand_volley"] as const) {
+    test(`${stroke}: the ball was played — its landing goes to the contact and its call to In`, () => {
+      expect(edit([lob(), smash()], "b", { stroke })).toEqual([
+        {
+          shotId: "a",
+          patch: {
+            landing_x: AT_NET.x,
+            landing_y: AT_NET.y,
+            result: "in",
+            result_called: false,
+          },
+        },
+      ]);
+    });
+  }
+
+  test("a miss the labeller called stands, and so does a serve, the same hitter, and an air stroke with no contact", () => {
+    const stroke = "overhead" as const;
+    expect(
+      edit([lob({ resultCalled: true }), smash()], "b", { stroke }),
+    ).toEqual([]);
+    expect(
+      edit([lob({ stroke: "second_serve" }), smash()], "b", { stroke }),
+    ).toEqual([]);
+    expect(edit([lob({ hitter: "p2" }), smash()], "b", { stroke })).toEqual([]);
+    expect(edit([lob(), shot("b", { hitter: "p2" })], "b", { stroke })).toEqual(
+      [],
+    );
+    // Already an air stroke: a change between two of them links nothing new.
+    const volley = shot("b", {
+      hitter: "p2",
+      stroke: "forehand_volley",
+      contactX: AT_NET.x,
+      contactY: AT_NET.y,
+    });
+    expect(edit([lob(), volley], "b", { stroke })).toEqual([]);
+  });
+});
+
 test.describe("a stroke changed TO an air stroke", () => {
   // One air stroke stands for the three: `isAirStroke` above is the set.
   for (const stroke of ["forehand_volley"] as const) {

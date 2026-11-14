@@ -28,6 +28,7 @@ import {
   type LabelShotPatch,
   type LivePointStatus,
 } from "./edit";
+import { labellerCall } from "./shot-derived";
 import {
   planPlayerSwap,
   type ShotSwapWrite,
@@ -261,7 +262,9 @@ export function liveShotsAfter(
  * the return after it was a swing at a dead ball. Nothing when the patch
  * carries no `result` (a court click with one end still missing), when the
  * ball was a miss already, when the stroke is a first serve (the second
- * serve follows that fault), or with three or more strokes after.
+ * serve follows that fault), or with three or more strokes after — unless the
+ * patch is the labeller's own call (`result_called`), which takes every
+ * stroke after it however many there are.
  */
 export function deadBallsAfterMiss(
   shots: readonly LabelShot[],
@@ -276,6 +279,10 @@ export function deadBallsAfterMiss(
   const shot = shots.find((s) => s.id === shotId);
   if (!shot || !endsPointWhenMissed(shot.stroke)) return [];
   const after = liveShotsAfter(shots, shotId, ghosts);
+  // A call the labeller made outright (N, the Result menu's override, a
+  // hint's yes) says the point ended on this ball: everything after it goes.
+  // A miss the coordinates alone read — a court click — keeps the cap.
+  if (patch.result_called === true) return after;
   return after.length > 0 && after.length <= DEAD_BALLS_REMOVED_WITH_MISS
     ? after
     : [];
@@ -294,6 +301,73 @@ export function deadBallReason(
   return stroke === "second_serve"
     ? "dead_ball_after_fault"
     : "dead_ball_after_point";
+}
+
+/**
+ * The reason the delete dialog opens on for `shotId`, read off the live
+ * strokes before it: hit after the point ended when the ball straight before
+ * it — or an earlier one the labeller called — is out or in the net, hit
+ * after a fault when that miss is a second serve (a
+ * double fault) or the stroke straight before is a faulted first serve the
+ * returner swung at. Null when nothing before it says the ball was dead: the
+ * labeller picks.
+ */
+export function suggestedDeleteReason(
+  shots: readonly LabelShot[],
+  shotId: string,
+  ghosts: boolean,
+): Extract<
+  LabelDeleteReason,
+  "dead_ball_after_fault" | "dead_ball_after_point"
+> | null {
+  const ordered = orderLabelShots(shots);
+  const at = ordered.findIndex((shot) => shot.id === shotId);
+  if (at === -1) return null;
+  const before = ordered.slice(0, at).filter((s) => isLiveShot(s, ghosts));
+  const previous = before.at(-1);
+  const endedPoint = (s: LabelShot) =>
+    endsPointWhenMissed(s.stroke) && isMissedResult(s.result);
+  // The stroke straight before, or an earlier one the labeller called: a
+  // miss the vendor's bounce read further back in a rally that carried on is
+  // most often a ball in play, and says nothing about this stroke.
+  const ended =
+    previous && endedPoint(previous)
+      ? previous
+      : before.find((s) => endedPoint(s) && labellerCall(s));
+  if (ended) return deadBallReason(ended.stroke);
+  return previous?.stroke === "first_serve" && isMissedResult(previous.result)
+    ? "dead_ball_after_fault"
+    : null;
+}
+
+/**
+ * The strokes a miss call on `shotId` took with it, to put back when the
+ * call is taken back: every stroke after it in video order, when each is a
+ * dead-ball tombstone (`dead_ball_after_point`, or `dead_ball_after_fault`
+ * behind a double fault). Empty when a live stroke or a tombstone with
+ * another reason follows: then what came after was not that call's alone.
+ * `ghosts` is the console's own flag (`isLiveShot`).
+ */
+export function deadBallRun(
+  shots: readonly LabelShot[],
+  shotId: string,
+  ghosts: boolean,
+): string[] {
+  const ordered = orderLabelShots(shots);
+  const at = ordered.findIndex((shot) => shot.id === shotId);
+  if (at === -1) return [];
+  // A ghost the site removed is no stroke while the session draws ghosts:
+  // it neither counts as following the ball nor is it put back.
+  const after = ordered
+    .slice(at + 1)
+    .filter((shot) => shot.status === "deleted" || isLiveShot(shot, ghosts));
+  const dead = after.every(
+    (shot) =>
+      shot.status === "deleted" &&
+      (shot.deleteReason === "dead_ball_after_point" ||
+        shot.deleteReason === "dead_ball_after_fault"),
+  );
+  return dead ? after.map((shot) => shot.id) : [];
 }
 
 /** What a batched remove answers about each stroke it tombstoned. */

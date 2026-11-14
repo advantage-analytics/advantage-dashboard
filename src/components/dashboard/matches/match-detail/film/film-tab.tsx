@@ -139,6 +139,11 @@ export function FilmTab({
    * and loses everything that writes or needs a session — bookmarks, the
    * view report, the ball-path fetch (`film-read-only.ts`). The page passes
    * no `entry`, so there is nothing to add, replace or adjust either.
+   *
+   * This prop is also what marks the room a SHARED LINK (plays are counted
+   * for analytics, a refused renewal blames the link). A read-only mount that
+   * is not one — the sample, the admin report — leaves it off and is
+   * read-only through the report's `meta.readOnly` instead.
    */
   readOnly?: boolean;
   /**

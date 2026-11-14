@@ -9,6 +9,7 @@ import {
   pointEndedEarly,
   secondServeAsFirst,
   serveAfterServeIn,
+  servesFromBothSides,
   thinTracking,
 } from "@/lib/services/labels/marks-state";
 import type { LabelPoint, LabelShot } from "@/lib/services/labels/session";
@@ -81,6 +82,108 @@ test.describe("pointEndedEarly", () => {
       true,
     );
     expect(three).toBeNull();
+  });
+
+  test("a miss the labeller called, anywhere, with any number of strokes after it", () => {
+    // Marked out by the labeller (the stored call left its seed): three
+    // strokes after it are more than the edit removes on its own.
+    const called = { status: "edited", result: "out" } as const;
+    const seed = { ...POINT_1_SHOTS[0].seed!, result: "in" as const };
+    const three = pointEndedEarly(
+      {
+        shots: [
+          stroke("a", IN),
+          stroke("b", LONG, { ...called, seed }),
+          stroke("c", IN),
+          stroke("d", IN),
+          stroke("e", IN),
+        ],
+      },
+      true,
+    );
+    expect(three?.params).toEqual({ shotId: "b", after: ["c", "d", "e"] });
+    expect(hintLabel(three!)).toBe("Did the point end here? 3 shots follow");
+    expect(markHover(three!, NAMES)).toBe(
+      "This shot is marked as a miss, yet 3 more strokes follow it. If the point ended here, answer yes to remove them, or split them into their own point. If the call is wrong, change the result or dismiss this.",
+    );
+    // Deleting one of them by hand leaves the question on the rest.
+    expect(
+      pointEndedEarly(
+        {
+          shots: [
+            stroke("a", IN),
+            stroke("b", LONG, { ...called, seed }),
+            stroke("c", IN, { status: "deleted", statusBeforeDelete: "kept" }),
+            stroke("d", IN),
+            stroke("e", IN),
+          ],
+        },
+        true,
+      )?.params,
+    ).toEqual({ shotId: "b", after: ["d", "e"] });
+    // Once the called miss is dismissed, the end of the rally is still read:
+    // an out read on the second-to-last stroke asks as it always did.
+    expect(
+      pointEndedEarly(
+        {
+          dismissed: ["point_ended:b"],
+          shots: [
+            stroke("a", IN),
+            stroke("b", LONG, { ...called, seed }),
+            stroke("c", IN),
+            stroke("d", LONG),
+            stroke("e", IN),
+          ],
+        },
+        true,
+      )?.params,
+    ).toEqual({ shotId: "d", after: ["e"] });
+    // A net call counts where a net read never does.
+    expect(
+      pointEndedEarly(
+        {
+          shots: [
+            stroke("a", IN, { result: "net", resultCalled: true }),
+            stroke("b", IN),
+            stroke("c", IN),
+            stroke("d", IN),
+          ],
+        },
+        true,
+      )?.params,
+    ).toEqual({ shotId: "a", after: ["b", "c", "d"] });
+    // Not a first serve's fault, not the last stroke, and not once a stroke
+    // after it has been looked at.
+    expect(
+      pointEndedEarly(
+        {
+          shots: [
+            stroke("a", LONG, {
+              stroke: "first_serve",
+              result: "out",
+              resultCalled: true,
+            }),
+            stroke("b", IN, { stroke: "second_serve" }),
+            stroke("c", IN),
+            stroke("d", IN, { result: "out", resultCalled: true }),
+          ],
+        },
+        true,
+      ),
+    ).toBeNull();
+    expect(
+      pointEndedEarly(
+        {
+          shots: [
+            stroke("a", IN, { result: "out", resultCalled: true }),
+            stroke("b", IN),
+            stroke("c", IN, { status: "edited" }),
+            stroke("d", IN),
+          ],
+        },
+        true,
+      ),
+    ).toBeNull();
   });
 
   test("only the second-to-last stroke: an earlier out read is the point still going", () => {
@@ -907,5 +1010,77 @@ test.describe("thinTracking", () => {
   test("an ordinary share, or too few serves to say, is nothing", () => {
     expect(thinTracking(match(100, 19), true)).toBeNull();
     expect(thinTracking(match(19, 10), true)).toBeNull();
+  });
+});
+
+test.describe("servesFromBothSides", () => {
+  const serve = (
+    id: string,
+    contactX: number | null,
+    over: Partial<LabelShot> = {},
+  ) =>
+    stroke(
+      id,
+      { x: 0, y: 14 },
+      {
+        stroke: "first_serve",
+        hitter: "p1",
+        contactX,
+        result: "out",
+        ...over,
+      },
+    );
+
+  test("one player serving from the deuce side, then from the ad side: split at the later serve", () => {
+    const hint = servesFromBothSides(
+      {
+        shots: [
+          serve("a", 1.25),
+          serve("b", -0.7, { stroke: "second_serve" }),
+          stroke("c", IN, { hitter: "p2" }),
+        ],
+      },
+      true,
+    );
+    expect(hint).toEqual({
+      code: "serves_from_both_sides",
+      tier: "hint",
+      scope: "shot",
+      params: { shotId: "b" },
+    });
+    expect(hintLabel(hint!)).toBe("Serves from both sides");
+    expect(markHover(hint!, NAMES)).toBe(
+      "The same player serves from the deuce side and from the ad side in this point. A server only changes sides for a new point, so this is most often two points in one: split at the second of them.",
+    );
+    // With a rally between them too.
+    expect(
+      servesFromBothSides(
+        {
+          shots: [
+            serve("a", 1.25, { result: "in" }),
+            stroke("b", IN, { hitter: "p2" }),
+            serve("c", -0.7),
+          ],
+        },
+        true,
+      )?.params,
+    ).toEqual({ shotId: "c" });
+  });
+
+  test("nothing from the same side, near the centre mark, unplaced, by two players, or where the serve-after-a-serve-in hint asks", () => {
+    const none = (shots: LabelShot[]) =>
+      expect(servesFromBothSides({ shots }, true)).toBeNull();
+    none([serve("a", 1.25), serve("b", 0.7, { stroke: "second_serve" })]);
+    // Within the dead zone the side is not read.
+    none([serve("a", 1.25), serve("b", -0.05)]);
+    none([serve("a", 0.05), serve("b", -0.7)]);
+    none([serve("a", null), serve("b", -0.7)]);
+    none([serve("a", 1.25), serve("b", -0.7, { hitter: "p2" })]);
+    // A deleted serve is no serve of the point.
+    none([serve("a", 1.25), serve("b", -0.7, { status: "deleted" })]);
+    // Straight after a serve stored in: that hint asks, with the same split.
+    const shots = [serve("a", 1.25, { result: "in" }), serve("b", -0.7)];
+    expect(serveAfterServeIn({ shots }, true)?.params).toEqual({ shotId: "b" });
+    none(shots);
   });
 });

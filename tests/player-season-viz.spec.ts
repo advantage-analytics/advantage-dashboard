@@ -679,6 +679,26 @@ test.describe("buildSeasonLightbox", () => {
     expect(opponents.filterPhrases).toEqual([]);
   });
 
+  test("the subtitle's subject word follows the player switch when the chips' words are handed in; the phrases keep the name", () => {
+    const state = parseVizState(new URLSearchParams("cut=serve"));
+    const own = buildSeasonLightbox(JUDGED, state, BANDS, NAMES, [], {
+      you: "You",
+      opponent: "Opponents",
+    })!;
+    expect(own.subtitle).toMatch(/^Serve placement · You · 2 matches · /);
+    // The card's subject (its aria name, the phrases) is still the player.
+    expect(own.subjectName).toBe(NAMES.you);
+    const coach = buildSeasonLightbox(JUDGED, state, BANDS, NAMES, [], {
+      you: "Chen",
+      opponent: "Opponents",
+    })!;
+    expect(coach.subtitle).toMatch(/^Serve placement · Chen · 2 matches · /);
+    // Left out, the subtitle keeps the names, as before.
+    expect(buildSeasonLightbox(JUDGED, state, BANDS, NAMES)!.subtitle).toMatch(
+      /^Serve placement · Maya Chen · 2 matches · /,
+    );
+  });
+
   test("an unjudged season reads Error type by its own rule: one Errors option, a forced link opens on every error", () => {
     const state = parseSeasonVizState(
       { cut: "errors", verr: "forced", tab: "visualizations" },
@@ -872,6 +892,7 @@ async function renderView(
       typeof props & {
         playerName: string;
         firstName: string;
+        chipLabels: { you: string; opponent: string };
         errorSplitJudged: boolean;
       }
     >;
@@ -879,6 +900,7 @@ async function renderView(
   const element = React.createElement(ProfileVisualizationsView, {
     playerName: "Maya Chen",
     firstName: "Maya",
+    chipLabels: { you: "Chen", opponent: "Opponents" },
     errorSplitJudged: true,
     savedCards: [],
     ...props,
@@ -1040,7 +1062,7 @@ test.describe("the Visualizations view, rendered", () => {
     expect(html).toContain('aria-label="View"');
     expect(html).toContain('aria-label="Player"');
     expect(html).toContain('aria-label="Legend"');
-    for (const chip of ["Default", "Saved", "You", "Opponent"])
+    for (const chip of ["Default", "Saved", "Chen", "Opponents"])
       expect(html).toContain(`>${chip}</button>`);
     // The empty wall, in the card's hairline, with a sentence about the season.
     expect(html).toContain('data-testid="season-viz-empty"');
@@ -1187,7 +1209,7 @@ test.describe("the Visualizations view, rendered", () => {
     // The where line, read off the match's own point, in its own seat.
     const pointB = B.points.find((p) => p.id === dotB.meta!.pointId)!;
     const server =
-      pointB.serverIsPlayer1 === B.isPlayer1 ? "Maya Chen" : "Sam Ortiz";
+      pointB.serverIsPlayer1 === B.isPlayer1 ? "Chen" : "Sam Ortiz";
     expect(props.whereFor(dotB.meta!.pointId!)).toBe(
       `Set ${pointB.setNumber} · Game ${pointB.gameNumber} · ${server} serving`,
     );
@@ -1443,7 +1465,7 @@ test.describe("the Visualizations view, rendered", () => {
       { analyzed: 2, side: "you", cards: yours, lightbox: null },
       "tab=visualizations&player=opponent",
     );
-    expect(stale.html).toMatch(/aria-pressed="true"[^>]*>Opponent<\/button>/);
+    expect(stale.html).toMatch(/aria-pressed="true"[^>]*>Opponents<\/button>/);
     expect(stale.html).toContain('aria-busy="true"');
     expect(stale.html).toContain("pointer-events-none");
     expect(stale.html).toContain('data-stale=""');
@@ -1501,7 +1523,7 @@ test.describe("the Visualizations view, rendered", () => {
       { analyzed: 2, side: "opponent", cards, lightbox },
       "tab=visualizations&cut=returnPlacement&player=opponent",
     );
-    expect(html).toMatch(/aria-pressed="true"[^>]*>Opponent<\/button>/);
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Opponents<\/button>/);
     expect(shellProps).toHaveLength(1);
     const shell = shellProps[0];
     expect(shell.player!.value).toBe("opponent");

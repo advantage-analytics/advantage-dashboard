@@ -974,6 +974,13 @@ export function buildSeasonLightbox(
   bands: SeasonVizBands,
   names: SeasonVizNames,
   views: readonly SavedView[] = [],
+  /**
+   * The subtitle's word for each side, when it differs from `names`: the
+   * player switch's own two words (`seasonPlayerChipLabels`), so the line
+   * under the title says what the pressed chip says. `names` still words the
+   * filter phrases, which need a name ("Maya Chen’s last shot").
+   */
+  subjectWords: SeasonVizNames = names,
 ): SeasonLightboxData | null {
   const cut = state.cut;
   if (cut === null || perMatch.length === 0) return null;
@@ -1158,6 +1165,8 @@ export function buildSeasonLightbox(
     .sort((a, b) => compareMatchDays(b.date, a.date));
 
   const subjectName = filters.player === "you" ? names.you : names.opponent;
+  const subjectWord =
+    filters.player === "you" ? subjectWords.you : subjectWords.opponent;
   const matches = included.length;
 
   return {
@@ -1171,7 +1180,7 @@ export function buildSeasonLightbox(
     unit: bands.unit,
     hasFilters: seasonActive || activeFilterEntries(state).length > 0,
     title: baseline !== null && onCard ? baseline.name : SEASON_CUT_LABEL[cut],
-    subtitle: `${SEASON_CUT_LABEL[cut]} · ${subjectName} · ${matches} ${matches === 1 ? "match" : "matches"} · ${lightboxCountLine(
+    subtitle: `${SEASON_CUT_LABEL[cut]} · ${subjectWord} · ${matches} ${matches === 1 ? "match" : "matches"} · ${lightboxCountLine(
       cut,
       result,
       stats,
