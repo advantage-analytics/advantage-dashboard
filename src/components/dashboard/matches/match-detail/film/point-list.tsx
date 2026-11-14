@@ -21,11 +21,9 @@ import {
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { Workspace } from "@/lib/workspace/types";
 import {
+  bandLabelsOf,
   handOf,
   pointResultLabel,
-} from "@/components/dashboard/matches/match-detail/match-filters/model";
-import {
-  bandLabelsOf,
   type FilterBandLabels,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";

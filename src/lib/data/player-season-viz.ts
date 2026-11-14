@@ -650,10 +650,10 @@ const availabilityMemo = new WeakMap<
 
 function matchAvailability(
   m: SeasonVizMatch,
+  bandsKey: string,
   bands?: SeasonVizBands,
 ): MatchFilterAvailability {
-  // The bands decide which Contact and Landed in options have a point.
-  const key = `${m.isPlayer1}|${m.isDerived}|${m.errorSplitJudged}|${JSON.stringify(bands?.bands ?? null)}`;
+  const key = `${m.isPlayer1}|${m.isDerived}|${m.errorSplitJudged}|${bandsKey}`;
   let memo = availabilityMemo.get(m.points);
   const hit = memo?.get(key);
   if (hit !== undefined) return hit;
@@ -679,7 +679,9 @@ export function seasonAdvancedOptions(
   perMatch: readonly SeasonVizMatch[],
   bands?: SeasonVizBands,
 ): SeasonAdvancedOptions {
-  const each = perMatch.map((m) => matchAvailability(m, bands));
+  // The bands decide which Contact and Landed in options have a point.
+  const bandsKey = JSON.stringify(bands?.bands ?? null);
+  const each = perMatch.map((m) => matchAvailability(m, bandsKey, bands));
   const out = {} as Record<MatchFilterKey, unknown[]>;
   for (const key of MATCH_FILTER_KEYS) {
     const values = new Set<unknown>();

@@ -599,7 +599,7 @@ export interface MatchFilterContext {
 }
 
 /** The bands a context buckets Contact and Landed in by. */
-export function bandsOf(ctx: MatchFilterContext): BandSettings {
+function bandsOf(ctx: MatchFilterContext): BandSettings {
   return ctx.bands ?? DEFAULT_BANDS;
 }
 
@@ -1777,7 +1777,9 @@ const LEGACY_TOKENS: Readonly<
   xo: { wn: ["resultEnding", "winner"], er: ["resultEnding", "error"] },
   // Return › Contact was three fixed buckets (on the baseline = 0–1 m
   // behind, deep = past 1 m) before it took the viewer's bands; each maps
-  // to the band nearest its meaning.
+  // to the band nearest its meaning. An accepted re-scope, like Won/Lost
+  // above: with the default bands the edge moves from 1.0 m to 5 ft
+  // (1.524 m), so an old link's 1.0–1.5 m returns move from "deep" to near.
   rc: { m: ["returnContact", "near"], n: ["returnContact", "far"] },
 };
 

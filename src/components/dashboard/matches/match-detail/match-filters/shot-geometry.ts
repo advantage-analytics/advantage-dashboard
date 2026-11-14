@@ -7,6 +7,7 @@ import {
   type BandSettings,
 } from "@/lib/data/viz-bands";
 
+import { SINGLES_HALF_WIDTH_M } from "@/lib/services/splitstep/derivation/court";
 import { COURT_LENGTH_M, NET_Y_M } from "../film/film-court";
 
 /**
@@ -231,7 +232,6 @@ const CONTACT_BAND_KEYS: readonly ContactBand[] = ["inside", "near", "far"];
 const LANDED_BAND_KEYS: readonly LandedBand[] = ["deep", "mid", "short"];
 
 /** Singles sideline from the centre line — a landing past it is out. */
-const SINGLES_HALF_M = 4.115;
 const IN_COURT_EPS = 1e-6;
 
 /**
@@ -239,7 +239,7 @@ const IN_COURT_EPS = 1e-6;
  * end they stood at, read off the contact itself (`contactMetrics` in
  * `shots/viz-model.ts`). Null when unmeasured.
  */
-export function contactBehindM(contactY: number | null | undefined) {
+function contactBehindM(contactY: number | null | undefined) {
   if (!isNum(contactY)) return null;
   return contactY > NET_Y_M ? contactY - COURT_LENGTH_M : -contactY;
 }
@@ -278,7 +278,7 @@ export function landedBandOf(
   const farEnd = isNum(contactY) ? contactY > NET_Y_M : !(landingY > NET_Y_M);
   const depthM = farEnd ? NET_Y_M - landingY : landingY - NET_Y_M;
   if (depthM < -IN_COURT_EPS || depthM > NET_Y_M + IN_COURT_EPS) return null;
-  if (Math.abs(landingX) > SINGLES_HALF_M + IN_COURT_EPS) return null;
+  if (Math.abs(landingX) > SINGLES_HALF_WIDTH_M + IN_COURT_EPS) return null;
   if (resolveDepthDividersFt(bands).length < 2) return null;
   return LANDED_BAND_KEYS[makeDepthBucketer(bands)(depthM)] ?? null;
 }

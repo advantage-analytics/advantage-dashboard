@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { prefersReducedMotion } from "@/components/dashboard/shared/use-reduced-motion";
+
 /**
  * A figure that counts to its new value instead of jumping — the lightbox's
  * Statistics column and the court's band rates, so a pick or a filter reads
@@ -32,13 +34,6 @@ function easeChart(x: number): number {
     else hi = mid;
   }
   return bez((lo + hi) / 2, y1, y2);
-}
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
 }
 
 interface Tween {
