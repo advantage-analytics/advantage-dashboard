@@ -231,3 +231,15 @@ is the runner's. Newest entries at the bottom.
 2. Two comments in `tests/fixtures/admin-team-harness-server.ts` still mention the conference drawer.
 3. `AddConferenceDialog` calls `router.refresh()` right after the caller's `router.push`.
 4. Arrow-key stepping through Missing details is gone; a "next missing" link on the conference page would bring it back.
+
+## T19 · Teams: Conferences as the third view pill — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `/admin/teams` has a third view pill, Conferences (`?view=conferences`), which loads `listAdminConferences()` only and renders the shared `ConferencesTable` sorted most teams first; the facet and sort menus show on Programs only. The other views count conferences for the pill. The pill/URL mapping is pure in the new `src/components/admin/teams-views.ts`; `tests/admin-teams-views.spec.ts` pins the three round-trips and the old `?view=` values.
+
+**follow-ups:**
+
+1. The Programs footnote still says "Conferences are in the account menu".
+2. A harness case for the Teams page on `view: "conferences"` would let a browser spec check the hidden menus and the row links.
+3. `countAdminTeamViews` still runs on the Conferences view.

@@ -268,7 +268,7 @@ ready).
 
 ## T19 · Teams: Conferences as the third view pill
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T15, T18
 - **files:** guess — src/app/admin/teams/page.tsx, src/components/admin/teams-page-content.tsx, tests/admin-teams-views.spec.ts (new)

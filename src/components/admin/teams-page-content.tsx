@@ -4,6 +4,7 @@ import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { CountPills, FilterMenuPill } from "@/components/admin/admin-cells";
 import { PilotsTable } from "@/components/admin/pilots/pilots-table";
+import { ConferencesTable } from "@/components/admin/conferences-table";
 import { markAdminRowSeen } from "@/app/admin/seen-actions";
 import { TeamsTable } from "@/components/admin/teams-table";
 import {
@@ -17,6 +18,18 @@ import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { actionRejectedWith } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import type { AdminPilotRow } from "@/lib/data/admin-pilots-view";
+import {
+  sortConferences,
+  type AdminConferenceRow,
+} from "@/lib/data/admin-conferences-view";
+import {
+  TEAMS_VIEW_PILLS,
+  teamsPillView,
+  teamsViewParam,
+  teamsViewPill,
+  type TeamsPageView,
+  type TeamsViewPill,
+} from "@/components/admin/teams-views";
 import type {
   AdminTeamRow,
   AdminTeamsSort,
@@ -38,8 +51,9 @@ import type {
  *
  * ## The toolbar
  *
- * Two view pills with their counts as text — Programs and Pilot players — then,
- * on Programs, one pill menu per facet (Division and Conference) whose trigger
+ * Three view pills with their counts as text — Programs, Pilot players and
+ * Conferences (`teams-views.ts` maps them to and from `?view=`) — then, on
+ * Programs, one pill menu per facet (Division and Conference) whose trigger
  * names the current value, so the cut reads off the toolbar and no strip
  * restates it, and sort. AdminTeams (T9) took away the In pilot, Needs review
  * and Whole directory pills: Programs lists the programs on Advantage, and a
@@ -51,6 +65,12 @@ import type {
  * the same component), with its row writes. The facets do not apply to it, so
  * their menus step aside, but the cut stays in the URL (a view is not a
  * filter, law 7) and comes back with Programs.
+ *
+ * Conferences (`?view=conferences`) is the plain conferences table
+ * (`ConferencesTable`, the same component `/admin/conferences` uses), most
+ * teams first, whose rows open each conference's page. Search, Missing
+ * details, sort and Add conference stay on `/admin/conferences`. As on Pilot
+ * players, the facet menus and sort step aside and the cut stays in the URL.
  *
  * ## New since you last looked
  *
@@ -90,10 +110,13 @@ export interface TeamsFacetOptions {
   states: FacetOption[];
 }
 
-/** The page's views: the loader's four program views, and the pilot players. */
-export type TeamsPageView = AdminTeamsView | "pilots";
+export type { TeamsPageView };
 
-type ViewPill = "programs" | "pilots";
+const VIEW_PILL_LABELS: Record<TeamsViewPill, string> = {
+  programs: "Programs",
+  pilots: "Pilot players",
+  conferences: "Conferences",
+};
 
 export interface TeamsCut {
   division: string | null;
@@ -108,6 +131,8 @@ export function TeamsPageContent({
   rows: serverRows,
   pilots = [],
   pilotCount = null,
+  conferences = [],
+  conferenceCount = null,
   freshIds,
   joinedCount,
   viewCounts,
@@ -122,6 +147,10 @@ export function TeamsPageContent({
   pilots?: readonly AdminPilotRow[];
   /** Pilot players in all; null when the count failed. */
   pilotCount?: number | null;
+  /** The conferences' rows — loaded only for the Conferences view. */
+  conferences?: readonly AdminConferenceRow[];
+  /** Conferences in all; null when the count failed. */
+  conferenceCount?: number | null;
   /** Ids of the rows that are New since this admin last looked. */
   freshIds: string[];
   /** Programs that joined since the last look, across the directory. */
@@ -137,10 +166,18 @@ export function TeamsPageContent({
   const router = useRouter();
   const pathname = usePathname();
 
-  const pilotsView = view === "pilots";
+  const viewPill = teamsViewPill(view);
+  const pilotsView = viewPill === "pilots";
+  const conferencesView = viewPill === "conferences";
   // The program view behind the Programs pill and "Load more".
   const programsView: AdminTeamsView =
-    view === "pilots" ? "on_advantage" : view;
+    viewPill === "programs" ? (view as AdminTeamsView) : "on_advantage";
+
+  // Most teams first, as `/admin/conferences` opens.
+  const conferenceRows = useMemo(
+    () => sortConferences(conferences, "most_teams"),
+    [conferences],
+  );
 
   const [sortOpen, setSortOpen] = useState(false);
 
@@ -183,7 +220,8 @@ export function TeamsPageContent({
       const merged = { view, sort, ...cut, ...next };
       // Defaults stay out of the URL — a first visit and a deliberate reset
       // should produce the same address.
-      if (merged.view !== "on_advantage") params.set("view", merged.view);
+      const viewParam = teamsViewParam(merged.view);
+      if (viewParam) params.set("view", viewParam);
       if (merged.sort !== "name_asc") params.set("sort", merged.sort);
       for (const key of FACET_KEYS) {
         const value = merged[key];
@@ -277,12 +315,16 @@ export function TeamsPageContent({
   const total = viewCounts[programsView];
   const onAdvantage = viewCounts.on_advantage;
 
-  const viewPills: { value: ViewPill; label: string; count: number | null }[] =
-    [
-      { value: "programs", label: "Programs", count: total ?? null },
-      { value: "pilots", label: "Pilot players", count: pilotCount },
-    ];
-  const viewPill: ViewPill = pilotsView ? "pilots" : "programs";
+  const pillCounts: Record<TeamsViewPill, number | null> = {
+    programs: total ?? null,
+    pilots: pilotCount,
+    conferences: conferenceCount,
+  };
+  const viewPills = TEAMS_VIEW_PILLS.map((value) => ({
+    value,
+    label: VIEW_PILL_LABELS[value],
+    count: pillCounts[value],
+  }));
 
   return (
     <div className="flex flex-col gap-4">
@@ -300,18 +342,18 @@ export function TeamsPageContent({
         <CreateTeamButton />
       </div>
 
-      {/* The two views; on Programs, one pill menu per facet, then sort. */}
+      {/* The three views; on Programs, one pill menu per facet, then sort. */}
       <div className="mt-2 flex flex-wrap items-center gap-3">
-        <CountPills<ViewPill>
+        <CountPills<TeamsViewPill>
           label="View"
           options={viewPills}
           value={viewPill}
           onChange={(next) => {
             if (next === viewPill) return;
-            pushCut({ view: next === "pilots" ? "pilots" : "on_advantage" });
+            pushCut({ view: teamsPillView(next) });
           }}
         />
-        {!pilotsView && (
+        {viewPill === "programs" && (
           <>
             <FilterMenuPill<string>
               label="Division"
@@ -362,6 +404,11 @@ export function TeamsPageContent({
 
       {pilotsView ? (
         <PilotsTable rows={pilots} />
+      ) : conferencesView ? (
+        <ConferencesTable
+          rows={conferenceRows}
+          emptyTitle="No conferences yet"
+        />
       ) : (
         <>
           <div onClickCapture={captureChip}>
@@ -424,7 +471,9 @@ export function TeamsPageContent({
       <p className="text-[12px] text-[var(--ink-600)]">
         {pilotsView
           ? "Video hours are set per account. Pilots are added on the Pilots page, in the account menu."
-          : "Programs that are not on Advantage yet only appear in search. Conferences are in the account menu."}
+          : conferencesView
+            ? "Search, Missing details and Add conference are on the Conferences page, in the account menu."
+            : "Programs that are not on Advantage yet only appear in search. Conferences are in the account menu."}
       </p>
 
       <ApprovePilotPopover

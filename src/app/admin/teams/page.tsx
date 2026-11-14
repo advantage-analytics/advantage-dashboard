@@ -10,14 +10,16 @@ import {
   countAdminPilots,
   listAdminPilots,
 } from "@/lib/data/admin-pilots-server";
+import {
+  countAdminConferences,
+  listAdminConferences,
+} from "@/lib/data/admin-conferences-server";
 import { isFresh, lookAtSurface } from "@/lib/admin/seen-server";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 import { divisionLabel } from "@/lib/data/programs-server";
 import { AdminPage } from "@/components/admin/admin-page";
-import {
-  TeamsPageContent,
-  type TeamsPageView,
-} from "@/components/admin/teams-page-content";
+import { TeamsPageContent } from "@/components/admin/teams-page-content";
+import { teamsPageViewFrom } from "@/components/admin/teams-views";
 
 /**
  * Admin › Teams — the console's front door.
@@ -30,19 +32,6 @@ import {
 export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Teams" };
-
-/**
- * The loader's four program views — the toolbar offers only "Programs"
- * (`on_advantage`) since T9, but an old link naming another still works — and
- * `pilots`, the "Pilot players" view, which is not a program view at all.
- */
-const VIEWS = new Set<TeamsPageView>([
-  "on_advantage",
-  "in_pilot",
-  "needs_review",
-  "all",
-  "pilots",
-]);
 
 /** First non-empty value for a param, ignoring the array form Next allows. */
 function one(value: string | string[] | undefined): string | null {
@@ -57,17 +46,17 @@ export default async function AdminTeamsPage({
 }) {
   const params = await searchParams;
 
-  const viewParam = one(params.view);
-  // Anything unrecognised falls back to the default rather than 404ing: a
-  // hand-edited or stale URL should still show the page it names.
-  const view: TeamsPageView =
-    viewParam && VIEWS.has(viewParam as TeamsPageView)
-      ? (viewParam as TeamsPageView)
-      : "on_advantage";
+  // Three pills — Programs, Pilot players, Conferences — over six `?view=`
+  // values: the loader's four program views (an old link naming one still
+  // reads as Programs), `pilots` and `conferences`. `teamsPageViewFrom` falls
+  // back to the default for anything it does not know.
+  const view = teamsPageViewFrom(one(params.view));
   const pilotsView = view === "pilots";
+  const conferencesView = view === "conferences";
+  const programsShown = !pilotsView && !conferencesView;
   // The program view the Programs pill stands for: the one the URL names, or
-  // the default while the Pilot players view is showing.
-  const programsView: AdminTeamsView = pilotsView ? "on_advantage" : view;
+  // the default while another view is showing.
+  const programsView: AdminTeamsView = programsShown ? view : "on_advantage";
   const sort: AdminTeamsSort =
     one(params.sort) === "name_desc" ? "name_desc" : "name_asc";
 
@@ -92,27 +81,39 @@ export default async function AdminTeamsPage({
   // server module, and the strings that go back into the URL have to stay the
   // raw column values either way (see `AdminTeamsFilters`).
   //
-  // Each view loads only its own list: the Pilot players view reads
-  // `listAdminPilots()` and no program page or facets, the Programs view reads
-  // those and only a head count of pilots for its pill.
-  const [facetValues, page, pilots, pilotCount, viewCounts, [seen, joined]] =
-    await Promise.all([
-      pilotsView ? null : listAdminTeamFacets(),
-      pilotsView
-        ? null
-        : listAdminTeams({
-            view: programsView,
-            sort,
-            after: one(params.after),
-            filters,
-          }),
-      pilotsView ? listAdminPilots() : null,
-      pilotsView ? null : countAdminPilots(),
-      countAdminTeamViews(filters),
-      seenRead.then(
-        async (seen) => [seen, await countTeamsJoinedSince(seen)] as const,
-      ),
-    ]);
+  // Each view loads only its own list, and the other pills get head counts:
+  // Programs reads a program page and the facets, Pilot players
+  // `listAdminPilots()`, Conferences `listAdminConferences()` — never the
+  // program page or facets off Programs, and never the conference rows off
+  // Conferences (`countAdminConferences()` fills that pill instead).
+  const [
+    facetValues,
+    page,
+    pilots,
+    pilotCount,
+    conferences,
+    conferenceCount,
+    viewCounts,
+    [seen, joined],
+  ] = await Promise.all([
+    programsShown ? listAdminTeamFacets() : null,
+    programsShown
+      ? listAdminTeams({
+          view: programsView,
+          sort,
+          after: one(params.after),
+          filters,
+        })
+      : null,
+    pilotsView ? listAdminPilots() : null,
+    pilotsView ? null : countAdminPilots(),
+    conferencesView ? listAdminConferences() : null,
+    conferencesView ? null : countAdminConferences(),
+    countAdminTeamViews(filters),
+    seenRead.then(
+      async (seen) => [seen, await countTeamsJoinedSince(seen)] as const,
+    ),
+  ]);
   const rows = page?.rows ?? [];
 
   // Booleans only cross to the client; the seen state stays here.
@@ -128,6 +129,10 @@ export default async function AdminTeamsPage({
         rows={rows}
         pilots={pilots ?? []}
         pilotCount={pilots ? pilots.length : pilotCount}
+        conferences={conferences?.rows ?? []}
+        conferenceCount={
+          conferences ? conferences.rows.length : conferenceCount
+        }
         freshIds={fresh}
         joinedCount={joined}
         viewCounts={viewCounts}
