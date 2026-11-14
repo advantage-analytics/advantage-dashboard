@@ -181,9 +181,7 @@ export function reviewItemThenLabel(item: ReviewItem): string {
     case 2:
       return has("shot_after_point_end")
         ? "split or remove the shots after"
-        : has("last_shot_untracked")
-          ? "check the last shot"
-          : "check for two points in one";
+        : "check the last shot";
     case 3:
       return has("first_serve_fault_alone")
         ? "say how the serve ended"
@@ -736,18 +734,31 @@ function stepAnswers(
       for (const { mark } of openMembers(item)) {
         if (mark.code === "shot_after_point_end") {
           answers.push(...afterPointEndAnswers(mark, point));
-        } else if (mark.code === "serve_after_serve_in") {
-          answers.push({
-            id: "split",
-            label: SPLIT_ANSWER,
-            kind: "plain",
-            writes: [{ write: "split", shotId: mark.params.shotId }],
-          });
         }
       }
       break;
     }
     case 3: {
+      // One "Split here", at the earliest serve either check names: two
+      // answers with one label would not say which shot each splits at, and
+      // the later one is asked again on the point the split leaves.
+      const inOrder = liveShotsInOrder(point, ghosts).map((shot) => shot.id);
+      const splitAt = openMembers(item)
+        .flatMap(({ mark }) =>
+          mark.code === "serve_after_serve_in" ||
+          mark.code === "serves_from_both_sides"
+            ? [mark.params.shotId]
+            : [],
+        )
+        .sort((a, b) => inOrder.indexOf(a) - inOrder.indexOf(b))[0];
+      if (splitAt !== undefined) {
+        answers.push({
+          id: "split",
+          label: SPLIT_ANSWER,
+          kind: "plain",
+          writes: [{ write: "split", shotId: splitAt }],
+        });
+      }
       for (const { mark } of openMembers(item)) {
         if (mark.code === "second_serve_as_first") {
           answers.push({

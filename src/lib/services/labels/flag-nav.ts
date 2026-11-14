@@ -21,6 +21,7 @@ import { setBreakLabel, setBreakSuspects } from "./set-break";
 import { tiebreakFolds } from "./tiebreak-fold";
 import { tiebreakServeOrders, type TiebreakServeOrder } from "./tiebreak-serve";
 import { foldedPointIds, gameServeRepeats } from "./game-serve-order";
+import { sessionCourtEndSwaps } from "./court-end";
 
 /** The header's two lists: amber for what can move the score, grey for data. */
 export type FlagList = "score" | "data";
@@ -130,6 +131,87 @@ export function errorAfterAnswer<F extends Pick<OpenFlag, "pointId">>(
   );
 }
 
+/** The tiebreak folds and the same-server games the slot stops read. */
+export interface SlotParts {
+  folds: ReturnType<typeof tiebreakFolds>;
+  repeats: ReturnType<typeof gameServeRepeats>;
+}
+
+/**
+ * The two readings `slotStops` and `courtEndStops` share, computed once for
+ * a caller that asks for both (`consoleSlotStops`).
+ */
+export function slotParts(
+  points: readonly LabelPoint[],
+  adScoring: boolean,
+  matchTiebreakSet: number | null = null,
+  start: LabelStartScore | null = null,
+): SlotParts {
+  const folds = tiebreakFolds(points, adScoring, matchTiebreakSet, start);
+  return { folds, repeats: gameServeRepeats(points, foldedPointIds(folds)) };
+}
+
+/**
+ * The console's slot stops in one pass: `slotStops`, then — where the
+ * console can switch players — `courtEndStops`, off one `slotParts`.
+ */
+export function consoleSlotStops(
+  input: Parameters<typeof courtEndStops>[0],
+  switchPlayers: boolean,
+): ScoreStop[] {
+  const parts = slotParts(
+    input.points,
+    input.adScoring,
+    input.matchTiebreakSet,
+    input.startScore,
+  );
+  return [
+    ...slotStops(
+      input.points,
+      input.adScoring,
+      input.matchTiebreakSet,
+      input.startScore,
+      parts,
+    ),
+    ...(switchPlayers ? courtEndStops(input, parts) : []),
+  ];
+}
+
+/**
+ * "Players at the wrong end" as stops (court-end.ts): one per game the rail
+ * draws that slot on — never a game "Same server two games in a row" already
+ * stands for (`sessionCourtEndSwaps`' `serveRepeats`). Apart from
+ * `slotStops` because it leans on the entered score, which that never reads.
+ */
+export function courtEndStops(
+  input: Omit<Parameters<typeof sessionCourtEndSwaps>[0], "serveRepeats"> & {
+    points: readonly LabelPoint[];
+    adScoring: boolean;
+    matchTiebreakSet: number | null;
+  },
+  /** `slotParts` for the same rows, when the caller has them already. */
+  parts: SlotParts = slotParts(
+    input.points,
+    input.adScoring,
+    input.matchTiebreakSet,
+    input.startScore,
+  ),
+): { pointId: string; pointNumber: number; label: string }[] {
+  const {
+    adScoring: _adScoring,
+    matchTiebreakSet: _matchTiebreakSet,
+    ...session
+  } = input;
+  return sessionCourtEndSwaps({
+    ...session,
+    serveRepeats: parts.repeats,
+  }).map((swap) => ({
+    pointId: swap.pointId,
+    pointNumber: swap.pointNumber,
+    label: "Players at the wrong end",
+  }));
+}
+
 /**
  * Every amber slot the rail draws between rows, as stops: a game already won
  * with rows after it (on its first leftover), a game that ends short (on its
@@ -148,13 +230,15 @@ export function slotStops(
   matchTiebreakSet: number | null = null,
   /** Where the video starts in the match; null: at the beginning. */
   start: LabelStartScore | null = null,
+  /** `slotParts` for the same rows, when the caller has them already. */
+  parts: SlotParts = slotParts(points, adScoring, matchTiebreakSet, start),
 ): ScoreStop[] {
   const numberOf = new Map(points.map((p) => [p.id, p.pointIndex + 1]));
   const stop = (pointId: string | undefined, label: string): ScoreStop[] =>
     pointId === undefined
       ? []
       : [{ pointId, pointNumber: numberOf.get(pointId) ?? 0, label }];
-  const folds = tiebreakFolds(points, adScoring, matchTiebreakSet, start);
+  const { folds, repeats } = parts;
   return [
     ...gameOverflow(points, adScoring, matchTiebreakSet, start).flatMap(
       (game) =>
@@ -174,7 +258,7 @@ export function slotStops(
       ),
     ),
     ...tiebreakServeStops(tiebreakServeOrders(points)),
-    ...gameServeRepeats(points, foldedPointIds(folds)).flatMap((repeat) =>
+    ...repeats.flatMap((repeat) =>
       stop(repeat.pointId, "Same server two games in a row"),
     ),
     // No slot of its own in the rail: the clock says a set ended where the

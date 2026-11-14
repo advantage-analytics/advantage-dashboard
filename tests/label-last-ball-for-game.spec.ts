@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { lockedGameNeeds } from "@/lib/services/labels/game-boundary";
-import type { LabelMarks } from "@/lib/services/labels/marks";
+import type { LabelMark, LabelMarks } from "@/lib/services/labels/marks";
 import {
   drawsGhosts,
   lastBallAgainstGame,
+  withoutRepeatedLastCall,
   reviewFlag,
   reviewItemQuestion,
 } from "@/lib/services/labels/marks-state";
@@ -55,8 +56,35 @@ function rally(
   index: number,
   lastHitter: LabelSide,
   lastResult: LabelShot["result"],
+  /**
+   * How the last ball's coordinates read against its stored call: `against`
+   * (the default — a landing that reads the other way, which is when the
+   * game asks), `with` it, or `none` placed.
+   */
+  landing: "against" | "with" | "none" = "against",
 ): LabelPoint {
   const t = index * 10;
+  // Lee hits from the near baseline, Vargas from the far one; a ball lands
+  // deep in the other half, or a metre past its baseline.
+  const reads = (result: "in" | "out") =>
+    lastHitter === "p1"
+      ? {
+          contactX: 0,
+          contactY: 1,
+          landingX: 0,
+          landingY: result === "in" ? 20 : 25,
+        }
+      : {
+          contactX: 0,
+          contactY: 22,
+          landingX: 0,
+          landingY: result === "in" ? 3 : -1.5,
+        };
+  const missedCall = lastResult === "out" || lastResult === "net";
+  const ends =
+    landing === "none" || lastResult === null
+      ? {}
+      : reads((landing === "with") === missedCall ? "out" : "in");
   const shots: LabelShot[] = [
     labelShot(`${id}-s1`, id, {
       hitter: "p1",
@@ -75,6 +103,7 @@ function rally(
       stroke: "backhand",
       result: lastHitter === "p1" ? lastResult : "in",
       videoTime: t + 2,
+      ...(lastHitter === "p1" ? ends : {}),
     }),
     ...(lastHitter === "p2"
       ? [
@@ -83,6 +112,7 @@ function rally(
             stroke: "forehand",
             result: lastResult,
             videoTime: t + 3,
+            ...ends,
           }),
         ]
       : []),
@@ -170,6 +200,76 @@ test.describe("Was the last ball out? for a locked game", () => {
       ending: "let_replayed" as const,
     };
     expect(lastBallAgainstGame(let_, "p1", true)).toBeNull();
+  });
+
+  test("only where the landing reads differently from the call: agreeing, or unplaced, it is not asked", () => {
+    // Vargas's winner stored in: the game needs Lee, and asks whether it was
+    // out only where the ball's own landing reads out.
+    expect(
+      lastBallAgainstGame(rally("c", 2, "p2", "in", "against"), "p1", true)
+        ?.params.call,
+    ).toBe("out");
+    expect(
+      lastBallAgainstGame(rally("c", 2, "p2", "in", "with"), "p1", true),
+    ).toBeNull();
+    expect(
+      lastBallAgainstGame(rally("c", 2, "p2", "in", "none"), "p1", true),
+    ).toBeNull();
+    // Stored net with a landing that reads out: a miss by both, not asked.
+    const netThenOut = rally("c", 2, "p1", "net", "with");
+    expect(lastBallAgainstGame(netThenOut, "p1", true)).toBeNull();
+    // Lee's error stored out with a landing that reads out too: not asked.
+    expect(
+      lastBallAgainstGame(rally("c", 2, "p1", "out", "with"), "p1", true),
+    ).toBeNull();
+  });
+
+  test("never against a call the labeller made: answering “Was the last ball out?” is not asked back as in", () => {
+    // Lee's last ball, called out by the labeller (a hint's yes, the Result
+    // menu): the game needs Lee, and the opposite call would give it — but
+    // the labeller has just said what the ball did.
+    const error = rally("c", 2, "p1", "out");
+    const called = {
+      ...error,
+      shots: error.shots.map((shot) =>
+        shot.id === "c-s3" ? { ...shot, resultCalled: true } : shot,
+      ),
+    };
+    expect(lastBallAgainstGame(error, "p1", true)).not.toBeNull();
+    expect(lastBallAgainstGame(called, "p1", true)).toBeNull();
+  });
+
+  test("asked once where the vendor's call already asks the same of the same ball", () => {
+    const forGame = (call: "in" | "out"): LabelMark => ({
+      code: "last_ball_against_game",
+      tier: "hint",
+      scope: "point",
+      params: { shotId: "c-s4", call, gameWinner: "p1" },
+    });
+    const lastCall = (vendorCall: "in" | "out", shotId = "c-s4") => ({
+      mark: {
+        code: "last_call_overruled" as const,
+        tier: "count" as const,
+        scope: "point" as const,
+        params: { vendorCall, eventId: 4 },
+      },
+      shotId,
+    });
+    // The same call on the same ball: one question.
+    expect(withoutRepeatedLastCall([forGame("out")], lastCall("out"))).toEqual(
+      [],
+    );
+    // Opposite calls disagree, another ball is another question, and with
+    // no vendor question the game's stands alone.
+    expect(withoutRepeatedLastCall([forGame("out")], lastCall("in"))).toEqual([
+      forGame("out"),
+    ]);
+    expect(
+      withoutRepeatedLastCall([forGame("out")], lastCall("out", "c-s3")),
+    ).toEqual([forGame("out")]);
+    expect(withoutRepeatedLastCall([forGame("out")], null)).toEqual([
+      forGame("out"),
+    ]);
   });
 
   test("the live marks carry it on the doubted point only, and only while the game is locked", () => {

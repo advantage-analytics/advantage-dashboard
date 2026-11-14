@@ -77,7 +77,7 @@ async function readResetRow<S, E extends object = object>(
     .select(
       what === "shot"
         ? "id, session_id, label_point_id, status, seed"
-        : "id, session_id, status, seed",
+        : "id, session_id, status, seed, set_number, game_number, server",
     )
     .eq("id", id)
     .maybeSingle<ResetRow<S> & E>();
@@ -163,12 +163,14 @@ export async function writeLabelPointReset(params: {
 }): Promise<LabelPointResetResult> {
   const pointId = normaliseId(params.pointId);
   if (!pointId) return { error: "Invalid point id." };
-  const read = await readResetRow<LabelPointStatus>(
-    params.supabase,
-    "label_points",
-    pointId,
-    "point",
-  );
+  const read = await readResetRow<
+    LabelPointStatus,
+    {
+      set_number: number | null;
+      game_number: number | null;
+      server: LabelPoint["server"];
+    }
+  >(params.supabase, "label_points", pointId, "point");
   if ("error" in read) return read;
   const [gate, owned] = await Promise.all([
     readSessionGate(params.supabase, read.row.session_id),
@@ -180,6 +182,10 @@ export async function writeLabelPointReset(params: {
     status: read.row.status,
     seed: parseLabelPointSeed(read.row.seed ?? null),
     shots: owned.shots,
+    // Where it sits now: a point moved to another game stays in it.
+    setNumber: read.row.set_number,
+    gameNumber: read.row.game_number,
+    server: read.row.server,
   });
   if ("error" in plan) return plan;
   const failed = await updateIfUnchanged(

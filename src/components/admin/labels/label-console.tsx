@@ -15,6 +15,7 @@ import {
 } from "react";
 import {
   labelProgress,
+  isMissedResult,
   liveShotsInOrder,
   orderLabelShots,
   type LabelErrorKind,
@@ -48,9 +49,11 @@ import type { LabelGameWriteResult } from "@/lib/services/labels/game-operations
 import {
   applyGameShift,
   GAME_PULL_ADD_POINT,
+  planGameCombine,
   planGamePull,
   planGameShift,
   planGameSplit,
+  type GameCombineDirection,
   type GameShiftWrite,
 } from "@/lib/services/labels/game-shift";
 import type { LabelGameShiftResult } from "@/lib/services/labels/game-shift-session";
@@ -95,7 +98,9 @@ import {
   applyPointMove,
   applyPointRestore,
   applyShotDelete,
+  deadBallRun,
   deadBallsAfterMiss,
+  suggestedDeleteReason,
   applyShotRestore,
   applyShotsRemoved,
   deadBallReason,
@@ -132,7 +137,6 @@ import {
   type PlayerSwitchWrite,
   type ShotSwapWrite,
 } from "@/lib/services/labels/player-swap";
-import { sessionCourtEndSwaps } from "@/lib/services/labels/court-end";
 import type {
   LabelPlayerSwitchResult,
   LabelPlayersSwitchResult,
@@ -284,7 +288,7 @@ import {
   errorStops,
   openFlags,
   scoreStop,
-  slotStops,
+  consoleSlotStops,
   stepFlag,
   type FlagList,
   type FlagStop,
@@ -342,6 +346,7 @@ import { useBrowserFullscreen } from "./use-browser-fullscreen";
 import {
   errorKindKeyPatch,
   errorKindShotId,
+  flagKeyShot,
   isLetKey,
   isNetKey,
   netKeyPatch,
@@ -464,6 +469,8 @@ const GAME_WRITE_FIELDS = [
 const GAME_SHIFT_FIELDS = [
   "setNumber",
   "gameNumber",
+  // A combine lets go of the merged game's lock: put back with the rest.
+  "gameStartLocked",
   ...GAME_WRITE_FIELDS,
 ] as const;
 
@@ -1024,6 +1031,10 @@ export function LabelConsole({
   // Let go when the labeller clicks or selects in another point, or drives
   // the film a point on (`stepFilm`).
   const lastFlagPointId = useRef<string | null>(null);
+  // The stroke the last step landed on (`landOnStep`). Once its question is
+  // answered and nothing is left to ask, the court lets go of the stroke;
+  // a shot key pressed then is still about it (`keyShot`), not the serve.
+  const landedShotId = useRef<string | null>(null);
 
   // A row click makes its point current, seeks to its first stroke and holds
   // the rail, or re-follows when the point is the one already playing.
@@ -2061,6 +2072,27 @@ export function LabelConsole({
   }
 
   /**
+   * Combine a game with the one above or below it (`planGameCombine`): the
+   * lower game's points all join the upper, switching players where a serve
+   * contradicts its server. The set's games and the servers below are put
+   * right by what already watches the rows — the set join, and the
+   * same-server slot.
+   */
+  function combineGames(gameKey: string, direction: GameCombineDirection) {
+    const combine = operations?.combineGames;
+    if (!combine) return;
+    const plan = planGameCombine(
+      points,
+      gameKey,
+      direction,
+      adScoring,
+      startScore,
+    );
+    if ("error" in plan) return refuse(plan.error);
+    return runGameShift(plan, () => combine(session.id, gameKey, direction));
+  }
+
+  /**
    * Split a point at one of its shots (`point-split.ts`): that shot and every
    * later one move to a draft point right below (`applyPointSplit`). The
    * server answers with both halves' endings as their rows derive them
@@ -2075,6 +2107,13 @@ export function LabelConsole({
     if ("error" in plan) return refuse(plan.error);
     const tempId = nextTempId(PENDING_POINT_PREFIX);
     const draft = draftSplitPoint(plan.write.insert, tempId);
+    // The stroke the split was asked from is not a selection in the new
+    // point: left selected, the next key (N for its last ball, say) would
+    // go to the new point's first stroke instead of the one it is meant for.
+    if (anchor.shots.some((shot) => shot.id === placement.shotId)) {
+      setPlacement(NO_PLACEMENT);
+    }
+    landedShotId.current = null;
     void runOperation<PointSplitSaved>(
       (rows) => applyPointSplit(rows, pointId, draft, plan.write),
       // A stroke just added is split at once its row is saved.
@@ -2299,6 +2338,7 @@ export function LabelConsole({
    */
   function landOnStep(point: LabelPoint, step: ReviewStep | null) {
     stopReplay();
+    landedShotId.current = step?.target.shotId ?? null;
     const active = document.activeElement as HTMLElement | null;
     if (active?.closest?.(JUMP_BLURS_SELECTOR)) active.blur();
     const target = step?.target ?? null;
@@ -3164,6 +3204,7 @@ export function LabelConsole({
       findGap(pointId, { arm: true, list });
     },
     pullGamePoints,
+    combineGames,
     addPointAfter: (pointId: string) => insertPoint(pointId, "after"),
     clearEnteredScore: () => void updateSessionFields({ final_score: null }),
     videoEndsEarly: () => void updateSessionFields({ video_ends_early: true }),
@@ -3232,25 +3273,22 @@ export function LabelConsole({
   const slotJumpStops = useMemo(
     () =>
       operable
-        ? [
-            ...slotStops(points, adScoring, matchTiebreakSetNumber, startScore),
-            // "Players at the wrong end" (court-end.ts) leans on the entered
-            // score, which slotStops never reads.
-            ...(operations?.switchPlayersByEnd
-              ? sessionCourtEndSwaps({
-                  points,
-                  games: scores.games,
-                  finalScore: sessionFields.finalScore,
-                  matchScore: session.matchScore,
-                  videoEndsEarly: sessionFields.videoEndsEarly,
-                  startScore,
-                }).map((swap) => ({
-                  pointId: swap.pointId,
-                  pointNumber: swap.pointNumber,
-                  label: "Players at the wrong end",
-                }))
-              : []),
-          ]
+        ? // The rail's amber slots and, where the console can switch players,
+          // "Players at the wrong end" (court-end.ts), which leans on the
+          // entered score — off one reading of the folds and the servers.
+          consoleSlotStops(
+            {
+              points,
+              games: scores.games,
+              finalScore: sessionFields.finalScore,
+              matchScore: session.matchScore,
+              videoEndsEarly: sessionFields.videoEndsEarly,
+              startScore,
+              adScoring,
+              matchTiebreakSet: matchTiebreakSetNumber,
+            },
+            Boolean(operations?.switchPlayersByEnd),
+          )
         : NO_SLOT_STOPS,
     [
       operable,
@@ -3613,13 +3651,19 @@ export function LabelConsole({
       return true;
     };
     // The stroke a shot key acts on: the selected one while it is the open
-    // point's; else the open point's first, selected first so the next key
-    // lands on it too. A selection left behind in another point — the film
+    // point's; else the stroke the flag's question is about, while its
+    // review lasts (`flagKeyShot` — a step with nothing to place lands with
+    // no stroke selected, `landOnStep`), or the one its last question was
+    // about once all are answered; else the open point's first. Either
+    // is selected first so the next key lands on it too. N, the call that
+    // ends a point, takes the point's last stroke instead of its first
+    // (`unselected`). A selection left behind in another point — the film
     // played or was clicked on into this one — never takes a key meant for
     // the point on screen. `accept`, when given, turns down a stroke before
     // it is selected, so a key with nothing to write moves nothing.
     const keyShot = (
       accept: (shot: LabelShot) => boolean = () => true,
+      unselected: "first" | "last" = "first",
     ): LabelShot | null => {
       const selected =
         placement.shotId === null ? null : findShot(points, placement.shotId);
@@ -3629,7 +3673,12 @@ export function LabelConsole({
       if (kept && expanded.shots.some((shot) => shot.id === kept.id)) {
         return live;
       }
-      const first = liveShotsInOrder(expanded, drawsGhosts(marks))[0];
+      const strokes = liveShotsInOrder(expanded, drawsGhosts(marks));
+      const first =
+        flagKeyShot(
+          strokes,
+          reviewMode ? (step?.target.shotId ?? landedShotId.current) : null,
+        ) ?? (unselected === "last" ? strokes.at(-1) : strokes[0]);
       if (!first || !accept(first)) return null;
       (document.activeElement as HTMLElement | null)?.blur?.();
       selectShot(first.id, undefined, { seek: false });
@@ -3748,14 +3797,32 @@ export function LabelConsole({
       return true;
     };
     // N calls the selected stroke Net, and again gives it back the result its
-    // landing reads (`netKeyPatch`), as the Result menu does. Every stroke
+    // landing reads (`netKeyPatch`), as the Result menu does. With no stroke
+    // selected it is the point's last one: a ball into the net ends the point. Every stroke
     // with a type takes it, and a labeller's console too.
     netKey.current = () => {
       if (!operable || confirm) return false;
-      const shot = keyShot((s) => netKeyPatch(s) !== null);
+      const shot = keyShot((s) => netKeyPatch(s) !== null, "last");
       const patch = shot && netKeyPatch(shot);
       if (!shot || !patch) return false;
-      requestPatchShot(shot.id, patch);
+      // N again takes the call back. Where that leaves the ball in play (its
+      // landing reads in, or nothing is placed), the strokes the call removed
+      // come back with it, when they are all that follows (`deadBallRun`) —
+      // after the call's own write has landed, since each of the two settles
+      // the point's ending. Given back to Out, the ball is still a miss and
+      // nothing returns.
+      const owner = pointOfShot(points, shot.id);
+      const run =
+        owner && !isMissedResult(patch.result)
+          ? deadBallRun(owner.shots, shot.id, drawsGhosts(marks))
+          : [];
+      if (!owner || run.length === 0) {
+        requestPatchShot(shot.id, patch);
+        return true;
+      }
+      void patchShot(shot.id, patch).then((saved) => {
+        if (saved) restoreShots(owner.id, run);
+      });
       return true;
     };
     // G / D / P toggle the selected rally stroke's kind (`tagKeyPatch`):
@@ -4547,6 +4614,11 @@ export function LabelConsole({
       onMoveGameBoundary={operable ? railHandlers.moveGameBoundary : undefined}
       onSetGameType={operable ? railHandlers.setGameType : undefined}
       onPullGame={operable ? railHandlers.pullGamePoints : undefined}
+      onCombineGames={
+        operable && operations?.combineGames
+          ? railHandlers.combineGames
+          : undefined
+      }
       onAddPoint={operable ? railHandlers.addPointAfter : undefined}
       onClearEnteredScore={
         operable ? railHandlers.clearEnteredScore : undefined
@@ -4826,6 +4898,15 @@ export function LabelConsole({
           names={names}
           onCancel={() => setConfirm(null)}
           onConfirm={confirmed}
+          initialReason={
+            confirm?.kind === "delete-shot"
+              ? suggestedDeleteReason(
+                  pointOfShot(points, confirm.shotId)?.shots ?? [],
+                  confirm.shotId,
+                  drawsGhosts(marks),
+                )
+              : null
+          }
           // A submitted session takes no edits, so Mark complete's "Mark
           // errors" has nowhere to go: Reopen is the way back to them.
           onAlternative={
@@ -4948,6 +5029,12 @@ export interface LabelConsoleOperations {
   pullGamePoints: (
     sessionId: string,
     gameKey: string,
+  ) => Promise<LabelGameShiftResult>;
+  /** Combines a game with the one above or below it. Same answer. */
+  combineGames?: (
+    sessionId: string,
+    gameKey: string,
+    direction: GameCombineDirection,
   ) => Promise<LabelGameShiftResult>;
   /** Starts a new game at a point (`planGameSplit`). Same answer. */
   splitGame?: (
@@ -5153,7 +5240,7 @@ function replacePoint(
   return points.map((point) => (point.id === pointId ? change(point) : point));
 }
 
-const NO_SLOT_STOPS: ReturnType<typeof slotStops> = [];
+const NO_SLOT_STOPS: ReturnType<typeof consoleSlotStops> = [];
 
 /** A planned point move (`planPointMove`), as the rows take it at once. */
 function pointMoved(

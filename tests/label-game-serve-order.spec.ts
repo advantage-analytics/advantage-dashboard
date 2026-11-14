@@ -166,6 +166,34 @@ test.describe("the same server two games in a row", () => {
     expect(gameServeRepeats(odd).map((r) => r.game.gameNumber)).toEqual([4]);
   });
 
+  test("a game the labeller emptied into its neighbours was on the video: the games around it still alternate", () => {
+    // Games 1 and 3 on the rows, both served by p1 — but one of game 3's
+    // points was seeded in game 2: two games were made one, none is missing.
+    const merged = [...game(0, 1, "p1", "p1"), ...game(2, 3, "p1", "p1")].map(
+      (point, i) =>
+        i === 2
+          ? {
+              ...point,
+              seed: {
+                set_number: 1,
+                game_number: 2,
+                server: "p2" as const,
+                serve_side: null,
+                winner: null,
+                ending: null,
+                ended_by: null,
+              },
+            }
+          : point,
+    );
+    expect(gameServeRepeats(merged).map((r) => r.game.gameNumber)).toEqual([3]);
+    // A deleted row's seed says nothing: the game is still missing.
+    const deleted = merged.map((point, i) =>
+      i === 2 ? { ...point, status: "deleted" as const } : point,
+    );
+    expect(gameServeRepeats(deleted)).toEqual([]);
+  });
+
   test("one game between two repeats is flagged once", () => {
     const rows = [
       ...game(0, 1, "p1", "p1"),

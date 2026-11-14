@@ -7,7 +7,12 @@ import {
 import { readFileSync } from "node:fs";
 
 import { applyGameShift } from "@/lib/services/labels/game-shift";
-import { planSetCut, setCut, setCutKey } from "@/lib/services/labels/set-cut";
+import {
+  planSetCut,
+  setCut,
+  setCutKey,
+  setJoin,
+} from "@/lib/services/labels/set-cut";
 import { labelScores } from "@/lib/services/labels/score";
 import { labelSetScores } from "@/lib/services/labels/set-scores";
 import type {
@@ -303,5 +308,129 @@ test.describe("the console and the server", () => {
         "cutSet: cutLabelSetAction,",
       );
     }
+  });
+});
+
+test.describe("setJoin", () => {
+  // A 5–7 set: the labeller made two of the vendor's games one, so eleven of
+  // its twelve games are filed under set 2 and the twelfth heads set 3.
+  // The first point of `set` seeded in a game no row holds any more: its
+  // game was emptied into the games beside it.
+  const emptied = (points: LabelPoint[], set: number): LabelPoint[] => {
+    const at = points.findIndex((p) => p.setNumber === set);
+    return points.map((p, i) =>
+      i === at ? { ...p, seed: { ...p.seed!, game_number: 99 } } : p,
+    );
+  };
+  const merged = emptied(
+    match([...won(1, "111111"), ...won(2, "12121212122"), ...won(3, "2112")]),
+    2,
+  );
+  const entered = [
+    [6, 0],
+    [5, 7],
+    [2, 1],
+  ];
+
+  test("a set short of games takes the next set's first game, and stops at its entered count", () => {
+    const join = setJoin(merged, true, entered, null, null);
+    expect(join).toEqual({ setNumber: 2, gameKeys: ["3·18"], join: true });
+    expect(setCutKey(join!)).toBe("2:join:3·18");
+
+    const plan = planSetCut(merged, true, entered, null, null);
+    if ("error" in plan) throw new Error(plan.error);
+    expect(plan.cut).toEqual(join);
+    expect(plan.writes).toHaveLength(4);
+    for (const write of plan.writes) {
+      expect(write.set_number).toBe(2);
+      expect(write.game_number).toBe(18);
+    }
+    const after = applyGameShift(merged, plan.writes);
+    expect(tally(after, null)).toEqual([
+      [6, 0],
+      [5, 7],
+      [2, 1],
+    ]);
+    // Twelve games now: nothing more to take, and nothing to cut back.
+    expect(planSetCut(after, true, entered, null, null)).toHaveProperty(
+      "error",
+    );
+  });
+
+  test("counted in games, not winners: it runs while the set's endings are still wrong", () => {
+    const wrong = emptied(
+      match([
+        ...won(1, "111111"),
+        ...won(2, "1111111 111".replace(" ", "")),
+        ...won(3, "2112"),
+      ]),
+      2,
+    );
+    expect(setJoin(wrong, true, entered, null, null)?.setNumber).toBe(2);
+    // …and with a game of the set still unfinished.
+    const unfinished = emptied(
+      match([...won(1, "111111"), ...won(2, "1212121212?"), ...won(3, "2112")]),
+      2,
+    );
+    expect(setJoin(unfinished, true, entered, null, null)?.setNumber).toBe(2);
+  });
+
+  test("only where a seeded game is gone from the set: a game the video never had is no reason to join", () => {
+    // The same short set with every row still in the game it was seeded in:
+    // nothing was merged, so the video simply lacks a game. Left alone —
+    // taking set 3's first game would shift every set after it.
+    const untouched = match([
+      ...won(1, "111111"),
+      ...won(2, "12121212122"),
+      ...won(3, "2112"),
+    ]);
+    expect(setJoin(untouched, true, entered, null, null)).toBeNull();
+    // A game handed to the set before by an earlier join counts: the set
+    // it left is short for a reason the rows show.
+    const first = planSetCut(merged, true, entered, null, null);
+    if ("error" in first) throw new Error(first.error);
+    const after = applyGameShift(merged, first.writes);
+    expect(
+      setJoin(
+        after,
+        true,
+        [
+          [6, 0],
+          [5, 7],
+          [3, 1],
+        ],
+        null,
+        null,
+      ),
+    ).toBeNull();
+  });
+
+  test("never for the last set on the rows, with nothing entered, or from a match tiebreak", () => {
+    // The last set short: a video that ends early, the mismatch slot's.
+    const lastShort = match([...won(1, "111111"), ...won(2, "1212121212")]);
+    expect(setJoin(lastShort, true, entered, null, null)).toBeNull();
+    expect(setJoin(merged, true, null, null, null)).toBeNull();
+    // Set 3 is the match tiebreak: its pieces are no games of set 2.
+    expect(setJoin(merged, true, entered, 3, null)).toBeNull();
+    // A set with all its games is left alone.
+    const full = match([...won(1, "111111"), ...won(2, "121212121222")]);
+    expect(setJoin(full, true, entered, null, null)).toBeNull();
+  });
+
+  test("the earlier set goes first, and a cut is never undone by a join", () => {
+    // Set 1 runs over (seven games for a 6–0) and set 2 is short: the cut of
+    // set 1 comes first, and hands set 2 the game it lacked.
+    const both = match([
+      ...won(1, "1111112"),
+      ...won(2, "2121212122"),
+      ...won(3, "2112"),
+    ]);
+    const first = planSetCut(both, true, entered, null, null);
+    if ("error" in first) throw new Error(first.error);
+    expect(first.cut).toEqual({ setNumber: 1, gameKeys: ["1·7"] });
+    const after = applyGameShift(both, first.writes);
+    // Set 2 is still a game short, but none it was seeded with is gone
+    // from it: no join without that.
+    expect(setJoin(after, true, entered, null, null)).toBeNull();
   });
 });
