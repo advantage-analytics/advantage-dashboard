@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import {
   EMPTY_VIZ_FILTERS,
+  bandStatRowsForDots,
+  bandZonesFor,
   computeViz,
   computeVizStats,
   type Cut,
@@ -97,4 +99,57 @@ test("the serve rows precomputed for hovering are the row filter's own marks, ro
           ].sort(),
         );
     }
+});
+
+test("the court's bands recount over a Statistics row's marks by the stats' own rules", () => {
+  let checked = 0;
+  for (const bands of [DEFAULT_BANDS, THIRDS])
+    for (const cut of CUTS)
+      for (const isPlayer1 of [true, false]) {
+        const filters = { ...EMPTY_VIZ_FILTERS };
+        const result = computeViz(POINTS, cut, filters, isPlayer1);
+        const stats = computeVizStats(
+          POINTS,
+          cut,
+          filters,
+          isPlayer1,
+          result,
+          bands,
+          "ft",
+        );
+        const zones = bandZonesFor(cut, bands, "ft", stats);
+        if (zones === null) continue;
+        const depth = stats.groups.find((g) => g.key === "depth");
+        // Nothing picked: the recount is the Depth group itself.
+        const all = bandStatRowsForDots(cut, zones, result.dots);
+        for (const row of depth?.rows ?? []) {
+          const got = all?.find((r) => r.key === row.key);
+          expect(got?.count, `${cut} all ${row.key}`).toBe(row.count);
+          expect(got?.won, `${cut} all ${row.key}`).toBe(row.won);
+        }
+        // A Depth row picked: its own band holds every mark, the rest none.
+        for (const row of depth?.rows ?? []) {
+          const ids = statPickDotIds(
+            POINTS,
+            cut,
+            filters,
+            isPlayer1,
+            undefined,
+            result.dots,
+            { group: "depth", row: row.key, label: row.label },
+            bands,
+          );
+          const picked = bandStatRowsForDots(
+            cut,
+            zones,
+            result.dots.filter((d) => ids.has(d.id)),
+          );
+          for (const band of picked ?? [])
+            expect(band.count, `${cut} ${row.key}→${band.key}`).toBe(
+              band.key === row.key ? row.count : 0,
+            );
+          checked++;
+        }
+      }
+  expect(checked).toBeGreaterThan(0);
 });

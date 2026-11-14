@@ -2233,6 +2233,53 @@ export interface VizBandZones {
   statRows: StatRow[] | null;
 }
 
+/**
+ * The bands' `% · n` recounted over the marks the court is drawing — the
+ * lightbox's court once a Statistics row or a legend key narrows it, so
+ * picking "Down the line" turns every band into "of the down-the-line
+ * returns, how many landed here and how many of those were won".
+ *
+ * Bucketed from the overlay's OWN dividers (never a second read of the
+ * settings), by the same rules `computeVizStats` uses: placement cuts count
+ * only marks that landed in (`isPlacementRow`), contact cuts count every
+ * mark. Index order is band order, as `depthBandRows`/`contactBandRows`
+ * list it. A band no mark falls in comes back `count: 0`, which the overlay
+ * prints as nothing.
+ */
+export function bandStatRowsForDots(
+  cut: Cut,
+  zones: Pick<VizBandZones, "kind" | "dividersFt" | "rows">,
+  dots: readonly VizDot[],
+): StatRow[] | null {
+  const [a, b] = zones.dividersFt;
+  if (a === undefined || b === undefined || zones.rows.length !== 3)
+    return null;
+  const bucket =
+    zones.kind === "depth"
+      ? makeDepthBucketer({
+          depthScheme: "custom",
+          depthDividersFt: [a, b],
+          contactDividersFt: [0, 0],
+        })
+      : makeContactBucketer({
+          depthScheme: "none",
+          depthDividersFt: null,
+          contactDividersFt: [a, b],
+        });
+  const placement = cut === "returnPlacement" || cut === "rallyPlacement";
+  const acc = bandRowAccumulator(zones.rows);
+  for (const dot of dots) {
+    if (placement && !isPlacementRow(dot)) continue;
+    const row = zones.rows[bucket(dot.depthM)];
+    if (!row) continue;
+    acc[row.key].count++;
+    if (dot.outcome === "won") acc[row.key].won++;
+  }
+  return zones.rows.map((r) =>
+    makeRow(r.key, r.label, acc[r.key].count, acc[r.key].won),
+  );
+}
+
 export function bandZonesFor(
   cut: Cut,
   bands: BandSettings,
