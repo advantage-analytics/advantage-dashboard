@@ -315,3 +315,13 @@ is the runner's. Newest entries at the bottom.
 2. An admin who is not a labeller is refused a claim; T27 should hide Claim for that viewer.
 3. Each claim re-reads the whole queue, including beats it does not use.
 4. Refresh the board after any refusal so the row moves.
+
+## T26 · Urgency mark component — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** new `UrgencyMark({ level })` (`src/components/admin/labels/urgency-mark.tsx`): an `aria-hidden` 14×14 three-bar SVG (3, 2, 1 filled) and the word, coloured only with design-system variables (Express and Priority `--blue`, Standard `--ink-500` bars with `--ink-700` text, empty bars `--ink-200`). `tests/urgency-mark.spec.ts`.
+
+**follow-ups:**
+
+1. The owner picked rose for Express and violet for Priority on the canvas; the design system's one accent replaced both. Swap back if the owner asks.

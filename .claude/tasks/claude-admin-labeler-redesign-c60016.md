@@ -363,7 +363,7 @@ ready).
 
 ## T26 · Urgency mark component
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** guess — src/components/admin/labels/urgency-mark.tsx (new), tests/urgency-mark.spec.ts (new)
 - **done when:**
