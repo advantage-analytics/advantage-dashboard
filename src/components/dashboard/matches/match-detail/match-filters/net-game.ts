@@ -29,11 +29,24 @@ export type NetEnding =
   "winner" | "opponent-error" | "own-error" | "passed" | "lobbed";
 
 /**
- * How close to the net the opponent's ball has to land for the side's next
- * shot to count as "drawn in": half the service box, in metres. A short ball
- * the side had to run up to, rather than an approach it chose.
+ * How close to the net the opponent's ball has to bounce for the side's first
+ * net shot to count as "drawn in": half the service box, in metres. A short
+ * ball the side had to run up to, rather than an approach it chose.
  */
 export const DRAWN_IN_DEPTH_M = 3.2;
+
+/**
+ * How far from that bounce, in metres along the court, the side may strike
+ * the ball and still have been drawn in. A ball that died near the net is met
+ * close to its bounce; one that bounced short but carried on is met well
+ * behind it, from where the side chose to take it — an approach.
+ *
+ * Tuned 2026-11-13 on Stoiber v Perelman (bca5777b…) against hand labels from
+ * the video: the two labelled drawn-in points were met 1.3 m and 2.0 m from
+ * the bounce, the labelled approaches 4.9 m to 10.2 m, and one the labeller
+ * called either way 5.0 m. Seven points; tune against more labelled matches.
+ */
+export const DRAWN_IN_RUN_IN_M = 3;
 
 /**
  * A stroke whose ball climbs at least this high before it bounces is a lob,
@@ -58,12 +71,17 @@ const isServeOrFeed = (shot: Pick<MatchShot, "shotType">) =>
  *   volley by type (product decision, 2026-11-13). A server's first ball
  *   struck inside the service line as a groundstroke, or an overhead, is not
  *   one: it is read by the two rules below like any other net shot.
- * - `drawn-in` — the opponent's ball the side struck just before N landed
- *   within `DRAWN_IN_DEPTH_M` of the net. That ball is the opponent's shot
- *   immediately before the side's last shot before N; when the side has no
- *   shot before N, the opponent's shot immediately before N.
- * - `approach` — anything else, including a ball with no landing recorded:
- *   coming in is the side's choice unless the data says it was dragged in.
+ * - `drawn-in` — N is a groundstroke (not a volley or overhead: those take
+ *   the ball out of the air, so it never bounced) answering an opponent's
+ *   ball that bounced on the side's own half within `DRAWN_IN_DEPTH_M` of the
+ *   net, and N was struck within `DRAWN_IN_RUN_IN_M` of that bounce: the side
+ *   ran onto a ball that died short.
+ * - `approach` — anything else. That includes an approach shot hit off a
+ *   short ball (the ordinary way to come in, not being dragged in), a short
+ *   ball that carried on and was met well behind its bounce, a bounce
+ *   recorded on the hitter's own side of the net, and a ball with no bounce
+ *   or contact recorded: coming in is the side's choice unless the data says
+ *   it was dragged in.
  */
 export function netEntryOf(
   point: MatchPoint,
@@ -83,37 +101,32 @@ export function netEntryOf(
     return "serve-volley";
   }
 
-  const landedShort = (shot: MatchShot | undefined): boolean =>
-    shot !== undefined &&
-    shot.landingY !== null &&
-    Math.abs(shot.landingY - NET_Y_M) <= DRAWN_IN_DEPTH_M;
-  const opponentBefore = (index: number): MatchShot | undefined => {
-    for (let i = index - 1; i >= 0; i -= 1) {
-      if (shots[i].isPlayer1 !== isPlayer1) return shots[i];
-    }
-    return undefined;
-  };
+  if (nType.includes("volley") || nType === "overhead") return "approach";
 
-  // N itself a groundstroke struck inside the net zone: the ball it answered
-  // is what pulled the side forward — a drop shot they ran onto is "drawn in"
-  // even when their previous shot was answered by a deep ball.
-  if (
-    !nType.includes("volley") &&
-    nType !== "overhead" &&
-    landedShort(opponentBefore(n))
-  ) {
-    return "drawn-in";
-  }
-
-  // The side's last shot before N (its approach), else N itself.
-  let anchor = n;
+  let answered: MatchShot | undefined;
   for (let i = n - 1; i >= 0; i -= 1) {
-    if (shots[i].isPlayer1 === isPlayer1) {
-      anchor = i;
+    if (shots[i].isPlayer1 !== isPlayer1) {
+      answered = shots[i];
       break;
     }
   }
-  if (landedShort(opponentBefore(anchor))) return "drawn-in";
+  const bounce = answered?.landingY ?? null;
+  const contact = shots[n].contactY;
+  if (bounce === null || contact === null) return "approach";
+
+  // Signed from the net: the same sign is the same half of the court.
+  const bounceFromNet = bounce - NET_Y_M;
+  const contactFromNet = contact - NET_Y_M;
+  const onOwnHalf =
+    bounceFromNet !== 0 &&
+    Math.sign(bounceFromNet) === Math.sign(contactFromNet);
+  if (
+    onOwnHalf &&
+    Math.abs(bounceFromNet) <= DRAWN_IN_DEPTH_M &&
+    Math.abs(contact - bounce) <= DRAWN_IN_RUN_IN_M
+  ) {
+    return "drawn-in";
+  }
   return "approach";
 }
 
@@ -232,8 +245,8 @@ export const DROP_SHOT_FROM_M = 8;
  * A drop shot: a forehand or backhand (never a serve, volley or overhead)
  * struck with backspin from at least `DROP_SHOT_FROM_M` from the net that
  * lands within `DRAWN_IN_DEPTH_M` of it — the same short-ball line the
- * drawn-in rule uses, so a drop shot that pulls the other side in is also
- * what makes their entry "drawn in". Backspin is "backspin" on an Advantage
+ * drawn-in rule uses (which reads the bounce and where it was met, not the
+ * spin, so it does not depend on this). Backspin is "backspin" on an Advantage
  * Intelligence match and "Slice" on a SwingVision import; a shot with no
  * spin, contact or landing recorded is never one. Unvalidated against
  * labelled matches: on 2026-11-07 it matched 356 of 18,920 video rally

@@ -16,6 +16,7 @@ import { applyFilmCut } from "@/components/dashboard/matches/match-detail/film-c
 import type { MatchFilterContext } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import {
   DRAWN_IN_DEPTH_M,
+  DRAWN_IN_RUN_IN_M,
   DROP_SHOT_FROM_M,
   hitADropShot,
   isDropShot,
@@ -144,7 +145,8 @@ const PASSED = p("passed", {
   ],
 });
 
-// A short ball drags you in, and you net the volley.
+// A short ball drags you in: you run onto it near its bounce, then net the
+// volley.
 const DRAWN_IN = p("drawn-in", {
   server: 2,
   winner: 2,
@@ -153,7 +155,7 @@ const DRAWN_IN = p("drawn-in", {
     s(1, false, "First Serve", { cy: 23.5, ly: 7 }),
     s(2, true, "Forehand", { cy: 0.5, ly: 20 }),
     s(3, false, "Backhand", { cy: 22, ly: NET - 2 }),
-    s(4, true, "Forehand", { cy: 5.2, ly: 20 }),
+    s(4, true, "Forehand", { cy: 8.5, ly: 20 }),
     s(5, false, "Backhand", { cy: 21, ly: 7 }),
     s(6, true, "Forehand Volley", { cy: 9.5, result: "Net" }),
   ],
@@ -250,28 +252,72 @@ test.describe("netEntryOf", () => {
     expect(netEntryOf(SERVE_VOLLEY, false)).toBeNull();
   });
 
+  /**
+   * The side at the low end strikes its first net shot, a forehand, from
+   * `cy` off the opponent's ball bouncing at `ly`, then volleys.
+   */
+  const ranOnto = (ly: number | null, cy: number | null, type = "Forehand") =>
+    netEntryOf(
+      p("x", {
+        server: 2,
+        winner: 1,
+        resultType: "Volley Winner",
+        shots: [
+          s(1, false, "First Serve", { cy: 23.5, ly: 7 }),
+          s(2, true, "Forehand", { cy: 0.5, ly: 20 }),
+          s(3, false, "Backhand", { cy: 22, ly }),
+          s(4, true, type, { cy, ly: 20 }),
+          s(5, false, "Backhand", { cy: 22, ly: 7 }),
+          s(6, true, "Volley", { cy: 10 }),
+        ],
+      }),
+      true,
+    );
+
   test("drawn in is the depth threshold", () => {
-    const at = (ly: number | null) =>
-      netEntryOf(
-        p("x", {
-          server: 2,
-          winner: 1,
-          resultType: "Volley Winner",
-          shots: [
-            s(1, false, "First Serve", { cy: 23.5, ly: 7 }),
-            s(2, true, "Forehand", { cy: 0.5, ly: 20 }),
-            s(3, false, "Backhand", { cy: 22, ly }),
-            s(4, true, "Forehand", { cy: 4, ly: 20 }),
-            s(5, false, "Backhand", { cy: 22, ly: 7 }),
-            s(6, true, "Volley", { cy: 10 }),
-          ],
-        }),
-        true,
-      );
-    expect(at(NET - DRAWN_IN_DEPTH_M + 0.01)).toBe("drawn-in");
-    expect(at(NET - DRAWN_IN_DEPTH_M - 0.01)).toBe("approach");
-    // No landing recorded: an approach.
-    expect(at(null)).toBe("approach");
+    expect(ranOnto(NET - DRAWN_IN_DEPTH_M + 0.01, 8)).toBe("drawn-in");
+    expect(ranOnto(NET - DRAWN_IN_DEPTH_M - 0.01, 8)).toBe("approach");
+    // No bounce or no contact recorded: an approach.
+    expect(ranOnto(null, 8)).toBe("approach");
+    expect(ranOnto(NET - 1, null)).toBe("approach");
+  });
+
+  test("drawn in is met near the bounce; a short ball that carried on is an approach", () => {
+    const bounce = NET - 1.4;
+    expect(ranOnto(bounce, bounce - DRAWN_IN_RUN_IN_M + 0.01)).toBe("drawn-in");
+    // Stoiber v Perelman, 83: bounced 1.4 m from the net, met 6.3 m from it.
+    expect(ranOnto(bounce, NET - 6.3)).toBe("approach");
+    expect(ranOnto(bounce, bounce - DRAWN_IN_RUN_IN_M - 0.01)).toBe("approach");
+  });
+
+  test("a bounce on the hitter's own side of the net is never drawn in", () => {
+    // Stoiber v Perelman, 60: the bounce is recorded 0.6 m past the net, on
+    // the opponent's own half — the ball cannot have been played from there.
+    expect(ranOnto(NET + 0.6, NET - 3)).toBe("approach");
+  });
+
+  test("a volley or overhead off a short ball is not drawn in: it never bounced", () => {
+    expect(ranOnto(NET - 1, NET - 2, "Forehand Volley")).toBe("approach");
+    expect(ranOnto(NET - 1, NET - 2, "Overhead")).toBe("approach");
+  });
+
+  test("an approach shot hit off a short ball is an approach", () => {
+    // Stoiber v Perelman, 73: a ball bouncing 2.6 m from the net, taken from
+    // 9.8 m as the approach, then a volley.
+    const point = p("x", {
+      server: 2,
+      winner: 1,
+      resultType: "Volley Winner",
+      shots: [
+        s(1, false, "First Serve", { cy: 23.5, ly: 7 }),
+        s(2, true, "Forehand", { cy: 0.5, ly: 20 }),
+        s(3, false, "Backhand", { cy: 22, ly: NET - 2.6 }),
+        s(4, true, "Forehand", { cy: NET - 9.8, ly: 20 }),
+        s(5, false, "Backhand", { cy: 22, ly: 7 }),
+        s(6, true, "Volley", { cy: NET - 2.1 }),
+      ],
+    });
+    expect(netEntryOf(point, true)).toBe("approach");
   });
 
   test("a groundstroke run onto off a drop shot is drawn in, whatever came before", () => {
