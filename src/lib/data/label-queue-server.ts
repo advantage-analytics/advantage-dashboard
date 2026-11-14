@@ -15,6 +15,8 @@
  * is — no player, program, owner or match id — and names another labeller's
  * session by nothing at all. The to-do `jobId` is the key a claim takes; it
  * grants nothing, because the claim reads this queue again on the server.
+ * An admin's send-back note is their own words to one labeller: it is copied
+ * onto that labeller's own row and onto no other.
  */
 
 import { readAllPages } from "@/lib/data/admin-range-read";
@@ -116,13 +118,26 @@ export interface QueueSessionRow {
   status: string;
   started_at: string;
   open_counts: unknown;
-  /** Absent until `20261114060750_label_queue_claims` is applied. */
+  /** Added by `20261114060750_label_queue_claims`. */
   start_open_counts?: unknown;
   assigned_to: string | null;
   assigned_at: string | null;
-  /** Absent until `20261114060750_label_queue_claims` is applied. */
+  /** Added by `20261114060750_label_queue_claims`. */
   claimed_at?: string | null;
   submitted_at: string | null;
+  /** The last publish; null until the session reaches `complete`. */
+  completed_at?: string | null;
+  /**
+   * The admin's check. Absent (not null) until
+   * `20261114070000_label_publish_check` is applied: every session completed
+   * before it was published and checked in one step, so an absent check on a
+   * `complete` session reads as checked, as the migration's backfill writes.
+   */
+  checked_at?: string | null;
+  /** Absent until `20261114070000_label_publish_check` is applied. */
+  sent_back_at?: string | null;
+  /** Absent until `20261114070000_label_publish_check` is applied. */
+  sent_back_note?: string | null;
   /** Who started the session, or the labeller who submitted it. */
   labeller: string | null;
   /** Embedded `users` row through `assigned_to` (one or none). */
@@ -146,7 +161,17 @@ export interface LabelQueueSource {
   photoUrl: (avatarPath: string | null) => string | null;
 }
 
-/** The label session on a queue entry. Never `complete`: those have left. */
+/** An admin's send-back: when, and what they asked the labeller to fix. */
+export interface LabelSentBack {
+  /** ISO moment. */
+  at: string;
+  note: string;
+}
+
+/**
+ * The label session on a queue entry. `complete` only while it waits for the
+ * admin's check: a checked one has left the queue.
+ */
 export interface LabelQueueEntrySession extends QueueSession {
   id: string;
   /** Who holds it, with the names both boards print. */
@@ -160,6 +185,13 @@ export interface LabelQueueEntrySession extends QueueSession {
   /** When a labeller took it themself; null on one an admin assigned. */
   claimedAt: string | null;
   submittedAt: string | null;
+  /** The last publish (`label_sessions.completed_at`); null until published. */
+  publishedAt: string | null;
+  /**
+   * Set on an open (`labelling`) session an admin sent back. Admin-only
+   * until a projection hands it to the labeller it was sent to.
+   */
+  sentBack: LabelSentBack | null;
   flags: BoardFlags;
   /** `label_sessions.labeller`, for `countLabelWorkMinutes`. */
   labellerId: string | null;
@@ -233,6 +265,19 @@ function sessionForJob(
   );
 }
 
+/** `checked_at` as the queue reads it; see `QueueSessionRow.checked_at`. */
+function checkedAtOf(session: QueueSessionRow): string | null {
+  if (session.checked_at !== undefined) return session.checked_at;
+  return session.status === "complete"
+    ? (session.completed_at ?? session.started_at)
+    : null;
+}
+
+function sentBackOf(session: QueueSessionRow): LabelSentBack | null {
+  if (session.status !== "labelling" || !session.sent_back_at) return null;
+  return { at: session.sent_back_at, note: session.sent_back_note ?? "" };
+}
+
 function firstName(assignee: NonNullable<QueueSessionRow["assignee"]>): string {
   return (
     assignee.first_name?.trim() ||
@@ -267,7 +312,12 @@ export function buildLabelQueue(source: LabelQueueSource): LabelQueueEntry[] {
         ? (source.ownerEmails.get(match.created_by) ?? null)
         : null,
       session: session
-        ? { status: session.status, assignedTo: session.assigned_to }
+        ? {
+            status: session.status,
+            assignedTo: session.assigned_to,
+            checkedAt: checkedAtOf(session),
+            sentBackAt: session.sent_back_at ?? null,
+          }
         : null,
     });
     if (!enters || !job.completed_at) continue;
@@ -293,6 +343,8 @@ export function buildLabelQueue(source: LabelQueueSource): LabelQueueEntry[] {
             id: session.id,
             status: session.status,
             assignedTo: session.assigned_to,
+            checkedAt: checkedAtOf(session),
+            sentBackAt: session.sent_back_at ?? null,
             assignee: assignee
               ? {
                   id: assignee.id,
@@ -308,6 +360,11 @@ export function buildLabelQueue(source: LabelQueueSource): LabelQueueEntry[] {
             assignedAt: session.assigned_at ?? null,
             claimedAt: session.claimed_at ?? null,
             submittedAt: session.submitted_at ?? null,
+            publishedAt:
+              session.status === "complete"
+                ? (session.completed_at ?? null)
+                : null,
+            sentBack: sentBackOf(session),
             flags: boardFlags(session.start_open_counts, session.open_counts),
             labellerId: session.labeller,
             lastBeatAt: null,
@@ -323,18 +380,50 @@ export function buildLabelQueue(source: LabelQueueSource): LabelQueueEntry[] {
  * Lanes
  * ---------------------------------------------------------------------- */
 
-type Lane = "todo" | "inProgress" | "submitted";
+type Lane = "todo" | "inProgress" | "published" | "submitted";
 
 /**
- * "Submitted" is a `submitted` session; "In progress" any `labelling` one
- * somebody holds, claimed or admin-assigned; everything else is still to do.
+ * "Published" is a `complete` session waiting for the admin's check (the
+ * queue holds no checked one); "Submitted" a `submitted` session handed in
+ * before submit published; "In progress" any `labelling` one somebody holds,
+ * claimed or admin-assigned, or one sent back; everything else is to do.
  */
 function laneOf(entry: LabelQueueEntry): Lane {
-  if (entry.session?.status === "submitted") return "submitted";
-  if (entry.session?.status === "labelling" && entry.session.assignedTo) {
+  const session = entry.session;
+  if (session?.status === "complete") return "published";
+  if (session?.status === "submitted") return "submitted";
+  if (
+    session?.status === "labelling" &&
+    (session.assignedTo || session.sentBack)
+  ) {
     return "inProgress";
   }
   return "todo";
+}
+
+/**
+ * The entries in the order the boards list them: every lane keeps the
+ * queue's earliest-due order except the published one, which lists the
+ * oldest publish first (ties by job id) — the admin checks in turn.
+ */
+function boardOrder(entries: readonly LabelQueueEntry[]): LabelQueueEntry[] {
+  const publishedMs = (entry: LabelQueueEntry) => {
+    const at = entry.session?.publishedAt;
+    const ms = at ? Date.parse(at) : NaN;
+    return Number.isFinite(ms) ? ms : Infinity;
+  };
+  const published = entries
+    .filter((entry) => laneOf(entry) === "published")
+    .sort((a, b) => {
+      const pa = publishedMs(a);
+      const pb = publishedMs(b);
+      if (pa !== pb) return pa < pb ? -1 : 1;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+  return [
+    ...entries.filter((entry) => laneOf(entry) !== "published"),
+    ...published,
+  ];
 }
 
 /** A waiting match, as a labeller sees it: how long, how urgent, due when. */
@@ -366,11 +455,21 @@ export interface LabellerSessionRow {
   dueAt: string;
   /** When it was handed in; null in the in-progress lane. */
   submittedAt: string | null;
+  /** When it was published (ISO); set only in the published lane. */
+  publishedAt: string | null;
+  /**
+   * The admin's send-back, with their note. Set only on the viewer's own
+   * (`mine`) row: the note is addressed to that labeller and nobody else.
+   */
+  sentBack: LabelSentBack | null;
 }
 
 export interface LabellerBoard {
   todo: LabellerTodoRow[];
   inProgress: LabellerSessionRow[];
+  /** Published, waiting for the admin's check; oldest publish first. */
+  published: LabellerSessionRow[];
+  /** Handed in before submit published (old `submitted` sessions). */
   submitted: LabellerSessionRow[];
   /** The viewer already holds an open analyst session, so cannot claim. */
   holding: boolean;
@@ -390,10 +489,11 @@ export function toLabellerBoard(
   const board: LabellerBoard = {
     todo: [],
     inProgress: [],
+    published: [],
     submitted: [],
     holding,
   };
-  for (const entry of entries) {
+  for (const entry of boardOrder(entries)) {
     const lane = laneOf(entry);
     const session = entry.session;
     if (lane === "todo" || !session) {
@@ -418,6 +518,11 @@ export function toLabellerBoard(
       urgency: entry.urgency,
       dueAt: entry.dueAt,
       submittedAt: session.submittedAt,
+      publishedAt: session.publishedAt,
+      sentBack:
+        mine && session.sentBack
+          ? { at: session.sentBack.at, note: session.sentBack.note }
+          : null,
     });
   }
   return board;
@@ -448,6 +553,10 @@ export interface AdminLabelBoardRow {
   /** When the labeller took it themself; null when an admin assigned it. */
   claimedAt: string | null;
   submittedAt: string | null;
+  /** When it was published (ISO); set only in the to-check lane. */
+  publishedAt: string | null;
+  /** Set on an in-progress row an admin sent back, with their note. */
+  sentBack: LabelSentBack | null;
   /** The assignee's newest work beat on it (a minute, ISO); null with none. */
   lastBeatAt: string | null;
   /** Minutes of labelling work on the session (`countLabelWorkMinutes`). */
@@ -458,18 +567,33 @@ export interface AdminLabelBoardRow {
 export interface AdminLabelBoard {
   todo: AdminLabelBoardRow[];
   inProgress: AdminLabelBoardRow[];
+  /** Published by a labeller, waiting for Check; oldest publish first. */
+  toCheck: AdminLabelBoardRow[];
+  /** Handed in before submit published (old `submitted` sessions). */
   submitted: AdminLabelBoardRow[];
 }
 
-/** The admin's projection: the same three lanes, every row named. */
+const ADMIN_LANE: Record<Lane, keyof AdminLabelBoard> = {
+  todo: "todo",
+  inProgress: "inProgress",
+  published: "toCheck",
+  submitted: "submitted",
+};
+
+/** The admin's projection: the same lanes, every row named. */
 export function toAdminLabelBoard(
   entries: readonly LabelQueueEntry[],
 ): AdminLabelBoard {
   const claimable = new Set(claimableJobIds(entries));
-  const board: AdminLabelBoard = { todo: [], inProgress: [], submitted: [] };
-  for (const entry of entries) {
+  const board: AdminLabelBoard = {
+    todo: [],
+    inProgress: [],
+    toCheck: [],
+    submitted: [],
+  };
+  for (const entry of boardOrder(entries)) {
     const session = entry.session;
-    board[laneOf(entry)].push({
+    board[ADMIN_LANE[laneOf(entry)]].push({
       jobId: entry.id,
       matchId: entry.matchId,
       player1Name: entry.player1Name,
@@ -486,6 +610,8 @@ export function toAdminLabelBoard(
       assignedAt: session?.assignedAt ?? null,
       claimedAt: session?.claimedAt ?? null,
       submittedAt: session?.submittedAt ?? null,
+      publishedAt: session?.publishedAt ?? null,
+      sentBack: session?.sentBack ?? null,
       lastBeatAt: session?.lastBeatAt ?? null,
       minutesWorked: session?.minutesWorked ?? 0,
       flags: session?.flags ?? null,
@@ -499,10 +625,10 @@ export function toAdminLabelBoard(
  * ---------------------------------------------------------------------- */
 
 const SESSION_COLUMNS =
-  "id, job_id, status, started_at, open_counts, assigned_to, assigned_at, submitted_at, labeller, assignee:users!assigned_to(id, email, first_name, last_name, avatar_path)";
-/** Added by `20261114060750_label_queue_claims`. */
-const CLAIM_COLUMNS = "claimed_at, start_open_counts";
-/** Postgres `undefined_column`: the claims migration is not applied yet. */
+  "id, job_id, status, started_at, completed_at, open_counts, start_open_counts, assigned_to, assigned_at, claimed_at, submitted_at, labeller, assignee:users!assigned_to(id, email, first_name, last_name, avatar_path)";
+/** Added by `20261114070000_label_publish_check`. */
+const CHECK_COLUMNS = "checked_at, sent_back_at, sent_back_note";
+/** Postgres `undefined_column`: the publish-check migration is not applied. */
 const UNDEFINED_COLUMN = "42703";
 
 async function readQueueSessions(
@@ -520,9 +646,10 @@ async function readQueueSessions(
 
   const chunks = await Promise.all(
     idChunks(jobIds).map(async (ids) => {
-      let result = await read(`${SESSION_COLUMNS}, ${CLAIM_COLUMNS}`, ids);
-      // Before the migration the two columns do not exist; the rows then read
-      // as never claimed with no starting count, which is what they are.
+      let result = await read(`${SESSION_COLUMNS}, ${CHECK_COLUMNS}`, ids);
+      // Before the migration the three columns do not exist. The rows then
+      // read with them absent: never sent back, and a `complete` one as
+      // already checked (`checkedAtOf`), which is what the backfill writes.
       if (result.error?.code === UNDEFINED_COLUMN) {
         result = await read(SESSION_COLUMNS, ids);
       }
@@ -702,8 +829,10 @@ const labellerDefaults: LabellerBoardDependencies = {
 };
 
 /**
- * The board at `/label`: what waits, what is being worked, what was handed
- * in. Nothing on it says whose match a row is.
+ * The board at `/label`: what waits, what is being worked (sent-back rows
+ * among it), what was published and waits for the admin's check, and what
+ * was handed in before submit published. Nothing on it says whose match a
+ * row is.
  */
 export async function loadLabellerBoard(
   deps: LabellerBoardDependencies = labellerDefaults,
@@ -726,7 +855,10 @@ const adminDefaults: AdminLabelBoardDependencies = {
   readQueue: readLabelQueue,
 };
 
-/** The board at `/admin/labels`: the same lanes, with whose match each is. */
+/**
+ * The board at `/admin/labels`: the same lanes, with whose match each is —
+ * the published lane named `toCheck`, since checking it is the admin's job.
+ */
 export async function loadAdminLabelBoard(
   deps: AdminLabelBoardDependencies = adminDefaults,
 ): Promise<AdminLabelBoard> {

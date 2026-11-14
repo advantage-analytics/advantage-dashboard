@@ -69,6 +69,8 @@ function sessionRow(
     urgency: "standard",
     dueAt: iso(10),
     submittedAt: null,
+    publishedAt: null,
+    sentBack: null,
     ...overrides,
   };
 }
@@ -86,6 +88,7 @@ function board(overrides: Partial<LabellerBoard> = {}): LabellerBoard {
         dueAt: iso(6),
       }),
     ],
+    published: [],
     submitted: [sessionRow({ submittedAt: iso(-3) })],
     holding: false,
     ...overrides,
@@ -233,6 +236,8 @@ test.describe("LabelBoard", () => {
       assignedAt: iso(-5),
       claimedAt: null,
       submittedAt: status === "submitted" ? iso(-1) : null,
+      publishedAt: null,
+      sentBack: null,
       flags: { left: 2 },
       labellerId: assignedTo,
       lastBeatAt: null,

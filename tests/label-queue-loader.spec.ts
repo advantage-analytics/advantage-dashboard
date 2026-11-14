@@ -173,7 +173,7 @@ test.describe("newest completed job per match", () => {
     expect(entries[0].session).toBeNull();
   });
 
-  test("a complete non-practice session on the newest job takes the match out", () => {
+  test("a complete session read before the publish-check columns exist counts as checked", () => {
     const entries = buildLabelQueue(
       source({
         jobs: [
@@ -337,6 +337,8 @@ test.describe("the labeller's board", () => {
         urgency: "standard",
         dueAt: "2026-11-05T22:00:00.000Z",
         submittedAt: null,
+        publishedAt: null,
+        sentBack: null,
       },
       {
         mine: false,
@@ -347,6 +349,8 @@ test.describe("the labeller's board", () => {
         urgency: "standard",
         dueAt: "2026-11-06T22:00:00.000Z",
         submittedAt: null,
+        publishedAt: null,
+        sentBack: null,
       },
     ]);
     expect(board.submitted).toHaveLength(1);
@@ -388,6 +392,7 @@ test.describe("the labeller's board", () => {
     expect(Object.keys(board).sort()).toEqual([
       "holding",
       "inProgress",
+      "published",
       "submitted",
       "todo",
     ]);
@@ -422,13 +427,15 @@ test.describe("the labeller's board", () => {
 });
 
 test.describe("the admin's board", () => {
-  test("the same three lanes, every row named", () => {
+  test("the same lanes, every row named", () => {
     const board = toAdminLabelBoard(fixture());
     expect(Object.keys(board).sort()).toEqual([
       "inProgress",
       "submitted",
+      "toCheck",
       "todo",
     ]);
+    expect(board.toCheck).toEqual([]);
     expect(board.todo.map((row) => row.jobId)).toEqual(["job-a", "job-b"]);
     expect(board.inProgress.map((row) => row.jobId)).toEqual([
       "job-c",
@@ -479,5 +486,202 @@ test.describe("the admin's board", () => {
     });
     expect(calls).toEqual(["gate", "client", "queue"]);
     expect(board.submitted[0].player1Name).toBe(PLAYER_ONE);
+  });
+});
+
+// ── Published, checked, sent back ────────────────────────────────────────────
+
+const SENT_BACK_NOTE = "Set 2 game 4: the second point went to the returner.";
+const OTHER_NOTE = "Recheck the tiebreak serve order from 3-3.";
+
+/**
+ * Six matches past the publish-check migration: two published and waiting
+ * (the later-due one published first), one checked, the viewer's sent-back
+ * session, another labeller's sent-back session, and an old submitted one.
+ */
+function publishFixture() {
+  const jobs = ["p", "q", "r", "s", "t", "u"].map((letter, index) =>
+    job({
+      id: `job-${letter}`,
+      completed_at: `2026-11-0${index + 2}T10:00:00Z`,
+    }),
+  );
+  const checkColumns = {
+    checked_at: null,
+    sent_back_at: null,
+    sent_back_note: null,
+  };
+  return buildLabelQueue(
+    source({
+      jobs,
+      sessions: [
+        session({
+          ...checkColumns,
+          id: "s-p",
+          job_id: "job-p",
+          status: "complete",
+          assigned_to: OTHER,
+          completed_at: "2026-11-09T08:00:00Z",
+          assignee: assignee(OTHER, "Tariq", "Lindqvist"),
+        }),
+        session({
+          ...checkColumns,
+          id: "s-q",
+          job_id: "job-q",
+          status: "complete",
+          assigned_to: VIEWER,
+          completed_at: "2026-11-08T08:00:00Z",
+          assignee: assignee(VIEWER, "Ines", "Okafor"),
+        }),
+        session({
+          ...checkColumns,
+          id: "s-r",
+          job_id: "job-r",
+          status: "complete",
+          assigned_to: OTHER,
+          completed_at: "2026-11-07T08:00:00Z",
+          checked_at: "2026-11-07T12:00:00Z",
+          assignee: assignee(OTHER, "Tariq", "Lindqvist"),
+        }),
+        session({
+          ...checkColumns,
+          id: "s-s",
+          job_id: "job-s",
+          assigned_to: VIEWER,
+          sent_back_at: "2026-11-10T09:00:00Z",
+          sent_back_note: SENT_BACK_NOTE,
+          assignee: assignee(VIEWER, "Ines", "Okafor"),
+        }),
+        session({
+          ...checkColumns,
+          id: "s-t",
+          job_id: "job-t",
+          assigned_to: OTHER,
+          sent_back_at: "2026-11-10T10:00:00Z",
+          sent_back_note: OTHER_NOTE,
+          assignee: assignee(OTHER, "Tariq", "Lindqvist"),
+        }),
+        session({
+          ...checkColumns,
+          id: "s-u",
+          job_id: "job-u",
+          status: "submitted",
+          assigned_to: OTHER,
+          submitted_at: "2026-11-08T09:00:00Z",
+          assignee: assignee(OTHER, "Tariq", "Lindqvist"),
+        }),
+      ],
+    }),
+  );
+}
+
+test.describe("published, checked and sent back", () => {
+  test("the admin checks the oldest publish first; a checked one is in no lane", () => {
+    const board = toAdminLabelBoard(publishFixture());
+    expect(board.toCheck.map((row) => row.jobId)).toEqual(["job-q", "job-p"]);
+    expect(board.toCheck[0]).toMatchObject({
+      sessionId: "s-q",
+      publishedAt: "2026-11-08T08:00:00Z",
+      labellerName: "Ines Okafor",
+      claimable: false,
+      sentBack: null,
+    });
+    expect(board.toCheck[1]).toMatchObject({
+      publishedAt: "2026-11-09T08:00:00Z",
+      labellerName: "Tariq Lindqvist",
+    });
+    const all = [
+      ...board.todo,
+      ...board.inProgress,
+      ...board.toCheck,
+      ...board.submitted,
+    ];
+    expect(all.map((row) => row.jobId)).not.toContain("job-r");
+    expect(board.submitted.map((row) => row.jobId)).toEqual(["job-u"]);
+  });
+
+  test("a sent-back session is in progress with its note on the admin's row", () => {
+    const board = toAdminLabelBoard(publishFixture());
+    expect(board.inProgress.map((row) => row.jobId)).toEqual([
+      "job-s",
+      "job-t",
+    ]);
+    expect(board.inProgress[0].sentBack).toEqual({
+      at: "2026-11-10T09:00:00Z",
+      note: SENT_BACK_NOTE,
+    });
+    expect(board.inProgress[1].sentBack).toEqual({
+      at: "2026-11-10T10:00:00Z",
+      note: OTHER_NOTE,
+    });
+    expect(board.todo).toEqual([]);
+  });
+
+  test("the labeller sees the published lane, and only their own note", () => {
+    const board = toLabellerBoard(publishFixture(), VIEWER, true);
+    expect(board.published.map((row) => [row.mine, row.publishedAt])).toEqual([
+      [true, "2026-11-08T08:00:00Z"],
+      [false, "2026-11-09T08:00:00Z"],
+    ]);
+    expect(board.published[0].sessionId).toBe("s-q");
+    expect("sessionId" in board.published[1]).toBe(false);
+
+    expect(board.inProgress).toHaveLength(2);
+    const [mine, theirs] = board.inProgress;
+    expect(mine).toMatchObject({
+      mine: true,
+      sessionId: "s-s",
+      sentBack: { at: "2026-11-10T09:00:00Z", note: SENT_BACK_NOTE },
+    });
+    expect(theirs.mine).toBe(false);
+    expect(theirs.sentBack).toBeNull();
+    for (const row of [...board.published, ...board.submitted]) {
+      expect(row.sentBack).toBeNull();
+    }
+    expect(board.submitted).toHaveLength(1);
+  });
+
+  test("another labeller's sent-back note appears nowhere on the board", () => {
+    const text = JSON.stringify(
+      toLabellerBoard(publishFixture(), VIEWER, true),
+    );
+    expect(text).not.toContain(OTHER_NOTE);
+    expect(text).not.toContain("Recheck the tiebreak");
+    expect(text).toContain(SENT_BACK_NOTE);
+    expect(text).not.toContain(PLAYER_ONE);
+    expect(text).not.toContain(PROGRAM);
+    expect(text).not.toContain("match-job-");
+    expect(text).not.toContain(OWNER);
+    expect(text).not.toContain("Lindqvist");
+
+    // Seen by the other labeller, the viewer's note is the one withheld.
+    const theirs = JSON.stringify(
+      toLabellerBoard(publishFixture(), OTHER, true),
+    );
+    expect(theirs).not.toContain(SENT_BACK_NOTE);
+    expect(theirs).toContain(OTHER_NOTE);
+  });
+
+  test("a sent-back session nobody holds is in progress, not claimable", () => {
+    const entries = buildLabelQueue(
+      source({
+        jobs: [job({ id: "job-v" })],
+        sessions: [
+          session({
+            id: "s-v",
+            job_id: "job-v",
+            checked_at: null,
+            sent_back_at: "2026-11-10T09:00:00Z",
+            sent_back_note: SENT_BACK_NOTE,
+          }),
+        ],
+      }),
+    );
+    const board = toAdminLabelBoard(entries);
+    expect(board.todo).toEqual([]);
+    expect(board.inProgress[0]).toMatchObject({
+      jobId: "job-v",
+      claimable: false,
+    });
   });
 });

@@ -44,6 +44,8 @@ function row(
     assignedAt: null,
     claimedAt: null,
     submittedAt: null,
+    publishedAt: null,
+    sentBack: null,
     lastBeatAt: null,
     minutesWorked: 0,
     flags: null,
@@ -80,6 +82,7 @@ function board(overrides: Partial<AdminLabelBoard> = {}): AdminLabelBoard {
         lastBeatAt: iso(-1),
       }),
     ],
+    toCheck: [],
     submitted: [
       row(5, {
         sessionId: "session-5",

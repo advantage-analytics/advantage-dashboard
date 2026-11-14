@@ -474,6 +474,8 @@ const boardRow = (
   assignedAt: null,
   claimedAt: null,
   submittedAt: null,
+  publishedAt: null,
+  sentBack: null,
   lastBeatAt: null,
   minutesWorked: 0,
   flags: null,
@@ -535,6 +537,7 @@ export const BOARD: AdminLabelBoard = {
       flags: { left: 14 },
     }),
   ],
+  toCheck: [],
   submitted: [
     boardRow(6, {
       player1Name: "Sam Arroyo",

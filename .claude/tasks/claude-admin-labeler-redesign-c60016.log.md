@@ -401,3 +401,11 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. `ANOTHER_SESSION_OPEN` says "before reopening this one", which reads oddly after Send back.
+
+## T34 · Board loader: published-to-check lane and sent-back rows — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `enterLabelQueue` keeps complete-unchecked sessions; complete and sent-back sessions are never claimable. `loadAdminLabelBoard` returns `{ todo, inProgress, toCheck, submitted }` (toCheck oldest publish first, with `publishedAt` and `labellerName`); `loadLabellerBoard` returns `{ todo, inProgress, published, submitted, holding }`; `sentBack { at, note }` reaches only the owner's row on the labeller board. T22 columns read directly; 42703 fallback kept only for T31's columns (missing columns read as checked). Added `labelPublishedText` ("On time" / "N h late").
+**follow-ups:**
+
+1. `/label` page's on-board set should include `board.published` once T36 draws it, or the viewer's published session also lists under "Assigned to you".

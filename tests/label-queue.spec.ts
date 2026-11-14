@@ -9,6 +9,7 @@ import {
   isOverdue,
   isTestOwner,
   labelDueAt,
+  labelPublishedText,
   labelDueText,
   sortByDue,
   urgencyLevel,
@@ -124,12 +125,57 @@ test.describe("label queue: who enters", () => {
     expect(enterLabelQueue(testJob)).toBe(false);
   });
 
-  test("a published (complete) session is left out", () => {
+  test("a published session stays until the admin checks it", () => {
+    expect(
+      enterLabelQueue(
+        job({
+          session: { status: "complete", assignedTo: "u", checkedAt: null },
+        }),
+      ),
+    ).toBe(true);
     expect(
       enterLabelQueue(
         job({ session: { status: "complete", assignedTo: "u" } }),
       ),
+    ).toBe(true);
+  });
+
+  test("a checked (complete) session is left out", () => {
+    expect(
+      enterLabelQueue(
+        job({
+          session: {
+            status: "complete",
+            assignedTo: "u",
+            checkedAt: "2026-11-12T10:00:00Z",
+          },
+        }),
+      ),
     ).toBe(false);
+  });
+
+  test("a sent-back session stays in the queue", () => {
+    expect(
+      enterLabelQueue(
+        job({
+          session: {
+            status: "labelling",
+            assignedTo: "u",
+            sentBackAt: "2026-11-12T10:00:00Z",
+          },
+        }),
+      ),
+    ).toBe(true);
+  });
+});
+
+test.describe("label queue: published timeliness", () => {
+  test("on time at or before due, floored hours late after", () => {
+    const due = "2026-11-02T22:00:00Z";
+    expect(labelPublishedText("2026-11-02T21:00:00Z", due)).toBe("On time");
+    expect(labelPublishedText(due, due)).toBe("On time");
+    expect(labelPublishedText("2026-11-02T22:10:00Z", due)).toBe("1 h late");
+    expect(labelPublishedText("2026-11-03T00:59:00Z", due)).toBe("2 h late");
   });
 });
 
@@ -162,5 +208,32 @@ test.describe("label queue: order and claims", () => {
       { id: "4", session: null },
     ];
     expect(claimableJobIds(rows)).toEqual(["3", "4"]);
+  });
+
+  test("a published session is never claimable, nor a sent-back one", () => {
+    const rows = [
+      {
+        id: "1",
+        session: { status: "complete", assignedTo: null, checkedAt: null },
+      },
+      {
+        id: "2",
+        session: {
+          status: "labelling",
+          assignedTo: null,
+          sentBackAt: "2026-11-12T10:00:00Z",
+        },
+      },
+      {
+        id: "3",
+        session: {
+          status: "labelling",
+          assignedTo: "u1",
+          sentBackAt: "2026-11-12T10:00:00Z",
+        },
+      },
+      { id: "4", session: null },
+    ];
+    expect(claimableJobIds(rows)).toEqual(["4"]);
   });
 });

@@ -472,7 +472,7 @@ ready).
 
 ## T34 · Board loader: published-to-check lane and sent-back rows
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T31
 - **files:** guess — src/lib/services/labels/queue.ts, src/lib/data/label-queue-server.ts, tests/label-queue.spec.ts, tests/label-queue-loader.spec.ts

@@ -80,6 +80,14 @@ export function urgencyLevel(
 export interface QueueSession {
   status: string;
   assignedTo: string | null;
+  /**
+   * When an admin passed the published session. A `complete` session with
+   * none is "Published, to check" and stays in the queue until it is set.
+   * Absent reads as none.
+   */
+  checkedAt?: string | null;
+  /** When an admin sent it back to its labeller; it is then never claimable. */
+  sentBackAt?: string | null;
 }
 
 /** A finished `processing_jobs` row joined to its match owner and session. */
@@ -103,7 +111,9 @@ export function isTestOwner(job: Pick<LabelQueueJob, "ownerEmail">): boolean {
 
 /**
  * Whether a job enters the queue: completed on or after `LABEL_QUEUE_FROM`,
- * some video to label, not a test workspace's, and not already published.
+ * some video to label, and not a test workspace's. A published (`complete`)
+ * session stays while it waits for the admin's check, and leaves once
+ * `checkedAt` is set.
  */
 export function enterLabelQueue(job: LabelQueueJob): boolean {
   if (!job.completedAt) return false;
@@ -113,7 +123,8 @@ export function enterLabelQueue(job: LabelQueueJob): boolean {
   }
   if (!(jobVideoSeconds(job) > 0)) return false;
   if (isTestOwner(job)) return false;
-  return job.session?.status !== "complete";
+  if (job.session?.status === "complete") return !job.session.checkedAt;
+  return true;
 }
 
 /** Earliest due first; ties by job id. Returns a new array. */
@@ -127,11 +138,17 @@ export function sortByDue<T extends { id: string; dueAt: Moment }>(
   });
 }
 
-/** No session yet, or an open (`labelling`) one nobody holds. */
+/**
+ * No session yet, or an open (`labelling`) one nobody holds. A sent-back
+ * session is addressed to its labeller, so it is never open to anyone else
+ * even with nobody assigned; a published one has nothing left to claim.
+ */
 function isOpenToClaim(session: QueueSession | null): boolean {
   return (
     session === null ||
-    (session.status === "labelling" && session.assignedTo === null)
+    (session.status === "labelling" &&
+      session.assignedTo === null &&
+      !session.sentBackAt)
   );
 }
 
@@ -148,4 +165,15 @@ export function claimableJobIds(
     .filter((row) => isOpenToClaim(row.session))
     .slice(0, LABEL_CLAIM_CHOICES)
     .map((row) => row.id);
+}
+
+/**
+ * A published session's timeliness against its due moment, as the admin's
+ * "to check" rows print it: "On time" when published at or before `dueAt`,
+ * else "N h late" (floored, at least 1).
+ */
+export function labelPublishedText(publishedAt: Moment, dueAt: Moment): string {
+  const late = toMs(publishedAt) - toMs(dueAt);
+  if (late <= 0) return "On time";
+  return `${Math.max(1, Math.floor(late / HOUR_MS))} h late`;
 }
