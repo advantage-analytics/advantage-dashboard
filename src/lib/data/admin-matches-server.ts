@@ -571,10 +571,11 @@ export async function listAdminMatches(
   return { rows, total: matches.length, viewsMeasured: views !== null };
 }
 
-/** What the team page's latest matches read off a `matches` row. */
+/** What the latest-matches lists read off a `matches` row. */
 type DbProgramMatch = Pick<
   DbListMatch,
   | "id"
+  | "program_id"
   | "player2_id"
   | "player1_name"
   | "player2_name"
@@ -584,34 +585,45 @@ type DbProgramMatch = Pick<
 >;
 
 /**
- * One program's newest matches and how many it has in all — the team page's
- * "latest matches" block. Same upload moment, seat rule, analysis resolution
- * and bucket as `listAdminMatches`, by calling the same helpers; nothing here
- * decides a status of its own.
+ * The newest matches across a set of programs and how many those programs have
+ * in all — the team page's "latest matches" block (one program) and the
+ * conference page's (every team in the conference). Same upload moment, seat
+ * rule, analysis resolution and bucket as `listAdminMatches`, by calling the
+ * same helpers; nothing here decides a status of its own.
  *
- * Every match of the program is read for its upload moment (`matches` has no
+ * Every match of the programs is read for its upload moment (`matches` has no
  * `created_at`, so "newest" cannot be an `order by`), but the analysis is
- * resolved only for the few that are kept. Throws when a read fails — the
- * caller decides how the page degrades.
+ * resolved only for the few that are kept. The order is newest upload first
+ * across all the programs together, and each match carries its `programId`.
+ * No ids means no query. Throws when a read fails — the caller decides how the
+ * page degrades.
  */
-export async function latestMatchesForProgram(
-  programId: string,
+export async function latestMatchesForPrograms(
+  programIds: readonly string[],
   limit: number = ADMIN_TEAM_LATEST_MATCHES,
 ): Promise<{ matches: AdminTeamLatestMatch[]; total: number }> {
   await requireAdminOrNotFound();
+  const ids = [...new Set(programIds)];
+  if (ids.length === 0) return { matches: [], total: 0 };
   const db = createAdminClient();
 
-  const matches = await readAllPages<DbProgramMatch>(
-    db
-      .from("matches")
-      .select(
-        "id, player2_id, player1_name, player2_name, created_by, date, source_provider",
-      )
-      .eq("program_id", programId)
-      .order("id")
-      .returns<DbProgramMatch[]>(),
-    "program matches read failed",
+  // Chunked like `readByIds`, so a large conference keeps the URL short.
+  const pages = await Promise.all(
+    chunks(ids).map((chunk) =>
+      readAllPages<DbProgramMatch>(
+        db
+          .from("matches")
+          .select(
+            "id, program_id, player2_id, player1_name, player2_name, created_by, date, source_provider",
+          )
+          .in("program_id", chunk)
+          .order("id")
+          .returns<DbProgramMatch[]>(),
+        "program matches read failed",
+      ),
+    ),
   );
+  const matches = pages.flat();
   if (matches.length === 0) return { matches: [], total: 0 };
 
   const moments = await uploadMoments(
@@ -635,22 +647,39 @@ export async function latestMatchesForProgram(
   return {
     total: matches.length,
     matches: adminTeamLatestMatches(
-      newest.map(({ m, id, date, uploadedAt }) => {
+      newest.flatMap(({ m, id, date, uploadedAt }) => {
+        // The filter is `program_id in (…)`, so this is never null; the guard
+        // is for the type, not for a row.
+        if (!m.program_id) return [];
         const analysis = resolvedAnalysis(jobAnalysis, moments.withStats, m);
         const { player, opponent } = seatNames(m);
-        return {
-          id,
-          date,
-          uploadedAt,
-          player,
-          opponent,
-          analysis,
-          bucket: bucketFor(analysis),
-        };
+        return [
+          {
+            id,
+            programId: m.program_id,
+            date,
+            uploadedAt,
+            player,
+            opponent,
+            analysis,
+            bucket: bucketFor(analysis),
+          },
+        ];
       }),
       limit,
     ),
   };
+}
+
+/**
+ * One program's newest matches and how many it has in all — the team page's
+ * "latest matches" block. `latestMatchesForPrograms` with a single id.
+ */
+export async function latestMatchesForProgram(
+  programId: string,
+  limit: number = ADMIN_TEAM_LATEST_MATCHES,
+): Promise<{ matches: AdminTeamLatestMatch[]; total: number }> {
+  return latestMatchesForPrograms([programId], limit);
 }
 
 /**

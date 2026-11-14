@@ -49,6 +49,9 @@ export function adminTeamJoinLink(
 /** How many matches the team page lists. */
 export const ADMIN_TEAM_LATEST_MATCHES = 3;
 
+/** How many matches the conference page lists, across all of its teams. */
+export const ADMIN_CONFERENCE_LATEST_MATCHES = 5;
+
 /**
  * Admin › Matches' filter buckets. Declared here so this leaf does not import
  * the server module; `admin-matches-server.ts` re-exports it as
@@ -92,9 +95,14 @@ export function newestUploads<T extends UploadOrderKey>(
   return [...rows].sort(compareNewestUpload).slice(0, Math.max(0, limit));
 }
 
-/** One of the program's newest matches, as the team page lists it. */
+/**
+ * One of the newest matches, as the team page lists it — and, read across
+ * several programs, as the conference page does.
+ */
 export interface AdminTeamLatestMatch {
   id: string;
+  /** The program the match belongs to — what tells two teams' matches apart. */
+  programId: string;
   /** The uploader's side, then the other — Admin › Matches' seat rule. */
   player: string;
   opponent: string;
@@ -108,6 +116,7 @@ export interface AdminTeamLatestMatch {
 
 /** A match with everything `adminTeamLatestMatches` reads, before trimming. */
 export interface AdminTeamMatchFacts extends UploadOrderKey {
+  programId: string;
   player: string;
   opponent: string;
   analysis: MatchAnalysis;
@@ -115,8 +124,10 @@ export interface AdminTeamMatchFacts extends UploadOrderKey {
 }
 
 /**
- * The team page's latest-matches list: the `limit` newest uploads, newest
- * first, each trimmed to what the page prints.
+ * The latest-matches list: the `limit` newest uploads, newest first, each
+ * trimmed to what the page prints. The rows may come from one program (the
+ * team page) or several (the conference page) — the order is by upload moment
+ * alone, never grouped by program, and every match keeps its `programId`.
  */
 export function adminTeamLatestMatches(
   rows: readonly AdminTeamMatchFacts[],
@@ -124,6 +135,7 @@ export function adminTeamLatestMatches(
 ): AdminTeamLatestMatch[] {
   return newestUploads(rows, limit).map((row) => ({
     id: row.id,
+    programId: row.programId,
     player: row.player,
     opponent: row.opponent,
     uploadedAt: row.uploadedAt,

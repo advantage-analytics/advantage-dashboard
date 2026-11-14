@@ -210,7 +210,7 @@ ready).
 
 ## T15 · Conference loader: one conference, its teams, its latest matches
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** guess — src/lib/data/admin-conferences-server.ts, src/lib/data/admin-teams-server.ts, src/lib/data/admin-matches-server.ts, src/lib/data/admin-team-links.ts, tests/admin-team-links.spec.ts
 - **done when:**

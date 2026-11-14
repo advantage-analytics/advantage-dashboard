@@ -181,3 +181,16 @@ is the runner's. Newest entries at the bottom.
 2. Once piece 2 records a starting flag count, the progress line becomes "X of Y flags resolved" with the artboard's bar.
 3. The artboard's checklist summary ("N open") beside "Before you publish" is not built.
 4. `AdminChecklist` repeats much of `PublishCheck`'s row markup, and `publishChecks` takes an `admin` boolean.
+
+## T15 · Conference loader: one conference, its teams, its latest matches — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `getAdminConference(conferenceId)` returns a conference row, its teams (through `listAdminTeams` with a new `conferenceId` filter), its five latest matches with `programId` and `programName`, and a match count; `countAdminConferences()` is a guarded head count. `latestMatchesForPrograms(programIds, limit)` replaces the single-program body, which now calls it. `tests/admin-team-links.spec.ts` covers matches from two programs.
+
+**follow-ups:**
+
+1. `listAdminTeams` turns a query error into an empty list, so a failed teams read on the conference page would read as "no teams".
+2. Teams then matches are read in sequence; a `programs.conference_id` join would let them run together.
+3. `latestMatchesForPrograms` reads every match of every program to find the newest few.
+4. The Teams `?conference=` text filter could now move to `conference_id`.

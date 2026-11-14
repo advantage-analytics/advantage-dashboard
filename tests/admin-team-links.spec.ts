@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  ADMIN_CONFERENCE_LATEST_MATCHES,
   adminTeamJoinLink,
   adminTeamLatestMatches,
   type AdminTeamMatchFacts,
@@ -50,6 +51,7 @@ function match(
 ): AdminTeamMatchFacts {
   return {
     id,
+    programId: "program-1",
     uploadedAt,
     date: "2026-11-01T00:00:00+00:00",
     player: `Player ${id}`,
@@ -78,6 +80,7 @@ test("three matches come back newest upload first", () => {
   expect(adminTeamLatestMatches(rows)).toEqual([
     {
       id: "b",
+      programId: "program-1",
       player: "Player b",
       opponent: "Opponent b",
       uploadedAt: "2026-11-05T10:00:00.000Z",
@@ -86,6 +89,7 @@ test("three matches come back newest upload first", () => {
     },
     {
       id: "c",
+      programId: "program-1",
       player: "Player c",
       opponent: "Opponent c",
       uploadedAt: "2026-11-03T10:00:00.000Z",
@@ -98,6 +102,7 @@ test("three matches come back newest upload first", () => {
     },
     {
       id: "a",
+      programId: "program-1",
       player: "Player a",
       opponent: "Opponent a",
       uploadedAt: "2026-11-02T10:00:00.000Z",
@@ -132,4 +137,40 @@ test("only the three newest are kept, and an unknown upload moment sorts last", 
     "unknown",
   ]);
   expect(adminTeamLatestMatches([])).toEqual([]);
+});
+
+test("matches from two programs come back newest upload first across both, each keeping its programId", () => {
+  const rows = [
+    match("a1", "2026-11-02T10:00:00.000Z", { programId: "program-a" }),
+    match("b1", "2026-11-06T10:00:00.000Z", { programId: "program-b" }),
+    match("a2", "2026-11-05T10:00:00.000Z", { programId: "program-a" }),
+    match("b2", "2026-11-03T10:00:00.000Z", { programId: "program-b" }),
+    match("a3", "2026-11-07T10:00:00.000Z", { programId: "program-a" }),
+    match("b3", null, { programId: "program-b" }),
+  ];
+
+  // Interleaved by upload moment — never one program's block, then the other's.
+  expect(
+    adminTeamLatestMatches(rows, ADMIN_CONFERENCE_LATEST_MATCHES).map(
+      ({ id, programId }) => ({ id, programId }),
+    ),
+  ).toEqual([
+    { id: "a3", programId: "program-a" },
+    { id: "b1", programId: "program-b" },
+    { id: "a2", programId: "program-a" },
+    { id: "b2", programId: "program-b" },
+    { id: "a1", programId: "program-a" },
+  ]);
+
+  // The default limit is still the team page's three.
+  expect(
+    adminTeamLatestMatches(rows).map(({ id, programId }) => ({
+      id,
+      programId,
+    })),
+  ).toEqual([
+    { id: "a3", programId: "program-a" },
+    { id: "b1", programId: "program-b" },
+    { id: "a2", programId: "program-a" },
+  ]);
 });

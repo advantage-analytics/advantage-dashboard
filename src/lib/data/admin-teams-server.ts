@@ -60,6 +60,13 @@ export interface AdminTeamsFilters {
   division?: string;
   conference?: string;
   state?: string;
+  /**
+   * `programs.conference_id` — the conference page's filter, an equality on
+   * the id. Separate from the text `conference` above, which `?conference=`
+   * still drives: a club's free-text league has text and no id, and two
+   * conferences may one day share a label.
+   */
+  conferenceId?: string;
 }
 
 /** The value sets the filter panel offers, read once from the directory. */
@@ -581,6 +588,9 @@ export async function listAdminTeams({
   if (filters?.division) query = query.eq("division", filters.division);
   if (filters?.conference) query = query.eq("conference", filters.conference);
   if (filters?.state) query = query.eq("state", filters.state);
+  if (filters?.conferenceId) {
+    query = query.eq("conference_id", filters.conferenceId);
+  }
 
   if (cursor) {
     const name = pgQuoteValue(cursor.schoolName);
@@ -771,6 +781,9 @@ export async function countAdminTeamViews(
     if (filters.division) query = query.eq("division", filters.division);
     if (filters.conference) query = query.eq("conference", filters.conference);
     if (filters.state) query = query.eq("state", filters.state);
+    if (filters.conferenceId) {
+      query = query.eq("conference_id", filters.conferenceId);
+    }
     return query;
   };
   const counted = async (

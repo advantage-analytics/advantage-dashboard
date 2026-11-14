@@ -31,6 +31,15 @@ import type {
   ConferenceSquads,
 } from "@/lib/data/admin-conferences-view";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
+import {
+  listAdminTeams,
+  type AdminTeamRow,
+} from "@/lib/data/admin-teams-server";
+import { latestMatchesForPrograms } from "@/lib/data/admin-matches-server";
+import {
+  ADMIN_CONFERENCE_LATEST_MATCHES,
+  type AdminTeamLatestMatch,
+} from "@/lib/data/admin-team-links";
 
 /**
  * The Admin › Conferences page — the 137 conferences the directory's programs
@@ -66,6 +75,31 @@ export interface AdminConferenceTeam {
   crestUrl: string | null;
   status: string;
 }
+
+/** One of a conference's newest matches, with the team it belongs to. */
+export interface AdminConferenceLatestMatch extends AdminTeamLatestMatch {
+  /** "Stanford Women's Tennis" — the `AdminTeamRow.name` of `programId`. */
+  programName: string;
+}
+
+/** Everything the Admin › Conferences detail page draws. */
+export interface AdminConferenceDetail {
+  conference: AdminConferenceRow;
+  /** Every team in the conference, school name ascending — never a page. */
+  teams: AdminTeamRow[];
+  /** The newest uploads across all of `teams`, newest first. */
+  latestMatches: AdminConferenceLatestMatch[];
+  /** Matches across all of `teams`; null when the matches read failed. */
+  matchCount: number | null;
+}
+
+/**
+ * The page size `getAdminConference` asks `listAdminTeams` for. Far above the
+ * largest conference in the directory, so the one page is all of them and no
+ * cursor is left; `listAdminTeams` reads one row past it, which stays inside
+ * PostgREST's 1000-row cap.
+ */
+const ADMIN_CONFERENCE_TEAMS_LIMIT = 500;
 
 // ---------------------------------------------------------------------------
 // Row mapping
@@ -243,4 +277,99 @@ export async function readConferenceTeams(
       : null,
     status: row.status,
   }));
+}
+
+/**
+ * One conference for its detail page: the row the list draws, every team in
+ * it, and the newest matches across those teams. Null when `conferenceId` is
+ * not a conference — the page answers that with `notFound()`.
+ *
+ * The row comes out of the `cache()`d `listAdminConferences()`, so the id is
+ * only ever compared against known ids: a value that is not a uuid never
+ * reaches a query. The teams are `listAdminTeams`' own rows (view `all`,
+ * narrowed by `conference_id`), so a team reads here exactly as it does on
+ * Admin › Teams.
+ *
+ * A failed matches read costs the matches block, not the page: it comes back
+ * empty with an unknown count rather than throwing.
+ */
+export async function getAdminConference(
+  conferenceId: string,
+): Promise<AdminConferenceDetail | null> {
+  // Before any service-role read. The loaders below guard themselves too; this
+  // one keeps the order from depending on which of them runs first.
+  await requireAdminOrNotFound();
+
+  const { rows } = await listAdminConferences();
+  const conference = rows.find((row) => row.id === conferenceId);
+  if (!conference) return null;
+
+  const { rows: teams } = await listAdminTeams({
+    view: "all",
+    limit: ADMIN_CONFERENCE_TEAMS_LIMIT,
+    filters: { conferenceId: conference.id },
+  });
+
+  const latest = await readConferenceLatestMatches(conference.id, teams);
+
+  return {
+    conference,
+    teams,
+    latestMatches: latest.matches,
+    matchCount: latest.total,
+  };
+}
+
+/**
+ * The conference's newest matches, each with its team's name, resolved by
+ * `admin-matches-server` so a match reads the same here as on Admin › Matches.
+ * That loader throws on a failed read; here it degrades to an empty list and
+ * an unknown count, as the team page's `readLatestMatches` does.
+ */
+async function readConferenceLatestMatches(
+  conferenceId: string,
+  teams: readonly AdminTeamRow[],
+): Promise<{ matches: AdminConferenceLatestMatch[]; total: number | null }> {
+  try {
+    const { matches, total } = await latestMatchesForPrograms(
+      teams.map((team) => team.id),
+      ADMIN_CONFERENCE_LATEST_MATCHES,
+    );
+    const nameById = new Map(teams.map((team) => [team.id, team.name]));
+    return {
+      total,
+      matches: matches.map((match) => ({
+        ...match,
+        programName: nameById.get(match.programId) ?? "Unavailable team",
+      })),
+    };
+  } catch (error) {
+    console.error("[admin conference] could not read latest matches", {
+      conferenceId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { matches: [], total: null };
+  }
+}
+
+/**
+ * How many conferences there are — a head count, for a nav or header figure
+ * that does not need the list. Null when the read fails, so the caller prints
+ * nothing rather than a confident zero.
+ */
+export async function countAdminConferences(): Promise<number | null> {
+  await requireAdminOrNotFound();
+  const admin = createAdminClient();
+
+  const { count, error } = await admin
+    .from("conferences")
+    .select("id", { count: "exact", head: true });
+
+  if (error) {
+    console.error("[admin conferences] could not count conferences", {
+      error: error.message,
+    });
+    return null;
+  }
+  return count;
 }
