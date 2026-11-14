@@ -296,7 +296,7 @@ ready).
 
 ## T21 · Team detail: the activity log on the page
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** guess — src/app/admin/teams/[programId]/page.tsx, src/components/admin/admin-activity-card.tsx, src/components/admin/team-sections.ts, tests/admin-team-views.spec.ts, tests/admin-activity-card.spec.ts (new)
 - **routes:** /admin/teams/[programId], /admin/teams/[programId]?view=activity

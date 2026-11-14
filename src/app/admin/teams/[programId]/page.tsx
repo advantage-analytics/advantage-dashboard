@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 
-import { AdminActivityCard } from "@/components/admin/admin-activity-card";
-import { activityLabel } from "@/components/admin/admin-activity-labels";
+import {
+  ACTIVITY_LOG_PREVIEW,
+  AdminActivityCard,
+} from "@/components/admin/admin-activity-card";
 import { AdminConferenceCard } from "@/components/admin/admin-conference-card";
 import { AdminContactsCard } from "@/components/admin/admin-contacts-card";
 import { AdminDetailsCard } from "@/components/admin/admin-details-card";
@@ -20,7 +22,6 @@ import {
   type TeamCardId,
 } from "@/components/admin/team-sections";
 import { getAdminTeam } from "@/lib/data/admin-team-server";
-import { shortDate } from "@/lib/data/match-utils";
 import { conferenceOptionsFor } from "@/lib/services/programs/admin-program-actions";
 import { quotaTierFor } from "@/lib/services/splitstep/quota";
 import { emailOrigin } from "@/lib/site-url";
@@ -63,15 +64,16 @@ export async function generateMetadata({
  * the conference first, with its own `Change` control — one `Edit details`
  * and the two join links), People (one list: join requests, then members and
  * roster players together, then invitations), the three latest matches with a link to Matches
- * filtered to this workspace, and a link to the activity log. No pill row and
+ * filtered to this workspace, and the activity log — its newest
+ * `ACTIVITY_LOG_PREVIEW` entries, with "Show all" for the rest. No pill row and
  * no rail: "keep it quiet" is the owner's word, and the column runs the full
  * width of the admin page like Matches and Teams (decided 2026-11-13).
  *
  * The cards the artboard has no place for stay behind `?view=`
  * (`team-sections.ts`): `schedule`, `usage` (Pilot + Usage — where `Add
- * hours` goes), `activity`, and `people` (the People list plus Contacts).
- * Each renders alone under the header with a link back. `roster` and any
- * unknown value are the default — the old `/admin/teams/<id>/<slug>` routes
+ * hours` goes), and `people` (the People list plus Contacts). Each renders
+ * alone under the header with a link back. `roster`, `activity` (the log is
+ * on the default view now) and any unknown value are the default — the old `/admin/teams/<id>/<slug>` routes
  * still redirect to `?view=<slug>` (`next.config.ts`), so every slug lands.
  *
  * It calls `getAdminTeam()` again rather than taking the layout's copy:
@@ -158,8 +160,6 @@ export default async function AdminTeamPage({
             members={data.members}
           />
         );
-      case "activity":
-        return <AdminActivityCard activity={data.activity} />;
     }
   };
 
@@ -212,8 +212,6 @@ export default async function AdminTeamPage({
     data.program.division ?? data.conference?.division ?? null,
   );
 
-  const lastActivity = data.activity[0] ?? null;
-
   return (
     <>
       {header}
@@ -251,22 +249,12 @@ export default async function AdminTeamPage({
         matchCount={data.matchCount}
       />
 
-      <Link
-        href={teamViewHref(programId, "activity")}
-        className="inline-flex items-center gap-0.5 self-start text-[12px] text-[var(--ink-600)] transition-colors duration-200 hover:text-[var(--ink-900)]"
-      >
-        Activity log
-        {lastActivity
-          ? ` · last: ${activityLabel(lastActivity.action)}${
-              lastActivity.actorName ? ` by ${lastActivity.actorName}` : ""
-            }, ${shortDate(lastActivity.createdAt)}`
-          : ""}
-        <ChevronRight
-          aria-hidden="true"
-          className="size-3.5 text-[var(--ink-400)]"
-          strokeWidth={1.75}
+      <section id="activity" aria-label="Activity log" className="scroll-mt-16">
+        <AdminActivityCard
+          activity={data.activity}
+          limit={ACTIVITY_LOG_PREVIEW}
         />
-      </Link>
+      </section>
     </>
   );
 }

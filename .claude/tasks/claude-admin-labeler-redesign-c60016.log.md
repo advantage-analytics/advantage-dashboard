@@ -249,3 +249,14 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical pass · completion pass
 
 **changed:** in `AdminConferenceCard`'s `fact` variant the conference name links to `/admin/conferences/<id>` ("No conference yet" stays plain); the `card` variant's "View conference" link and the admin search's conference result point at the page too. `tests/admin-conference-card.spec.ts` and the search mock carry the new hrefs; no `/admin/conferences?id=` string is left under `src/`.
+
+## T21 · Team detail: the activity log on the page — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** the team page's default view ends with an `#activity` section rendering `AdminActivityCard` with `limit={ACTIVITY_LOG_PREVIEW}` (8); the new client `AdminActivityShowAll` expands the rest in place and appears only past 8 entries. The "Activity log" link and the `activity` view are gone; `?view=activity` resolves to the default view, pinned in `tests/admin-team-views.spec.ts`. New `tests/admin-activity-log-section.spec.ts`.
+
+**follow-ups:**
+
+1. Expanding is one-way, with no "Show less".
+2. The page's doc comment could be shortened now the activity view is gone.

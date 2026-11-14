@@ -1,26 +1,25 @@
 /**
  * The Admin › Teams detail page's views — which `?view=` shows what.
  *
- * The page is one centred column (`TeamDetail.dc.html`, 2026-11-12): header,
- * Details, People, Latest matches, then a link to the activity log. There is
- * no pill row and no rail any more. The cards the artboard has no place for —
- * Schedule, the Pilot and per-member Usage cards, Contacts, the Activity log —
- * are kept behind `?view=` rather than deleted, each reached by a link on the
- * default view (`Add hours` → usage, the activity link → activity).
+ * The page is one full-width column (`TeamDetail.dc.html`, 2026-11-12):
+ * header, Details, People, Latest matches, then the Activity log (T21 — on the
+ * page itself, no longer a view of its own). There is no pill row and no rail
+ * any more. The cards the artboard has no place for — Schedule, the Pilot and
+ * per-member Usage cards, Contacts — are kept behind `?view=` rather than
+ * deleted (`Add hours` → usage).
  *
  * `next.config.ts` still redirects the five old sub-routes
  * (`/admin/teams/<id>/<slug>`) to `?view=<slug>`, so every one of those slugs
- * must land somewhere: `roster` has no view of its own now (the roster is part
- * of People on the default view) and resolves to the default, like any value
- * this file does not know.
+ * must land somewhere: `roster` and `activity` have no view of their own now
+ * (the roster is part of People on the default view, and the activity log is
+ * its last section) and resolve to the default, like any value this file does
+ * not know.
  */
 
 /** A card the page can render on its own behind a `?view=`. */
-export type TeamCardId =
-  "people" | "contacts" | "schedule" | "pilot" | "usage" | "activity";
+export type TeamCardId = "people" | "contacts" | "schedule" | "pilot" | "usage";
 
-export type TeamViewId =
-  "overview" | "people" | "schedule" | "usage" | "activity";
+export type TeamViewId = "overview" | "people" | "schedule" | "usage";
 
 export interface TeamView {
   readonly id: TeamViewId;
@@ -44,7 +43,6 @@ export const TEAM_VIEWS: readonly TeamView[] = [
   },
   { id: "schedule", label: "Schedule & results", cards: ["schedule"] },
   { id: "usage", label: "Usage", cards: ["pilot", "usage"] },
-  { id: "activity", label: "Activity log", cards: ["activity"] },
 ];
 
 /** `?view=` → a known view, or the default for anything missing or unknown. */
