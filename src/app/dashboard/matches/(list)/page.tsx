@@ -4,6 +4,10 @@ import {
   withRosterProfiles,
   withViewerSide,
 } from "@/lib/data/matches-page-server";
+import {
+  loadVerificationPending,
+  withVerificationPending,
+} from "@/lib/data/match-verification-server";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { Suspense } from "react";
 import { createClient } from "@/lib/supabase/server";
@@ -122,14 +126,23 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
   // Both scopes turn their rows to "you": the viewer's own seat on a
   // personal list, the program's player on a team one (`toTeamSide`) — the
   // seat the match page calls "you", so row, drawer and report agree.
-  const enriched = isTeam
-    ? withRosterProfiles(
-        supabase,
-        workspace.active.id,
-        enrichMatches(supabase, rows, user),
-        rows,
-      )
-    : withViewerSide(rows, user.id, enrichMatches(supabase, rows, user));
+  // "Verification pending" is one batched read for the whole list, started
+  // beside the enrichment rather than after it, and never fatal.
+  const pending = loadVerificationPending(
+    supabase,
+    rows.map((row) => row.id),
+  );
+  const enriched = withVerificationPending(
+    isTeam
+      ? withRosterProfiles(
+          supabase,
+          workspace.active.id,
+          enrichMatches(supabase, rows, user),
+          rows,
+        )
+      : withViewerSide(rows, user.id, enrichMatches(supabase, rows, user)),
+    pending,
+  );
   const scope = isTeam ? "team" : "personal";
   const canUpload = !isTeam || canUploadForProgram(workspace.active);
   const scopeKey = `${user.id}:${workspace.active.id}`;

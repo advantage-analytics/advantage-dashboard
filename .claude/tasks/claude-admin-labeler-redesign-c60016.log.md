@@ -461,3 +461,12 @@ is the runner's. Newest entries at the bottom.
 
 1. After applying, call it once as a real signed-in user to exercise the visibility filter.
 2. `labelling` is match-level; 2 open analyst sessions sit on a non-latest job and 1 has no job.
+
+## T41 · Pending rule and loader wiring — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `verificationPendingFor()` and `showsVerificationPending()` in `match-verification.ts` (cutoff imported from `labels/queue.ts`); new `match-verification-server.ts` batches `match_label_states` through the caller's own client (500 ids per call, empty set and one log on error). `verificationPending` on `DisplayMatch`, `Match`, Home's `MatchRow`/`EventGroup`; wired in the matches list, match detail and Home. Fixtures gain the required field.
+**follow-ups:**
+
+1. Nothing shows as pending until T40 is applied; each server process logs one warning for the missing function until then.
+2. A coach can't read other people's job analysis, so a failed reprocess after an earlier completed job could show pending to a coach.

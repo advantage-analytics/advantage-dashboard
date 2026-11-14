@@ -76,6 +76,7 @@ const MATCH: Match = {
   },
   won: true,
   isUserPlayer1: true,
+  verificationPending: false,
 };
 
 const POINT: MatchPoint = {

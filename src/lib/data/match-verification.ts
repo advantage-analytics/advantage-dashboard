@@ -12,6 +12,12 @@
  */
 
 import { pointScoreLabel } from "@/lib/ui/score-format";
+import { LABEL_QUEUE_FROM } from "@/lib/services/labels/queue";
+import {
+  isInFlight,
+  isStatsUnavailable,
+  type MatchAnalysis,
+} from "@/lib/data/match-analysis";
 
 export const VERIFIED_BY_ADVANTAGE = "Verified by Advantage";
 
@@ -99,4 +105,71 @@ export function verifiedOnLabel(verification: MatchVerification): string {
     day: "numeric",
   });
   return `Verified ${day}`;
+}
+
+/**
+ * One row of `match_label_states()` (migration `20261114151350`): what the
+ * customer may know about an unverified match's way to verification. Four
+ * columns and no more — no labeller, session id or due time ever reaches a
+ * customer type.
+ */
+export interface MatchLabelState {
+  match_id: string;
+  /** `processing_jobs.completed_at` of the latest completed job — a moment. */
+  results_at: string | null;
+  /** Whether that job covers any video (`jobVideoSeconds() > 0`). */
+  has_video: boolean;
+  /** Whether a labeller holds the match right now. */
+  labelling: boolean;
+}
+
+/**
+ * "Verification pending": an unverified match that is waiting on a labeller.
+ *
+ * True only for a match with video whose results landed on or after the
+ * queue's cut-off (`LABEL_QUEUE_FROM` — the same moment the labeller queue
+ * starts from, so the customer is never promised a check the queue will not
+ * do), or one a labeller already holds whatever its age. A missing state —
+ * the RPC returned no row, or could not be read — is never pending.
+ */
+export function verificationPendingFor(
+  state:
+    | Pick<MatchLabelState, "results_at" | "has_video" | "labelling">
+    | null
+    | undefined,
+): boolean {
+  if (!state || !state.has_video) return false;
+  if (state.labelling) return true;
+  if (!state.results_at) return false;
+  const landed = Date.parse(state.results_at);
+  return Number.isFinite(landed) && landed >= Date.parse(LABEL_QUEUE_FROM);
+}
+
+/**
+ * Whether a row shows "Verification pending", given what its loader knows.
+ *
+ * Never on a verified match, never while analysis is in flight (a reprocess
+ * can sit in front of an older completed job), and never on a match whose
+ * statistics our derivation refused (`isStatsUnavailable`) — there is
+ * nothing for a labeller to check against. `analysis` is optional because
+ * not every loader can read the job (`processing_jobs` RLS is per-creator);
+ * without it, `results_at` being null until a job completes is the guard.
+ */
+export function showsVerificationPending({
+  verification,
+  pending,
+  analysis,
+}: {
+  verification: MatchVerification | null | undefined;
+  pending: boolean;
+  analysis?: Pick<MatchAnalysis, "status" | "recovery"> | null;
+}): boolean {
+  if (verification || !pending) return false;
+  if (
+    analysis &&
+    (isInFlight(analysis.status) || isStatsUnavailable(analysis))
+  ) {
+    return false;
+  }
+  return true;
 }

@@ -4,6 +4,7 @@ import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import {
   isAnalysisFailed,
   isInFlight,
+  isStatsUnavailable,
   type AnalysisStatus,
 } from "@/lib/data/match-analysis";
 import { viewerSide } from "@/lib/data/viewer-side";
@@ -17,9 +18,11 @@ import {
   type TodayInput,
 } from "@/lib/data/match-day";
 import {
+  showsVerificationPending,
   verificationFor,
   type MatchVerification,
 } from "@/lib/data/match-verification";
+import { loadVerificationPending } from "@/lib/data/match-verification-server";
 
 export interface DbRecentMatch {
   id: string;
@@ -84,6 +87,12 @@ export interface EventGroup {
   courtType: string | null;
   /** Verified by Advantage (`verificationFor`), or null. */
   verification: MatchVerification | null;
+  /**
+   * The row says "Verification pending" when not every match it lists is
+   * verified and at least one of them is waiting on a labeller. False
+   * whenever `verification` is set.
+   */
+  verificationPending: boolean;
   matches: MatchRow[];
 }
 
@@ -113,6 +122,8 @@ export interface MatchRow {
    * the plain result row its dashes correctly describe.
    */
   analysisStatus?: AnalysisStatus;
+  /** Waiting on a labeller (`showsVerificationPending`); false once verified. */
+  verificationPending: boolean;
 }
 
 /**
@@ -143,6 +154,12 @@ export function groupMatchesIntoEvents(
   analysisMap: Map<string, AnalysisStatus>,
   /** The day "Today" and "Yesterday" count from — a spec holds it still. */
   today?: TodayInput,
+  /**
+   * Matches `match_label_states` calls pending (`loadVerificationPending`),
+   * already cleared of any whose statistics were refused. Empty by default:
+   * nothing is pending unless the read said so.
+   */
+  pendingIds: ReadonlySet<string> = new Set(),
 ): EventGroup[] {
   const byKey = new Map<string, DbRecentMatch[]>();
   for (const row of rows) {
@@ -210,6 +227,11 @@ export function groupMatchesIntoEvents(
           status && (isInFlight(status) || isAnalysisFailed(status))
             ? status
             : undefined,
+        verificationPending: showsVerificationPending({
+          verification: verificationFor(m),
+          pending: pendingIds.has(m.id),
+          analysis: status ? { status } : null,
+        }),
       });
     }
 
@@ -218,6 +240,7 @@ export function groupMatchesIntoEvents(
     const verifications = matches
       .filter((m) => shownIds.has(m.id))
       .map((m) => verificationFor(m));
+    const verification = verifications.every(Boolean) ? verifications[0] : null;
     events.push({
       id: first.id,
       tournamentName: first.tournament_name,
@@ -227,7 +250,11 @@ export function groupMatchesIntoEvents(
       // The row stands for the matches it lists, so it says Verified by
       // Advantage only when every one of them is — never one match's status
       // for all, and never held back by a match the row leaves out.
-      verification: verifications.every(Boolean) ? verifications[0] : null,
+      verification,
+      // Pending only while the row is not Verified by Advantage as a whole,
+      // and only when one of the matches it lists is actually waiting.
+      verificationPending:
+        verification == null && mapped.some((row) => row.verificationPending),
       matches: mapped,
     });
   }
@@ -265,18 +292,29 @@ export async function loadRecentMatches(
 
   // Stats and in-flight analysis state key off the same id set and neither
   // reads the other's output, so they run together rather than in series.
-  const [{ data: stats, error: statsError }, analysis] = await Promise.all([
-    supabase
-      .from("match_stats_with_percentages")
-      .select(
-        "match_id, is_player1, first_serve_pct, winners, unforced_errors, forced_errors, break_points_saved, break_points_faced, break_point_opportunities, break_points_converted",
-      )
-      .in("match_id", matchIds),
-    loadMatchAnalysis(supabase, matchIds),
-  ]);
+  // The label-state read joins them: same ids, never fatal, one call.
+  const [{ data: stats, error: statsError }, analysis, pending] =
+    await Promise.all([
+      supabase
+        .from("match_stats_with_percentages")
+        .select(
+          "match_id, is_player1, first_serve_pct, winners, unforced_errors, forced_errors, break_points_saved, break_points_faced, break_point_opportunities, break_points_converted",
+        )
+        .in("match_id", matchIds),
+      loadMatchAnalysis(supabase, matchIds),
+      loadVerificationPending(supabase, matchIds),
+    ]);
   if (statsError) throw new Error(statsError.message);
   const analysisMap = new Map<string, AnalysisStatus>();
   for (const [id, a] of analysis) analysisMap.set(id, a.status);
+  // The status map carries no recovery class, so a match whose statistics
+  // were refused leaves the pending set here, where the class is in hand.
+  const pendingIds = new Set(
+    [...pending].filter((id) => {
+      const a = analysis.get(id);
+      return !(a && isStatsUnavailable(a));
+    }),
+  );
 
   const matchById = new Map(list.map((m) => [m.id, m]));
   const statsMap = new Map<string, MatchStats>();
@@ -293,5 +331,13 @@ export async function loadRecentMatches(
     }
   }
 
-  return groupMatchesIntoEvents(list, playerIds, userId, statsMap, analysisMap);
+  return groupMatchesIntoEvents(
+    list,
+    playerIds,
+    userId,
+    statsMap,
+    analysisMap,
+    undefined,
+    pendingIds,
+  );
 }

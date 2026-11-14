@@ -571,7 +571,7 @@ ready).
 
 ## T41 · Pending rule and loader wiring
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T40
 - **files:** src/lib/data/match-verification.ts, src/lib/data/match-verification-server.ts (new), src/lib/data/matches-list-types.ts, src/app/dashboard/matches/(list)/page.tsx, src/lib/data/match-detail-server.ts, src/lib/data/home-recent-data.ts, src/lib/data/types.ts, tests/verification-pending.spec.ts (new) — guess

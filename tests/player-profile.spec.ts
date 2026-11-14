@@ -637,6 +637,7 @@ test.describe("fromPlayerSide", () => {
     tournamentName: "Fall dual",
     date: "October 24, 2026",
     matchType: "Dual",
+    verificationPending: false,
     player1: { name: "Avery Teammate", id: "p-avery" },
     player2: { name: "Maya Okafor" },
     player2Hand: "right",

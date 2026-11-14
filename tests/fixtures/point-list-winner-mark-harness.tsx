@@ -79,6 +79,7 @@ const MATCH: Match = {
   },
   won: true,
   isUserPlayer1: true,
+  verificationPending: false,
 };
 
 function point(overrides: Partial<MatchPoint> & { id: string }): MatchPoint {

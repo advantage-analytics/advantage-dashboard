@@ -31,6 +31,12 @@ export interface Match {
   courtType?: string;
   /** Verified by Advantage (`verificationFor`), or null. */
   verification?: MatchVerification | null;
+  /**
+   * Waiting on a labeller (`showsVerificationPending`). Always false when
+   * `verification` is set, and false on every read that is not the signed-in
+   * viewer's own (a share link, the admin console, the sample match).
+   */
+  verificationPending: boolean;
   /** `matches.source_provider` — which pipeline produced this match's data. */
   sourceProvider?: string;
   /**
