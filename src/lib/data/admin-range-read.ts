@@ -17,7 +17,11 @@ export async function readAllPages<T>(
   const pageSize = 500;
   for (let offset = 0; ; offset += pageSize) {
     const result = await query.range(offset, offset + pageSize - 1);
-    if (result.error || !result.data) throw new Error(errorMessage);
+    // `cause` keeps the PostgREST error (its `code`) for a caller that
+    // branches on it.
+    if (result.error || !result.data) {
+      throw new Error(errorMessage, { cause: result.error });
+    }
     rows.push(...result.data);
     if (result.data.length < pageSize) return rows;
   }

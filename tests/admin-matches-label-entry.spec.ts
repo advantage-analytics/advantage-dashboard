@@ -63,6 +63,8 @@ function row(overrides: Partial<AdminMatchRow> = {}): AdminMatchRow {
     sentForAnalysisAt: "2026-09-01T12:05:00Z",
     resultsLandedAt: "2026-09-01T13:00:00Z",
     labelState: null,
+    labelPublishedAt: null,
+    labelCheckedAt: null,
     verifiedAt: null,
     ...overrides,
   };

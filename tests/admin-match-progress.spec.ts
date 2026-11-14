@@ -7,15 +7,18 @@ import {
 } from "@/lib/data/admin-match-progress";
 
 /**
- * Admin › Matches progress steps (T6) — pure, no I/O. Pins the order, each
- * fixture's step states, and that Published and Checked share
- * `matches.verified` until piece 3 splits them.
+ * Admin › Matches progress steps (T6, T38) — pure, no I/O. Pins the order,
+ * each fixture's step states, Published and Checked read off the match's
+ * label session, and a verified match with no session falling back to
+ * `matches.verified_at` for both.
  */
 
 const UPLOADED = "2026-11-01T10:00:00.000Z";
 const SENT = "2026-11-01T11:00:00.000Z";
 const LANDED = "2026-11-01T15:00:00.000Z";
 const VERIFIED = "2026-11-02T09:00:00.000Z";
+const PUBLISHED = "2026-11-02T08:00:00.000Z";
+const CHECKED = "2026-11-02T12:00:00.000Z";
 
 function facts(overrides: Partial<MatchProgressFacts>): MatchProgressFacts {
   return {
@@ -24,6 +27,8 @@ function facts(overrides: Partial<MatchProgressFacts>): MatchProgressFacts {
     sentForAnalysisAt: SENT,
     resultsLandedAt: LANDED,
     labelState: null,
+    labelPublishedAt: null,
+    labelCheckedAt: null,
     verifiedAt: null,
     ...overrides,
   };
@@ -154,10 +159,8 @@ test("being labelled", () => {
   ]);
 });
 
-test("verified: Published and Checked turn done together", () => {
-  const steps = matchProgressSteps(
-    facts({ labelState: "complete", verifiedAt: VERIFIED }),
-  );
+test("verified with no label session: both steps done at verified_at", () => {
+  const steps = matchProgressSteps(facts({ verifiedAt: VERIFIED }));
   expect(steps.map((step) => [step.name, step.state])).toEqual([
     ["Uploaded", "done"],
     ["Sent for analysis", "done"],
@@ -168,6 +171,59 @@ test("verified: Published and Checked turn done together", () => {
   ]);
   expect(steps[4].at).toBe(VERIFIED);
   expect(steps[5].at).toBe(VERIFIED);
+});
+
+test("published and unchecked", () => {
+  const steps = matchProgressSteps(
+    facts({
+      labelState: "complete",
+      labelPublishedAt: PUBLISHED,
+      verifiedAt: VERIFIED,
+    }),
+  );
+  expect(steps.slice(3).map((step) => [step.name, step.state])).toEqual([
+    ["Being labelled", "done"],
+    ["Published", "done"],
+    ["Checked", "todo"],
+  ]);
+  expect(steps[4].at).toBe(PUBLISHED);
+  expect(steps[5].at).toBeNull();
+});
+
+test("sent back: labelling again, still published, not checked", () => {
+  for (const verifiedAt of [VERIFIED, null]) {
+    const steps = matchProgressSteps(
+      facts({
+        labelState: "labelling",
+        labelPublishedAt: PUBLISHED,
+        verifiedAt,
+      }),
+    );
+    expect(steps.slice(3).map((step) => [step.name, step.state])).toEqual([
+      ["Being labelled", "current"],
+      ["Published", "done"],
+      ["Checked", "todo"],
+    ]);
+    expect(steps[4].at).toBe(PUBLISHED);
+  }
+});
+
+test("checked: each step carries its own moment", () => {
+  const steps = matchProgressSteps(
+    facts({
+      labelState: "complete",
+      labelPublishedAt: PUBLISHED,
+      labelCheckedAt: CHECKED,
+      verifiedAt: VERIFIED,
+    }),
+  );
+  expect(steps.slice(3).map((step) => [step.name, step.state])).toEqual([
+    ["Being labelled", "done"],
+    ["Published", "done"],
+    ["Checked", "done"],
+  ]);
+  expect(steps[4].at).toBe(PUBLISHED);
+  expect(steps[5].at).toBe(CHECKED);
 });
 
 test("a submitted label session without verification publishes nothing", () => {

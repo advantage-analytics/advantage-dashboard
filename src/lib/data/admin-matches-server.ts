@@ -129,6 +129,13 @@ export interface AdminMatchRow {
   resultsLandedAt: string | null;
   /** The match's own label session's status (never a practice copy). */
   labelState: AdminLabelState | null;
+  /**
+   * When that session was published: its `completed_at` while complete, else
+   * its `published_at` (a sent-back session keeps it). Null with no session.
+   */
+  labelPublishedAt: string | null;
+  /** That session's `checked_at`, or null. */
+  labelCheckedAt: string | null;
   /** `matches.verified_at` while the match is verified, else null. */
   verifiedAt: string | null;
 }
@@ -334,6 +341,55 @@ function bucketFor(analysis: MatchAnalysis): AdminMatchBucket {
 interface LabelSessionFacts {
   id: string;
   status: AdminLabelState | null;
+  /** `completed_at` while complete, else `published_at` (a sent-back one). */
+  publishedAt: string | null;
+  /** `checked_at`. */
+  checkedAt: string | null;
+}
+
+interface LabelSessionRow {
+  id: string;
+  match_id: string;
+  kind: string | null;
+  status: string | null;
+  created_at: string;
+  completed_at: string | null;
+  /** Absent before `20261114070000_label_publish_check` is applied. */
+  published_at?: string | null;
+  checked_at?: string | null;
+}
+
+const SESSION_COLUMNS = "id, match_id, kind, status, created_at, completed_at";
+/** Added by `20261114070000_label_publish_check`. */
+const PUBLISH_CHECK_COLUMNS = "published_at, checked_at";
+/** Postgres `undefined_column`: the publish-check migration is not applied. */
+const UNDEFINED_COLUMN = "42703";
+
+function isUndefinedColumn(error: unknown): boolean {
+  const cause = error instanceof Error ? error.cause : null;
+  return (
+    typeof cause === "object" &&
+    cause !== null &&
+    (cause as { code?: unknown }).code === UNDEFINED_COLUMN
+  );
+}
+
+/**
+ * The publish-check stamps of a session. Before the migration the columns
+ * are absent: a `complete` session then reads as published and checked at its
+ * `completed_at`, which is what the migration's backfill writes.
+ */
+function publishCheckOf(row: LabelSessionRow) {
+  const complete = row.status === "complete";
+  return {
+    publishedAt: complete ? row.completed_at : (row.published_at ?? null),
+    checkedAt:
+      row.checked_at !== undefined
+        ? row.checked_at
+        : complete
+          ? row.completed_at
+          : null,
+  };
 }
 
 /** Latest label session per match, an analyst's ahead of a player's own. */
@@ -341,19 +397,15 @@ async function labelSessions(
   db: SupabaseClient,
   ids: string[],
 ): Promise<Map<string, LabelSessionFacts>> {
-  const rows = await readByIds<{
-    id: string;
-    match_id: string;
-    kind: string | null;
-    status: string | null;
-    created_at: string;
-  }>(
-    db,
-    "label_sessions",
-    "id, match_id, kind, status, created_at",
-    "match_id",
-    ids,
-  );
+  const read = (columns: string) =>
+    readByIds<LabelSessionRow>(db, "label_sessions", columns, "match_id", ids);
+  let rows: LabelSessionRow[];
+  try {
+    rows = await read(`${SESSION_COLUMNS}, ${PUBLISH_CHECK_COLUMNS}`);
+  } catch (error) {
+    if (!isUndefinedColumn(error)) throw error;
+    rows = await read(SESSION_COLUMNS);
+  }
   const best = new Map<string, (typeof rows)[number]>();
   const rank = (kind: string | null) => (kind === "analyst" ? 1 : 0);
   for (const row of rows) {
@@ -372,7 +424,7 @@ async function labelSessions(
   return new Map(
     [...best].map(([matchId, row]) => [
       matchId,
-      { id: row.id, status: labelStateOf(row.status) },
+      { id: row.id, status: labelStateOf(row.status), ...publishCheckOf(row) },
     ]),
   );
 }
@@ -587,6 +639,8 @@ export async function listAdminMatches(
       sentForAnalysisAt: job?.submitted_at ?? null,
       resultsLandedAt: job?.completed_at ?? null,
       labelState: session?.status ?? null,
+      labelPublishedAt: session?.publishedAt ?? null,
+      labelCheckedAt: session?.checkedAt ?? null,
       verifiedAt: verification?.verifiedAt ?? null,
     };
   });

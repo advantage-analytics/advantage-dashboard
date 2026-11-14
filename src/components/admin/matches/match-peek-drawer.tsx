@@ -304,7 +304,7 @@ function stepSubLine(
     return row.labelState === "submitted" ? "Submitted for checking" : "";
   }
   if (!step.at) return "";
-  // Published and Checked share one moment today; each states it outright.
+  // Published and Checked often share one moment; each states it outright.
   if (step.name === "Published" || step.name === "Checked") {
     return moment(step.at);
   }

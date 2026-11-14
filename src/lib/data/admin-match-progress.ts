@@ -6,10 +6,11 @@
  * (`admin-matches-server.ts`) reads every fact these steps need in its batched
  * reads and puts them on the row.
  *
- * "Published" and "Checked" are piece 3 vocabulary with one fact behind them
- * today: an admin's Mark complete both publishes and checks, setting
- * `matches.verified`. Until piece 3 splits them, both turn done together on a
- * verified match.
+ * "Published" and "Checked" are two moments on the match's own label session:
+ * a labeller's submit publishes it, then an admin checks it or sends it back.
+ * A sent-back session is being labelled again and stays published, unchecked.
+ * A verified match with no label session (verified by hand, before labelling
+ * existed) has only `matches.verified_at`, so it takes that moment for both.
  */
 
 import type { AnalysisStatus } from "@/lib/data/match-analysis";
@@ -53,6 +54,10 @@ export interface MatchProgressFacts {
   /** The analysis job's `processing_jobs.completed_at`. */
   resultsLandedAt: string | null;
   labelState: AdminLabelState | null;
+  /** When that session was published (`AdminMatchRow.labelPublishedAt`). */
+  labelPublishedAt: string | null;
+  /** That session's `checked_at`. */
+  labelCheckedAt: string | null;
   /** `matches.verified_at` while `matches.verified` is set, else null. */
   verifiedAt: string | null;
 }
@@ -113,14 +118,17 @@ export function matchProgressSteps(
     results = "todo";
   }
 
+  // A sent-back session is labelling again, verified or not.
   let labelling: MatchProgressStepState = "todo";
-  if (verified) labelling = "done";
-  else if (results === "done") {
+  if (results === "done") {
     if (row.labelState === "labelling") labelling = "current";
-    else if (row.labelState) labelling = "done";
+    else if (verified || row.labelState) labelling = "done";
   }
 
-  const published: MatchProgressStepState = verified ? "done" : "todo";
+  // No label session: a verified match keeps `verified_at` for both steps.
+  const noSession = row.labelState === null;
+  const publishedAt = noSession ? row.verifiedAt : row.labelPublishedAt;
+  const checkedAt = noSession ? row.verifiedAt : row.labelCheckedAt;
 
   return [
     uploaded,
@@ -135,8 +143,12 @@ export function matchProgressSteps(
       at: results === "done" ? row.resultsLandedAt : null,
     },
     { name: "Being labelled", state: labelling, at: null },
-    { name: "Published", state: published, at: row.verifiedAt },
-    { name: "Checked", state: published, at: row.verifiedAt },
+    {
+      name: "Published",
+      state: publishedAt ? "done" : "todo",
+      at: publishedAt,
+    },
+    { name: "Checked", state: checkedAt ? "done" : "todo", at: checkedAt },
   ];
 }
 

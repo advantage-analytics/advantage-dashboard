@@ -529,7 +529,7 @@ ready).
 
 ## T38 · Matches progress: split Published and Checked
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T31
 - **files:** guess — src/lib/data/admin-match-progress.ts, src/lib/data/admin-matches-server.ts, tests/admin-match-progress.spec.ts

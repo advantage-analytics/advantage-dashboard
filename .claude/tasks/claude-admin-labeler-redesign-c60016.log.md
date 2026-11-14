@@ -435,3 +435,11 @@ is the runner's. Newest entries at the bottom.
 
 1. Comments and some spec test names still say "Mark complete".
 2. A practice copy's overview also reads "Before you publish".
+
+## T38 · Matches progress: split Published and Checked — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `AdminMatchRow` carries `labelPublishedAt` and `labelCheckedAt` from the existing session read (42703 fallback: complete counts as published and checked at `completed_at`); Published and Checked turn done from their own moments; a sent-back match shows Being labelled current; no session keeps the `verifiedAt` rule. `readAllPages` attaches the PostgREST error as `cause`. Live check: no non-practice `submitted` sessions exist.
+**follow-ups:**
+
+1. On a published, unchecked match, Checked shows "to do"; it could be "current" to match the board's "Published, to check" lane.
