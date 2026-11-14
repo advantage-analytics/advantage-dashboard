@@ -12,6 +12,9 @@
  * Assigning is refused on a `complete` session (it is frozen for everyone;
  * reopen it first), for a user who does not exist, and for one whose
  * `is_labeller` is false. Unassigning (`userId` null) clears both columns.
+ * Either way `claimed_at` is cleared in the same write: the session is now
+ * the admin's assignment, not a labeller's own claim, so the stale-claim
+ * release leaves it alone.
  * `labelling` and `submitted` sessions may both be reassigned: a submitted
  * session waiting on review still names who did it. The write is matched on
  * `status <> 'complete'`, so a session published between the read and the
@@ -128,7 +131,11 @@ export async function assignLabelSession(
       : null;
     const { data: moved, error: updateError } = await db
       .from("label_sessions")
-      .update({ assigned_to: target, assigned_at: assignedAt })
+      .update({
+        assigned_to: target,
+        assigned_at: assignedAt,
+        claimed_at: null,
+      })
       .eq("id", id)
       .neq("status", "complete")
       .select("id");

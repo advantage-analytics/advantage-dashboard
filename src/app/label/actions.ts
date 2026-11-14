@@ -121,6 +121,10 @@ import {
   recordLabelWorkBeat,
   type LabelWorkBeatResult,
 } from "@/lib/services/labels/work-beats-session";
+import {
+  claimLabelMatch,
+  type ClaimLabelMatchResult,
+} from "@/lib/services/labels/claim-session";
 import { labellerShotPatchError } from "@/lib/services/labels/edit";
 import { withLabelOp } from "@/lib/supabase/op-context";
 import type { LabelGame } from "@/lib/services/labels/operations";
@@ -605,4 +609,18 @@ export async function recordLabelWorkBeatAction(
   sessionId: string,
 ): Promise<LabelWorkBeatResult> {
   return recordLabelWorkBeat(sessionId);
+}
+
+/**
+ * The board's "Claim" (claim-session.ts): take job `jobId` for the caller and
+ * answer the session to open. The caller is read from the server-side
+ * session, never sent; the job must be one of the next three due and the
+ * caller must hold no other match. Seeds the job's session when it has none,
+ * so the first claim of a match is slow. Not a step to undo: outside
+ * `withLabelOp`.
+ */
+export async function claimLabelMatchAction(
+  jobId: string,
+): Promise<ClaimLabelMatchResult> {
+  return claimLabelMatch(jobId);
 }

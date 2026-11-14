@@ -300,3 +300,18 @@ is the runner's. Newest entries at the bottom.
 4. `readLabelQueue` reads every newest job since the cut-off before filtering.
 5. Retire `listLabelJobs` once T28 moves `/admin/labels` onto the new loader.
 6. Add a live-DB spec for `readLabelQueue` after the migration is applied.
+
+## T25 · Self-claim: seed, claim, admin assign clears the claim — done
+
+**gate:** mechanical pass · completion needs-work, then pass after a fix
+
+**changed:** new `src/lib/services/labels/claim-session.ts` with `claimLabelMatch(jobId, deps)`: viewer from the server session only, refuses a non-labeller, a holding viewer and a job outside the recomputed `claimableJobIds`, seeds when the job has no session, then calls `claim_label_session` with the viewer's id and maps each answer to a named sentence; `{ sessionId }` only on `'claimed'`. `claimLabelMatchAction(jobId)` in `src/app/label/actions.ts`. `assignLabelSession` now writes `claimed_at: null`. Specs: new `tests/label-claim.spec.ts`, updated `tests/label-assign.spec.ts`.
+
+**note:** the first review failed because the runner's dispatch prompt asked for an "already yours" shortcut that returned the session to a holding viewer, contradicting the `done when:` rule that a holding viewer is refused. The runner removed the shortcut and its test by hand, re-ran the gate (pass) and the review (pass).
+
+**follow-ups:**
+
+1. `assignLabelSession` writes `claimed_at`, which exists only once the T22 migration is applied: admin Assign and Unassign fail against the live database until then.
+2. An admin who is not a labeller is refused a claim; T27 should hide Claim for that viewer.
+3. Each claim re-reads the whole queue, including beats it does not use.
+4. Refresh the board after any refusal so the row moves.

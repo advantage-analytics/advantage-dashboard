@@ -349,7 +349,7 @@ ready).
 
 ## T25 · Self-claim: seed, claim, admin assign clears the claim
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T22, T24
 - **files:** guess — src/lib/services/labels/claim-session.ts (new), src/app/label/actions.ts, src/lib/services/labels/assign-session.ts, tests/label-claim.spec.ts (new), tests/label-assign.spec.ts
