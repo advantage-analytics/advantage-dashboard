@@ -110,12 +110,12 @@ test.describe("scoreboardCells", () => {
     expect(scoreboardCells(level, "opp")[0].tiebreak).toBeNull();
   });
 
-  test("the tiebreak digit sits on the loser's row only, and is the loser's points", () => {
+  test("the tiebreak digit sits on the winner's row only, and is the loser's points", () => {
     const you = scoreboardCells(SETS, "you");
     const opp = scoreboardCells(SETS, "opp");
-    // Set 3 is 7-6(5) to you: the raised 5 belongs beside the opponent's 6.
-    expect(you[2].tiebreak).toBeNull();
-    expect(opp[2].tiebreak).toBe(5);
+    // Set 3 is 7-6(5) to you: the raised 5 sits beside your 7.
+    expect(you[2].tiebreak).toBe(5);
+    expect(opp[2].tiebreak).toBeNull();
     // A non-tiebreak set has none on either row.
     expect(you[0].tiebreak).toBeNull();
     expect(opp[0].tiebreak).toBeNull();
