@@ -543,8 +543,8 @@ function MatchRow({
  * The row's one status mark and its words — `RowLifecycle`'s vocabulary on a
  * single line: an upload's percentage rides beside the word rather than as a
  * track beneath it, which would make the row two lines. Exported for the team
- * page's latest matches, which pass `verification: null` (its loader reads no
- * verification) and so print the plain status words.
+ * page's latest matches, which pass each match's own `verification`
+ * (`verificationFor`), so a verified match reads the same there as here.
  */
 export function MatchStatus({
   row,

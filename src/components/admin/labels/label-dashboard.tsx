@@ -1080,18 +1080,20 @@ function FlagsLeft({
   // the score" figure is the checklist's flags on points, and the total still
   // matches the boards.
   const split = (counts: FlagCounts) => {
-    const unbalanced = Math.max(0, counts.amber - score);
-    const onPoints = counts.amber - unbalanced;
+    const onPoints = Math.min(counts.amber, score);
+    const unbalanced = counts.amber - onPoints;
     return [
       `${onPoints} can move the score`,
       ...(unbalanced > 0 ? ["the score doesn't add up"] : []),
       `${counts.grey} wrong data`,
     ].join(", ");
   };
+  // The console's count when it hands one in, so this line and the boards
+  // (which read the `open_counts` it saves) give the same number.
+  const open = openCounts ?? { amber: score, grey: data };
+  const left = open.amber + open.grey;
   // A start of zero has nothing to count from: the line reads as without one.
   if (marks && startOpenCounts && total > 0) {
-    const open = openCounts ?? { amber: score, grey: data };
-    const left = open.amber + open.grey;
     const resolved = Math.max(0, total - left);
     return (
       <section
@@ -1121,10 +1123,6 @@ function FlagsLeft({
       </section>
     );
   }
-  // The console's count when it hands one in, so this line and the boards
-  // (which read the `open_counts` it saves) give the same number.
-  const now = openCounts ?? { amber: score, grey: data };
-  const left = now.amber + now.grey;
   return (
     <section data-dashboard-card="Progress" aria-label="Progress">
       <p data-flags-left="" className="text-body tabular" style={INK[600]}>
@@ -1139,7 +1137,7 @@ function FlagsLeft({
             <span className="text-title" style={INK[900]}>
               {`${left} ${left === 1 ? "flag" : "flags"} left:`}
             </span>{" "}
-            {split(now)}
+            {split(open)}
           </>
         )}
       </p>
