@@ -49,6 +49,8 @@ import {
 import { bandKindFor } from "./cut-kinds";
 import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
+import type { PlayerChipLabels } from "./player-chip-labels";
+import { PlayerChips } from "./player-chips";
 import { filterRailReducer } from "../match-filters/rail-state";
 import { LightboxAdvancedDrawer } from "./lightbox-advanced-drawer";
 import { LightboxMatchesSheet } from "./lightbox-matches-sheet";
@@ -176,8 +178,13 @@ export interface VizLightboxShellProps {
   onClose: () => void;
   /** "Clear filter": the shell lets go of its own picks, then calls this. */
   onClearFilters: () => void;
-  /** The You | Opponent switch. Omitted, it is not drawn. */
-  player?: { value: PlayerFilter; onChange: (player: PlayerFilter) => void };
+  /** The player switch and its two words (`player-chips.tsx`: "You" only
+   *  for the player the charts are about). Omitted, it is not drawn. */
+  player?: {
+    value: PlayerFilter;
+    onChange: (player: PlayerFilter) => void;
+    labels: PlayerChipLabels;
+  };
   /** The Filters panel. Omitted, it is not drawn. */
   filterPanel?: {
     onChange: (next: VizFilters) => void;
@@ -973,21 +980,12 @@ export function VizLightboxShell({
                 <div className="flex min-w-0 shrink-0 flex-col gap-3 md:min-h-0 md:max-w-[800px] md:flex-1 md:shrink">
                   <div className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3">
                     {player && (
-                      <div
+                      <PlayerChips
+                        value={player.value}
+                        onChange={player.onChange}
+                        labels={player.labels}
                         className="flex gap-1.5"
-                        role="group"
-                        aria-label="Player"
-                      >
-                        {(["you", "opponent"] as const).map((value) => (
-                          <LifecycleChip
-                            key={value}
-                            pressed={player.value === value}
-                            onClick={() => player.onChange(value)}
-                          >
-                            {value === "you" ? "You" : "Opponent"}
-                          </LifecycleChip>
-                        ))}
-                      </div>
+                      />
                     )}
                     {controls && (
                       <ControlsSlot

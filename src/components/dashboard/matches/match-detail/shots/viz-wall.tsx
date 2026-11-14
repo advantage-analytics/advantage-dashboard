@@ -6,6 +6,8 @@ import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { WallCard } from "./wall-card";
 import { LifecycleChip } from "./lifecycle-chip";
+import { PlayerChips } from "./player-chips";
+import { useMatchPlayerChipLabels } from "./use-match-player-chip-labels";
 import { LegendMark } from "./legend-mark";
 import { useVizState } from "./use-viz-state";
 import { buildDefaultTiles } from "./default-tiles";
@@ -54,6 +56,8 @@ export function VizWall({
 }) {
   const points = useVizPoints(useMatchData());
   const { you, opp } = useMatchSides();
+  // "You" only for the player the report is about; names for everyone else.
+  const chipLabels = useMatchPlayerChipLabels();
   const { setState, hrefFor } = useVizState();
   // The errors card's name, filter and error reading follow whether this
   // match's errors are judged (`defaultCutsFor`, `errorKindOf`).
@@ -121,17 +125,11 @@ export function VizWall({
             style={{ backgroundColor: "var(--border-medium)" }}
           />
         )}
-        <div className="flex gap-2" role="group" aria-label="Player">
-          {(["you", "opponent"] as const).map((value) => (
-            <LifecycleChip
-              key={value}
-              pressed={player === value}
-              onClick={() => choosePlayer(value)}
-            >
-              {value === "you" ? "You" : "Opponent"}
-            </LifecycleChip>
-          ))}
-        </div>
+        <PlayerChips
+          value={player}
+          onChange={choosePlayer}
+          labels={chipLabels}
+        />
         <div className="flex-1" />
         <div
           role="group"

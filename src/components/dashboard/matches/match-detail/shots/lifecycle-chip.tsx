@@ -18,7 +18,7 @@ export function LifecycleChip({
       type="button"
       aria-pressed={pressed}
       onClick={onClick}
-      className={`flex h-[26px] cursor-pointer items-center rounded-[var(--radius-pill)] px-[11px] text-[12px] transition-colors duration-200 motion-reduce:transition-none ${
+      className={`flex h-[26px] cursor-pointer items-center rounded-[var(--radius-pill)] px-[11px] text-[12px] whitespace-nowrap transition-colors duration-200 motion-reduce:transition-none ${
         pressed ? "" : "hover:bg-[var(--surface-subtle)]"
       }`}
       style={{
