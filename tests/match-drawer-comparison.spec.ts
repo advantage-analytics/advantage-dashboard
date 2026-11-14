@@ -176,8 +176,9 @@ test.describe("drawerScoreboardProps", () => {
     expect(you.sets).toEqual([6, 3, 7]);
     expect(you.lostSets).toEqual([false, true, false]);
     expect(opp.wonSets).toEqual([false, true, false]);
-    // The tiebreak is the loser's points, drawn on the set they lost.
-    expect(opp.tiebreaks?.[2]).toBe(5);
+    // The tiebreak is the loser's points, drawn beside the winner's 7.
+    expect(you.tiebreaks?.[2]).toBe(5);
+    expect(you.wonSets?.[2]).toBe(true);
   });
 
   test("a trailing 0-0 set never reaches the board", () => {

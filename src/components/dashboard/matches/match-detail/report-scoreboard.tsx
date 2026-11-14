@@ -69,15 +69,15 @@ export function setOutcome(set: ScoreLineSet): "you" | "opp" | "level" {
  * `lostSet` is what dims a digit. A LEVEL set has no loser, so both rows keep
  * full ink — which is also the closest thing `ScoreLineSet` can express to
  * "unfinished", since it carries no such flag (see `setOutcome` above).
- * `tiebreak` is non-null only on the LOSER's row, because `tiebreakOf`
- * already returns the loser's points and the digit belongs beside their 6.
+ * `tiebreak` is non-null only on the set WINNER's row: `tiebreakOf` returns
+ * the loser's points, and the digit is raised beside the winner's 7.
  */
 export interface ScoreboardCell {
   /** The games digit for THIS row. */
   digit: number;
   /** This row lost the set — draw it dimmed. */
   lostSet: boolean;
-  /** The loser's tiebreak points, on the loser's row only. */
+  /** The loser's tiebreak points, on the set winner's row only. */
   tiebreak: number | null;
 }
 
@@ -92,7 +92,7 @@ export function scoreboardCells(
     return {
       digit: isYou ? set.player1 : set.player2,
       lostSet,
-      tiebreak: lostSet ? tiebreakOf(set) : null,
+      tiebreak: outcome === side ? tiebreakOf(set) : null,
     };
   });
 }
@@ -206,7 +206,7 @@ export function MatchReportScoreboard() {
         id: isYou ? youId : oppId,
         name: isYou ? sides.you.name : sides.opp.name,
         sets: sets.map((set) => (isYou ? set.player1 : set.player2)),
-        // `tiebreakOf` returns the LOSER's points; only drawn on a lost set.
+        // `tiebreakOf` returns the LOSER's points; drawn beside the winner's 7.
         tiebreaks: sets.map((set) => tiebreakOf(set)),
         // Only a completed set has a loser: the open last set of an unfinished
         // match dims neither digit.

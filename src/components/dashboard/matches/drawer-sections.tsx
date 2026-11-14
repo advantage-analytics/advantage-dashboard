@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { shortName } from "@/lib/data/match-utils";
@@ -848,6 +848,28 @@ function columnName(name: string): string {
   return parts[parts.length - 1] ?? name;
 }
 
+/** Clear space on each surname's left, so two long names never touch. */
+const SNAPSHOT_NAME_GUTTER = 10;
+
+/**
+ * One width for both value columns, so a long surname widens them together
+ * and every figure stays under its name — the head-to-head table's rule
+ * (`columnWidth()` in `head-to-head-table.tsx`) without its legend marker.
+ * 64px holds about six characters at 12px medium; past that a surname gets
+ * 8.2px a character plus the gutter ("Lutkemeyer" clipped to ".utkemeyer" at
+ * a fixed 64px). Capped so the statistic label keeps its room in a 340px
+ * drawer; `truncate` backstops anything longer.
+ */
+function snapshotColumnWidth(youName: string, oppName: string): number {
+  const longest = Math.max(youName.length, oppName.length);
+  return Math.min(
+    100,
+    Math.max(64, Math.ceil(longest * 8.2) + SNAPSHOT_NAME_GUTTER),
+  );
+}
+
+const SNAPSHOT_COLUMN = "w-[var(--snapshot-col,64px)] shrink-0";
+
 /**
  * The drawer's snapshot as two columns — the match report's head-to-head
  * table (`head-to-head-table.tsx`) at the drawer's four rows: surnames
@@ -864,15 +886,37 @@ export function SnapshotComparison({
   youName: string;
   oppName: string;
 }) {
+  const you = columnName(youName);
+  const opp = columnName(oppName);
   return (
-    <div className="flex flex-col">
+    <div
+      className="flex flex-col"
+      style={
+        {
+          "--snapshot-col": `${snapshotColumnWidth(you, opp)}px`,
+        } as CSSProperties
+      }
+    >
       <div className="flex items-center border-b border-[var(--border-hairline)] pb-[11px]">
         <span className="eyebrow-sm min-w-0 flex-1">Snapshot</span>
-        <span className="flex w-16 shrink-0 justify-end truncate text-[12px] font-medium text-[var(--ink-900)]">
-          {columnName(youName)}
+        {/* `truncate` sits on an inner block: on the flex cell itself, with
+            `justify-end`, an overlong name overflowed to the LEFT and lost
+            its first letters with no ellipsis. */}
+        <span
+          className={cn(SNAPSHOT_COLUMN, "flex justify-end")}
+          style={{ paddingLeft: SNAPSHOT_NAME_GUTTER }}
+        >
+          <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-900)]">
+            {you}
+          </span>
         </span>
-        <span className="flex w-16 shrink-0 justify-end truncate text-[12px] font-medium text-[var(--ink-600)]">
-          {columnName(oppName)}
+        <span
+          className={cn(SNAPSHOT_COLUMN, "flex justify-end")}
+          style={{ paddingLeft: SNAPSHOT_NAME_GUTTER }}
+        >
+          <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-600)]">
+            {opp}
+          </span>
         </span>
       </div>
       <dl className="flex flex-col pt-1">
@@ -893,7 +937,7 @@ export function SnapshotComparison({
 function Figure({ value, lead }: { value: string | null; lead: boolean }) {
   return (
     <dd
-      className="tabular m-0 w-16 shrink-0 text-right text-[13px]"
+      className={cn(SNAPSHOT_COLUMN, "tabular m-0 text-right text-[13px]")}
       style={{
         fontWeight: lead ? 500 : 400,
         color:
