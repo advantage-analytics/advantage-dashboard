@@ -558,7 +558,7 @@ ready).
 
 ## T40 · Migration: `match_label_states` for the customer read
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** supabase/migrations/<timestamp after 20261114091835>_match_label_states.sql (new), tests/match-label-states-migration.spec.ts (new) — guess
 - **done when:**

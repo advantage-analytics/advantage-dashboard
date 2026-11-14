@@ -452,3 +452,12 @@ is the runner's. Newest entries at the bottom.
 
 1. A labeller whose only in-range session was sent back no longer gets a zero row.
 2. CSV column names changed (`first_published_at`, `published_*`, `checked_*`); check nothing downstream reads the old names.
+
+## T40 · Migration: `match_label_states` for the customer read — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New `supabase/migrations/20261114151350_match_label_states.sql` (written, not applied): SECURITY DEFINER `match_label_states(uuid[])` returning `match_id, results_at, has_video, labelling` for unverified matches the caller can see (`visible_match_ids()`, checked equal to the `matches` select policy), latest completed job only; `has_video` mirrors `jobVideoSeconds` incl. a NaN/Infinity guard; execute to authenticated and service_role only. Spec `tests/match-label-states-migration.spec.ts`.
+**follow-ups:**
+
+1. After applying, call it once as a real signed-in user to exercise the visibility filter.
+2. `labelling` is match-level; 2 open analyst sessions sit on a non-latest job and 1 has no job.
