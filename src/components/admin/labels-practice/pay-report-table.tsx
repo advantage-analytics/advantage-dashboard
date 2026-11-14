@@ -29,30 +29,30 @@ export function PayReportTable({
     [
       "labeller",
       "email",
-      "submitted_sessions",
-      "submitted_video_hours",
-      "approved_sessions",
-      "approved_video_hours",
+      "published_sessions",
+      "published_video_hours",
+      "checked_sessions",
+      "checked_video_hours",
       "total_video_hours",
-      "practice_sets_submitted",
+      "practice_sets",
     ],
     ...rows.map((r) => [
       r.name,
       r.email,
-      r.submittedSessions,
-      hours(r.submittedHours),
-      r.approvedSessions,
-      hours(r.approvedHours),
-      hours(r.submittedHours + r.approvedHours),
+      r.publishedSessions,
+      hours(r.publishedHours),
+      r.checkedSessions,
+      hours(r.checkedHours),
+      hours(r.publishedHours + r.checkedHours),
       r.practiceSets,
     ]),
   ];
   const detail = [
-    ["labeller", "session_id", "first_submitted_at", "state", "video_hours"],
+    ["labeller", "session_id", "first_published_at", "state", "video_hours"],
     ...lines.map((l) => [
       l.labellerName,
       l.sessionId,
-      l.submittedAt,
+      l.publishedAt,
       l.state,
       hours(l.videoHours),
     ]),
@@ -76,7 +76,7 @@ export function PayReportTable({
       {rows.length === 0 ? (
         <div className="rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] px-6 py-12 text-center shadow-[var(--shadow-card)]">
           <p className="text-[13px] text-[var(--ink-900)]">
-            Nothing was submitted in this range.
+            Nothing was published in this range.
           </p>
         </div>
       ) : (
@@ -86,8 +86,8 @@ export function PayReportTable({
               className={`${GRID} border-b border-[var(--border-hairline)] pt-3.5 pb-2.5`}
             >
               <span className="eyebrow-sm">Labeller</span>
-              <span className="eyebrow-sm text-right">Submitted h</span>
-              <span className="eyebrow-sm text-right">Approved h</span>
+              <span className="eyebrow-sm text-right">Published h</span>
+              <span className="eyebrow-sm text-right">Checked h</span>
               <span className="eyebrow-sm text-right">Total h</span>
               <span className="eyebrow-sm text-right">Sessions</span>
               <span className="eyebrow-sm text-right">Practice sets</span>
@@ -106,16 +106,16 @@ export function PayReportTable({
                   </span>
                 </span>
                 <span className="text-right text-[var(--ink-700)]">
-                  {hours(r.submittedHours)}
+                  {hours(r.publishedHours)}
                 </span>
                 <span className="text-right text-[var(--ink-700)]">
-                  {hours(r.approvedHours)}
+                  {hours(r.checkedHours)}
                 </span>
                 <span className="text-right text-[var(--ink-900)]">
-                  {hours(r.submittedHours + r.approvedHours)}
+                  {hours(r.publishedHours + r.checkedHours)}
                 </span>
                 <span className="text-right text-[var(--ink-700)]">
-                  {r.submittedSessions + r.approvedSessions}
+                  {r.publishedSessions + r.checkedSessions}
                 </span>
                 <span className="text-right text-[var(--ink-700)]">
                   {r.practiceSets}

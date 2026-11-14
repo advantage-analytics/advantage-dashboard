@@ -5,9 +5,9 @@ import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 
 /**
- * Admin › Labels › Pay report: hours of match video each labeller handed in
- * over a date range (UTC days, both ends included), split into submitted
- * (awaiting review) and approved (published), with practice sets counted
+ * Admin › Labels › Pay report: hours of match video each labeller published
+ * over a date range (UTC days, both ends included), split into published
+ * (waiting for the admin's check) and checked, with practice sets counted
  * apart. Reviewers are paid per hour of match video. The range is in the URL
  * (`?from=&to=`) so a report can be linked; it defaults to this month so far.
  */
@@ -37,8 +37,9 @@ export default async function LabelPayPage({
       <div>
         <h1 className="text-display">Pay report</h1>
         <p className="text-body-sm mt-[9px]">
-          Hours of match video each labeller handed in, counted once on the day
-          it was first submitted. Practice sets are not paid hours.
+          Hours of match video each labeller published, counted once on the day
+          it was first published. Checked is what an admin has passed. Practice
+          sets are not paid hours.
         </p>
       </div>
 

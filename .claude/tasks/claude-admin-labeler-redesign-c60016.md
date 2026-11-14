@@ -543,7 +543,7 @@ ready).
 
 ## T39 · Pay report: published and checked
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T31
 - **files:** guess — src/lib/data/practice-server.ts, src/app/admin/labels/pay/page.tsx, tests/label-pay-report.spec.ts (new)

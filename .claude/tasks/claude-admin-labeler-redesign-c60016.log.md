@@ -443,3 +443,12 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. On a published, unchecked match, Checked shows "to do"; it could be "current" to match the board's "Published, to check" lane.
+
+## T39 · Pay report: published and checked — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `getLabelPayReport` counts non-practice sessions on the UTC day of `published_at`, credited to the first submitter; states "published" / "checked"; `PayLabellerRow` and `PaySessionLine` renamed fields; practice sets unchanged. `/admin/labels/pay` shows "Published h" / "Checked h"; CSV columns renamed. 42703 fallback reads complete sessions by `completed_at`. New spec `tests/label-pay-report.spec.ts`.
+**follow-ups:**
+
+1. A labeller whose only in-range session was sent back no longer gets a zero row.
+2. CSV column names changed (`first_published_at`, `published_*`, `checked_*`); check nothing downstream reads the old names.
