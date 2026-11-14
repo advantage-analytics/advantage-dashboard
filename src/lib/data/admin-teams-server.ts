@@ -351,15 +351,26 @@ function toAdminTeamRow(
           }
         : undefined,
     openRequestCount,
-    videoUsedSeconds: usedSeconds ? (usedSeconds.get(row.id) ?? 0) : null,
-    videoCapSeconds: usedSeconds
-      ? monthlyCapSecondsFor({
-          kind: "team",
-          orgType: (row.org_type as ProgramOrgType | null) ?? null,
-          pilotEligible: row.pilot_eligible === true,
-        })
-      : null,
+    // A program not on Advantage (`active` / `claim_pending`) has no
+    // allowance to spend, so it shows "—" rather than an empty "0 of 75 h".
+    videoUsedSeconds:
+      usedSeconds && onAdvantageStatus(row.status)
+        ? (usedSeconds.get(row.id) ?? 0)
+        : null,
+    videoCapSeconds:
+      usedSeconds && onAdvantageStatus(row.status)
+        ? monthlyCapSecondsFor({
+            kind: "team",
+            orgType: (row.org_type as ProgramOrgType | null) ?? null,
+            pilotEligible: row.pilot_eligible === true,
+          })
+        : null,
   };
+}
+
+/** On Advantage, as the `on_advantage` view counts it: claimed or being claimed. */
+export function onAdvantageStatus(status: string): boolean {
+  return status === "active" || status === "claim_pending";
 }
 
 // ---------------------------------------------------------------------------
