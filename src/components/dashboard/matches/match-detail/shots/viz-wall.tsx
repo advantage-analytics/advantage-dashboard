@@ -149,7 +149,10 @@ export function VizWall({
             className="grid grid-cols-1 items-start gap-4 @min-[640px]:grid-cols-2"
           >
             {visibleTiles.map((tile) => (
-              <div key={tile.key} role="listitem">
+              // Keyed by cut, not by player: switching players keeps each
+              // card mounted, so its court crossfades and its figures count
+              // across (`WallCard`) instead of the card being replaced.
+              <div key={tile.cut} role="listitem">
                 <WallCard
                   name={tile.name}
                   playerName={tile.playerName}
