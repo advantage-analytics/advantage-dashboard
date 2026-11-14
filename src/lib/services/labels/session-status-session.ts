@@ -394,7 +394,7 @@ async function verifyMatchOf(
     .maybeSingle<{ match_id: string }>();
   if (readError || !row) {
     return {
-      error: `The labels are published, but the match could not be marked Verified by Advantage: ${readError?.message ?? "session not found"}. Mark complete again to retry.`,
+      error: `The labels are published, but the match could not be marked Verified by Advantage: ${readError?.message ?? "session not found"}. Publish again to retry.`,
     };
   }
   const { error } = await supabase.rpc("verify_match", {

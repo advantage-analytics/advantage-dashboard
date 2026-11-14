@@ -13,7 +13,6 @@ import {
   firstAmberStop,
   LABELLER_SIDE_NAMES,
   labellerSession,
-  labellerWording,
 } from "@/lib/services/labels/labeller-view";
 import type { LabelSession } from "@/lib/services/labels/session";
 import { text } from "./fixtures/html-probe";
@@ -94,7 +93,7 @@ const NAMES = ["Jordan Lee", "Elena Vargas", "Lee", "Vargas"];
 
 test.describe("viewerKind=labeller", () => {
   for (const mode of ["overview", "black"] as const) {
-    test(`no player, program, admin link or derivation; Player 1 and Player 2; Submit for review (${mode})`, () => {
+    test(`no player, program, admin link or derivation; Player 1 and Player 2; Publish (${mode})`, () => {
       const html = render(
         consoleProps({
           viewerKind: "labeller",
@@ -109,9 +108,9 @@ test.describe("viewerKind=labeller", () => {
       expect(html).not.toContain("Dartmouth");
       if (mode === "overview") {
         expect(html).toContain("data-submit-review");
-        expect(text(divAt(html, "data-console-header"))).toContain(
-          "Submit for review",
-        );
+        const header = divAt(html, "data-console-header");
+        expect(header).toMatch(/data-submit-review="[^>]*>Publish</);
+        expect(text(header)).not.toContain("Submit for review");
       }
       expect(html).not.toContain("data-mark-complete");
       expect(html).not.toContain("data-reopen-session");
@@ -183,7 +182,21 @@ test.describe("viewerKind=labeller", () => {
     expect(stripped.points).toEqual(labelSessionFixture().points);
   });
 
-  test("a submitted session is read-only and waits for review", () => {
+  test("a practice copy's button keeps Submit: it is graded, never published", () => {
+    const header = divAt(
+      render(
+        consoleProps({
+          viewerKind: "labeller",
+          session: { ...labelSessionFixture(), kind: "practice" },
+        }),
+      ),
+      "data-console-header",
+    );
+    expect(header).toMatch(/data-submit-review="[^>]*>Submit</);
+    expect(text(header)).not.toContain("Publish");
+  });
+
+  test("a submitted session is read-only and says Submitted", () => {
     const html = render(
       consoleProps({
         viewerKind: "labeller",
@@ -191,7 +204,8 @@ test.describe("viewerKind=labeller", () => {
       }),
     );
     const header = divAt(html, "data-console-header");
-    expect(text(header)).toContain("Submitted — waiting for review");
+    expect(text(header)).toContain("Submitted");
+    expect(text(header)).not.toContain("waiting for review");
     expect(header).not.toContain("data-submit-review");
     expect(header).not.toContain("data-mark-complete");
     expect(header).not.toContain("data-reopen-session");
@@ -217,6 +231,7 @@ test.describe("viewerKind=admin", () => {
    * Changed on purpose since, for the admin alone: "N of M points checked"
    * left its meta (the body counts flags left). The header's wrapper is the
    * labeller's again: both run the full width of the admin page (2026-11-13).
+   * "Mark complete" reads "Publish", as the labeller's does (T37).
    */
   const BEFORE = [
     `<div data-console-header="" class="flex shrink-0 items-end justify-between gap-8">`,
@@ -245,7 +260,7 @@ test.describe("viewerKind=admin", () => {
     `<div class="flex shrink-0 items-center gap-5">`,
     `<span data-save-status="idle" role="status" aria-live="polite">`,
     `</span>`,
-    `<button type="button" data-mark-complete="" class="${OUTLINE}">Mark complete`,
+    `<button type="button" data-mark-complete="" class="${OUTLINE}">Publish`,
     `</button>`,
     `<button type="button" data-open-labelling="" class="${PRIMARY}">Open labelling`,
     `</button>`,
@@ -270,7 +285,7 @@ test.describe("viewerKind=admin", () => {
     ).toBe(BEFORE);
   });
 
-  test("a submitted session says so, with Reopen and Mark complete", () => {
+  test("a submitted session says so, with Reopen and Publish", () => {
     const html = render(
       consoleProps({
         session: { ...labelSessionFixture(), status: "submitted" },
@@ -280,7 +295,7 @@ test.describe("viewerKind=admin", () => {
     expect(header).toContain("data-session-submitted");
     expect(text(header)).toContain("Submitted for review · derivation");
     expect(header).toContain("data-reopen-session");
-    expect(header).toContain("data-mark-complete");
+    expect(header).toMatch(/data-mark-complete="[^>]*>Publish</);
     expect(header).not.toContain("data-submit-review");
   });
 });
@@ -370,44 +385,17 @@ test.describe("the point the labeller page opens on", () => {
   });
 });
 
-test.describe("the overview checklist said to a labeller", () => {
-  test("labellerWording swaps every publish for what submitting hands over", () => {
-    expect(
-      labellerWording(
-        "Point 4's strokes say Player 2 won — it publishes with the labelled winner",
-      ),
-    ).toBe(
-      "Point 4's strokes say Player 2 won — it goes in with the labelled winner",
-    );
-    expect(
-      labellerWording(
-        "Point 9 isn't on the video and will publish as score only",
-      ),
-    ).toBe("Point 9 isn't on the video and will go in as score only");
-    expect(labellerWording("No point is missing what a publish needs.")).toBe(
-      "No point is missing what submitting needs.",
-    );
-    expect(
-      labellerWording(
-        "3 of 5 marked. Publish now and the match reports plain Errors, with your marks kept.",
-      ),
-    ).toBe(
-      "3 of 5 marked. Submit now and the match reports plain Errors, with your marks kept.",
-    );
-    expect(labellerWording("Blocks publishing")).toBe("Blocks submitting");
-  });
-
-  test("the labeller's overview says Before you submit and never publish", () => {
+test.describe("the overview checklist", () => {
+  test("a labeller's overview says Before you publish, never submit", () => {
     const html = render(
       consoleProps({ viewerKind: "labeller", initialLayoutMode: "overview" }),
     );
-    expect(html).toContain("Before you submit");
-    expect(html).not.toContain("Before you publish");
-    // Visible words only: `data-publish-check` is an attribute name.
-    expect(text(html)).not.toMatch(/publish/i);
+    expect(html).toContain("Before you publish");
+    expect(html).not.toContain("Before you submit");
+    expect(text(html)).not.toMatch(/\bsubmit/i);
   });
 
-  test("the admin's overview still says Before you publish", () => {
+  test("the admin's overview says Before you publish", () => {
     const html = render(consoleProps({ initialLayoutMode: "overview" }));
     expect(html).toContain("Before you publish");
   });

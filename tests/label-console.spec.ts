@@ -1752,7 +1752,7 @@ test.describe("Undo applies a diff (undo-diff.ts), never a whole re-read", () =>
   });
 });
 
-test.describe("Mark complete with errors still unmarked", () => {
+test.describe("Publish with errors still unmarked", () => {
   type Props = Record<string, unknown>;
   const passThrough = (tagName: string) =>
     function PassThrough({
@@ -1867,7 +1867,7 @@ test.describe("Mark complete with errors still unmarked", () => {
       unmarked: 0,
     });
     expect(text(html.slice(html.indexOf("<h2"), html.indexOf("</h2>")))).toBe(
-      "Mark complete and publish?",
+      "Publish?",
     );
     expect(footer(html)).toEqual([
       { label: "Cancel", disabled: false },
@@ -2138,7 +2138,7 @@ test.describe("the admin's overview, read off the design fixture", () => {
       "Left to check",
       "Statistics from the labels",
       "Progress",
-      "Before you submit",
+      "Before you publish",
       "Score",
       "Entered at upload",
     ]);

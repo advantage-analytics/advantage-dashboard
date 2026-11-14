@@ -897,7 +897,7 @@ test.describe("completeWarnings", () => {
         NAMES,
       ),
     ).toEqual({
-      title: "Mark complete and publish?",
+      title: "Publish?",
       description:
         "Every point is checked and the score adds up. The athlete's match is rebuilt from these labels: statistics, points and summary, and it shows Verified by Advantage. The version it replaces is backed up, and Reopen lets you edit and publish again.",
       confirmLabel: "Publish",
@@ -938,11 +938,62 @@ test.describe("completeWarnings", () => {
     expect(unmarked(1).title).toBe("Publish with 1 error unmarked?");
   });
 
+  test("a labeller's Publish: the same title, saying the player sees it at once and an admin may send it back", () => {
+    const copy = labelConfirmCopy(
+      {
+        kind: "complete-session",
+        warnings: [],
+        unmarked: 0,
+        audience: "labeller",
+      },
+      NAMES,
+    );
+    expect(copy).toMatchObject({
+      title: "Publish?",
+      confirmLabel: "Publish",
+      pendingLabel: "Publishing…",
+    });
+    expect(copy.description).toContain("straight away");
+    expect(copy.description).toContain("Verified by Advantage");
+    expect(copy.description).toContain("An admin may send it back");
+    const unmarked = labelConfirmCopy(
+      {
+        kind: "complete-session",
+        warnings: [],
+        unmarked: 2,
+        audience: "labeller",
+      },
+      NAMES,
+    );
+    expect(unmarked).toMatchObject({
+      title: "Publish with 2 errors unmarked?",
+      alternativeLabel: "Mark errors",
+    });
+    expect(unmarked.description).not.toContain("Reopen");
+  });
+
+  test("a practice copy's confirm submits: it is graded, never published", () => {
+    const copy = labelConfirmCopy(
+      {
+        kind: "complete-session",
+        warnings: [],
+        unmarked: 0,
+        audience: "practice",
+      },
+      NAMES,
+    );
+    expect(copy).toMatchObject({ title: "Submit?", confirmLabel: "Submit" });
+    expect(copy.description).not.toMatch(/publish/i);
+  });
+
   test("Reopen asks first, and says Verified by Advantage comes off", () => {
     expect(labelConfirmCopy({ kind: "reopen-session" }, NAMES)).toMatchObject({
       title: "Reopen and remove Verified by Advantage?",
       confirmLabel: "Reopen",
     });
+    const { description } = labelConfirmCopy({ kind: "reopen-session" }, NAMES);
+    expect(description).toContain("Publish again");
+    expect(description).not.toContain("Mark complete");
   });
 });
 
@@ -1174,7 +1225,7 @@ function headerOf(html: string): string {
 test.describe("the console header", () => {
   const BOTH = ["completeSession", "reopenSession", "updateSessionFields"];
 
-  test("a labelling session offers Mark complete, not Reopen — and a render writes nothing", () => {
+  test("a labelling session offers Publish, not Reopen — and a render writes nothing", () => {
     const { called, operations } = counting(BOTH);
     const head = headerOf(
       renderConsole(labelSessionFixture(), operations).html,
@@ -1182,7 +1233,8 @@ test.describe("the console header", () => {
     expect(called).toEqual([]);
     const button = tag(head, 'data-mark-complete=""');
     expect(button).toContain('type="button"');
-    expect(head).toContain(">Mark complete<");
+    expect(head).toContain(">Publish<");
+    expect(head).not.toContain("Mark complete");
     expect(head).not.toContain("data-reopen-session");
     expect(head).not.toContain("data-session-complete");
   });

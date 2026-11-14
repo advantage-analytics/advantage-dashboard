@@ -168,7 +168,7 @@ test.describe("LabelBoard", () => {
   test("no Claim button while holding a match", () => {
     const html = render(board({ holding: true }));
     expect(claimButtons(html)).toBe(0);
-    expect(html).toContain("Submit yours to claim the next one.");
+    expect(html).toContain("Publish yours to claim the next one.");
   });
 
   test("no Claim button for an admin who is not a labeller", () => {

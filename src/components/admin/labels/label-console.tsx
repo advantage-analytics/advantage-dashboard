@@ -618,11 +618,13 @@ export function LabelConsole({
   /**
    * Who is looking. `"labeller"` (`/label/[sessionId]`) shows no player,
    * program or derivation, names the sides "Player 1" / "Player 2", and
-   * swaps Mark complete and Reopen for "Submit for review".
+   * drops Reopen. Its Publish goes through `submitSession`.
    */
   viewerKind?: "admin" | "labeller";
 }) {
   const labeller = viewerKind === "labeller";
+  // A practice copy is graded, never published: its button submits.
+  const practice = session.kind === "practice";
   const names = useMemo(
     () =>
       labeller
@@ -630,7 +632,7 @@ export function LabelConsole({
         : sideNames(session.player1Name, session.player2Name),
     [labeller, session.player1Name, session.player2Name],
   );
-  // Client state, so "Mark complete" and "Reopen" flip the console read-only
+  // Client state, so "Publish" and "Reopen" flip the console read-only
   // or editable without a reload.
   const [status, setStatus] = useState(session.status);
   // A status write in flight: both buttons wait for it.
@@ -2242,21 +2244,22 @@ export function LabelConsole({
   }
 
   /**
-   * "Mark complete" (after its confirm), "Reopen" and the labeller's "Submit
-   * for review": `label_sessions.status` alone. Not optimistic — the console
-   * flips read-only or editable once the server has said so.
+   * "Publish" (after its confirm) and "Reopen": `label_sessions.status`
+   * alone. The admin's Publish is `completeSession`, the labeller's
+   * `submitSession` (a practice copy's answers `submitted`). Not optimistic —
+   * the console flips read-only or editable once the server has said so.
    */
-  async function setSessionStatus(next: LabelSession["status"]) {
+  async function setSessionStatus(action: "publish" | "reopen") {
     const write:
       | ((
           sessionId: string,
         ) => Promise<{ status: LabelSession["status"] } | { error: string }>)
       | undefined =
-      next === "complete"
-        ? operations?.completeSession
-        : next === "submitted"
+      action === "reopen"
+        ? operations?.reopenSession
+        : labeller
           ? operations?.submitSession
-          : operations?.reopenSession;
+          : operations?.completeSession;
     if (!write || statusSaving) return;
     setStatusSaving(true);
     dispatchSave({ type: "start" });
@@ -2269,17 +2272,25 @@ export function LabelConsole({
     if (result.status !== "labelling") setPlacement(NO_PLACEMENT);
     setStatus(result.status);
     dispatchSave({ type: "success", at: Date.now() });
+    // A labeller reads only labelling and submitted sessions
+    // (`requireLabelReader`): once theirs is published, this page would
+    // 404 on a reload, so they go back to their matches.
+    if (labeller && result.status === "complete") {
+      window.location.replace("/label");
+    }
   }
 
   /**
-   * "Mark complete": the confirm, listing what is still open, and saying what
-   * publishing past any error not yet marked forced or unforced means.
+   * "Publish" (a practice copy's "Submit"): the confirm, listing what is
+   * still open, and saying what publishing past any error not yet marked
+   * forced or unforced means. One confirm for both audiences.
    */
   function askComplete() {
     setConfirm({
       kind: "complete-session",
       unmarked: errorsToMark.length,
       warnings: sessionWarnings,
+      ...(labeller ? { audience: practice ? "practice" : "labeller" } : {}),
     });
   }
 
@@ -3051,20 +3062,15 @@ export function LabelConsole({
         // An edit made while the confirm was open would be refused.
         if (saveStatus.pending > 0) {
           return refuse(
-            "Wait for your changes to save, then mark it complete.",
+            practice
+              ? "Wait for your changes to save, then submit it."
+              : "Wait for your changes to save, then publish it.",
           );
         }
-        void setSessionStatus("complete");
+        void setSessionStatus("publish");
         return;
       case "reopen-session":
-        void setSessionStatus("labelling");
-        return;
-      case "submit-session":
-        // An edit made while the confirm was open would be refused.
-        if (saveStatus.pending > 0) {
-          return refuse("Wait for your changes to save, then submit it.");
-        }
-        void setSessionStatus("submitted");
+        void setSessionStatus("reopen");
         return;
     }
   }
@@ -3325,7 +3331,7 @@ export function LabelConsole({
     // A cache: a failed save leaves the list a step behind, nothing more.
     void recordOpenCounts(session.id, openCounts).catch(() => {});
   }, [openCounts, recordOpenCounts, session.id]);
-  // What Mark complete would list. Memoised: the console re-renders on every
+  // What Publish would list. Memoised: the console re-renders on every
   // film tick while it plays.
   const sessionWarnings = useMemo(
     () =>
@@ -4718,7 +4724,7 @@ export function LabelConsole({
                   data-submitted-waiting=""
                   className="text-[13px] text-[var(--ink-600)]"
                 >
-                  Submitted — waiting for review
+                  Submitted
                 </span>
               ) : operable && operations?.submitSession ? (
                 <button
@@ -4726,11 +4732,11 @@ export function LabelConsole({
                   data-submit-review=""
                   className={advButton("outline", "sm")}
                   // Every edit must have landed first: one still in flight
-                  // would be refused once the session is submitted.
+                  // would be refused once the session is published.
                   disabled={saveStatus.pending > 0 || statusSaving}
-                  onClick={() => setConfirm({ kind: "submit-session" })}
+                  onClick={askComplete}
                 >
-                  Submit for review
+                  {practice ? "Submit" : "Publish"}
                 </button>
               ) : null
             ) : null}
@@ -4747,7 +4753,7 @@ export function LabelConsole({
                 disabled={saveStatus.pending > 0 || statusSaving}
                 onClick={askComplete}
               >
-                Mark complete
+                Publish
               </button>
             ) : null}
             {!labeller &&
@@ -4834,7 +4840,7 @@ export function LabelConsole({
         />
       ) : null}
       {/* A complete or submitted session is not operable, but its Reopen
-          still asks — and a submitted one's Mark complete. */}
+          still asks — and a submitted one's Publish. */}
       {operable ||
       confirm?.kind === "reopen-session" ||
       (status === "submitted" && confirm?.kind === "complete-session") ? (
@@ -4843,7 +4849,7 @@ export function LabelConsole({
           names={names}
           onCancel={() => setConfirm(null)}
           onConfirm={confirmed}
-          // A submitted session takes no edits, so Mark complete's "Mark
+          // A submitted session takes no edits, so Publish's "Mark
           // errors" has nowhere to go: Reopen is the way back to them.
           onAlternative={
             status === "submitted" ? undefined : confirmAlternative
@@ -5009,7 +5015,7 @@ export interface LabelConsoleOperations {
     sessionId: string,
     patch: LabelSessionFieldsPatch,
   ) => Promise<LabelSessionFieldsResult>;
-  /** `label_sessions.status` to `complete`. Absent: no "Mark complete". */
+  /** `label_sessions.status` to `complete`. Absent: no admin "Publish". */
   completeSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
   /**
    * A complete or submitted session back to `labelling`. Absent: no

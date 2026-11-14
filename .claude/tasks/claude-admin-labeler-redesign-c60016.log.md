@@ -426,3 +426,12 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The ordinary holding lede still says "Submit yours to claim the next one" (folded into T37's dispatch).
+
+## T37 · Rename to "Publish" for both audiences — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** Console button "Publish" for admin and labeller (practice keeps "Submit"); the labeller's Publish uses the shared `complete-session` confirm ("Publish?", player sees it with Verified by Advantage, an admin may send it back); `submit-session` confirm kind removed; "Before you publish" overview; guide section "Publish" (GUIDE_VERSION 2026-11-14); retry sentences "Publish again to retry"; `labellerWording` removed. Orchestrator additions: a labeller returns to `/label` after a successful publish (`window.location.replace`), and the board's holding lede reads "Publish yours to claim the next one."
+**follow-ups:**
+
+1. Comments and some spec test names still say "Mark complete".
+2. A practice copy's overview also reads "Before you publish".

@@ -515,7 +515,7 @@ ready).
 
 ## T37 · Rename to "Publish" for both audiences
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T32
 - **files:** guess — src/components/admin/labels/label-console.tsx, src/components/admin/labels/label-confirm.ts, src/components/admin/labels/label-dashboard.tsx, src/lib/labels/guide-content.ts, src/lib/services/labels/session-status-session.ts, src/lib/services/labels/apply-session.ts, tests/label-console.spec.ts, tests/label-console-labeller.spec.ts, tests/label-console-operations.spec.ts, tests/label-guide.spec.ts, tests/label-session-status.spec.ts, tests/label-apply-session.spec.ts, tests/label-practice.spec.ts

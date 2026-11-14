@@ -41,7 +41,6 @@ import {
   type LabelSetScore,
 } from "@/lib/services/labels/set-scores";
 import { partialPublishWarnings } from "@/lib/services/labels/session-status";
-import { labellerWording } from "@/lib/services/labels/labeller-view";
 import { advButton } from "@/lib/ui/adv-button";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { cn } from "@/lib/utils";
@@ -63,11 +62,10 @@ import { cn } from "@/lib/utils";
  * The admin works until the flags are resolved, not every point, so there is
  * no "Every point checked" item and no points-checked count here.
  *
- * The labeller's page ("Before you submit") keeps its two columns, one card
- * each:
+ * The labeller's page keeps its two columns, one card each:
  *
  *   left, the work     Left to check · Statistics from the labels
- *   right, the facts   Progress · Before you submit · Score · Entered at upload
+ *   right, the facts   Progress · Before you publish · Score · Entered at upload
  *
  * Every point number is a way in: it opens full screen on that point
  * (`onOpen`). The cards size to their content and none stretches to its
@@ -108,15 +106,15 @@ export interface LabelDashboardProps {
   openCounts?: FlagCounts | null;
   names: Record<LabelSide, string>;
   /**
-   * Who reads it. A labeller submits and never publishes, so the checklist
-   * is "Before you submit" and its sentences say so (`labellerWording`).
+   * Who reads it. Both publish (a labeller through submit-session.ts), so
+   * both read "Before you publish"; a labeller's check words are their own.
    */
   audience?: "admin" | "labeller";
   finalScore: readonly (readonly number[])[] | null;
   matchScore: MatchScore | null;
   /** The video stops before the match does: the sets are not held to the record. */
   videoEndsEarly: boolean | null;
-  /** `completeWarnings(...)`: what "Mark complete" would list. */
+  /** `completeWarnings(...)`: what "Publish" would list. */
   warnings: readonly string[];
   /** Whether the console is asking for the errors yet (`errorMarkingReady`). */
   errorsReady?: boolean;
@@ -1315,12 +1313,11 @@ function UploadDetails(props: WidgetProps) {
 function PublishCheck(props: WidgetProps) {
   const { complete, onOpen, audience = "admin" } = props;
   const labeller = audience === "labeller";
-  const say = labeller ? labellerWording : (text: string) => text;
   const checkWord = labeller ? LABELLER_CHECK_WORD : CHECK_WORD;
   if (complete) return <Published />;
   const checks = publishChecks(props);
   return (
-    <Card title={labeller ? "Before you submit" : "Before you publish"}>
+    <Card title="Before you publish">
       <ul className="flex flex-col">
         {checks.map((check) => (
           <li
@@ -1334,7 +1331,7 @@ function PublishCheck(props: WidgetProps) {
                 {check.title}
               </span>
               <span className="text-body-sm" style={INK[600]}>
-                {say(check.detail)}{" "}
+                {check.detail}{" "}
                 {check.pointId ? (
                   <PointLink
                     onClick={() => onOpen(check.pointId)}

@@ -50,7 +50,7 @@ const HOW_TO_HEADINGS = [
   "Players at the wrong end",
   "Set the server",
   "Undo and redo",
-  "Submit for review",
+  "Publish",
 ];
 
 const STANDARD = [
@@ -153,6 +153,14 @@ test.describe("LabelGuide", () => {
     }
     const loop = shortcuts.find((item) => /^Loop/.test(item.action))!;
     expect(prose.join(" ")).toContain(`Loop (${loop.keys.join("")})`);
+  });
+
+  test("the last step is Publish, never Submit for review", () => {
+    const howTo = part("how-to");
+    expect(howTo).toContain("press Publish at the top of the page");
+    expect(howTo).toContain("before you publish");
+    expect(markup).not.toContain("Submit for review");
+    expect(markup).not.toContain("before you submit");
   });
 
   test("links nowhere under /admin", () => {

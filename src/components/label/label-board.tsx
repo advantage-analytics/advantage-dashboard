@@ -484,7 +484,7 @@ export function LabelBoard({
     sentBack
       ? "A match was sent back to you. Fix and publish it again to claim the next one."
       : board.holding
-        ? "Submit yours to claim the next one."
+        ? "Publish yours to claim the next one."
         : null,
   ]
     .filter(Boolean)

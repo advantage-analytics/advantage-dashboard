@@ -650,7 +650,7 @@ export async function publishPlanned(params: {
   } catch (err) {
     return {
       ok: false,
-      error: `The labelled points are published, but the statistics could not be rebuilt (${err instanceof Error ? err.message : String(err)}). Mark complete again to retry; the previous version is backed up at ${backupKey}.`,
+      error: `The labelled points are published, but the statistics could not be rebuilt (${err instanceof Error ? err.message : String(err)}). Publish again to retry; the previous version is backed up at ${backupKey}.`,
     };
   }
   const insightsRequested = params.deferInsights
