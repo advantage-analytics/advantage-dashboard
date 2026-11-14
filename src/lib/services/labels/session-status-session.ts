@@ -1,11 +1,17 @@
 /**
  * The console header's "Mark complete" and "Reopen": the one column pair a
  * session's lifecycle lives in, `label_sessions.status` and `completed_at`
- * (a CHECK holds them together). Admin-only, unlike the row writes: a
- * labeller hands a session over by submitting it (T4), never by publishing or
- * reopening it, so both entry points refuse any actor whose `kind` is not
- * `admin` (`requireAdminActor`) with `ADMIN_REQUIRED`. Not the marks gate — a
- * session labelled blind completes like any other.
+ * (a CHECK holds them together). Admin-only, unlike the row writes: both entry
+ * points refuse any actor whose `kind` is not `admin` (`requireAdminActor`)
+ * with `ADMIN_REQUIRED`. Not the marks gate — a session labelled blind
+ * completes like any other.
+ *
+ * A labeller publishes too, but through their own door: Submit
+ * (submit-session.ts) calls `writeLabelSessionComplete` here, with its
+ * snapshot as `beforePublish` and without `checked`. So the lease, the
+ * publish, the verify and the close below are the one path either way; what
+ * differs is the close's `checked_at` / `checked_by`, written only when the
+ * publish is an admin's (`20261114070000_label_publish_check.sql`).
  *
  * Complete is the ordinary gate (`checkSessionOpen`), then a lease: ONE update
  * (`claim_label_publish_lease`) stamping `publishing_since` with the
@@ -39,7 +45,9 @@
  * Reopen leaves the published points as they are but removes Verified by
  * Advantage (`unverify_match`), after the status flips; a failed unverify
  * puts the session back to complete, so the console and the badge never
- * disagree. Completing again publishes and verifies again. Reopen reads the
+ * disagree. The admin's check (`checked_at`, `checked_by`) is cleared with the
+ * status, since a CHECK allows it on a complete session only, and put back
+ * with it when the unverify fails. Completing again publishes and verifies again. Reopen reads the
  * status and writes the reverse, matched on `status = 'complete'`; the partial unique index that allows one open
  * session per job (`label_sessions_one_open_per_job`) refuses it while
  * another session of the match is open.
@@ -115,6 +123,15 @@ const publishCheckingScore: LabelPublish = async (supabase, sessionId) => {
   return publishLabelSession({ db: supabase, sessionId, acceptScore: true });
 };
 
+/**
+ * A step run under the publish lease, before the publish (the submit's
+ * snapshot): null to go on, or the sentence that stops it.
+ */
+export type LabelBeforePublish = (
+  supabase: AdminClient,
+  sessionId: string,
+) => Promise<string | null>;
+
 const RACED = racedMessage("session");
 /** The unique index's refusal, as `seed-session.ts` reads it. */
 const UNIQUE_VIOLATION = "23505";
@@ -126,14 +143,31 @@ const ALREADY_OPEN = "This session is already open for labelling.";
 export async function writeLabelSessionComplete(params: {
   supabase: AdminClient;
   sessionId: unknown;
-  /** The admin who pressed Mark complete: `matches.verified_by`. */
+  /**
+   * Who published: `matches.verified_by`. The admin who pressed Mark
+   * complete, or whoever submitted (submit-session.ts).
+   */
   actorId: string;
+  /**
+   * The publish is also the admin's check: the close stamps `checked_at` and
+   * `checked_by`. Unset for a labeller's publish, which an admin checks later
+   * (`20261114070000_label_publish_check.sql`).
+   */
+  checked?: boolean;
+  /**
+   * Runs under the lease, before the publish: the submit's snapshot. A
+   * sentence back refuses the publish; the lease is released and the sentence
+   * is the answer.
+   */
+  beforePublish?: LabelBeforePublish;
   publish?: LabelPublish;
   now?: () => number;
 }): Promise<LabelSessionStatusResult> {
   const {
     supabase,
     actorId,
+    checked = false,
+    beforePublish,
     publish = publishCheckingScore,
     now = Date.now,
   } = params;
@@ -161,7 +195,11 @@ export async function writeLabelSessionComplete(params: {
 
   let failure: string;
   try {
-    const result = await publish(supabase, sessionId);
+    const blocked = (await beforePublish?.(supabase, sessionId)) ?? null;
+    const result =
+      blocked === null
+        ? await publish(supabase, sessionId)
+        : ({ ok: false, error: blocked } as const);
     const verified = result.ok
       ? await verifyMatchOf(
           supabase,
@@ -185,15 +223,18 @@ export async function writeLabelSessionComplete(params: {
     } else if (!verified || "error" in verified) {
       failure = verified?.error ?? "Could not verify the match.";
     } else {
+      const closedAt = new Date(now()).toISOString();
       const { data: closed, error: closeError } = await supabase
         .from("label_sessions")
         .update({
           status: "complete",
-          completed_at: new Date(now()).toISOString(),
+          completed_at: closedAt,
           // Null with the status: `label_sessions_submitted_check` wants the
           // pair to agree. A no-op on a session that was never submitted.
           submitted_at: null,
           publishing_since: null,
+          // An admin's publish is its own check; a labeller's waits for one.
+          ...(checked ? { checked_at: closedAt, checked_by: actorId } : {}),
         })
         .eq("id", sessionId)
         .eq("publishing_since", claimedAt)
@@ -255,12 +296,14 @@ export async function writeLabelSessionReopen(params: {
 
   const { data: session, error: readError } = await supabase
     .from("label_sessions")
-    .select("status, match_id, completed_at")
+    .select("status, match_id, completed_at, checked_at, checked_by")
     .eq("id", sessionId)
     .maybeSingle<{
       status: string;
       match_id: string;
       completed_at: string | null;
+      checked_at?: string | null;
+      checked_by?: string | null;
     }>();
   if (readError) {
     return { error: `Could not read the session: ${readError.message}` };
@@ -284,9 +327,16 @@ export async function writeLabelSessionReopen(params: {
   }
   if (session.status !== "complete") return { error: ALREADY_OPEN };
 
+  // The check goes with the status: `label_sessions_checked_needs_complete`
+  // allows `checked_at` on a complete session only.
   const { data, error } = await supabase
     .from("label_sessions")
-    .update({ status: "labelling", completed_at: null })
+    .update({
+      status: "labelling",
+      completed_at: null,
+      checked_at: null,
+      checked_by: null,
+    })
     .eq("id", sessionId)
     .eq("status", "complete")
     .select("id");
@@ -304,7 +354,12 @@ export async function writeLabelSessionReopen(params: {
     // never shows Verified by Advantage beside an open session.
     const { error: undoError } = await supabase
       .from("label_sessions")
-      .update({ status: "complete", completed_at: session.completed_at })
+      .update({
+        status: "complete",
+        completed_at: session.completed_at,
+        checked_at: session.checked_at ?? null,
+        checked_by: session.checked_by ?? null,
+      })
       .eq("id", sessionId)
       .eq("status", "labelling");
     return {
@@ -350,7 +405,7 @@ async function verifyMatchOf(
   if (error) {
     return {
       matchId: row.match_id,
-      error: `The labels are published, but the match could not be marked Verified by Advantage: ${error.message}. Mark complete again to retry.`,
+      error: `The labels are published, but the match could not be marked Verified by Advantage: ${error.message}. Publish again to retry.`,
     };
   }
   return { matchId: row.match_id };
@@ -387,7 +442,12 @@ export function completeLabelSession(
     deps,
     sessionId,
     (supabase, actorId) =>
-      writeLabelSessionComplete({ supabase, sessionId, actorId }),
+      writeLabelSessionComplete({
+        supabase,
+        sessionId,
+        actorId,
+        checked: true,
+      }),
     "complete the session",
   );
 }

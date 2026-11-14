@@ -203,7 +203,6 @@ import {
   errorMarkingReady,
 } from "@/lib/services/labels/session-status";
 import type { LabelSessionStatusResult } from "@/lib/services/labels/session-status-session";
-import type { LabelSubmitResult } from "@/lib/services/labels/submit-session";
 import { advButton } from "@/lib/ui/adv-button";
 import { applySiteRemovalRestore } from "@/lib/services/labels/site-removal";
 import type { LabelSiteRemovalRestoreResult } from "@/lib/services/labels/site-removal-session";
@@ -5018,10 +5017,11 @@ export interface LabelConsoleOperations {
    */
   reopenSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
   /**
-   * The labeller's "Submit for review": `label_sessions.status` to
-   * `submitted` (submit-session.ts). Shown only to `viewerKind="labeller"`.
+   * The labeller's submit (submit-session.ts): the session is published and
+   * answers `complete`; a practice copy answers `submitted`. The console
+   * takes its status from the answer. Shown only to `viewerKind="labeller"`.
    */
-  submitSession?: (sessionId: string) => Promise<LabelSubmitResult>;
+  submitSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
   /**
    * Rewind the session's newest action, whatever it was, and answer the rows
    * it touched as a diff (undo-session.ts). Absent: no "Undo".

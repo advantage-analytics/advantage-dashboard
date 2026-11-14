@@ -383,3 +383,13 @@ is the runner's. Newest entries at the bottom.
 1. Reopen (`session-status-session.ts`, `status: "labelling", completed_at: null`) must also clear `checked_at`/`checked_by`, or it breaks `label_sessions_checked_needs_complete` once this migration is applied. Ship before applying.
 2. `verify_match`'s refusal still reads "Only an Advantage admin can verify a match".
 3. The `alter table` is not re-runnable (no `add constraint if not exists`); a publish in flight at apply time rolls the backfill back.
+
+## T32 · Submit publishes through the existing publish path — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** A labeller's submit on an analyst session now runs `writeLabelSessionComplete` (lease, `beforePublish` snapshot via shared `insertLabelSubmission`, publish, `verify_match` as the labeller, close without a check); an admin's submit and Mark complete stamp `checked_at`/`checked_by`. Practice copies are unchanged. Reopen also clears `checked_at`/`checked_by` and restores them if `unverify_match` fails (orchestrator-added, for T31's CHECK). Errors returned to a labeller have UUIDs replaced with "…". `/label/[sessionId]` sets `maxDuration = 120`; the submit action returns `LabelSessionStatusResult`.
+**follow-ups:**
+
+1. After a labeller publishes, the console holds `complete` but `requireLabelReader` admits labellers only on `labelling`/`submitted`, so a reload 404s; send the labeller back to `/label` after publishing (folded into T37's dispatch).
+2. Reopen now selects `checked_at`/`checked_by`, so Reopen also needs T31 applied.
+3. The labeller console does not show the `published` summary (points, shots, left out).

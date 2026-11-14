@@ -444,7 +444,7 @@ ready).
 
 ## T32 · Submit publishes through the existing publish path
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T31
 - **files:** guess — src/lib/services/labels/submit-session.ts, src/lib/services/labels/session-status-session.ts, src/app/label/actions.ts, src/app/label/[sessionId]/page.tsx, src/components/admin/labels/label-console.tsx, tests/label-submit.spec.ts, tests/label-session-status.spec.ts

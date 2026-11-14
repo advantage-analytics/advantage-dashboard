@@ -73,8 +73,12 @@ import {
  */
 export const dynamic = "force-dynamic";
 
-/** No publish here (Mark complete is an admin's), so an ordinary write's budget. */
-export const maxDuration = 30;
+/**
+ * A labeller's submit publishes the session from this route
+ * (submit-session.ts), so it takes the budget the admin page gives Mark
+ * complete. Still inside the publish lease (`PUBLISH_LEASE_MS`).
+ */
+export const maxDuration = 120;
 
 export const metadata = { title: "Label match" };
 

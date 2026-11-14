@@ -89,10 +89,7 @@ import {
   reopenLabelSession,
   type LabelSessionStatusResult,
 } from "@/lib/services/labels/session-status-session";
-import {
-  submitLabelSession,
-  type LabelSubmitResult,
-} from "@/lib/services/labels/submit-session";
+import { submitLabelSession } from "@/lib/services/labels/submit-session";
 import {
   redoLabelOp,
   undoLabelOp,
@@ -540,15 +537,16 @@ export async function updateLabelSessionFieldsAction(
 }
 
 /**
- * The console header's "Submit for review" (submit-session.ts): the one
- * status write a labeller may make. A snapshot of the session's rows goes to
- * `label_submissions`, then `label_sessions.status` to `submitted`; nothing is
- * published. Refused on a session that is not labelling. Outside
+ * The console header's submit (submit-session.ts): the one status write a
+ * labeller may make. A snapshot of the session's rows goes to
+ * `label_submissions`, then the session is published and closed as Mark
+ * complete does it, answering `complete`; a practice copy is only marked
+ * `submitted`. Refused on a session that is not labelling. Outside
  * `withLabelOp`, like Mark complete: a status move is not a step to undo.
  */
 export async function submitLabelSessionAction(
   sessionId: string,
-): Promise<LabelSubmitResult> {
+): Promise<LabelSessionStatusResult> {
   return submitLabelSession(sessionId);
 }
 

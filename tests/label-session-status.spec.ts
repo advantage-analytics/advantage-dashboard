@@ -209,7 +209,76 @@ test.describe("writeLabelSessionComplete", () => {
       },
       filters: { id: SESSION_ID, publishing_since: CLAIM_STAMP },
     });
+    // Not told the publish is an admin's check, the close leaves it unwritten.
+    expect(close.values).not.toHaveProperty("checked_at");
+    expect(close.values).not.toHaveProperty("checked_by");
     for (const call of updates(fake)) expect(call.table).toBe("label_sessions");
+  });
+
+  test("checked: the close stamps the admin's check with the close's own time", async () => {
+    const fake = fakeClient({});
+    const now = Date.parse("2026-11-14T09:00:00.000Z");
+    await writeLabelSessionComplete({
+      actorId: ACTOR,
+      checked: true,
+      supabase: fake.supabase,
+      sessionId: SESSION_ID,
+      now: () => now,
+      publish: PUBLISHED,
+    });
+    expect(updates(fake)[0].values).toEqual({
+      status: "complete",
+      completed_at: "2026-11-14T09:00:00.000Z",
+      submitted_at: null,
+      publishing_since: null,
+      checked_at: "2026-11-14T09:00:00.000Z",
+      checked_by: ACTOR,
+    });
+  });
+
+  test("beforePublish runs under the lease and before the publish; its sentence stops the publish and releases the lease", async () => {
+    const order: string[] = [];
+    const went = fakeClient({});
+    await writeLabelSessionComplete({
+      actorId: ACTOR,
+      supabase: went.supabase,
+      sessionId: SESSION_ID,
+      beforePublish: async (_db, id) => {
+        order.push(`before ${id} after ${went.calls.at(-1)?.table}`);
+        return null;
+      },
+      publish: async () => {
+        order.push("publish");
+        return PUBLISHED();
+      },
+    });
+    expect(order).toEqual([
+      `before ${SESSION_ID} after claim_label_publish_lease`,
+      "publish",
+    ]);
+
+    const stopped = fakeClient({});
+    let published = 0;
+    expect(
+      await writeLabelSessionComplete({
+        actorId: ACTOR,
+        supabase: stopped.supabase,
+        sessionId: SESSION_ID,
+        beforePublish: async () => "No snapshot.",
+        publish: async () => {
+          published += 1;
+          return PUBLISHED();
+        },
+      }),
+    ).toEqual({ error: "No snapshot." });
+    expect(published).toBe(0);
+    expect(stopped.calls.some((c) => c.table === "verify_match")).toBe(false);
+    expect(updates(stopped)).toMatchObject([
+      {
+        values: { publishing_since: null },
+        filters: { id: SESSION_ID, publishing_since: CLAIM_STAMP },
+      },
+    ]);
   });
 
   test("a failed verify is a failed Complete: the lease is released, the session stays open", async () => {
@@ -222,7 +291,7 @@ test.describe("writeLabelSessionComplete", () => {
     });
     expect(result).toEqual({
       error:
-        "The labels are published, but the match could not be marked Verified by Advantage: verify_match refused. Mark complete again to retry.",
+        "The labels are published, but the match could not be marked Verified by Advantage: verify_match refused. Publish again to retry.",
     });
     expect(updates(fake).map((c) => c.values)).toEqual([
       { publishing_since: null },
@@ -424,7 +493,7 @@ test.describe("writeLabelSessionComplete", () => {
 });
 
 test.describe("writeLabelSessionReopen", () => {
-  test("a complete session back to labelling, completed_at cleared, matched on the complete status", async () => {
+  test("a complete session back to labelling, completed_at and the admin's check cleared, matched on the complete status", async () => {
     const fake = fakeClient({
       session: { status: "complete", match_id: MATCH_ID, completed_at: "x" },
     });
@@ -438,7 +507,16 @@ test.describe("writeLabelSessionReopen", () => {
       {
         table: "label_sessions",
         op: "update",
-        values: { status: "labelling", completed_at: null },
+        // The check goes with the status: the CHECK
+        // `label_sessions_checked_needs_complete` refuses `checked_at` on a
+        // session that is not complete, and every session completed before
+        // 20261114070000 carries one.
+        values: {
+          status: "labelling",
+          completed_at: null,
+          checked_at: null,
+          checked_by: null,
+        },
         filters: { id: SESSION_ID, status: "complete" },
       },
     ]);
@@ -458,6 +536,8 @@ test.describe("writeLabelSessionReopen", () => {
         status: "complete",
         match_id: MATCH_ID,
         completed_at: completedAt,
+        checked_at: completedAt,
+        checked_by: ACTOR,
       },
       failRpc: ["unverify_match"],
     });
@@ -473,7 +553,13 @@ test.describe("writeLabelSessionReopen", () => {
     expect(updates(fake).at(-1)).toEqual({
       table: "label_sessions",
       op: "update",
-      values: { status: "complete", completed_at: completedAt },
+      // The check the reopen cleared goes back with the status.
+      values: {
+        status: "complete",
+        completed_at: completedAt,
+        checked_at: completedAt,
+        checked_by: ACTOR,
+      },
       filters: { id: SESSION_ID, status: "labelling" },
     });
   });
