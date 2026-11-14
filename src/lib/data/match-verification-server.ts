@@ -1,6 +1,6 @@
 /**
  * Which of a page's matches are "Verification pending" — read through
- * `match_label_states()` (migration `20261114151350`), the one place a
+ * `match_label_states()` (migration `20261114205508`), the one place a
  * customer learns anything about the label queue.
  *
  * Always the CALLER's client: the signed-in cookie client on the server, the

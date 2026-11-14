@@ -121,7 +121,7 @@ export function verifiedOnLabel(verification: MatchVerification): string {
 }
 
 /**
- * One row of `match_label_states()` (migration `20261114151350`): what the
+ * One row of `match_label_states()` (migration `20261114205508`): what the
  * customer may know about an unverified match's way to verification. Four
  * columns and no more — no labeller, session id or due time ever reaches a
  * customer type.
