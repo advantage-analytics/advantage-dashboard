@@ -84,19 +84,14 @@ export function adminPeopleRows(input: {
     player: profileOf.get(member.userId) ?? null,
   });
 
-  const staff = members
+  const staffMembers = members
     .filter((member) => member.role !== "player")
     .sort(
       (a, b) =>
         (STAFF_RANK[a.role] ?? 3) - (STAFF_RANK[b.role] ?? 3) || byName(a, b),
-    )
-    .map(memberRow);
-
-  const shown = new Set(
-    members
-      .filter((member) => member.role !== "player")
-      .map((member) => member.userId),
-  );
+    );
+  const staff = staffMembers.map(memberRow);
+  const shown = new Set(staffMembers.map((member) => member.userId));
 
   const players: AdminPeopleRow[] = [];
   for (const player of roster) {

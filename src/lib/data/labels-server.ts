@@ -8,7 +8,7 @@
 import { requireAdmin } from "@/lib/services/programs/admin-guard";
 import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
 import { PROVIDER_ID } from "@/lib/services/splitstep/config";
-import { readAllPages } from "@/lib/data/admin-range-read";
+import { readAllPages, UNDEFINED_COLUMN } from "@/lib/data/admin-range-read";
 import { isUuid } from "@/lib/admin/validation";
 import type { FlagCounts } from "@/lib/services/labels/job-groups";
 import { ADMIN_REQUIRED } from "@/lib/services/labels/edit-session";
@@ -579,9 +579,6 @@ export async function getLabelSession(
     marks: marksFetch ? joinMarks(marksFetch, read.session) : null,
   };
 }
-
-/** Postgres `undefined_column`: `20261114060750_label_queue_claims` is not applied yet. */
-const UNDEFINED_COLUMN = "42703";
 
 /**
  * `label_sessions.start_open_counts` for the console, by `readOpenCounts`. A

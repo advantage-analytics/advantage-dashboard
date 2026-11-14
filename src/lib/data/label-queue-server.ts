@@ -19,7 +19,7 @@
  * onto that labeller's own row and onto no other.
  */
 
-import { readAllPages } from "@/lib/data/admin-range-read";
+import { readAllPages, UNDEFINED_COLUMN } from "@/lib/data/admin-range-read";
 import { avatarUrlFor } from "@/lib/data/admin-pilots-server";
 import {
   countLabelWorkMinutes,
@@ -628,8 +628,6 @@ const SESSION_COLUMNS =
   "id, job_id, status, started_at, completed_at, open_counts, start_open_counts, assigned_to, assigned_at, claimed_at, submitted_at, labeller, assignee:users!assigned_to(id, email, first_name, last_name, avatar_path)";
 /** Added by `20261114091835_label_publish_check`. */
 const CHECK_COLUMNS = "checked_at, sent_back_at, sent_back_note";
-/** Postgres `undefined_column`: the publish-check migration is not applied. */
-const UNDEFINED_COLUMN = "42703";
 
 async function readQueueSessions(
   db: AdminClient,

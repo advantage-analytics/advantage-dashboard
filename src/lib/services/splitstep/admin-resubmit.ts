@@ -43,7 +43,9 @@ import { VERIFIED_MATCH_REFUSAL } from "@/lib/data/match-verification";
 
 const LOG = "[admin-resubmit]";
 
-// Shared with the athlete's route, so the two refusals cannot drift apart.
+// The athlete's route (jobs/[jobId]/resubmit, frozen under the guardrails)
+// keeps the same sentence as its own literal; tests/admin-resubmit.spec.ts
+// pins this one, so change both together.
 export { VERIFIED_MATCH_REFUSAL };
 
 export type AdminResubmitRefusalCode =
