@@ -71,9 +71,10 @@ export interface ClaimDependencies {
  * The caller, when they are a labeller. `is_labeller` has no client grant, so
  * it is read service-role from the caller's own row, keyed by the id
  * `auth.getUser()` verified. A failed read is no labeller: the gate fails
- * closed.
+ * closed. `/label` asks it too, so an admin who is not a labeller is never
+ * shown a Claim button the claim would refuse.
  */
-async function requireLabeller(): Promise<{ id: string } | null> {
+export async function requireLabeller(): Promise<{ id: string } | null> {
   const supabase = await createClient();
   const {
     data: { user },

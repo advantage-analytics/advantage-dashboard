@@ -325,3 +325,16 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The owner picked rose for Express and violet for Priority on the canvas; the design system's one accent replaced both. Swap back if the owner asks.
+
+## T27 · Labeller board on `/label` — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `/label` renders the new `LabelBoard` (`src/components/label/label-board.tsx`) from `loadLabellerBoard()`: To do (hours, `UrgencyMark`, due text with an overdue style, Claim on the claimable rows only and never while holding or for an admin who is not a labeller; first 8 then "Show N more"), In progress (the viewer's own card first with "Continue labelling" and "X of Y flags resolved" with a progressbar, or "N flags left"; others by first name and avatar), Submitted. Claim calls `claimLabelMatchAction`, routes to the session on success and shows the refusal on the row. Practice sets still list through `AssignedSessionsList`. `claim-session.ts` exports `requireLabeller`. New `tests/label-board.spec.ts` (10 tests).
+
+**follow-ups:**
+
+1. Check `/label` in a browser as a labeller once the T22 migration is applied.
+2. Due text is as of page load; a periodic refresh would keep "Due in N min" honest.
+3. The first claim seeds and is slow; a clearer pending state may help.
+4. A non-practice assigned session outside labelling or submitted is no longer listed; confirm none is stranded.

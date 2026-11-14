@@ -374,7 +374,7 @@ ready).
 
 ## T27 · Labeller board on `/label`
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T24, T25, T26
 - **files:** guess — src/app/label/page.tsx, src/components/label/label-board.tsx (new), src/components/label/assigned-sessions-list.tsx, tests/label-board.spec.ts (new)
