@@ -309,7 +309,7 @@ ready).
 
 ## T22 · Migration: label claims, starting flag count, stale-claim release
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** guess — supabase/migrations/<timestamp>_label_queue_claims.sql (new), tests/label-queue-migration.spec.ts (new)
 - **done when:**

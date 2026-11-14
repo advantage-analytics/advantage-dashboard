@@ -260,3 +260,16 @@ is the runner's. Newest entries at the bottom.
 
 1. Expanding is one-way, with no "Show less".
 2. The page's doc comment could be shortened now the activity view is gone.
+
+## T22 · Migration: label claims, starting flag count, stale-claim release — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** new migration `supabase/migrations/20261114022117_label_queue_claims.sql`, written and NOT applied: `label_sessions.claimed_at` and `label_sessions.start_open_counts` (integer-shape CHECK), partial index on open analyst sessions by `assigned_to`, a `before update of open_counts` trigger recording the first count, `claim_label_session(uuid, uuid)` and `release_stale_label_claims(interval)` (service_role only), and an hourly `release-stale-label-claims` cron at 48 h. `tests/label-queue-migration.spec.ts` reads the file offline.
+
+**follow-ups:**
+
+1. Apply the migration to the live project once the owner approves; T24, T25 and T30 read its columns.
+2. The release skips a session under a fresh publish lease (not in the task text); the next run picks it up.
+3. The new CHECK requires integers where the live `open_counts` CHECK allows any non-negative number.
+4. Re-claiming your own session returns `'taken'`; the claim action should treat that as already yours.
