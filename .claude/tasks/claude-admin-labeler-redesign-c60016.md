@@ -223,7 +223,7 @@ ready).
 
 ## T16 · Conference page: route, header and Details
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T15
 - **files:** guess — src/app/admin/conferences/[conferenceId]/page.tsx (new), src/components/admin/conference-page-header.tsx (new), src/components/admin/conference-details.tsx (new), MAP.md, tests/admin-routes.spec.ts

@@ -194,3 +194,15 @@ is the runner's. Newest entries at the bottom.
 2. Teams then matches are read in sequence; a `programs.conference_id` join would let them run together.
 3. `latestMatchesForPrograms` reads every match of every program to find the newest few.
 4. The Teams `?conference=` text filter could now move to `conference_id`.
+
+## T16 · Conference page: route, header and Details — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** new route `/admin/conferences/[conferenceId]` (full width inside `AdminPage`, `notFound()` on an unknown id) with `ConferencePageHeader` (back link, crest control, name, meta line, "⋯" with Merge into… and Delete only when the conference has no teams) and `ConferenceDetails` (Division, Teams, On Advantage, Website facts; one Edit dialog calling `saveConference`). `MAP.md` regenerated; `tests/admin-routes.spec.ts` gains the unauthenticated 307 case.
+
+**follow-ups:**
+
+1. `getAdminConference()` is not wrapped in `cache()`; a later layout or metadata caller would read twice.
+2. The merge dialog and delete confirm are duplicated between the drawer and this header until T18 deletes the drawer.
+3. The new route spec case is live-DB and was not run in the gate.

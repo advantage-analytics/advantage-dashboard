@@ -25,6 +25,7 @@ markers is hand-written — edit it as things move.
 | `/sign-up` | [`src/app/(auth)/sign-up/page.tsx`](src/app/(auth)/sign-up/page.tsx) |
 | `/update-password` | [`src/app/(auth)/update-password/page.tsx`](src/app/(auth)/update-password/page.tsx) |
 | `/admin/ask` | [`src/app/admin/ask/page.tsx`](src/app/admin/ask/page.tsx) |
+| `/admin/conferences/[conferenceId]` | [`src/app/admin/conferences/[conferenceId]/page.tsx`](src/app/admin/conferences/[conferenceId]/page.tsx) |
 | `/admin/conferences` | [`src/app/admin/conferences/page.tsx`](src/app/admin/conferences/page.tsx) |
 | `/admin/labels/[sessionId]` | [`src/app/admin/labels/[sessionId]/page.tsx`](src/app/admin/labels/[sessionId]/page.tsx) |
 | `/admin/labels/[sessionId]/practice` | [`src/app/admin/labels/[sessionId]/practice/page.tsx`](src/app/admin/labels/[sessionId]/practice/page.tsx) |
