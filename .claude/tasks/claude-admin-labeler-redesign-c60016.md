@@ -555,3 +555,60 @@ ready).
   - [ ] `/admin/labels/pay` shows "Published" and "Checked", and no "Submitted" or "Approved" text
   - [ ] `tests/label-pay-report.spec.ts` (fake deps) asserts: a session published inside the range is counted; one published before the range is not; credit goes to the first submitter; sent back counts as published; and a session the admin published with no submission is not counted
 - **notes:** Hours stay the job's match video (`jobVideoSeconds`). Published and checked are disjoint counts, as submitted and approved were. Moving from the submit day to the publish day shifts old sessions that were submitted in one month and published in the next.
+
+## T40 · Migration: `match_label_states` for the customer read
+
+- **status:** todo
+- **model:** fable
+- **files:** supabase/migrations/<timestamp after 20261114091835>_match_label_states.sql (new), tests/match-label-states-migration.spec.ts (new) — guess
+- **done when:**
+  - [ ] A new migration creates `public.match_label_states(p_match_ids uuid[])` as `security definer` with `search_path` set to `''`, returning only `match_id`, `results_at`, `has_video` and `labelling`
+  - [ ] The function body returns rows only for matches the caller may read, either through `visible_match_ids()` or the `matches` select policy's predicate restated, and never for a verified match
+  - [ ] `labelling` is true only for a `kind = 'analyst'` session with status `labelling` or `submitted` and a non-null `assigned_to`; no labeller id, session id or status leaves the function
+  - [ ] The migration revokes execute from `public` and `anon` and grants it to `authenticated` and `service_role`
+  - [ ] An offline spec reads the migration file and asserts the grants, the `security definer` + `search_path` line and the four returned column names
+- **notes:** The owner applies the migration after reviewing it, the task only commits the file. Before using `visible_match_ids()`, read its live definition and confirm it matches the `matches` select policy (creator, `my_player_ids()`, `user_program_role`); if not, restate the policy. `has_video` mirrors `jobVideoSeconds` (`src/lib/services/labels/video-seconds.ts`). Do not hand-format the migration.
+
+## T41 · Pending rule and loader wiring
+
+- **status:** todo
+- **model:** opus
+- **needs:** T40
+- **files:** src/lib/data/match-verification.ts, src/lib/data/match-verification-server.ts (new), src/lib/data/matches-list-types.ts, src/app/dashboard/matches/(list)/page.tsx, src/lib/data/match-detail-server.ts, src/lib/data/home-recent-data.ts, src/lib/data/types.ts, tests/verification-pending.spec.ts (new) — guess
+- **done when:**
+  - [ ] A pure `verificationPendingFor(state)` returns true only when `has_video` is true and either `results_at` is on or after `LABEL_QUEUE_FROM` (imported from `labels/queue.ts`, not a second literal) or `labelling` is true; a spec covers before the cutoff, at the cutoff, no video, and labelling before the cutoff
+  - [ ] A server loader calls `match_label_states` through the signed-in Supabase server client; the diff adds no `createAdminClient` call to any customer loader
+  - [ ] When the RPC errors or does not exist, the loader returns no pending matches and logs once, and no page throws
+  - [ ] The matches-list row type, the match-detail match type and Home's recent rows each carry `verificationPending: boolean`, false whenever `verification` is non-null
+  - [ ] Home's event row is pending when not every match in it is verified and at least one is pending
+- **notes:** Never show pending on a row whose `analysis.recovery` is `stats_unavailable` or whose analysis is still in flight; `results_at` is null until a job completes, which covers the second. No labeller name, session id or due time enters any customer type.
+
+## T42 · Match report: "Verification pending" fact and popover
+
+- **status:** todo
+- **model:** opus
+- **needs:** T41
+- **files:** src/components/dashboard/matches/verified-mark.tsx, src/components/dashboard/matches/match-detail/verified-fact.tsx or a new pending-fact.tsx beside it, src/components/dashboard/matches/match-detail/report-facts.tsx, src/lib/data/match-verification.ts, tests/verification-pending-fact.spec.ts (new) — guess
+- **routes:** /dashboard/matches/[matchId]
+- **done when:**
+  - [ ] `match-verification.ts` exports `VERIFICATION_PENDING = "Verification pending"` and the popover's sentences, and no component holds its own copy of them
+  - [ ] `VerifiedMark` takes a `pending` prop that renders the same icon with greyscale and reduced opacity; without it the output is unchanged
+  - [ ] The report's facts line renders the pending fact as its last fact when `verificationPending` is true and `verification` is null, and renders `VerifiedFact` exactly as before otherwise
+  - [ ] The pending fact is a button opening a popover with the label, "We are checking every point against the video: who won and how it ended." and "Until then, your statistics come from the automatic analysis and may change."; it has no "Tell us" action, no date and no time
+  - [ ] A spec renders the facts line pending, verified and neither, and asserts the text of each
+- **notes:** Artboard `docs/superpowers/specs/2026-11-12-admin-strip/CustSoft.dc.html`. Copy the `VerifiedFact` trigger and popover classes; the design system wins over the artboard's raw values. The artboard's "usually done within 24 hours" sentence is left out: the owner decided (2026-11-14) the popover states no time.
+
+## T43 · Lists: pending in the row state, gallery card and Home
+
+- **status:** todo
+- **model:** opus
+- **needs:** T42
+- **files:** src/components/dashboard/matches/row-state.tsx, src/components/dashboard/matches/match-card-list.tsx, src/components/dashboard/matches/match-card-gallery.tsx, src/components/dashboard/home/recent-matches.tsx, src/components/dashboard/matches/match-metadata-row.tsx, tests/matches-row-state.spec.ts — guess
+- **routes:** /dashboard/matches, /dashboard
+- **done when:**
+  - [ ] `RowState` renders the greyed mark and `VERIFICATION_PENDING` in the Verified line's markup when the row is pending, settled and not `stats_unavailable`; a verified row still reads "Verified by Advantage"
+  - [ ] In-flight, Failed, Cancelled and "Not analyzed" rows render exactly as before when `verificationPending` is true
+  - [ ] The gallery card shows the greyed mark with `VERIFICATION_PENDING` as its accessible label where it shows the verified mark today
+  - [ ] Home's recent event row passes its pending flag to `RowState`
+  - [ ] `tests/matches-row-state.spec.ts` gains cases for pending, pending + verified (verified wins) and pending + in flight (in flight wins)
+- **notes:** Artboard `CustList.dc.html`. `match-metadata-row.tsx` also prints the badge: use trace-route to find its callers and add the pending line only if a customer route renders it.
