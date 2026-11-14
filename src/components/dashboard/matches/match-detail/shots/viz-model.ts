@@ -417,6 +417,50 @@ function resolvedServe(p: MatchPoint) {
     (s) => s.shotType,
     (s) => s.shotNumber,
   );
+  return serveFromShot(p, shot);
+}
+
+/**
+ * The point's FIRST serve, struck — in or not. `resolvedServe` is the serve
+ * that was played (the second, after a fault), so a faulted first serve is
+ * on no court there; this is the one the Ball › 1st court draws instead
+ * (`firstServesStruck`). Null when the point has no first serve: a serve
+ * row list that holds only a second serve, or a point with no rows whose
+ * played serve was the second.
+ */
+function firstServeStruck(p: MatchPoint) {
+  const serves = (p.shots ?? []).filter((s) => isServeShotType(s.shotType));
+  if (serves.length === 0) {
+    // No serve rows: the flattened fields are the played serve, which is
+    // the first serve only when it is labelled one.
+    return isFirstServePoint(p) ? serveFromShot(p, undefined) : null;
+  }
+  const counted = serves.filter((s) => (s.shotNumber ?? 0) >= 1);
+  const pool = counted.length > 0 ? counted : serves;
+  const played = pool.find((s) => isFirstServeShotType(s.shotType));
+  if (played) return serveFromShot(p, played);
+  // Played on the second serve. A faulted first serve is stored BEFORE the
+  // serve that counted — shot 0, where `countedShots` skips it as pre-serve
+  // — so it is read here directly: the last first-serve row before it.
+  const faulted = serves
+    .filter((s) => (s.shotNumber ?? 0) < 1 && isFirstServeShotType(s.shotType))
+    .at(-1);
+  return faulted ? serveFromShot(p, faulted) : null;
+}
+
+/**
+ * The Ball filter is exactly 1st: the serve court draws every FIRST serve
+ * struck, faults included, rather than the points played on a first serve
+ * — so the court reads as first-serve percentage and where the misses
+ * went. Zone shares still count only the serves that landed in
+ * (`computeServeZoneStats`). Both pills, or neither, or 2nd alone: one
+ * serve per point, the one played, as before.
+ */
+export function firstServesStruck(cut: Cut, ball: BallFilter): boolean {
+  return cut === "serve" && ball.length === 1 && ball[0] === "first";
+}
+
+function serveFromShot(p: MatchPoint, shot: MatchShot | undefined) {
   // A resolved row is authoritative as a pair. Never manufacture a landing
   // by mixing one missing shot coordinate with a different flattened row.
   const landingX = shot ? shot.landingX : p.firstShotLandingX;
@@ -1366,6 +1410,7 @@ export function computeViz(
   }
 
   const frame = cutFrame(cut);
+  const everyFirst = firstServesStruck(cut, filters.ball);
   let total = 0;
   let count = 0;
   let serveOutOrNetCount = 0;
@@ -1376,12 +1421,36 @@ export function computeViz(
     if (frame === "serve") {
       if (p.serverIsPlayer1 !== subjectIsPlayer1) continue;
 
-      const serve = resolvedServe(p);
+      const serve = everyFirst ? firstServeStruck(p) : resolvedServe(p);
       if (!serve) continue;
       const { shot: serveShot, metrics } = serve;
 
       total++;
-      if (!pointMatchesFilters(p, filters, "serve", subjectIsPlayer1)) continue;
+      if (everyFirst) {
+        // Every first serve qualifies on Ball, and Court and Zone read THIS
+        // serve, not the one played after it — so they are checked here
+        // and the rest of the filters run without them.
+        if (
+          filters.court.length &&
+          !filters.court.includes(metrics.lateralM < 0 ? "deuce" : "ad")
+        )
+          continue;
+        if (filters.zone.length) {
+          if (metrics.kind !== "in") continue;
+          if (!filters.zone.includes(deriveZoneFromX(metrics.lateralM)))
+            continue;
+        }
+        if (
+          !pointMatchesFilters(
+            p,
+            { ...filters, ball: [], court: [], zone: [] },
+            "serve",
+            subjectIsPlayer1,
+          )
+        )
+          continue;
+      } else if (!pointMatchesFilters(p, filters, "serve", subjectIsPlayer1))
+        continue;
       if (matchPass !== null && !matchPass.point(p)) continue;
       count++;
       if (metrics.kind === "out" || metrics.kind === "net") {
@@ -1398,7 +1467,10 @@ export function computeViz(
       // ONE expression for "this serve is an ace", read by both
       // the dot's star shape and its `meta.isAce`, so the glyph and the
       // readout's first line can never disagree.
-      const isAce = p.resultType === "Ace";
+      // On the 1st court a faulted first serve is never the ace, even when
+      // the second serve that followed it was.
+      const isAce =
+        p.resultType === "Ace" && (!everyFirst || metrics.kind === "in");
 
       // Mirrors the return branch's flattened-field fallback —
       // `serveShot` can be `undefined` (a point whose `shots` row wasn't
