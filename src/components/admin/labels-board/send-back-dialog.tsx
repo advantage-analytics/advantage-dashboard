@@ -2,15 +2,9 @@
 
 import { useId } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { SEND_BACK_NOTE_MAX } from "@/lib/labels/send-back";
 import { advField } from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
-
-/**
- * The longest note Send back takes. `SEND_BACK_NOTE_MAX` in
- * `lib/services/labels/check-session.ts` (and the database's CHECK) hold the
- * same; that module is server-only, so the number is repeated here.
- */
-const NOTE_MAX = 2000;
 
 /** Send back needs a note: the trimmed text must say something. */
 export function canSendBack(note: string): boolean {
@@ -70,7 +64,7 @@ export function SendBackDialog({
           id={fieldId}
           rows={3}
           required
-          maxLength={NOTE_MAX}
+          maxLength={SEND_BACK_NOTE_MAX}
           value={note}
           onChange={(event) => onNoteChange(event.target.value)}
           data-send-back-note=""

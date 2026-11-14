@@ -33,7 +33,11 @@ import {
   jobStatusText,
   type FlagCounts,
 } from "@/lib/services/labels/job-groups";
-import { agoText, labelPublishedText } from "@/lib/services/labels/queue";
+import {
+  agoText,
+  DAY_MS,
+  labelPublishedText,
+} from "@/lib/services/labels/queue";
 import { actionRejected } from "@/lib/ui/action-rejected";
 import { cn } from "@/lib/utils";
 
@@ -457,8 +461,6 @@ export function FlagLegend() {
  * ---------------------------------------------------------------------- */
 
 export type AdminLane = "todo" | "inProgress" | "toCheck" | "submitted";
-
-const DAY_MS = 86_400_000;
 
 /**
  * "no work in N days" once the holder's newest work beat is a day old or

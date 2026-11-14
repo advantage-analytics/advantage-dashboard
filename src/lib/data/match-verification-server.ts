@@ -22,6 +22,7 @@ import {
   type MatchLabelState,
   type MatchVerification,
 } from "@/lib/data/match-verification";
+import { chunksOf } from "@/lib/services/labels/chunks";
 
 /** Ids per RPC call: one call for any ordinary page, a few for a long list. */
 const BATCH_SIZE = 500;
@@ -64,10 +65,7 @@ export async function loadVerificationPending(
   const ids = [...new Set(matchIds)];
   if (ids.length === 0) return pending;
 
-  const batches: string[][] = [];
-  for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-    batches.push(ids.slice(i, i + BATCH_SIZE));
-  }
+  const batches = chunksOf(ids, BATCH_SIZE);
 
   try {
     const results = await Promise.all(

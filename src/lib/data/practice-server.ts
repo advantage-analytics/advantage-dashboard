@@ -10,7 +10,7 @@
  * (`admin/layout.tsx` gates the route already). Read-only.
  */
 
-import { readAllPages } from "@/lib/data/admin-range-read";
+import { isUndefinedColumn, readAllPages } from "@/lib/data/admin-range-read";
 import { countLabelWorkMinutes } from "@/lib/data/labels-server";
 import { isUuid } from "@/lib/admin/validation";
 import { requireAdmin } from "@/lib/services/programs/admin-guard";
@@ -22,7 +22,10 @@ import {
   type PracticeGrade,
   type Side,
 } from "@/lib/services/labels/practice-grading";
-import { jobVideoSeconds } from "@/lib/services/labels/video-seconds";
+import {
+  jobVideoSeconds,
+  type JobVideoSpan,
+} from "@/lib/services/labels/video-seconds";
 import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
 
 interface Deps {
@@ -396,23 +399,7 @@ function dayAfter(day: string): string {
 // Lives in a dependency-free module so the label queue can use it client-side.
 export { jobVideoSeconds };
 
-/** Postgres `undefined_column`: `20261114091835_label_publish_check` is not applied. */
-const UNDEFINED_COLUMN = "42703";
-
-function isUndefinedColumn(error: unknown): boolean {
-  const cause = error instanceof Error ? error.cause : null;
-  return (
-    typeof cause === "object" &&
-    cause !== null &&
-    (cause as { code?: unknown }).code === UNDEFINED_COLUMN
-  );
-}
-
-type PayJob = {
-  start_time_seconds: number | string | null;
-  end_time_seconds: number | string | null;
-  billable_seconds: number | null;
-};
+type PayJob = JobVideoSpan;
 
 type PublishedSessionRow = {
   id: string;

@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 import { isFresh, loadNavSeen, type SeenState } from "@/lib/admin/seen-server";
 import { UUID_RE } from "@/lib/admin/validation";
-import { readAllPages } from "@/lib/data/admin-range-read";
+import { isUndefinedColumn, readAllPages } from "@/lib/data/admin-range-read";
 import {
   DEFAULT_BANDS,
   rowToBandSettings,
@@ -33,7 +33,10 @@ import { programDisplayName } from "@/lib/data/programs-server";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import { getMatchViews30d } from "@/lib/services/posthog/match-views-server";
 import { playedSets, type ScoreLineSet } from "@/lib/ui/score-format";
-import { jobVideoSeconds } from "@/lib/data/practice-server";
+import {
+  jobVideoSeconds,
+  type JobVideoSpan,
+} from "@/lib/services/labels/video-seconds";
 import {
   labelJobIdFor,
   type AdminLabelState,
@@ -207,15 +210,12 @@ function earlier(a: string | null | undefined, b: string | null | undefined) {
 }
 
 /** The job columns the list reads beyond the upload moment. */
-interface JobFacts extends LabelJobCandidate {
+interface JobFacts extends LabelJobCandidate, JobVideoSpan {
   id: string;
   match_id: string;
   created_at: string;
   submitted_at: string | null;
   completed_at: string | null;
-  start_time_seconds: number | string | null;
-  end_time_seconds: number | string | null;
-  billable_seconds: number | null;
 }
 
 /**
@@ -362,18 +362,6 @@ interface LabelSessionRow {
 const SESSION_COLUMNS = "id, match_id, kind, status, created_at, completed_at";
 /** Added by `20261114091835_label_publish_check`. */
 const PUBLISH_CHECK_COLUMNS = "published_at, checked_at";
-/** Postgres `undefined_column`: the publish-check migration is not applied. */
-const UNDEFINED_COLUMN = "42703";
-
-function isUndefinedColumn(error: unknown): boolean {
-  const cause = error instanceof Error ? error.cause : null;
-  return (
-    typeof cause === "object" &&
-    cause !== null &&
-    (cause as { code?: unknown }).code === UNDEFINED_COLUMN
-  );
-}
-
 /**
  * The publish-check stamps of a session. Before the migration the columns
  * are absent: a `complete` session then reads as published and checked at its

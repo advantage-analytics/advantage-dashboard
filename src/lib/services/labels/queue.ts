@@ -29,7 +29,7 @@ export const LABEL_CLAIM_CHOICES = 3;
 /** A moment as the boards hold it: an ISO string, a `Date` or epoch ms. */
 export type Moment = string | number | Date;
 
-const DAY_MS = 86_400_000;
+export const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 const MINUTE_MS = 60_000;
 

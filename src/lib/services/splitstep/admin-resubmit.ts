@@ -39,11 +39,12 @@ import type {
   ResubmitResult,
 } from "./resubmit-job";
 
+import { VERIFIED_MATCH_REFUSAL } from "@/lib/data/match-verification";
+
 const LOG = "[admin-resubmit]";
 
-/** The athlete's route says this for the same refusal; keep the two the same. */
-export const VERIFIED_MATCH_REFUSAL =
-  "This match is Verified by Advantage, so it can't be analysed again.";
+// Shared with the athlete's route, so the two refusals cannot drift apart.
+export { VERIFIED_MATCH_REFUSAL };
 
 export type AdminResubmitRefusalCode =
   | ResubmitRefusalReason

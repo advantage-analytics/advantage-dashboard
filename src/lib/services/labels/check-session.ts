@@ -18,6 +18,7 @@
  * touched: the labeller is whoever the session is assigned to.
  */
 
+import { SEND_BACK_NOTE_MAX } from "@/lib/labels/send-back";
 import type { AdminClient } from "@/lib/supabase/admin";
 import {
   ADMIN_REQUIRED,
@@ -43,8 +44,7 @@ const RACED = racedMessage("session");
 /** The unique index's refusal: another session of the match is open. */
 const UNIQUE_VIOLATION = "23505";
 
-/** The longest note Send back takes (the database's CHECK holds the same). */
-export const SEND_BACK_NOTE_MAX = 2000;
+export { SEND_BACK_NOTE_MAX };
 /** Check matched nothing: already checked, reopened, or never published. */
 export const NOT_WAITING_FOR_CHECK =
   "This session is not waiting for a check. Reload to see where it stands.";

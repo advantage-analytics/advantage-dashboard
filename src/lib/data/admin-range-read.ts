@@ -1,3 +1,16 @@
+/** Postgres `undefined_column`: a migration the code expects is not applied. */
+export const UNDEFINED_COLUMN = "42703";
+
+/** Whether a `readAllPages` failure's cause is Postgres `undefined_column`. */
+export function isUndefinedColumn(error: unknown): boolean {
+  const cause = error instanceof Error ? error.cause : null;
+  return (
+    typeof cause === "object" &&
+    cause !== null &&
+    (cause as { code?: unknown }).code === UNDEFINED_COLUMN
+  );
+}
+
 /**
  * Read every page of a `.range()` query: PostgREST caps each response, including
  * service-role reads. Shared by the admin upload context and history loaders,

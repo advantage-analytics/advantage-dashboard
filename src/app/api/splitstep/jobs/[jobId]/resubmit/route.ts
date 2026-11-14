@@ -10,6 +10,7 @@
 
 import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
 import { NextResponse, type NextRequest } from "next/server";
+import { VERIFIED_MATCH_REFUSAL } from "@/lib/data/match-verification";
 import { isUuid } from "@/lib/services/match-video/access";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -142,10 +143,7 @@ export async function POST(
   // service role, which the database guard lets through.
   if ((matchRow as { verified: boolean | null }).verified) {
     return NextResponse.json(
-      {
-        error:
-          "This match is Verified by Advantage, so it can't be analysed again.",
-      },
+      { error: VERIFIED_MATCH_REFUSAL },
       { status: 409 },
     );
   }
