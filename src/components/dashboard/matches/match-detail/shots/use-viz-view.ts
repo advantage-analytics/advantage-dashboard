@@ -10,6 +10,7 @@ import {
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { BandSettings } from "@/lib/data/viz-bands";
 import type { DistanceUnit } from "@/lib/format/distance";
+import type { MatchFilterContext } from "../match-filters/model";
 import { useMatchFilters } from "../match-filters/provider";
 import { useVizState } from "./use-viz-state";
 import { useVizBands } from "./viz-bands-context";
@@ -77,12 +78,24 @@ export interface VizView {
   unit: DistanceUnit;
 }
 
+/**
+ * The report's filter context (`useMatchFilters().context`) with the LIVE
+ * bands laid in — a band edit applies here before its save lands — so the
+ * advanced filters' Contact and Landed in bucket by exactly the bands the
+ * court draws and counts with.
+ */
+export function useVizFilterContext(): MatchFilterContext {
+  const { context } = useMatchFilters();
+  const { bands, unit } = useVizBands();
+  return useMemo(() => ({ ...context, bands, unit }), [context, bands, unit]);
+}
+
 export function useVizView(): VizView {
   const points = useVizPoints(useMatchData());
   const { you, opp } = useMatchSides();
   const { state } = useVizState();
   const { bands, unit, contactHidden } = useVizBands();
-  const { context } = useMatchFilters();
+  const context = useVizFilterContext();
 
   const cut = state.cut;
   const subjectIsPlayer1 = subjectFor(state.filters, you.isPlayer1);

@@ -46,7 +46,7 @@ export function LightboxAdvancedPanel({
   /** The X, Show and Esc: back to the lightbox. */
   onClose: () => void;
 }) {
-  const { availability, youName, oppName, count } = advanced;
+  const { availability, youName, oppName, count, bandLabels } = advanced;
   // Only the court player decides what the carry rule keeps, so the probe
   // reruns on that alone.
   const player = filters.player;
@@ -83,6 +83,7 @@ export function LightboxAdvancedPanel({
       className="min-h-0 flex-1"
       filters={fold.match}
       availability={offered}
+      bandLabels={bandLabels}
       youName={youName}
       oppName={oppName}
       countFor={countFor}

@@ -150,12 +150,16 @@ export interface SeasonVizNames {
  *  inside-out never matches — the season's Filters panel does not offer it). */
 export function seasonMatchContext(
   m: Pick<SeasonVizMatch, "isPlayer1" | "isDerived" | "errorSplitJudged">,
+  /** The viewer's bands, which Contact and Landed in bucket by. */
+  bands?: SeasonVizBands,
 ): MatchFilterContext {
   return {
     youIsPlayer1: m.isPlayer1,
     hands: { player1: null, player2: null },
     isDerived: m.isDerived,
     errorSplitJudged: m.errorSplitJudged,
+    bands: bands?.bands,
+    unit: bands?.unit,
   };
 }
 
@@ -230,7 +234,7 @@ function computeSeasonPart(
   { bands, unit }: SeasonVizBands,
 ): SeasonPart {
   const points = vizPoints(m.points, m.isDerived);
-  const ctx = seasonMatchContext(m);
+  const ctx = seasonMatchContext(m, { bands, unit });
   const subjectIsPlayer1 = subjectFor(filters, m.isPlayer1);
   const result = computeViz(points, cut, filters, subjectIsPlayer1, chart, ctx);
   const stats = computeVizStats(
@@ -644,12 +648,19 @@ const availabilityMemo = new WeakMap<
   Map<string, MatchFilterAvailability>
 >();
 
-function matchAvailability(m: SeasonVizMatch): MatchFilterAvailability {
-  const key = `${m.isPlayer1}|${m.isDerived}|${m.errorSplitJudged}`;
+function matchAvailability(
+  m: SeasonVizMatch,
+  bands?: SeasonVizBands,
+): MatchFilterAvailability {
+  // The bands decide which Contact and Landed in options have a point.
+  const key = `${m.isPlayer1}|${m.isDerived}|${m.errorSplitJudged}|${JSON.stringify(bands?.bands ?? null)}`;
   let memo = availabilityMemo.get(m.points);
   const hit = memo?.get(key);
   if (hit !== undefined) return hit;
-  const availability = optionAvailability(m.points, seasonMatchContext(m));
+  const availability = optionAvailability(
+    m.points,
+    seasonMatchContext(m, bands),
+  );
   if (memo === undefined) {
     memo = new Map();
     availabilityMemo.set(m.points, memo);
@@ -666,8 +677,9 @@ function matchAvailability(m: SeasonVizMatch): MatchFilterAvailability {
  */
 export function seasonAdvancedOptions(
   perMatch: readonly SeasonVizMatch[],
+  bands?: SeasonVizBands,
 ): SeasonAdvancedOptions {
-  const each = perMatch.map(matchAvailability);
+  const each = perMatch.map((m) => matchAvailability(m, bands));
   const out = {} as Record<MatchFilterKey, unknown[]>;
   for (const key of MATCH_FILTER_KEYS) {
     const values = new Set<unknown>();
@@ -725,6 +737,9 @@ export interface SeasonLightboxData {
   result: VizResult;
   stats: VizStats;
   bandZones: VizBandZones | null;
+  /** The bands the court was counted with — Contact and Landed in, in the
+   *  advanced filters, print their options from these. */
+  bands: BandSettings;
   subjectName: string;
   unit: DistanceUnit;
   /** Any filter beyond the defaults is on (`activeFilterEntries`). */
@@ -1131,6 +1146,7 @@ export function buildSeasonLightbox(
     );
   const filterPhrases = activeFilterEntries(state, names, {
     errorSplitJudged: judged,
+    bandLabels: bands,
   })
     .filter(
       (entry) =>
@@ -1176,6 +1192,7 @@ export function buildSeasonLightbox(
     result: { ...result, dots: result.dots.map(toMillimetre) },
     stats,
     bandZones: bandZonesFor(cut, bands.bands, bands.unit, stats),
+    bands: bands.bands,
     subjectName,
     unit: bands.unit,
     hasFilters: seasonActive || activeFilterEntries(state).length > 0,
@@ -1193,7 +1210,7 @@ export function buildSeasonLightbox(
     errorSplitJudged: judged,
     statRowDots,
     optionCounts,
-    advancedOptions: seasonAdvancedOptions(perMatch),
+    advancedOptions: seasonAdvancedOptions(perMatch, bands),
     names,
     matches: perMatch.map((m) => ({
       id: m.matchId,

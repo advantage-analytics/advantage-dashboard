@@ -24,6 +24,10 @@ import {
   handOf,
   pointResultLabel,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
+import {
+  bandLabelsOf,
+  type FilterBandLabels,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import type { Hand } from "@/components/dashboard/matches/match-detail/match-filters/shot-geometry";
 import type { MatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
@@ -619,6 +623,7 @@ export const PointList = memo(function PointList({
             <EmptyList
               filmFilters={filmFilters}
               sides={sides}
+              bandLabels={bandLabelsOf(labelContext)}
               hasAnyPoints={allPoints.length > 0}
               hasAnySaved={allPoints.some((p) => p.saved)}
               onClear={clearAll}
@@ -1391,6 +1396,7 @@ const ShotWellRow = memo(function ShotWellRow({
 function EmptyList({
   filmFilters,
   sides,
+  bandLabels,
   hasAnyPoints,
   hasAnySaved,
   onClear,
@@ -1398,6 +1404,7 @@ function EmptyList({
 }: {
   filmFilters: FilmListFilters;
   sides: MatchSides;
+  bandLabels: FilterBandLabels;
   hasAnyPoints: boolean;
   hasAnySaved: boolean;
   onClear: () => void;
@@ -1438,10 +1445,11 @@ function EmptyList({
   return (
     <EmptyBody
       title="No points match these filters"
-      body={`Nothing in this match matched: ${filmListSentence(filmFilters, {
-        you: sides.you.shortName,
-        opponent: sides.opp.shortName,
-      })}.`}
+      body={`Nothing in this match matched: ${filmListSentence(
+        filmFilters,
+        { you: sides.you.shortName, opponent: sides.opp.shortName },
+        bandLabels,
+      )}.`}
       action={tone === "dark" ? "Clear the cut" : undefined}
       onAction={onClear}
       tone={tone}

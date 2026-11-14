@@ -49,7 +49,7 @@ export function FilmAdvancedPanel({
   tone = "light",
 }: FilmAdvancedPanelProps) {
   const context = useFilmFilterContext();
-  const { points, availability, youName, oppName, total } =
+  const { points, availability, youName, oppName, total, bandLabels } =
     useFiltersPanelData();
   const { shared, setShared, remainder, savedOnly } = filmFilters;
   const countFor = useCallback(
@@ -74,6 +74,7 @@ export function FilmAdvancedPanel({
         oppName={oppName}
         countFor={countFor}
         total={total}
+        bandLabels={bandLabels}
         filmCut={remainder?.label ?? null}
         onApply={(next) => {
           setShared(next);

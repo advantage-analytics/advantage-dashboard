@@ -21,7 +21,8 @@ import {
 import { shotsWriteAccess } from "./shots-write-access";
 import { serveRowDotIds, statPickDotIds, type StatPick } from "./stat-cut";
 import { useVizState } from "./use-viz-state";
-import { useVizView } from "./use-viz-view";
+import { useVizFilterContext, useVizView } from "./use-viz-view";
+import { bandLabelsOf } from "../match-filters/model";
 import { useVizBands } from "./viz-bands-context";
 import { CUT_LABEL } from "./viz-labels";
 import { useMatchPlayerChipLabels } from "./use-match-player-chip-labels";
@@ -40,7 +41,6 @@ import { activeFilterEntries, courtFor, sameFilterValue } from "./viz-url";
 import {
   useErrorSplitJudged,
   useFiltersPanelData,
-  useMatchFilters,
 } from "../match-filters/provider";
 import { lightboxCountLine } from "./wall-summary";
 
@@ -99,7 +99,7 @@ export function VizLightbox({
 }) {
   const { state, setState } = useVizState();
   const { meta } = useMatchReport();
-  const { context: matchCtx } = useMatchFilters();
+  const matchCtx = useVizFilterContext();
   const {
     cut,
     result,
@@ -347,12 +347,14 @@ export function VizLightbox({
       youName: panelData.youName,
       oppName: panelData.oppName,
       count: countAdvanced,
+      bandLabels: bandLabelsOf(matchCtx),
     }),
     [
       panelData.availability,
       panelData.youName,
       panelData.oppName,
       countAdvanced,
+      matchCtx,
     ],
   );
 
@@ -490,7 +492,10 @@ export function VizLightbox({
     cardFilters !== null &&
     cardKeys.includes(key) &&
     (onView ? sameFilterValue(key, liveFilters, cardFilters) : onCard);
-  const phrases = activeFilterEntries(state, names, { errorSplitJudged })
+  const phrases = activeFilterEntries(state, names, {
+    errorSplitJudged,
+    bandLabels: bandLabelsOf(matchCtx),
+  })
     .filter((e) => e.key !== "player" && !unchangedBaseKey(e.key))
     .map((e) => e.label);
   if (onView)

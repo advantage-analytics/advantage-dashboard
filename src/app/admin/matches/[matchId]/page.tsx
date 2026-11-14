@@ -200,7 +200,11 @@ export default async function AdminMatchReportPage({
           kpiHistory={null}
         >
           <Suspense fallback={<MatchReportPending view="statistics" />}>
-            <MatchFiltersProvider initialQuery={query[MATCH_FILTERS_PARAM]}>
+            <MatchFiltersProvider
+              initialQuery={query[MATCH_FILTERS_PARAM]}
+              bands={report.bands}
+              unit={unit}
+            >
               <MatchReportProvider
                 matchId={match.id}
                 summary={summary}

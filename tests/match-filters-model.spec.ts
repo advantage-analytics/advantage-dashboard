@@ -11,7 +11,6 @@ import {
   optionAvailability,
   parseMatchFilters,
   pointResultLabel,
-  returnContactOf,
   serializeMatchFilters,
   shotMatchesCustom,
   shotMatchesThen,
@@ -21,6 +20,7 @@ import {
   type MatchFilters,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import type { Match } from "@/lib/data/types";
+import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 
 import { pt } from "./fixtures/film-point";
@@ -186,27 +186,92 @@ test("serve spin, zone and return type/spin/zone read the role-picked shots", ()
   ]);
 });
 
-test("return contact: inside / 0–1.0 m behind / more than 1.0 m behind, either end", () => {
-  // Low end: baseline at y = 0, behind = −y.
-  expect(returnContactOf(1)).toBe("inside");
-  expect(returnContactOf(-0.5)).toBe("middle");
-  expect(returnContactOf(-1.0)).toBe("middle");
-  expect(returnContactOf(-1.5)).toBe("neutral");
-  // High end: baseline at y = 23.77, behind = y − 23.77.
-  expect(returnContactOf(22)).toBe("inside");
-  expect(returnContactOf(24.3)).toBe("middle");
-  expect(returnContactOf(25.5)).toBe("neutral");
-  expect(returnContactOf(null)).toBeNull();
-
+test("return contact: the viewer's contact bands, either end", () => {
+  // Default bands: inside | 0–5 ft (1.524 m) behind | past that.
+  // Low end: baseline at y = 0, behind = −y. High end: behind = y − 23.77.
   const points = [
-    pt({ id: "deep", secondShotContactY: 25.5 }),
+    pt({ id: "far", secondShotContactY: 25.5 }),
+    pt({ id: "near-high", secondShotContactY: 24.3 }),
+    pt({ id: "near-low", secondShotContactY: -1.0 }),
     pt({ id: "inside", secondShotContactY: 2 }),
     pt({ id: "unmeasured", secondShotContactY: null }),
   ];
-  expect(run(points, { returnContact: ["neutral"] })).toEqual(["deep"]);
+  expect(run(points, { returnContact: ["far"] })).toEqual(["far"]);
+  expect(run(points, { returnContact: ["near"] })).toEqual([
+    "near-high",
+    "near-low",
+  ]);
+  expect(run(points, { returnContact: ["inside", "near", "far"] })).toEqual([
+    "far",
+    "near-high",
+    "near-low",
+    "inside",
+  ]);
+  // The viewer's own dividers move the edge: at 0 / 3 ft, 1.0 m behind is far.
+  const tight = {
+    ...CTX,
+    bands: { ...DEFAULT_BANDS, contactDividersFt: [0, 3] as [number, number] },
+  };
+  expect(run(points, { returnContact: ["far"] }, tight)).toEqual([
+    "far",
+    "near-low",
+  ]);
+});
+
+test("return landed in: the viewer's depth bands, in balls only", () => {
+  // Thirds of 11.885 m from the net. A return struck from the low end
+  // (contact y < net) travels toward y = 23.77.
+  const at = (id: string, landingY: number, result = "In", landingX = 0) =>
+    pt({
+      id,
+      secondShotContactY: -0.5,
+      secondShotLandingX: landingX,
+      secondShotLandingY: landingY,
+      secondShotResult: result,
+    });
+  const points = [
+    at("deep", 22),
+    at("mid", 18),
+    at("short", 13),
+    at("long", 24.5),
+    at("wide", 22, "In", 4.5),
+    at("netted", 13, "Net"),
+    at("out-call", 22, "Out"),
+  ];
+  expect(run(points, { returnLanded: ["deep"] })).toEqual(["deep"]);
+  expect(run(points, { returnLanded: ["mid", "short"] })).toEqual([
+    "mid",
+    "short",
+  ]);
+  // No depth bands set: nothing can match.
+  const none = {
+    ...CTX,
+    bands: { ...DEFAULT_BANDS, depthScheme: "none" as const },
+  };
+  expect(run(points, { returnLanded: ["deep"] }, none)).toEqual([]);
+});
+
+test("Custom › Contact and Landed in test the one shot, by its own end", () => {
+  const points = [
+    pt({
+      id: "far-end",
+      shots: [shot({ shotNumber: 3, contactY: 25, landingX: 0, landingY: 2 })],
+    }),
+    pt({
+      id: "inside",
+      shots: [shot({ shotNumber: 3, contactY: 3, landingX: 0, landingY: 18 })],
+    }),
+  ];
+  // Far end: 1.23 m behind (near), landed 9.885 m past the net (deep).
+  expect(run(points, { customContact: ["near"] })).toEqual(["far-end"]);
+  expect(run(points, { customLanded: ["deep"] })).toEqual(["far-end"]);
+  // Low end, struck inside, landed 6.1 m past the net (mid).
+  expect(run(points, { customContact: ["inside"] })).toEqual(["inside"]);
+  expect(run(points, { customLanded: ["mid"] })).toEqual(["inside"]);
+  // Both on ONE shot: never a contact from one and a landing from another.
   expect(
-    run(points, { returnContact: ["inside", "middle", "neutral"] }),
-  ).toEqual(["deep", "inside"]);
+    run(points, { customContact: ["inside"], customLanded: ["deep"] }),
+  ).toEqual([]);
 });
 
 /* ── Score ──────────────────────────────────────────────────────────────── */
@@ -1252,7 +1317,8 @@ const EVERYTHING: MatchFilters = {
   returnType: ["Forehand", "Backhand"],
   returnSpin: ["Topspin", "Slice"],
   returnZone: ["Down the Line", "Middle", "Crosscourt"],
-  returnContact: ["inside", "middle", "neutral"],
+  returnContact: ["inside", "near", "far"],
+  returnLanded: ["deep", "mid", "short"],
   returnResult: ["winner", "error", "in-play"],
   resultOutcome: ["won", "lost"],
   resultPlayer: "you",
@@ -1264,11 +1330,15 @@ const EVERYTHING: MatchFilters = {
   customSide: ["deuce", "ad"],
   customStroke: ["Forehand", "Backhand", "Volley", "Overhead"],
   customDirection: ["Crosscourt", "Down the Line", "Inside Out", "Inside In"],
+  customContact: ["inside"],
+  customLanded: ["short"],
   customRallyShot: [1, 4, 12],
   thenPlayer: "you",
   thenSide: ["ad"],
   thenStroke: ["Backhand", "Overhead"],
   thenDirection: ["Down the Line", "Inside In"],
+  thenContact: ["far"],
+  thenLanded: ["deep", "mid"],
   thenRallyShot: [2, 7],
 };
 
@@ -1306,10 +1376,19 @@ test("an older ?f= string parses exactly as before and re-serializes unchanged",
         thenStroke: [],
         thenDirection: [],
         thenRallyShot: [],
+        returnLanded: [],
+        customContact: [],
+        customLanded: [],
+        thenContact: [],
+        thenLanded: [],
       }),
     ),
   ).toBe(true);
-  expect(serializeMatchFilters(back)).toBe(PRE_THEN_EVERYTHING);
+  // Return › Contact's fixed buckets (`rc.i.m.n`) read as the contact bands
+  // nearest their meaning, and re-serialize in the band form.
+  expect(serializeMatchFilters(back)).toBe(
+    PRE_THEN_EVERYTHING.replace("_rc.i.m.n_", "_rc.i.nr.fr_"),
+  );
 });
 
 test("Custom › Stroke and Then use their own short codes and round-trip", () => {
@@ -1327,8 +1406,10 @@ test("Custom › Stroke and Then use their own short codes and round-trip", () =
   expect(filtersEqual(parseMatchFilters(text), filters)).toBe(true);
   // The full every-field string carries the new groups after the old ones.
   expect(serializeMatchFilters(EVERYTHING)).toBe(
-    PRE_THEN_EVERYTHING.replace("_cd.", "_ck.fh.bh.vo.oh_cd.") +
-      "_tp.y_ts.a_tk.bh.oh_td.dl.ii_tr.2.7",
+    PRE_THEN_EVERYTHING.replace("_rc.i.m.n_", "_rc.i.nr.fr_rl.d.m.s_")
+      .replace("_cd.", "_ck.fh.bh.vo.oh_cd.")
+      .replace("_cr.", "_cn.i_cl.s_cr.") +
+      "_tp.y_ts.a_tk.bh.oh_td.dl.ii_tn.fr_tl.d.m_tr.2.7",
   );
   // matchFiltersQuery carries the same value as ?f=.
   expect(matchFiltersQuery("tab=film", filters)).toBe(`tab=film&f=${text}`);

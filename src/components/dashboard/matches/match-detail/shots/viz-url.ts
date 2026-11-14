@@ -35,6 +35,7 @@ import {
   parseMatchFilters,
   serializeMatchFilters,
   toggleMatchFilter,
+  type FilterBandLabels,
   type MatchFilterAvailability,
   type MatchFilterKey,
   type MatchFilterValue,
@@ -942,7 +943,12 @@ export function activeFilterEntries(
    * Error type as its pills do (`errorOptionsFor`): Unforced and Forced are
    * one "Errors" token. Omitted, every value is its own token, as stored.
    */
-  options: { errorSplitJudged?: boolean } = {},
+  options: {
+    errorSplitJudged?: boolean;
+    /** Contact and Landed in name the viewer's bands ("return struck 0–5
+     *  ft behind"). Omitted, the default bands in feet. */
+    bandLabels?: FilterBandLabels;
+  } = {},
 ): ActiveFilterEntry[] {
   if (state.cut === null) {
     return [];
@@ -1008,7 +1014,7 @@ export function activeFilterEntries(
           label: capitalizeFirst(
             phraseFor(
               matchKey,
-              optionLabel(matchKey, matchValue),
+              optionLabel(matchKey, matchValue, options.bandLabels),
               matchValue,
               names,
             ),

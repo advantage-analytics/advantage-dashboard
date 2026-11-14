@@ -56,6 +56,7 @@ import {
 import { usePublishFilmHead } from "@/components/dashboard/matches/match-detail/film-head-context";
 import { useOptionalMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { usePendingFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
+import { bandLabelsOf } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import {
   FILTER_RAIL_ID,
@@ -1211,6 +1212,7 @@ function FilmRoom({
         shown={filteredPoints.length}
         total={points.length}
         focusAfterClear={filterRail.focusTrigger}
+        bandLabels={bandLabelsOf(filterContext)}
       />
       <div
         ref={clockRef}

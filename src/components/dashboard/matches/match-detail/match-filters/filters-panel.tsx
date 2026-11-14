@@ -8,6 +8,7 @@ import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
 import type {
+  FilterBandLabels,
   MatchFilterAvailability,
   MatchFilterSectionId,
   MatchFilters,
@@ -82,6 +83,7 @@ export function FiltersPanel({
   noun,
   title = "Filters",
   onCloseTooltipEscape,
+  bandLabels,
 }: {
   /** The applied filters — the draft starts here. */
   filters: MatchFilters;
@@ -118,11 +120,17 @@ export function FiltersPanel({
    * lightbox's dialog) forwards it here to still close in one press.
    */
   onCloseTooltipEscape?: () => void;
+  /**
+   * The viewer's bands and unit, which Contact and Landed in print their
+   * options from — the court's own band labels. Omitted, they read as the
+   * default bands in feet.
+   */
+  bandLabels?: FilterBandLabels;
 }) {
   const titleId = useId();
   const names = { you: youName, opponent: oppName };
   const [draft, setDraft] = useState<MatchFilters>(filters);
-  const sections = panelSections(availability, names);
+  const sections = panelSections(availability, names, bandLabels);
   const [open, setOpen] = useState<MatchFilterSectionId | null>(() =>
     initialOpenSection(filters, sections),
   );
@@ -199,7 +207,7 @@ export function FiltersPanel({
               onToggleOpen={() =>
                 setOpen((prev) => (prev === section.id ? null : section.id))
               }
-              summary={sectionSummary(draft, section.id, names)}
+              summary={sectionSummary(draft, section.id, names, bandLabels)}
               draft={draft}
               onToggleOption={actions.toggle}
               pad={pad}
