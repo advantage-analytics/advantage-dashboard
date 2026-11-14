@@ -29,12 +29,10 @@ const trigger = functionSource("label_sessions_record_start_open_counts");
 const claim = functionSource("claim_label_session");
 const release = functionSource("release_stale_label_claims");
 
-test("the migration file is committed and sorts last", () => {
-  expect(file).toBeDefined();
-  const names = readdirSync(dir)
-    .filter((name) => name.endsWith(".sql"))
-    .sort();
-  expect(names.at(-1)).toBe(file);
+test("the migration file is committed at its live version", () => {
+  // Later migrations sort after it; 20261114060750 is how the live database
+  // recorded this one.
+  expect(file).toBe("20261114060750_label_queue_claims.sql");
 });
 
 test("it adds the two nullable columns to label_sessions", () => {

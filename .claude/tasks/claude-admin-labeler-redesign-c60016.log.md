@@ -373,3 +373,13 @@ is the runner's. Newest entries at the bottom.
 
 1. Add a loader spec for `readStartOpenCounts` (42703 gives null; a stored pair comes through).
 2. The console's amber count includes the "score doesn't add up" stop and `openFlags` does not, so the two differ by one; make every board count the same flags.
+
+## T31 · Migration: published, checked, sent back — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New `supabase/migrations/20261114070000_label_publish_check.sql` (written, not applied): six `label_sessions` columns (published/checked/sent back), four CHECKs, the `label_sessions_stamp_published` trigger, a backfill of the 36 complete sessions, `verify_match` widened to admins or labellers (owner approved 2026-11-14), and `release_stale_label_claims` skipping published sessions. New spec `tests/label-publish-check-migration.spec.ts`; `tests/label-queue-migration.spec.ts` now pins its own filename in place of "sorts last".
+**follow-ups:**
+
+1. Reopen (`session-status-session.ts`, `status: "labelling", completed_at: null`) must also clear `checked_at`/`checked_by`, or it breaks `label_sessions_checked_needs_complete` once this migration is applied. Ship before applying.
+2. `verify_match`'s refusal still reads "Only an Advantage admin can verify a match".
+3. The `alter table` is not re-runnable (no `add constraint if not exists`); a publish in flight at apply time rolls the backfill back.

@@ -431,7 +431,7 @@ ready).
 
 ## T31 · Migration: published, checked, sent back
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** guess — supabase/migrations/<timestamp>_label_publish_check.sql (new), tests/label-publish-check-migration.spec.ts (new)
 - **done when:**
