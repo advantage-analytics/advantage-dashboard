@@ -7,6 +7,10 @@
 
 import type { LabelUploadInfo } from "@/lib/data/label-overview-server";
 import type { LabelJobOwner } from "@/lib/data/label-overview-server";
+import type {
+  AdminLabelBoard,
+  AdminLabelBoardRow,
+} from "@/lib/data/label-queue-server";
 import type { LabelJobRow } from "@/lib/data/labels-server";
 import type { LabelMark, LabelMarks } from "@/lib/services/labels/marks";
 import type {
@@ -442,4 +446,107 @@ export const FLAGS: Record<string, { amber: number; grey: number }> = {
   m7: { amber: 0, grey: 0 },
   m8: { amber: 8, grey: 24 },
   m9: { amber: 0, grey: 2 },
+};
+
+/** The moment the sample board is read at; fixed, so due texts never move. */
+export const BOARD_NOW = Date.parse("2026-11-13T12:00:00Z");
+
+const at = (hours: number) =>
+  new Date(BOARD_NOW + hours * 3_600_000).toISOString();
+
+const boardRow = (
+  n: number,
+  overrides: Partial<AdminLabelBoardRow>,
+): AdminLabelBoardRow => ({
+  jobId: `board-${n}`,
+  matchId: `board-m${n}`,
+  player1Name: "Maya Okafor",
+  player2Name: "Elena Vargas",
+  programName: LAKESHORE,
+  videoSeconds: 4500,
+  urgency: "standard",
+  dueAt: at(12),
+  claimable: false,
+  sessionId: null,
+  labellerId: null,
+  labellerName: null,
+  labellerPhotoUrl: null,
+  assignedAt: null,
+  claimedAt: null,
+  submittedAt: null,
+  lastBeatAt: null,
+  minutesWorked: 0,
+  flags: null,
+  ...overrides,
+});
+
+/** The admin's board on `/admin/labels`, three lanes of sample matches. */
+export const BOARD: AdminLabelBoard = {
+  todo: [
+    boardRow(1, {
+      player1Name: "Sam Arroyo",
+      player2Name: "Ken Watanabe",
+      programName: "Personal",
+      dueAt: at(-1.5),
+      claimable: true,
+    }),
+    boardRow(2, {
+      player1Name: "Jo Castellanos",
+      player2Name: "Ruth Adeyemi",
+      urgency: "express",
+      videoSeconds: 3060,
+      dueAt: at(5),
+      claimable: true,
+    }),
+    boardRow(3, {
+      player1Name: "Theo Marchetti",
+      player2Name: "Luis Ferreira",
+      programName: HARBOR,
+      videoSeconds: 5940,
+      dueAt: at(17),
+      claimable: true,
+      sessionId: "board-s3",
+      flags: { left: 23 },
+    }),
+  ],
+  inProgress: [
+    boardRow(4, {
+      player1Name: "Maya Okafor",
+      player2Name: "Sofia Lindqvist",
+      videoSeconds: 4680,
+      dueAt: at(-2),
+      sessionId: "board-s4",
+      labellerId: "lena",
+      labellerName: "Lena Kovac",
+      lastBeatAt: at(-72),
+      flags: { resolved: 38, total: 41 },
+    }),
+    boardRow(5, {
+      player1Name: "Theo Marchetti",
+      player2Name: "Omar Haddad",
+      programName: HARBOR,
+      urgency: "express",
+      videoSeconds: 3780,
+      dueAt: at(2),
+      sessionId: "board-s5",
+      labellerId: "maya-rao",
+      labellerName: "Maya Rao",
+      lastBeatAt: at(-0.2),
+      flags: { left: 14 },
+    }),
+  ],
+  submitted: [
+    boardRow(6, {
+      player1Name: "Sam Arroyo",
+      player2Name: "Milo Brandt",
+      programName: "Personal",
+      videoSeconds: 3240,
+      dueAt: at(20),
+      sessionId: "board-s6",
+      labellerId: "dev",
+      labellerName: "Dev Patel",
+      submittedAt: at(-3),
+      flags: { resolved: 30, total: 30 },
+    }),
+  ],
 };

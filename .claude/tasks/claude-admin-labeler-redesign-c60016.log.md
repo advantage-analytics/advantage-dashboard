@@ -338,3 +338,15 @@ is the runner's. Newest entries at the bottom.
 2. Due text is as of page load; a periodic refresh would keep "Due in N min" honest.
 3. The first claim seeds and is slow; a clearer pending state may help.
 4. A non-practice assigned session outside labelling or submitted is no longer listed; confirm none is stranded.
+
+## T28 · Admin Labels board in lanes — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `/admin/labels` renders the lanes To do, In progress and Submitted from `loadAdminLabelBoard()` (players, team or Personal, hours, `UrgencyMark`, due text; labeller via the Assign pill; flag progress and "no work in N days" on In progress). Every row opens through `useStartLabelling(jobId)` with no claim check; rows with a session keep `AssignMenu`, which now refreshes the board. Requested reviews and the Pay report link stay; the view pills and Program filter are gone; a line points to Matches for matches analysed before 2026-10-29. `AdminLabelBoardRow` gains `labellerId`; the labeller board's lane parts are exported and shared. New `tests/admin-labels-board.spec.ts`.
+
+**follow-ups:**
+
+1. Requested reviews still reads every completed job through `listLabelJobs` when a report is open; a reported-matches loader would let it and two helpers go.
+2. `tests/label-queue-loader.spec.ts` could assert `labellerId`.
+3. Submitted rows could say "submitted N h ago".

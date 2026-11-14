@@ -439,6 +439,8 @@ export interface AdminLabelBoardRow {
   claimable: boolean;
   /** Null when nobody has started a session for the job. */
   sessionId: string | null;
+  /** The assigned labeller (`users.id`), for the admin's Assign menu. */
+  labellerId: string | null;
   /** The assigned labeller's full name; null when unassigned. */
   labellerName: string | null;
   labellerPhotoUrl: string | null;
@@ -478,6 +480,7 @@ export function toAdminLabelBoard(
       dueAt: entry.dueAt,
       claimable: claimable.has(entry.id),
       sessionId: session?.id ?? null,
+      labellerId: session?.assignee?.id ?? null,
       labellerName: session?.assignee?.fullName ?? null,
       labellerPhotoUrl: session?.assignee?.photoUrl ?? null,
       assignedAt: session?.assignedAt ?? null,

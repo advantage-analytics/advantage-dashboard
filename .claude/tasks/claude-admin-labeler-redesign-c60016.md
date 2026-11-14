@@ -389,7 +389,7 @@ ready).
 
 ## T28 · Admin Labels board in lanes
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T24, T26
 - **files:** guess — src/app/admin/labels/page.tsx, src/components/admin/labels/labels-board.tsx, src/components/admin/labels-board/label-job-row.tsx, tests/admin-labels-board.spec.ts (new)

@@ -29,29 +29,32 @@ import { cn } from "@/lib/utils";
  *
  * `now` comes from the server render and is used for every due text, so the
  * server's HTML and the browser's first render agree; the board does not tick.
+ *
+ * The lane shell and the row parts are exported: the admin's board
+ * (`components/admin/labels/labels-board.tsx`) draws the same lanes.
  */
 
 /** The To do lane shows this many before "Show N more". */
-const TODO_VISIBLE = 8;
+export const TODO_VISIBLE = 8;
 
 /** Video | Urgency | (due or labeller) | trailing slot. */
-const ROW_GRID =
+export const ROW_GRID =
   "grid grid-cols-[56px_96px_minmax(0,1fr)_auto] items-center gap-x-2";
 
-function hours(seconds: number): string {
+export function hours(seconds: number): string {
   return (seconds / 3600).toFixed(2);
 }
 
-function matchesWord(n: number): string {
+export function matchesWord(n: number): string {
   return n === 1 ? "1 match" : `${n} matches`;
 }
 
-function laneCount(rows: readonly { videoSeconds: number }[]): string {
+export function laneCount(rows: readonly { videoSeconds: number }[]): string {
   const seconds = rows.reduce((sum, row) => sum + row.videoSeconds, 0);
   return `${matchesWord(rows.length)} · ${hours(seconds)} h`;
 }
 
-function Hours({ seconds }: { seconds: number }) {
+export function Hours({ seconds }: { seconds: number }) {
   return (
     <span className="text-[14px] font-medium whitespace-nowrap text-[var(--ink-900)] tabular-nums">
       {hours(seconds)}{" "}
@@ -60,7 +63,7 @@ function Hours({ seconds }: { seconds: number }) {
   );
 }
 
-function DueText({ dueAt, now }: { dueAt: string; now: number }) {
+export function DueText({ dueAt, now }: { dueAt: string; now: number }) {
   const overdue = isOverdue(dueAt, now);
   return (
     <span
@@ -77,7 +80,7 @@ function DueText({ dueAt, now }: { dueAt: string; now: number }) {
   );
 }
 
-function Lane({
+export function Lane({
   id,
   title,
   count,
@@ -108,7 +111,7 @@ function Lane({
   );
 }
 
-function LaneEmpty({ children }: { children: React.ReactNode }) {
+export function LaneEmpty({ children }: { children: React.ReactNode }) {
   return (
     <p className="flex min-h-[44px] items-center rounded-[var(--radius-element)] border border-dashed border-[var(--border-field)] px-3 text-[12px] text-[var(--ink-500)]">
       {children}

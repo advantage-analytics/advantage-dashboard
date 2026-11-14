@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { ChevronDown } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { assignLabelSessionAction } from "@/app/admin/labels/actions";
 import {
   AdminMatchCell,
@@ -11,9 +12,15 @@ import {
   WorkspaceCell,
 } from "@/components/admin/admin-cells";
 import { useStartLabelling } from "@/components/admin/labels/start-labelling-button";
+import { UrgencyMark } from "@/components/admin/labels/urgency-mark";
+import { DueText, Hours, ROW_GRID } from "@/components/label/label-board";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { StatePill } from "@/components/ui/state-pill";
 import type { LabelJobOwner } from "@/lib/data/label-overview-server";
+import type {
+  AdminLabelBoardRow,
+  BoardFlags,
+} from "@/lib/data/label-queue-server";
 import type { LabelJobRow } from "@/lib/data/labels-server";
 import type { Labeller } from "@/lib/services/labels/assign-session";
 import {
@@ -25,7 +32,11 @@ import { actionRejected } from "@/lib/ui/action-rejected";
 import { cn } from "@/lib/utils";
 
 /**
- * One row of the Labels list (LabelsFlat, "Labels B"): Match · Workspace ·
+ * Two kinds of row for Admin › Labels. `AdminLaneRow` (at the foot) is a
+ * match on the board's lanes. `LabelJobListRow` is a row of the Requested
+ * reviews table, drawn as the Labels list (LabelsFlat, "Labels B") drew it:
+ *
+ * One row of the Labels list: Match · Workspace ·
  * Analyzed · Points · Flags · Status · Assigned · Worked · chevron. A match is a
  * record row, so the whole row is the way in and carries the chevron the
  * table laws give a row that navigates; a match nobody has started seeds its
@@ -176,11 +187,14 @@ function AssignMenu({
   frozen,
   initial,
   labellers,
+  onAssigned,
 }: {
   sessionId: string;
   frozen: boolean;
   initial: { id: string; name: string } | null;
   labellers: readonly Labeller[];
+  /** Ran after the assignment is saved (the board re-reads its lanes). */
+  onAssigned?: () => void;
 }) {
   const [assignee, setAssignee] = useState(initial);
   const [open, setOpen] = useState(false);
@@ -226,6 +240,7 @@ function AssignMenu({
         return;
       }
       setAssignee(result.assignedTo);
+      onAssigned?.();
     });
   };
 
@@ -428,5 +443,170 @@ export function FlagLegend() {
         Wrong data
       </span>
     </span>
+  );
+}
+
+/* -------------------------------------------------------------------------
+ * The board's lanes
+ * ---------------------------------------------------------------------- */
+
+export type AdminLane = "todo" | "inProgress" | "submitted";
+
+const DAY_MS = 86_400_000;
+
+/**
+ * "no work in N days" once the holder's newest work beat is a day old or
+ * more; null with no beat at all, or a recent one.
+ */
+export function noWorkText(
+  lastBeatAt: string | null,
+  now: number,
+): string | null {
+  if (!lastBeatAt) return null;
+  const days = Math.floor((now - Date.parse(lastBeatAt)) / DAY_MS);
+  if (!(days >= 1)) return null;
+  return days === 1 ? "no work in 1 day" : `no work in ${days} days`;
+}
+
+/** "3 of 10 flags resolved", or "4 flags left" before a start was counted. */
+export function flagText(flags: NonNullable<BoardFlags>): string {
+  if ("total" in flags) {
+    return `${flags.resolved} of ${flags.total} flags resolved`;
+  }
+  return flags.left === 1 ? "1 flag left" : `${flags.left} flags left`;
+}
+
+/**
+ * One match on the admin's board (AdminAudit artboard): hours, urgency and
+ * the due time, then "Player vs Player · Team" with the chevron a record row
+ * carries. The top of the card is the way in — for every row in every lane it
+ * seeds or reopens the session (`useStartLabelling`) and opens the console;
+ * an admin labels any match, with no claim and no limit.
+ *
+ * Below it, outside the button: a row with a session keeps the Assign menu
+ * (its pill reads the labeller's name), and an In progress row its progress
+ * in flags and, when the holder has gone quiet, "no work in N days".
+ */
+export function AdminLaneRow({
+  row,
+  lane,
+  now,
+  labellers = [],
+  onOpen,
+}: {
+  row: AdminLabelBoardRow;
+  lane: AdminLane;
+  /** Epoch ms, read once on the server. */
+  now: number;
+  /** Who the Assign menu offers (`listLabellers`). */
+  labellers?: readonly Labeller[];
+  /** Ran on the click, before the session opens. */
+  onOpen?: () => void;
+}) {
+  const router = useRouter();
+  const { start, isPending, error } = useStartLabelling(row.jobId);
+  const players = `${row.player1Name} vs ${row.player2Name}`;
+  const flags = lane === "inProgress" ? row.flags : null;
+  const stalled =
+    lane === "inProgress" ? noWorkText(row.lastBeatAt, now) : null;
+  const bar = flags && "total" in flags ? flags : null;
+
+  return (
+    <div
+      data-admin-label-row=""
+      data-labels-job={row.jobId}
+      className="group rounded-[var(--radius-element)] bg-[var(--surface-card)]"
+    >
+      <button
+        type="button"
+        aria-label={`Open ${players}`}
+        aria-busy={isPending}
+        disabled={isPending}
+        onClick={() => {
+          onOpen?.();
+          start();
+        }}
+        className="flex w-full cursor-pointer flex-col rounded-[var(--radius-element)] px-3 pb-2 text-left transition-colors duration-100 outline-none hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] active:scale-[0.998] disabled:cursor-progress"
+      >
+        <span className={cn(ROW_GRID, "h-[40px] w-full")}>
+          <Hours seconds={row.videoSeconds} />
+          <UrgencyMark level={row.urgency} />
+          <span className="col-span-2 min-w-0 text-right">
+            <DueText dueAt={row.dueAt} now={now} />
+          </span>
+        </span>
+        <span className="flex w-full items-center justify-between gap-3">
+          <span className="min-w-0 truncate text-[12px] text-[var(--ink-900)]">
+            {players}{" "}
+            <span className="text-[var(--ink-500)]">· {row.programName}</span>
+          </span>
+          <ChevronRight
+            className="size-[13px] shrink-0 text-[var(--ink-300)] transition-colors duration-200 group-hover:text-[var(--ink-900)]"
+            strokeWidth={1.5}
+            aria-hidden="true"
+          />
+        </span>
+      </button>
+
+      {row.sessionId || stalled || flags ? (
+        <div className="flex flex-col gap-2 px-3 pt-0.5 pb-2.5">
+          {bar ? (
+            <div
+              role="progressbar"
+              aria-label="Flags resolved"
+              aria-valuemin={0}
+              aria-valuemax={bar.total}
+              aria-valuenow={bar.resolved}
+              className="h-1.5 overflow-hidden rounded-full bg-[var(--ink-200)]"
+            >
+              <div
+                className="h-full rounded-full bg-[var(--blue)]"
+                style={{
+                  width: `${bar.total > 0 ? (bar.resolved / bar.total) * 100 : 100}%`,
+                }}
+              />
+            </div>
+          ) : null}
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-[var(--ink-500)] tabular-nums">
+            {row.sessionId ? (
+              <span className="flex min-w-0 flex-col items-start">
+                <AssignMenu
+                  key={row.sessionId}
+                  sessionId={row.sessionId}
+                  frozen={false}
+                  initial={
+                    row.labellerId && row.labellerName
+                      ? { id: row.labellerId, name: row.labellerName }
+                      : null
+                  }
+                  labellers={labellers}
+                  onAssigned={() => router.refresh()}
+                />
+              </span>
+            ) : null}
+            {stalled || flags ? (
+              <span data-admin-label-progress="">
+                {stalled ? (
+                  <span className="font-medium text-[var(--ink-900)]">
+                    {stalled}
+                  </span>
+                ) : null}
+                {stalled && flags ? " · " : null}
+                {flags ? flagText(flags) : null}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {error ? (
+        <p
+          role="alert"
+          className="px-3 pb-2.5 text-[12px] text-[var(--danger)]"
+        >
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }

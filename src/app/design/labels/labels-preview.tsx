@@ -2,10 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { LabelDashboard } from "@/components/admin/labels/label-dashboard";
-import { LabelsBoard } from "@/components/admin/labels/labels-board";
+import {
+  LabelsBoard,
+  RequestedReviews,
+} from "@/components/admin/labels/labels-board";
 import { labelScores } from "@/lib/services/labels/score";
 import { completeWarnings } from "@/lib/services/labels/session-status";
 import {
+  BOARD,
+  BOARD_NOW,
   fixtureMatch,
   FLAGS,
   JOBS,
@@ -16,8 +21,8 @@ import {
 } from "./fixture";
 
 /**
- * `/design/labels`: a match's overview on a made-up match, then the grouped
- * Labels list. The real components on fixed
+ * `/design/labels`: a match's overview on a made-up match, then the Labels
+ * board: Requested reviews over the three lanes. The real components on fixed
  * inputs; a point's link has nowhere to go here, and says so in the page's
  * own note rather than doing nothing silently.
  */
@@ -90,15 +95,20 @@ export function LabelsDesignPreview() {
       <section aria-labelledby="list" className="flex flex-col gap-6">
         <div className="flex flex-col gap-1 border-t border-[var(--border-card)] pt-5">
           <h2 id="list" className="text-title-lg">
-            The Labels list, by program and player
+            The Labels board
           </h2>
           <p className="max-w-[72ch] text-[13px] leading-[1.6] text-[var(--ink-600)]">
-            A dropdown for each program and, inside it, one for each person.
-            What still needs labelling starts open. The view switch and the
-            dropdowns are live.
+            Requested reviews, then the queue in three lanes: To do, In
+            progress, Submitted. These matches do not exist, so opening or
+            assigning one here only shows its error.
           </p>
         </div>
-        <LabelsBoard rows={JOBS} owners={OWNERS} flagCounts={FLAGS} />
+        <RequestedReviews
+          rows={JOBS.slice(0, 2)}
+          owners={OWNERS}
+          flagCounts={FLAGS}
+        />
+        <LabelsBoard board={BOARD} now={BOARD_NOW} />
       </section>
     </main>
   );
