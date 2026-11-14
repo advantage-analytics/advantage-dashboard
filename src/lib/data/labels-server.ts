@@ -580,7 +580,7 @@ export async function getLabelSession(
   };
 }
 
-/** Postgres `undefined_column`: `20261114022117_label_queue_claims` is not applied yet. */
+/** Postgres `undefined_column`: `20261114060750_label_queue_claims` is not applied yet. */
 const UNDEFINED_COLUMN = "42703";
 
 /**

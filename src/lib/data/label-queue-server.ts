@@ -116,11 +116,11 @@ export interface QueueSessionRow {
   status: string;
   started_at: string;
   open_counts: unknown;
-  /** Absent until `20261114022117_label_queue_claims` is applied. */
+  /** Absent until `20261114060750_label_queue_claims` is applied. */
   start_open_counts?: unknown;
   assigned_to: string | null;
   assigned_at: string | null;
-  /** Absent until `20261114022117_label_queue_claims` is applied. */
+  /** Absent until `20261114060750_label_queue_claims` is applied. */
   claimed_at?: string | null;
   submitted_at: string | null;
   /** Who started the session, or the labeller who submitted it. */
@@ -500,7 +500,7 @@ export function toAdminLabelBoard(
 
 const SESSION_COLUMNS =
   "id, job_id, status, started_at, open_counts, assigned_to, assigned_at, submitted_at, labeller, assignee:users!assigned_to(id, email, first_name, last_name, avatar_path)";
-/** Added by `20261114022117_label_queue_claims`. */
+/** Added by `20261114060750_label_queue_claims`. */
 const CLAIM_COLUMNS = "claimed_at, start_open_counts";
 /** Postgres `undefined_column`: the claims migration is not applied yet. */
 const UNDEFINED_COLUMN = "42703";
