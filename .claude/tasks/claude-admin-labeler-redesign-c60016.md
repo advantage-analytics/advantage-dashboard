@@ -322,7 +322,7 @@ ready).
 
 ## T23 · Queue rules: due time, who can enter, sort, the first three
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** guess — src/lib/services/labels/queue.ts (new), tests/label-queue.spec.ts (new)
 - **done when:**

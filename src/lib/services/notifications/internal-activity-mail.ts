@@ -14,6 +14,7 @@ import { isFirstMatchFeedbackRating } from "@/lib/feedback/first-match-feedback"
 import { emailOrigin } from "@/lib/site-url";
 import { describeContext } from "./analysis-mail";
 import { claimSend } from "./should-notify";
+import { isTestAccountEmail } from "./test-account";
 
 /**
  * New signups, new uploads, first-match feedback answers and player messages,
@@ -76,13 +77,8 @@ export function parseInternalEvent(body: unknown): InternalEvent | null {
   return { kind: kind as InternalEventKind, id };
 }
 
-/**
- * A login the test suites made. `example.com` / `.org` / `.net` are reserved
- * (RFC 2606), so no real person signs up with one.
- */
-export function isTestAccountEmail(email: string | null | undefined): boolean {
-  return /@example\.(com|org|net)$/i.test(email?.trim() ?? "");
-}
+// Lives in a dependency-free module so the label queue can use it client-side.
+export { isTestAccountEmail };
 
 function fullName(
   row: {

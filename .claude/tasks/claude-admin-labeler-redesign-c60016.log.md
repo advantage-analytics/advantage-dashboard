@@ -273,3 +273,15 @@ is the runner's. Newest entries at the bottom.
 2. The release skips a session under a fresh publish lease (not in the task text); the next run picks it up.
 3. The new CHECK requires integers where the live `open_counts` CHECK allows any non-negative number.
 4. Re-claiming your own session returns `'taken'`; the claim action should treat that as already yours.
+
+## T23 · Queue rules: due time, who can enter, sort, the first three — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** new pure `src/lib/services/labels/queue.ts`: `LABEL_DUE_WINDOW_HOURS` (36), `LABEL_QUEUE_FROM` (2026-10-29Z), `LABEL_CLAIM_CHOICES` (3), `labelDueAt`, `labelDueText`, `isOverdue`, `urgencyLevel`, `isTestOwner`, `enterLabelQueue`, `sortByDue`, `claimableJobIds`. `jobVideoSeconds` and `isTestAccountEmail` moved, unchanged, into dependency-free modules (`video-seconds.ts`, `test-account.ts`) and are re-exported from their old homes. `tests/label-queue.spec.ts` (15 tests).
+
+**follow-ups:**
+
+1. The three choices skip matches someone else holds, so a fourth open match can be a choice; counting held ones instead is a one-line change in `claimableJobIds`.
+2. A `submitted` session still enters the queue; piece 3 may want those dropped.
+3. The named-test-program rule awaits the owner; it goes in `isTestOwner` and needs the program on the job.

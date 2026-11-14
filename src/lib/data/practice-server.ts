@@ -22,6 +22,7 @@ import {
   type PracticeGrade,
   type Side,
 } from "@/lib/services/labels/practice-grading";
+import { jobVideoSeconds } from "@/lib/services/labels/video-seconds";
 import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
 
 interface Deps {
@@ -388,17 +389,8 @@ function dayAfter(day: string): string {
   return date.toISOString().slice(0, 10);
 }
 
-/** Seconds of match video a job covers: its trimmed span, else what was billed. */
-export function jobVideoSeconds(job: {
-  start_time_seconds: number | string | null;
-  end_time_seconds: number | string | null;
-  billable_seconds: number | null;
-}): number {
-  const start = Number(job.start_time_seconds ?? 0);
-  const end = Number(job.end_time_seconds ?? NaN);
-  if (Number.isFinite(end) && end > start) return end - start;
-  return job.billable_seconds ?? 0;
-}
+// Lives in a dependency-free module so the label queue can use it client-side.
+export { jobVideoSeconds };
 
 /**
  * Who handed in what between `from` and `to` (UTC days, both inclusive). A
