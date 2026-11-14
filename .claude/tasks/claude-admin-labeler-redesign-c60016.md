@@ -428,3 +428,130 @@ ready).
   - [ ] With `startOpenCounts` null, the line is unchanged: "N flags left: …" with no bar, and "No flags left" at zero
   - [ ] `tests/label-console.spec.ts` asserts both forms and the progressbar's values
 - **notes:** Admin audience only, as in T14. The labeller's "Before you submit" overview is unchanged. Check that the dashboard's open count (`openFlags`) and the console's `openCounts` amber + grey count the same flags. If they differ, X takes the same source as Y (the `open_counts` pair) and the diff says why.
+
+## T31 · Migration: published, checked, sent back
+
+- **status:** todo
+- **model:** fable
+- **files:** guess — supabase/migrations/<timestamp>_label_publish_check.sql (new), tests/label-publish-check-migration.spec.ts (new)
+- **done when:**
+  - [ ] One new migration file, whose name sorts after `20261114060750_label_queue_claims.sql`, adds these nullable columns to `label_sessions`: `published_at timestamptz`, `checked_at timestamptz`, `checked_by uuid references public.users(id) on delete set null`, `sent_back_at timestamptz`, `sent_back_by uuid references public.users(id) on delete set null` and `sent_back_note text`. It also adds four CHECKs: `label_sessions_checked_needs_complete` (`checked_at is null or status = 'complete'`); `label_sessions_sent_back_open` (`sent_back_at is null or status = 'labelling'`); `label_sessions_sent_back_note` (`(sent_back_at is null) = (sent_back_note is null)`, and `sent_back_note` is null or `char_length(btrim(sent_back_note))` is between 1 and 2000); and `label_sessions_practice_never_published` (`kind <> 'practice' or (published_at is null and checked_at is null and sent_back_at is null)`)
+  - [ ] It adds the trigger function `public.label_sessions_stamp_published()` (`set search_path = ''`) and a `BEFORE UPDATE OF status` trigger on `label_sessions`. When `new.status = 'complete'` and `old.status is distinct from 'complete'`, the function sets `new.published_at := coalesce(new.published_at, now())` and nulls `sent_back_at`, `sent_back_by` and `sent_back_note`. It never writes `checked_at`
+  - [ ] It backfills every existing `status = 'complete'`, non-practice session: `published_at` and `checked_at` get `completed_at`, and `checked_by` gets the match's `verified_by` when the match is verified
+  - [ ] It runs `create or replace function public.verify_match(p_match_id uuid, p_actor uuid, p_errors_judged boolean default false)` with the same body, except that the actor check accepts `u.is_admin or u.is_labeller`. It also runs `create or replace function public.release_stale_label_claims(p_idle interval)` with T22's body plus `and published_at is null`. Both keep `revoke … from public, anon, authenticated` and `grant execute … to service_role`
+  - [ ] `tests/label-publish-check-migration.spec.ts` reads the file and asserts: the six columns; the four CHECK names; that the trigger fires only on the move to `complete` and leaves `checked_at` alone; `is_labeller` in `verify_match`; `published_at is null` in `release_stale_label_claims`; and no `grant … to anon` or `to authenticated`
+- **notes:** WRITE THE MIGRATION FILE ONLY. Do NOT apply it to the live project or to any branch database: the owner approves and applies it separately, after T22's `20261114060750_label_queue_claims.sql`, which is applied live (recorded as 20261114060750). Never hand-format it (`.prettierignore`). `label_sessions.status` gets no new value, so the open-per-job index, the publish lease and the T22 claim functions keep their meaning. The states are derived. Published, to check: `status = 'complete' and checked_at is null`. Sent back: `status = 'labelling' and sent_back_at is not null`. Last published: `completed_at`. First published (for pay): `published_at`. No RLS policy changes: `label_sessions` select and update are admin-only and the app writes through the service role. No new RPC: Check and Send back are guarded single-row updates (T33). A sent-back session stays assigned and is never released by the stale-claim job, because the note is addressed to its labeller. Live checks used to plan this: `verify_match` is SECURITY DEFINER, executable by service_role only, and raised 42501 for a non-admin actor. `matches.verified_by` references `auth.users`. The `points`/`shots` verified guards skip the service role, so publishing again over a verified match is not refused.
+
+## T32 · Submit publishes through the existing publish path
+
+- **status:** todo
+- **model:** fable
+- **needs:** T31
+- **files:** guess — src/lib/services/labels/submit-session.ts, src/lib/services/labels/session-status-session.ts, src/app/label/actions.ts, src/app/label/[sessionId]/page.tsx, src/components/admin/labels/label-console.tsx, tests/label-submit.spec.ts, tests/label-session-status.spec.ts
+- **done when:**
+  - [ ] `submitLabelSession` reads the session's `kind` after `requireLabelActor`. A `practice` copy still goes through `writeLabelSubmit` exactly as today: a snapshot and then `status = 'submitted'`, with no `claim_label_publish_lease`, `verify_match` or publish call. `tests/label-submit.spec.ts` asserts this with a fake client
+  - [ ] Every other session goes through `writeLabelSessionComplete`, the same function `completeLabelSession` calls. The diff adds no second lease, apply, `verify_match` or insights call. It passes `actorId` = the gate's actor and a new `checked` flag, which is `actor.kind === "admin"`. `completeLabelSession` passes `checked: true`. The close update writes `checked_at` and `checked_by` only when `checked` is true
+  - [ ] `writeLabelSessionComplete` gains an optional `beforePublish(supabase, sessionId)` hook. It runs after the lease is taken and before `publish`. `submitLabelSession` uses it to insert the `label_submissions` snapshot (the same `{ points }` rows and `submitted_by` as `writeLabelSubmit`, through one shared helper). If the snapshot fails, the lease is released and the snapshot's error is returned without calling `publish`
+  - [ ] Each failure ends in its own way. A refused gate or a lease not taken writes nothing and returns that sentence. A publish refusal releases the lease, leaves the session `labelling` and the snapshot in place, and returns the publish's sentence. A failed `verify_match` releases the lease and returns a sentence ending "Publish again to retry." Success returns `{ ok: true, status: "complete", published }`. `tests/label-submit.spec.ts` asserts this call order: lease RPC, snapshot insert, publish, `verify_match` with the labeller's id, then the close update with no `checked_at`. It also asserts that a refused publish leaves the snapshot and releases the lease
+  - [ ] `src/app/label/[sessionId]/page.tsx` sets `maxDuration = 120` (a publish now runs from this route). `submitLabelSessionAction` returns `LabelSessionStatusResult`, the labeller console sets its status from that answer, and `npm run typecheck` passes
+- **notes:** The riskiest change on the branch: a labeller now puts labels and the Verified badge in front of a customer. Keep every server refusal that exists today: session not open, held lease, practice, no points, a missing job and imported points on the match. Keep `acceptScore: true`: a labelled score that differs from the record still publishes, as Mark complete does today. The close-failure path's `unverify_match` is existing behaviour and stays. On a publish again after a send-back it would take the badge off, which is rare and is noted for the owner. The "Mark complete again to retry" sentences become "Publish again to retry" in T37, not here; this task changes only the sentence in criterion 4. Do NOT deploy this before T31 is applied: until then `verify_match` refuses labellers, and the close update writes `checked_at`, a column that does not exist yet. Before T31 is applied, an admin's Publish would also fail on that column.
+
+## T33 · Admin Check and Send back actions
+
+- **status:** todo
+- **model:** opus
+- **needs:** T31
+- **files:** guess — src/lib/services/labels/check-session.ts (new), src/app/admin/labels/actions.ts, tests/label-check-session.spec.ts (new)
+- **done when:**
+  - [ ] `check-session.ts` exports `checkLabelSession(sessionId, deps)` and `sendBackLabelSession(sessionId, note, deps)`. Both refuse with `ADMIN_REQUIRED` unless `requireAdminActor` answers. `actions.ts` exports `checkLabelSessionAction` and `sendBackLabelSessionAction`, which delegate to them and call `revalidatePath("/admin/labels")` on success
+  - [ ] Check is one update, `checked_at = now`, `checked_by = admin id`, matched on `id`, `status = 'complete'`, `kind = 'analyst'` and `checked_at is null`. Zero rows matched returns a named constant sentence
+  - [ ] Send back trims the note and refuses an empty note, or one over 2000 characters, before any write. It is then one update matched on `id`, `status = 'complete'` and `kind = 'analyst'`. The update sets `status = 'labelling'`, `completed_at`, `checked_at` and `checked_by` to null, and `sent_back_at` = now, `sent_back_by` = admin id and `sent_back_note` = the trimmed note. A `23505` returns the existing `ANOTHER_SESSION_OPEN` sentence, and zero rows matched returns the raced sentence
+  - [ ] Neither function calls `unverify_match` or `verify_match`, or writes `matches`, `points` or `shots`
+  - [ ] `tests/label-check-session.spec.ts` (fake dependencies) asserts: a non-admin is refused before any write; a blank note is refused before any write; the exact update payload and filters for each action; and that the fake recorded no `rpc` call and no `matches` write
+- **notes:** The owner's rule: the Verified badge stays on while a match is back with its labeller. This is the opposite of Reopen, which calls `unverify_match` and stays as it is in the console (an assumption, see the planner's questions). Send back works on a checked match too, and clears the check, so the next publish lands in "Published, to check" again. The labeller is whoever is assigned; `assigned_to` is not touched.
+
+## T34 · Board loader: published-to-check lane and sent-back rows
+
+- **status:** todo
+- **model:** opus
+- **needs:** T31
+- **files:** guess — src/lib/services/labels/queue.ts, src/lib/data/label-queue-server.ts, tests/label-queue.spec.ts, tests/label-queue-loader.spec.ts
+- **done when:**
+  - [ ] `enterLabelQueue` keeps a job whose session is `complete` with `checkedAt` null, and drops it once `checkedAt` is set. `tests/label-queue.spec.ts` covers both. A `complete` session is never `claimable`, and neither is a sent-back one
+  - [ ] `loadAdminLabelBoard()` returns `{ todo, inProgress, toCheck, submitted }`. `toCheck` holds the `complete`, unchecked sessions, oldest `completed_at` first, and each row carries `publishedAt` (the session's `completed_at`) and the labeller's full name. Every `inProgress` row carries `sentBack: { at, note } | null`, which is set when `status = 'labelling'` and `sent_back_at` is set
+  - [ ] `loadLabellerBoard()` returns `{ todo, inProgress, published, submitted, holding }`, where `published` holds the `complete`, unchecked sessions with `publishedAt`. `sentBack` (with the note) is set only on the viewer's own row (`mine`) and is null on every other row
+  - [ ] `submitted` keeps the old `submitted` sessions (handed in before this change) in both projections
+  - [ ] `tests/label-queue-loader.spec.ts` asserts from fixtures: a complete unchecked session in `toCheck` / `published`; a complete checked one in no lane; a sent-back session in `inProgress` with its note on the owner's row; and that `JSON.stringify` of the labeller board contains another labeller's sent-back note nowhere
+- **notes:** Keep T24's boundary: a labeller row names no player, program, match id or owner. A note is the admin's own words and reaches only the labeller it was sent to. Admin-published sessions are checked when they are published, so they never enter `toCheck`. Read the new columns through `.returns<>` types with the 42703 fallback T24 used, since they exist only once T31 is applied. Optional if cheap: on `toCheck` rows, "On time" / "N h late" from `completed_at` against `dueAt`, as AdminAudit.dc.html shows.
+
+## T35 · Admin Labels board: "Published, to check" lane
+
+- **status:** todo
+- **model:** opus
+- **needs:** T33, T34
+- **files:** guess — src/components/admin/labels/labels-board.tsx, src/components/admin/labels/send-back-dialog.tsx (new), src/app/admin/labels/page.tsx, tests/admin-labels-board.spec.ts
+- **routes:** /admin/labels
+- **done when:**
+  - [ ] `/admin/labels` renders the lanes "To do", "In progress" and "Published, to check" in that order, each with its "N matches · H.HH h" count. A "Submitted" lane renders only while `submitted` has rows
+  - [ ] Each "Published, to check" row shows "Player vs Player · Team", hours, the labeller's name and "published <relative time>", plus a "Check" button calling `checkLabelSessionAction` and a "Send back" button. "Send back" opens a dialog with a required note field. Its confirm stays disabled while the trimmed note is empty, and it calls `sendBackLabelSessionAction`. A refusal shows its sentence next to the row, and success refreshes the board
+  - [ ] An In progress row with `sentBack` shows "Sent back", the labeller's name, "sent back <relative time>" and the note
+  - [ ] The lede reads "N published matches to check". Under that lane: "These are already live for the player. Matches you publish yourself skip this list."
+  - [ ] `tests/admin-labels-board.spec.ts` asserts from fixtures: the lane order; Check and Send back on to-check rows and on no other row; the dialog's confirm disabled with a blank note; and the note on a sent-back row
+- **notes:** Layout and copy from AdminAudit.dc.html. The design system wins on tokens; read `.skills/advantage-analytics-design/SKILL.md` first. Rows still open the match through `useStartLabelling`. The artboard's "34 of 126 points changed" is out of scope. Today's (admin home) "Check" row from AdminToday.dc.html is not in this task.
+
+## T36 · Labeller board: Published lane and sent-back card
+
+- **status:** todo
+- **model:** opus
+- **needs:** T34
+- **files:** guess — src/components/label/label-board.tsx, src/app/label/page.tsx, tests/label-board.spec.ts
+- **routes:** /label
+- **done when:**
+  - [ ] The third lane is headed "Published" and lists `published` rows as "<first name or You> · <relative time>" with the avatar. A "Submitted" lane renders only while `submitted` has rows
+  - [ ] The viewer's own sent-back row comes first in In progress, as a card with "Sent back <relative time>", the note, "Your first version is still published. Publishing again replaces it." and a "Fix and publish again" link to `/label/<sessionId>`
+  - [ ] While the viewer holds a sent-back match, the lede reads "A match was sent back to you. Fix and publish it again to claim the next one." Under the lanes: "Publishing puts a match in front of the player straight away. It can still be sent back to you."
+  - [ ] `tests/label-board.spec.ts` asserts from fixtures: the "Published" heading; the sent-back card's note and link; that no Claim button shows while the viewer holds a sent-back match; and no player name in the markup
+- **notes:** Layout from LabSentBack.dc.html. The artboard says "Fix and resubmit"; the owner's vocabulary has no "submit", so this uses "Fix and publish again". The artboard's header stat ("Your submitted hours, November") stays out.
+
+## T37 · Rename to "Publish" for both audiences
+
+- **status:** todo
+- **model:** opus
+- **needs:** T32
+- **files:** guess — src/components/admin/labels/label-console.tsx, src/components/admin/labels/label-confirm.ts, src/components/admin/labels/label-dashboard.tsx, src/lib/labels/guide-content.ts, src/lib/services/labels/session-status-session.ts, src/lib/services/labels/apply-session.ts, tests/label-console.spec.ts, tests/label-console-labeller.spec.ts, tests/label-console-operations.spec.ts, tests/label-guide.spec.ts, tests/label-session-status.spec.ts, tests/label-apply-session.spec.ts, tests/label-practice.spec.ts
+- **routes:** /label/[sessionId], /admin/labels/[sessionId]
+- **done when:**
+  - [ ] The console header's button reads "Publish" for the admin (was "Mark complete") and for the labeller (was "Submit for review"). The "Submitted — waiting for review" text is gone. The labeller's Publish opens the same `complete-session` confirm the admin's does (open warnings, unmarked errors and their "Mark errors" alternative). Confirming calls `submitSession`, and the `submit-session` confirm kind is removed. A practice copy's button keeps "Submit" wording (it is graded, never published)
+  - [ ] `label-confirm.ts`: the publish confirm's title is "Publish?" for both audiences. The labeller's description says the player sees it straight away with Verified by Advantage and an admin may send it back. The Reopen copy says "Publish again" in place of "Mark complete again"
+  - [ ] The overview card reads "Before you publish" for both audiences, and `guide-content.ts`'s "Submit for review" section and steps say "Publish"
+  - [ ] Outside comments and `src/components/admin/admin-upload-history.tsx` (an unrelated upload control), no string literal under `src/` contains "Mark complete", "Submit for review" or "Before you submit". The listed specs assert the new wording
+- **notes:** `data-*` attribute names (`data-mark-complete`, `data-submit-review`) may stay, to keep the specs' selectors. The admin's Reopen button stays.
+
+## T38 · Matches progress: split Published and Checked
+
+- **status:** todo
+- **model:** opus
+- **needs:** T31
+- **files:** guess — src/lib/data/admin-match-progress.ts, src/lib/data/admin-matches-server.ts, tests/admin-match-progress.spec.ts
+- **routes:** /admin/matches
+- **done when:**
+  - [ ] `AdminMatchRow` carries `labelPublishedAt` (`completed_at` when complete, else `published_at`) and `labelCheckedAt`, both read from the match's own non-practice session in the loader's existing session read
+  - [ ] "Published" is done when `labelPublishedAt` is set (`at` = that moment), "Checked" is done when `labelCheckedAt` is set, and a verified match with no such session keeps today's rule: both steps done at `verifiedAt`
+  - [ ] A sent-back match shows "Being labelled" current, "Published" done and "Checked" to do
+  - [ ] The file's header comment no longer says the two steps turn done together. `tests/admin-match-progress.spec.ts` covers: published and unchecked; sent back; checked; verified with no session
+- **notes:** Pure function plus one loader read. No new query: add the columns to the session select the loader already makes.
+
+## T39 · Pay report: published and checked
+
+- **status:** todo
+- **model:** opus
+- **needs:** T31
+- **files:** guess — src/lib/data/practice-server.ts, src/app/admin/labels/pay/page.tsx, tests/label-pay-report.spec.ts (new)
+- **routes:** /admin/labels/pay
+- **done when:**
+  - [ ] `getLabelPayReport` counts a non-practice session once, on the UTC day of `label_sessions.published_at`, credited to the `submitted_by` of its first `label_submissions` row. A session with `published_at` null, or with no submission row, is not counted
+  - [ ] A counted session's state is "checked" when `checked_at` is set, else "published" (a sent-back session counts as published). `PayLabellerRow` has `publishedSessions`, `publishedHours`, `checkedSessions` and `checkedHours` in place of submitted/approved, and `PaySessionLine` has `state: "published" | "checked"` and `publishedAt`
+  - [ ] Practice sets are counted as today: submitted practice copies, by the day of their first submission
+  - [ ] `/admin/labels/pay` shows "Published" and "Checked", and no "Submitted" or "Approved" text
+  - [ ] `tests/label-pay-report.spec.ts` (fake deps) asserts: a session published inside the range is counted; one published before the range is not; credit goes to the first submitter; sent back counts as published; and a session the admin published with no submission is not counted
+- **notes:** Hours stay the job's match video (`jobVideoSeconds`). Published and checked are disjoint counts, as submitted and approved were. Moving from the submit day to the publish day shifts old sessions that were submitted in one month and published in the next.
