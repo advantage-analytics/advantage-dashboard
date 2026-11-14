@@ -857,13 +857,14 @@ const SNAPSHOT_NAME_GUTTER = 10;
  * (`columnWidth()` in `head-to-head-table.tsx`) without its legend marker.
  * 64px holds about six characters at 12px medium; past that a surname gets
  * 8.2px a character plus the gutter ("Lutkemeyer" clipped to ".utkemeyer" at
- * a fixed 64px). Capped so the statistic label keeps its room in a 340px
- * drawer; `truncate` backstops anything longer.
+ * a fixed 64px). Capped at 90px so the longest label, "Break points won"
+ * (~95px at 12px plus its 12px gap), still fits beside two capped columns in
+ * the drawer's ~298px content box; `truncate` backstops anything longer.
  */
 function snapshotColumnWidth(youName: string, oppName: string): number {
   const longest = Math.max(youName.length, oppName.length);
   return Math.min(
-    100,
+    90,
     Math.max(64, Math.ceil(longest * 8.2) + SNAPSHOT_NAME_GUTTER),
   );
 }
@@ -873,7 +874,8 @@ const SNAPSHOT_COLUMN = "w-[var(--snapshot-col,64px)] shrink-0";
 /**
  * The drawer's snapshot as two columns — the match report's head-to-head
  * table (`head-to-head-table.tsx`) at the drawer's four rows: surnames
- * right-aligned over 64px columns under a hairline, 30px rows, the label at
+ * right-aligned over two equal columns (64px, wider for a long surname —
+ * `snapshotColumnWidth`) under a hairline, 30px rows, the label at
  * 12px ink-600, and each figure 13px tabular, the leader's in ink-900/500 and
  * the other in ink-500. The row's own side is the first column.
  */
@@ -899,25 +901,8 @@ export function SnapshotComparison({
     >
       <div className="flex items-center border-b border-[var(--border-hairline)] pb-[11px]">
         <span className="eyebrow-sm min-w-0 flex-1">Snapshot</span>
-        {/* `truncate` sits on an inner block: on the flex cell itself, with
-            `justify-end`, an overlong name overflowed to the LEFT and lost
-            its first letters with no ellipsis. */}
-        <span
-          className={cn(SNAPSHOT_COLUMN, "flex justify-end")}
-          style={{ paddingLeft: SNAPSHOT_NAME_GUTTER }}
-        >
-          <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-900)]">
-            {you}
-          </span>
-        </span>
-        <span
-          className={cn(SNAPSHOT_COLUMN, "flex justify-end")}
-          style={{ paddingLeft: SNAPSHOT_NAME_GUTTER }}
-        >
-          <span className="min-w-0 truncate text-[12px] font-medium text-[var(--ink-600)]">
-            {opp}
-          </span>
-        </span>
+        <SnapshotName name={you} ink="var(--ink-900)" />
+        <SnapshotName name={opp} ink="var(--ink-600)" />
       </div>
       <dl className="flex flex-col pt-1">
         {pair.figures.map((figure) => (
@@ -931,6 +916,27 @@ export function SnapshotComparison({
         ))}
       </dl>
     </div>
+  );
+}
+
+/**
+ * `truncate` sits on an inner block: on the flex cell itself, with
+ * `justify-end`, an overlong name overflowed to the LEFT and lost its first
+ * letters with no ellipsis.
+ */
+function SnapshotName({ name, ink }: { name: string; ink: string }) {
+  return (
+    <span
+      className={cn(SNAPSHOT_COLUMN, "flex justify-end")}
+      style={{ paddingLeft: SNAPSHOT_NAME_GUTTER }}
+    >
+      <span
+        className="min-w-0 truncate text-[12px] font-medium"
+        style={{ color: ink }}
+      >
+        {name}
+      </span>
+    </span>
   );
 }
 

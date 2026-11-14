@@ -57,6 +57,12 @@ const sections = loader.load(
   SnapshotComparison: React.ComponentType<Record<string, unknown>>;
 };
 
+const rail = loader.load(
+  "src/components/dashboard/matches/match-detail/rail-scoreboard.tsx",
+) as {
+  RailScoreboard: React.ComponentType<ReturnType<typeof drawerScoreboardProps>>;
+};
+
 const CHEN: Row = {
   first_serve_pct: 64,
   first_serve_won_pct: 71,
@@ -137,6 +143,34 @@ test("the comparison heads its columns by surname, leader in ink-900", () => {
   expect(html).toMatch(/font-weight:400;color:var\(--ink-500\)">58%</);
 });
 
+test("a long surname widens both columns and keeps its first letter", () => {
+  const pair = sections.toSnapshotPair(CHEN, DIAZ);
+  const html = renderToStaticMarkup(
+    React.createElement(sections.SnapshotComparison, {
+      pair,
+      youName: "Anne-Christine Lutkemeyer",
+      oppName: "Yuki Naito",
+    }),
+  );
+  // 10 characters at 8.2px plus the 10px gutter is 92px, held to the 90px cap.
+  expect(html).toContain("--snapshot-col:90px");
+  // The name is inside its own truncating span, never the flex cell itself
+  // (which clipped it from the left: ".utkemeyer").
+  expect(html).toMatch(/class="min-w-0 truncate[^"]*"[^>]*>Lutkemeyer</);
+});
+
+test("short surnames keep the 64px columns", () => {
+  const pair = sections.toSnapshotPair(CHEN, DIAZ);
+  const html = renderToStaticMarkup(
+    React.createElement(sections.SnapshotComparison, {
+      pair,
+      youName: "Avery Chen",
+      oppName: "Yuki Naito",
+    }),
+  );
+  expect(html).toContain("--snapshot-col:64px");
+});
+
 /* ── The scoreboard ───────────────────────────────────────────────────── */
 
 function match(over: Partial<DisplayMatch> = {}): DisplayMatch {
@@ -160,6 +194,25 @@ function match(over: Partial<DisplayMatch> = {}): DisplayMatch {
     ...over,
   } as DisplayMatch;
 }
+
+test.describe("RailScoreboard draws the tiebreak beside the winner's 7", () => {
+  test("the loser's points are raised on the set winner's row only", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(rail.RailScoreboard, drawerScoreboardProps(match())),
+    );
+    // Set 3 is 7-6(5) to Chen: the raised 5 follows Chen's 7 ...
+    expect(html).toMatch(
+      />7<span class="inline-block w-0"><span aria-hidden="true"[^>]*>5</,
+    );
+    // ... and nothing hangs off Díaz's 6.
+    expect(html).not.toMatch(/>6<span class="inline-block w-0">/);
+    expect(
+      html.match(/aria-hidden="true" style="font-size:0.6em/g),
+    ).toHaveLength(1);
+    // Spoken as the other side's points, not the winner's.
+    expect(html).toContain("(won the tiebreak; opponent scored 5)");
+  });
+});
 
 test.describe("drawerScoreboardProps", () => {
   test("a final: seat one first, the winner checked, lost sets dimmed", () => {

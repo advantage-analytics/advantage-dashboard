@@ -208,7 +208,13 @@ function ScoreRow({
                     <span aria-hidden="true" style={TIEBREAK_STYLE}>
                       {tiebreak}
                     </span>
-                    <span className="sr-only"> tiebreak {tiebreak}</span>
+                    {/* The digit is the OTHER row's points, so the spoken
+                        form says so: "7 tiebreak 10" on the winner's row
+                        reads as the winner scoring 10. */}
+                    <span className="sr-only">
+                      {" "}
+                      (won the tiebreak; opponent scored {tiebreak})
+                    </span>
                   </span>
                 ) : null}
               </span>
