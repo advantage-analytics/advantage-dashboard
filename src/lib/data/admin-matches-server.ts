@@ -34,7 +34,11 @@ import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import { getMatchViews30d } from "@/lib/services/posthog/match-views-server";
 import { playedSets, type ScoreLineSet } from "@/lib/ui/score-format";
 import { jobVideoSeconds } from "@/lib/data/practice-server";
-import type { AdminLabelState } from "@/lib/data/admin-match-progress";
+import {
+  labelJobIdFor,
+  type AdminLabelState,
+  type LabelJobCandidate,
+} from "@/lib/data/admin-match-progress";
 import {
   ADMIN_TEAM_LATEST_MATCHES,
   adminTeamLatestMatches,
@@ -110,6 +114,12 @@ export interface AdminMatchRow {
   videoSeconds: number | null;
   /** The failed job "Resubmit" retries; null outside the `failed` bucket. */
   failedJobId: string | null;
+  /**
+   * The job "Label this match" seeds a session on: the newest completed
+   * Advantage Intelligence job with a results file, else null
+   * (`labelJobIdFor`). Not limited by the label queue's cut-off.
+   */
+  labelJobId: string | null;
   // The moments `matchProgressSteps()` (admin-match-progress.ts) reads, with
   // `uploadedAt` and `analysis` above. All from the analysis job — the one
   // `analysis` describes — and read in the list's batched reads.
@@ -190,7 +200,7 @@ function earlier(a: string | null | undefined, b: string | null | undefined) {
 }
 
 /** The job columns the list reads beyond the upload moment. */
-interface JobFacts {
+interface JobFacts extends LabelJobCandidate {
   id: string;
   match_id: string;
   created_at: string;
@@ -204,7 +214,8 @@ interface JobFacts {
 /**
  * When each match was uploaded (file header), plus which have statistics —
  * the stats read answers both questions — and every job row by id, for the
- * progress moments and the video's length.
+ * progress moments and the video's length, and the job each match can be
+ * labelled on (`labelJobIdFor`), all from the one job read.
  */
 async function uploadMoments(
   db: SupabaseClient,
@@ -214,12 +225,13 @@ async function uploadMoments(
   withStats: Set<string>;
   jobs: Map<string, JobFacts>;
   newestJob: Map<string, JobFacts>;
+  labelJob: Map<string, string>;
 }> {
   const [jobs, files, stats] = await Promise.all([
     readByIds<JobFacts>(
       db,
       "processing_jobs",
-      "id, match_id, created_at, submitted_at, completed_at, start_time_seconds, end_time_seconds, billable_seconds",
+      "id, match_id, created_at, submitted_at, completed_at, start_time_seconds, end_time_seconds, billable_seconds, provider, status, results_object_key",
       "match_id",
       ids,
     ),
@@ -260,17 +272,27 @@ async function uploadMoments(
     if (!uploadedAt.has(id)) uploadedAt.set(id, at);
   }
   const newestJob = new Map<string, JobFacts>();
+  const jobsByMatch = new Map<string, JobFacts[]>();
   for (const job of jobs) {
     const held = newestJob.get(job.match_id);
     if (!held || Date.parse(job.created_at) > Date.parse(held.created_at)) {
       newestJob.set(job.match_id, job);
     }
+    const list = jobsByMatch.get(job.match_id);
+    if (list) list.push(job);
+    else jobsByMatch.set(job.match_id, [job]);
+  }
+  const labelJob = new Map<string, string>();
+  for (const [matchId, matchJobs] of jobsByMatch) {
+    const jobId = labelJobIdFor(matchJobs);
+    if (jobId) labelJob.set(matchId, jobId);
   }
   return {
     uploadedAt,
     withStats,
     jobs: new Map(jobs.map((job) => [job.id, job])),
     newestJob,
+    labelJob,
   };
 }
 
@@ -561,6 +583,7 @@ export async function listAdminMatches(
       labelHref: labelHrefFor(session?.id, m.source_provider, analysis),
       videoSeconds: job ? jobVideoSeconds(job) : null,
       failedJobId: bucket === "failed" ? (analysis.jobId ?? null) : null,
+      labelJobId: moments.labelJob.get(m.id) ?? null,
       sentForAnalysisAt: job?.submitted_at ?? null,
       resultsLandedAt: job?.completed_at ?? null,
       labelState: session?.status ?? null,

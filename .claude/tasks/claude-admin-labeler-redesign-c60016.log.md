@@ -350,3 +350,15 @@ is the runner's. Newest entries at the bottom.
 1. Requested reviews still reads every completed job through `listLabelJobs` when a report is open; a reported-matches loader would let it and two helpers go.
 2. `tests/label-queue-loader.spec.ts` could assert `labellerId`.
 3. Submitted rows could say "submitted N h ago".
+
+## T29 · Admin › Matches panel: label any analysed match — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `AdminMatchRow.labelJobId` (newest completed Advantage Intelligence job with a results file, from the loader's existing batched job read, via the pure `labelJobIdFor` in `admin-match-progress.ts`). The Matches side panel shows "Label this match" only when it is set, calling `useStartLabelling` and showing a refusal; nothing reads the queue's cut-off, so older matches can be labelled. New `tests/admin-matches-label-entry.spec.ts`.
+
+**follow-ups:**
+
+1. The panel's "Open in Labels" link leads to a list that omits matches before the cut-off; hide it when "Label this match" shows.
+2. The list row and Today could offer the same button, as Resubmit does.
+3. The provider/status/results-file filter now exists in three places; one shared predicate would do.

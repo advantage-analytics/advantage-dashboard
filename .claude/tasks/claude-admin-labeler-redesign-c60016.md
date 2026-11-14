@@ -404,7 +404,7 @@ ready).
 
 ## T29 · Admin › Matches panel: label any analysed match
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** guess — src/components/admin/matches/match-peek-drawer.tsx, src/lib/data/admin-matches-server.ts, tests/admin-matches-label-entry.spec.ts (new)
 - **routes:** /admin/matches

@@ -13,6 +13,7 @@
  */
 
 import type { AnalysisStatus } from "@/lib/data/match-analysis";
+import { PROVIDER_ID } from "@/lib/services/splitstep/config";
 
 /** `label_sessions.status` of the match's own session (never a practice copy). */
 export type AdminLabelState = "labelling" | "submitted" | "complete";
@@ -137,4 +138,44 @@ export function matchProgressSteps(
     { name: "Published", state: published, at: row.verifiedAt },
     { name: "Checked", state: published, at: row.verifiedAt },
   ];
+}
+
+/** The `processing_jobs` columns `labelJobIdFor` reads. */
+export interface LabelJobCandidate {
+  id: string;
+  provider: string | null;
+  status: string | null;
+  results_object_key: string | null;
+  completed_at: string | null;
+}
+
+/**
+ * The job "Label this match" seeds a session on: the match's newest
+ * completed Advantage Intelligence job with a results file, else null. The
+ * same three filters the Labels list and the queue read jobs by — but
+ * deliberately not the queue's cut-off (`LABEL_QUEUE_FROM`): this is the way
+ * into labelling for a match the queue leaves out, older ones included.
+ * Newest by `completed_at` (a job without one ranks last), ties by id.
+ */
+export function labelJobIdFor(
+  jobs: readonly LabelJobCandidate[],
+): string | null {
+  let best: LabelJobCandidate | null = null;
+  let bestAt = -Infinity;
+  for (const job of jobs) {
+    if (
+      job.provider !== PROVIDER_ID ||
+      job.status !== "completed" ||
+      !job.results_object_key
+    ) {
+      continue;
+    }
+    const parsed = job.completed_at ? Date.parse(job.completed_at) : NaN;
+    const at = Number.isFinite(parsed) ? parsed : -Infinity;
+    if (!best || at > bestAt || (at === bestAt && job.id > best.id)) {
+      best = job;
+      bestAt = at;
+    }
+  }
+  return best?.id ?? null;
 }

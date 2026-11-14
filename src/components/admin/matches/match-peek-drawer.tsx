@@ -9,6 +9,7 @@ import {
 import { PeekDrawerFrame } from "@/components/dashboard/matches/match-drawer";
 import { CopyButton } from "@/components/admin/matches/copy-button";
 import { ResubmitButton } from "@/components/admin/matches/resubmit-button";
+import { useStartLabelling } from "@/components/admin/labels/start-labelling-button";
 import {
   LABEL_INK,
   StepMark,
@@ -77,7 +78,9 @@ export function viewsSentence(views: number | null): string | null {
  * (`matchProgressSteps`), the match id with Copy, its 30-day views, and the
  * two ways on — the read-only report and the label console. The shared
  * `PeekDrawerFrame` draws the header (‹ › · counter · X), the width keyframe
- * and focus.
+ * and focus. "Label this match" sits under the steps whenever the row has a
+ * `labelJobId` — the way into labelling for any analysed match, the ones the
+ * label queue's cut-off leaves out included.
  */
 export function MatchPeekDrawer({
   row,
@@ -155,6 +158,11 @@ export function MatchPeekDrawer({
           <ResubmitButton key={failedJobId} jobId={failedJobId} />
         ) : null}
 
+        {row.labelJobId ? (
+          // Keyed by the job, like Resubmit: a refusal never follows ‹ ›.
+          <LabelMatchButton key={row.labelJobId} jobId={row.labelJobId} />
+        ) : null}
+
         <div className="flex items-center gap-2 rounded-[var(--radius-element)] bg-[var(--surface-subtle)] py-1 pr-1 pl-3">
           <code
             aria-label="Match id"
@@ -170,6 +178,38 @@ export function MatchPeekDrawer({
         )}
       </div>
     </PeekDrawerFrame>
+  );
+}
+
+/**
+ * "Label this match": seeds (or reopens) the job's label session through
+ * `useStartLabelling` and opens the console; a refusal's sentence shows
+ * under the button. It asks nothing of the label queue — the row's
+ * `labelJobId` alone decides it is drawn.
+ */
+function LabelMatchButton({ jobId }: { jobId: string }) {
+  const { start, isPending, error } = useStartLabelling(jobId);
+  return (
+    <span className="flex min-w-0 flex-col items-start gap-1">
+      <button
+        type="button"
+        data-label-match={jobId}
+        aria-busy={isPending}
+        disabled={isPending}
+        onClick={start}
+        className={advButton("outline", "sm")}
+      >
+        {isPending ? "Opening…" : "Label this match"}
+      </button>
+      {error ? (
+        <span
+          role="alert"
+          className="max-w-[320px] text-[12px] leading-[18px] whitespace-normal text-[var(--danger)]"
+        >
+          {error}
+        </span>
+      ) : null}
+    </span>
   );
 }
 
