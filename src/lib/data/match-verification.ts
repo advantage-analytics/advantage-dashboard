@@ -70,6 +70,19 @@ export function reportPointLabel(point: ReportPoint): string {
 export const VERIFIED_SCOPE =
   "We checked every point against the video: who won and how it ended.";
 
+/**
+ * The report's status while a match waits on a labeller
+ * (`showsVerificationPending`), and the two sentences its popover says. No
+ * time: the owner decided (2026-11-14) the customer is promised none.
+ */
+export const VERIFICATION_PENDING = "Verification pending";
+
+export const VERIFICATION_PENDING_SCOPE =
+  "We are checking every point against the video: who won and how it ended.";
+
+export const VERIFICATION_PENDING_UNTIL =
+  "Until then, your statistics come from the automatic analysis and may change.";
+
 export interface MatchVerification {
   /** When Advantage verified it, ISO (`matches.verified_at`) — a moment. */
   verifiedAt: string;

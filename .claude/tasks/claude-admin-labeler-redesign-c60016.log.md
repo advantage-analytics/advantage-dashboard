@@ -470,3 +470,11 @@ is the runner's. Newest entries at the bottom.
 
 1. Nothing shows as pending until T40 is applied; each server process logs one warning for the missing function until then.
 2. A coach can't read other people's job analysis, so a failed reprocess after an earlier completed job could show pending to a coach.
+
+## T42 · Match report: "Verification pending" fact and popover — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `VERIFICATION_PENDING` and the two popover sentences exported from `match-verification.ts`; `VerifiedMark` gains `pending` (greyscale, 55% opacity); new `pending-fact.tsx` reusing `VerifiedFact`'s trigger and popover; the facts line shows it last when pending and unverified. No time in the copy (owner, 2026-11-14). The "Until then…" sentence uses ink-700, not the artboard's lighter grey, for AA contrast. Spec `tests/verification-pending-fact.spec.ts`.
+**follow-ups:**
+
+1. Nobody has looked at the greyed mark and open popover on screen yet.

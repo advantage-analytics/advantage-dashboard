@@ -585,7 +585,7 @@ ready).
 
 ## T42 · Match report: "Verification pending" fact and popover
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T41
 - **files:** src/components/dashboard/matches/verified-mark.tsx, src/components/dashboard/matches/match-detail/verified-fact.tsx or a new pending-fact.tsx beside it, src/components/dashboard/matches/match-detail/report-facts.tsx, src/lib/data/match-verification.ts, tests/verification-pending-fact.spec.ts (new) — guess
