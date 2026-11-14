@@ -9,6 +9,7 @@ import {
   SEND_BACK_NOTE_REQUIRED,
   SEND_BACK_NOTE_TOO_LONG,
   sendBackLabelSession,
+  SEND_BACK_NOBODY,
   type LabelCheckDependencies,
 } from "@/lib/services/labels/check-session";
 import { ADMIN_REQUIRED } from "@/lib/services/labels/edit-session";
@@ -32,7 +33,14 @@ interface Call {
   filters: Record<string, unknown>;
 }
 
-function fakeClient(opts: { raced?: boolean; failCode?: string } = {}) {
+function fakeClient(
+  opts: {
+    raced?: boolean;
+    failCode?: string;
+    /** What a read-back of the session answers after an update matched nothing. */
+    row?: { status: string; assigned_to: string | null };
+  } = {},
+) {
   const calls: Call[] = [];
   const client = {
     async rpc(fn: string, args: Record<string, unknown>) {
@@ -74,6 +82,11 @@ function fakeClient(opts: { raced?: boolean; failCode?: string } = {}) {
           call.filters[`${column} is`] = value;
           return builder;
         },
+        not: (column: string, operator: string, value: unknown) => {
+          call.filters[`${column} not ${operator}`] = value;
+          return builder;
+        },
+        maybeSingle: async () => ({ data: opts.row ?? null, error: null }),
         then: (
           resolve: (v: unknown) => unknown,
           reject?: (e: unknown) => unknown,
@@ -215,7 +228,12 @@ test.describe("Send back", () => {
           sent_back_by: ADMIN,
           sent_back_note: "Set 2 game 4: the serve is the wrong player.",
         },
-        filters: { id: SESSION_ID, status: "complete", kind: "analyst" },
+        filters: {
+          id: SESSION_ID,
+          status: "complete",
+          kind: "analyst",
+          "assigned_to not is": null,
+        },
       },
     ]);
     // A checked session goes back too: the update is not matched on the check.
@@ -230,6 +248,18 @@ test.describe("Send back", () => {
     expect(
       await sendBackLabelSession(SESSION_ID, "Fix set 2", deps(client)),
     ).toEqual({ error: ANOTHER_SESSION_OPEN });
+    expectMatchUntouched(client.calls);
+  });
+
+  test("refuses a session nobody is assigned to, pointing at Reopen", async () => {
+    const client = fakeClient({
+      raced: true,
+      row: { status: "complete", assigned_to: null },
+    });
+    expect(
+      await sendBackLabelSession(SESSION_ID, "Fix set 2", deps(client)),
+    ).toEqual({ error: SEND_BACK_NOBODY });
+    expect(client.calls.filter((c) => c.op === "update")).toHaveLength(1);
     expectMatchUntouched(client.calls);
   });
 

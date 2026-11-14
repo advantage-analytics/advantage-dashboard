@@ -139,6 +139,21 @@ test.describe("claimLabelMatch", () => {
     ]);
   });
 
+  test("a seed refusal reaches the labeller with every id struck out", async () => {
+    const matchId = "0b5f1c2a-3d4e-4f60-8a71-92b3c4d5e6f7";
+    const h = harness({
+      seeded: {
+        error: `Could not create the session: Key (match_id)=(${matchId}) is not present`,
+      },
+    });
+    const answer = await claimLabelMatch(job(2), h.deps);
+    expect(answer).toEqual({
+      error: "Could not create the session: Key (match_id)=(…) is not present",
+    });
+    expect(JSON.stringify(answer)).not.toContain(matchId);
+    expect(h.rpcs).toEqual([]);
+  });
+
   test("an existing unassigned session is claimed without a seed call", async () => {
     const entries = fourWaiting();
     entries[1].session = {

@@ -1059,8 +1059,9 @@ function Published() {
  * `openFlags` here: the two differ. The console's amber also counts the set
  * that doesn't add up (`sessionScoreMismatch`), one stop `openFlags` never
  * holds, and the start was copied from that pair — so X takes the same source
- * as Y, and so does the split after it. With no `openCounts` (or no start) the
- * line counts `openFlags`, as it always has.
+ * as Y, and so does the split after it. Without a start the "N flags left"
+ * line takes the console's `openCounts` too, so it matches the boards (which
+ * read the saved `open_counts`); with no `openCounts` it counts `openFlags`.
  */
 function FlagsLeft({
   marks,
@@ -1107,21 +1108,25 @@ function FlagsLeft({
       </section>
     );
   }
+  // The console's count when it hands one in, so this line and the boards
+  // (which read the `open_counts` it saves) give the same number.
+  const now = openCounts ?? { amber: score, grey: data };
+  const left = now.amber + now.grey;
   return (
     <section data-dashboard-card="Progress" aria-label="Progress">
       <p data-flags-left="" className="text-body tabular" style={INK[600]}>
         {!marks ? (
           "This session is labelled without marks, so nothing is flagged."
-        ) : flagged.length === 0 ? (
+        ) : left === 0 ? (
           <span className="text-title" style={INK[900]}>
             No flags left
           </span>
         ) : (
           <>
             <span className="text-title" style={INK[900]}>
-              {`${flagged.length} ${flagged.length === 1 ? "flag" : "flags"} left:`}
+              {`${left} ${left === 1 ? "flag" : "flags"} left:`}
             </span>{" "}
-            {`${score} can move the score, ${data} wrong data`}
+            {`${now.amber} can move the score, ${now.grey} wrong data`}
           </>
         )}
       </p>

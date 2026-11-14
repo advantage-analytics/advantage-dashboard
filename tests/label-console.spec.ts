@@ -2059,6 +2059,20 @@ test.describe("the admin's overview, read off the design fixture", () => {
     }
   });
 
+  test("with no starting count, the line takes the console's open count, as the boards do", () => {
+    // openFlags here is 5 + 64; the console's count also holds the set that
+    // doesn't add up, one more amber. The boards read that saved pair.
+    const { html } = page("admin", false, {
+      startOpenCounts: null,
+      openCounts: { amber: 6, grey: 64 },
+    });
+    const line = progressLine(html);
+    expect(text(line)).toContain(
+      "70 flags left: 6 can move the score, 64 wrong data",
+    );
+    expect(line).not.toContain('role="progressbar"');
+  });
+
   test("with nothing open and no starting count, the line reads No flags left", () => {
     // No points, so nothing for the marks to flag.
     const { html } = page("admin", false, {

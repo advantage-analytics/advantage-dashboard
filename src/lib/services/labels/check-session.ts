@@ -51,6 +51,13 @@ export const NOT_WAITING_FOR_CHECK =
 export const SEND_BACK_NOTE_REQUIRED =
   "Write a note for the labeller saying what to fix.";
 export const SEND_BACK_NOTE_TOO_LONG = `Keep the note to ${SEND_BACK_NOTE_MAX} characters or fewer.`;
+/**
+ * Send back on a session nobody is assigned to: there is no labeller to read
+ * the note, and a sent-back session is never offered for a claim, so it would
+ * sit in In progress with nobody able to take it.
+ */
+export const SEND_BACK_NOBODY =
+  "Nobody is assigned to this match, so there is no labeller to send it back to. Reopen it instead.";
 
 /** The trimmed note, or the sentence that refuses it. */
 export function parseSendBackNote(
@@ -161,6 +168,7 @@ export function sendBackLabelSession(
         .eq("id", id)
         .eq("status", "complete")
         .eq("kind", "analyst")
+        .not("assigned_to", "is", null)
         .select("id");
       if (error) {
         if (error.code === UNIQUE_VIOLATION) {
@@ -170,7 +178,17 @@ export function sendBackLabelSession(
           error: `Could not send the session back: ${error.message}`,
         };
       }
-      if (!data || data.length === 0) return { error: RACED };
+      if (!data || data.length === 0) {
+        // Say which: nobody to send it to, or it moved under us.
+        const { data: row } = await supabase
+          .from("label_sessions")
+          .select("status, assigned_to")
+          .eq("id", id)
+          .maybeSingle<{ status: string; assigned_to: string | null }>();
+        return row?.status === "complete" && row.assigned_to === null
+          ? { error: SEND_BACK_NOBODY }
+          : { error: RACED };
+      }
       return { ok: true, status: "labelling" };
     },
     () => ("error" in parsed ? parsed.error : null),

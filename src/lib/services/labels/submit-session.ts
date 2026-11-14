@@ -43,6 +43,7 @@ import {
 import { targetId } from "./label-actor";
 import { normaliseId, type LabelOpResult } from "./operations-session";
 import type { LabelSession } from "./session";
+import { stripIds } from "./strip-ids";
 import {
   writeLabelSessionComplete,
   type LabelPublish,
@@ -166,20 +167,13 @@ export async function writeLabelSubmit(params: {
   return { ok: true, status: "submitted", submissionId: submission.id };
 }
 
-const UUIDS = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
-
-/**
- * A refusal as a labeller may read it. A publish's sentences were written for
- * an admin and can name the match (`verify_match`'s "Match … not found", the
- * backup's storage key), which a labeller is never shown: every id is struck
- * out. An admin reads the sentence whole.
- */
+/** A refusal as the actor may read it: a labeller's has its ids struck out (`stripIds`); an admin reads it whole. */
 function answerFor(
   actor: { kind: string },
   result: LabelSessionStatusResult,
 ): LabelSessionStatusResult {
   if (actor.kind === "admin" || !("error" in result)) return result;
-  return { error: result.error.replace(UUIDS, "…") };
+  return { error: stripIds(result.error) };
 }
 
 /** What a spec swaps in for the publish, the snapshot's read and the clock. */

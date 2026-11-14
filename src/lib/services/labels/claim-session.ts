@@ -14,6 +14,10 @@
  * what settles a race: it assigns the session only while nobody holds it and
  * the claimer holds no other.
  *
+ * Every sentence a labeller gets back has its ids struck out (`stripIds`):
+ * the seed's and the database's errors were written for an admin and can
+ * carry a match or program id.
+ *
  * Seeding is the existing path (results download, re-derive), so the first
  * claim of a match is slow. A seed that then loses the claim leaves an
  * unassigned `labelling` session, which stays in To do.
@@ -27,6 +31,7 @@ import {
 import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { claimableJobIds, type QueueSession } from "./queue";
+import { stripIds } from "./strip-ids";
 import {
   seedLabelSessionForJob,
   type SeedLabelSessionResult,
@@ -134,7 +139,7 @@ export async function claimLabelMatch(
         jobId: id,
         labellerId: viewer.id,
       });
-      if ("error" in seeded) return { error: seeded.error };
+      if ("error" in seeded) return { error: stripIds(seeded.error) };
       sessionId = seeded.sessionId;
     }
 
@@ -142,7 +147,9 @@ export async function claimLabelMatch(
       p_session_id: sessionId,
       p_user_id: viewer.id,
     });
-    if (error) return { error: `Could not claim the match: ${error.message}` };
+    if (error) {
+      return { error: stripIds(`Could not claim the match: ${error.message}`) };
+    }
 
     if (answer === "claimed") return { sessionId };
     if (answer === "holding") return { error: CLAIM_HOLDING };
@@ -153,6 +160,6 @@ export async function claimLabelMatch(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`${LOG} threw`, { jobId: id, message });
-    return { error: `Could not claim the match: ${message}` };
+    return { error: stripIds(`Could not claim the match: ${message}`) };
   }
 }
