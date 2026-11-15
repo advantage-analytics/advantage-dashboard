@@ -1695,7 +1695,14 @@ function rowTieBreak(a: StatRow, b: StatRow): number {
 }
 
 /** Rows sorted by win rate, highest first; zero-count (`winPct: null`) rows
- * sort last; ties by count desc, then label. */
+ * sort last; ties by count desc, then label.
+ *
+ * Not for a "Depth" group. Its rows are positions on the court — Deep, Mid,
+ * Short; Inside the baseline, then further behind it — and they stay in that
+ * order, the order the bands are drawn in, whatever each one's win rate. A
+ * list that reshuffled with the numbers made the reader find "Deep" again
+ * on every filter change, and put the rows out of step with the court
+ * beside them. */
 function sortRows(rows: StatRow[]): StatRow[] {
   return [...rows].sort((a, b) => {
     if (a.winPct === null && b.winPct === null) return rowTieBreak(a, b);
@@ -1709,12 +1716,14 @@ function sortRows(rows: StatRow[]): StatRow[] {
 /**
  * The order `computeVizStats` gives a group's rows, for a caller that has
  * summed rows from several matches and must put them back in it (the player
- * profile's season fold, `lib/data/player-season-viz.ts`): share rows (the
- * errors cut's, `errorStats`) by count, every other group by win rate
- * (`sortRows`). `tests/player-season-viz.spec.ts` pins that one match merged
- * with itself comes back in `computeVizStats`' own order.
+ * profile's season fold, `lib/data/player-season-viz.ts`): a "Depth" group
+ * as it came (band order — see `sortRows`), share rows (the errors cut's,
+ * `errorStats`) by count, every other group by win rate (`sortRows`).
+ * `tests/player-season-viz.spec.ts` pins that one match merged with itself
+ * comes back in `computeVizStats`' own order.
  */
-export function orderStatRows(rows: StatRow[]): StatRow[] {
+export function orderStatRows(rows: StatRow[], groupKey: string): StatRow[] {
+  if (groupKey === "depth") return rows;
   if (rows.some((row) => row.share)) {
     return [...rows].sort((a, b) => b.count - a.count || rowTieBreak(a, b));
   }
@@ -1926,10 +1935,8 @@ function returnPlacementStats(
     groups.push({
       key: "depth",
       label: "Depth",
-      rows: sortRows(
-        depthRows.map((row) =>
-          makeRow(row.key, row.label, depth[row.key].count, depth[row.key].won),
-        ),
+      rows: depthRows.map((row) =>
+        makeRow(row.key, row.label, depth[row.key].count, depth[row.key].won),
       ),
     });
   }
@@ -1974,10 +1981,8 @@ function returnContactStats(
   const depthGroup: StatGroup = {
     key: "depth",
     label: "Depth",
-    rows: sortRows(
-      contactRows.map((row) =>
-        makeRow(row.key, row.label, depth[row.key].count, depth[row.key].won),
-      ),
+    rows: contactRows.map((row) =>
+      makeRow(row.key, row.label, depth[row.key].count, depth[row.key].won),
     ),
   };
   const strokeGroup: StatGroup = {
@@ -2103,10 +2108,8 @@ export function computeVizStats(
           {
             key: "depth",
             label: "Depth",
-            rows: sortRows(
-              rows.map((r) =>
-                makeRow(r.key, r.label, acc[r.key].count, acc[r.key].won),
-              ),
+            rows: rows.map((r) =>
+              makeRow(r.key, r.label, acc[r.key].count, acc[r.key].won),
             ),
           },
         ]
