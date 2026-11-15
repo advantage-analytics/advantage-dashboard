@@ -4783,7 +4783,10 @@ export function LabelConsole({
             >
               {status === "labelling" ? "Open labelling" : "Open full screen"}
             </button>
-            {headerAction}
+            {/* Keyed: `headerAction` is built by the page (a Server
+                Component), and React's dev key check reads an element that
+                crossed that boundary as an unkeyed list child. */}
+            <Fragment key="header-action">{headerAction}</Fragment>
           </div>
         </div>
       )}
