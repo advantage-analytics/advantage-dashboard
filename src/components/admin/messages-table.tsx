@@ -2,6 +2,10 @@
 
 import { MessagesSquare } from "lucide-react";
 import { AdminPersonCell, AgeText } from "@/components/admin/admin-cells";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type { AdminSupportThreadRow } from "@/lib/data/support-admin-server";
 import { originLabel } from "@/lib/data/support-view";
@@ -41,6 +45,60 @@ export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] || name;
 }
 
+function MessagesHeaderRow() {
+  return (
+    <div
+      className={cn(
+        ROW,
+        "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
+      )}
+    >
+      {COLUMNS.map((column) => (
+        <span key={column.label} className={cn(column.col, "eyebrow-sm")}>
+          {column.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The table while Admin › Messages loads: the real header over 64px rows of
+ * bars — avatar and name over whose move it is, the origin, the age over who
+ * wrote last.
+ */
+export function MessagesTableSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div className={CARD}>
+      <div className={INNER}>
+        <MessagesHeaderRow />
+        <PendingRegion label="messages">
+          {Array.from({ length: rows }, (_, i) => (
+            <div key={i} className={cn(ROW, "h-16")}>
+              <span
+                className={cn(COL.player, "flex min-w-0 items-center gap-3")}
+              >
+                <PendingBar className="size-8 shrink-0 rounded-full" />
+                <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <PendingBar className="h-3 w-40" />
+                  <PendingBar className="h-2.5 w-24" />
+                </span>
+              </span>
+              <span className={cn(COL.origin, "flex items-center")}>
+                <PendingBar className="h-3 w-28" />
+              </span>
+              <span className={cn(COL.last, "flex flex-col gap-1.5")}>
+                <PendingBar className="h-3 w-14" />
+                <PendingBar className="h-2.5 w-12" />
+              </span>
+            </div>
+          ))}
+        </PendingRegion>
+      </div>
+    </div>
+  );
+}
+
 export function MessagesTable({
   rows,
   emptyTitle,
@@ -55,19 +113,8 @@ export function MessagesTable({
 }) {
   return (
     <div className={CARD}>
-      <div className="min-w-[620px] px-6 pt-0.5 pb-1.5">
-        <div
-          className={cn(
-            ROW,
-            "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-          )}
-        >
-          {COLUMNS.map((column) => (
-            <span key={column.label} className={cn(column.col, "eyebrow-sm")}>
-              {column.label}
-            </span>
-          ))}
-        </div>
+      <div className={INNER}>
+        <MessagesHeaderRow />
 
         {rows.length === 0 ? (
           <TableEmptyBody icon={MessagesSquare} title={emptyTitle} />
@@ -85,6 +132,8 @@ export function MessagesTable({
     </div>
   );
 }
+
+const INNER = "min-w-[620px] px-6 pt-0.5 pb-1.5";
 
 const CARD =
   "overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]";

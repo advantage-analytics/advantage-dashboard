@@ -4,7 +4,12 @@ import { useState } from "react";
 import { Clock, Plus } from "lucide-react";
 import { AdminPage } from "@/components/admin/admin-page";
 import { AddPilotDialog } from "@/components/admin/pilots/add-pilot-dialog";
-import { PilotsTable } from "@/components/admin/pilots/pilots-table";
+import { InertButton } from "@/components/admin/inert-button";
+import {
+  PilotsTable,
+  PilotsTableSkeleton,
+} from "@/components/admin/pilots/pilots-table";
+import { PendingBar } from "@/components/dashboard/loading/pending";
 import { SetHoursDialog } from "@/components/admin/pilots/set-hours-dialog";
 import {
   pilotPlacesLabel,
@@ -75,6 +80,34 @@ export function PilotsPageContent({
           onClose={() => setSettingHours(false)}
         />
       ) : null}
+    </AdminPage>
+  );
+}
+
+/**
+ * Admin › Pilots while the page loads (`app/admin/pilots/loading.tsx`): the
+ * title, Set hours and Add pilot (inert), and the table's real header over
+ * rows of bars. The lede counts the places taken, so it is a bar.
+ */
+export function PilotsPageSkeleton() {
+  return (
+    <AdminPage>
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-display">Pilots</h1>
+          <PendingBar className="mt-[13px] mb-[3px] h-3 w-64" />
+        </div>
+        <InertButton variant="outline" size="md">
+          <Clock className="size-3.5" strokeWidth={1.5} aria-hidden />
+          Set hours
+        </InertButton>
+        <InertButton variant="primary" size="md">
+          <Plus className="size-3.5" strokeWidth={1.5} aria-hidden />
+          Add pilot
+        </InertButton>
+      </div>
+
+      <PilotsTableSkeleton className="mt-5" />
     </AdminPage>
   );
 }

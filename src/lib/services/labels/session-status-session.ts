@@ -174,8 +174,12 @@ export async function writeLabelSessionComplete(params: {
   const sessionId = normaliseId(params.sessionId);
   if (!sessionId) return { error: "Invalid session id." };
 
-  // A submitted session passes here and nowhere else: this writer is reached
-  // only through `adminGated`, so the admin's review is what lets it through.
+  // A submitted session passes here and nowhere else. Two doors reach this
+  // writer: an admin's Mark complete, through `adminGated`, and Submit
+  // (submit-session.ts), gated by `requireLabelActor` — an admin, or the
+  // labeller the session is assigned to. So `allowSubmitted` lets a submitted
+  // session through for either; a labeller's own publish normally starts
+  // from `labelling`.
   const refused = await checkSessionOpen(supabase, sessionId, {
     allowSubmitted: true,
     forPublish: true,

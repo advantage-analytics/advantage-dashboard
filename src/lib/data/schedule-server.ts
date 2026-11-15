@@ -10,6 +10,8 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
+import { showsVerificationPending } from "@/lib/data/match-verification";
+import { loadVerificationPending } from "@/lib/data/match-verification-server";
 import { isAnalysisReady, isWorking } from "@/lib/data/match-analysis";
 import {
   dualScore,
@@ -109,6 +111,7 @@ interface DbEntryOutcome {
 
 type ScheduleClient = Awaited<ReturnType<typeof createClient>>;
 type AnalysisLoader = typeof loadMatchAnalysis;
+type VerificationPendingLoader = typeof loadVerificationPending;
 
 function toEvent(row: DbEvent): ProgramEvent {
   return {
@@ -173,15 +176,30 @@ async function readSchedule(
   eventId?: string,
 ): Promise<ProgramSchedule> {
   const supabase = await createClient();
-  return readScheduleWithClient(supabase, programId, eventId);
+  // The signed-in reader's own client, so "Verification pending" is asked
+  // with their rights (`match_label_states`), never the service role's.
+  return readScheduleWithClient(
+    supabase,
+    programId,
+    eventId,
+    loadMatchAnalysis,
+    loadVerificationPending,
+  );
 }
 
-/** Testable core of the cached server read; callers should use the exports below. */
+/**
+ * Testable core of the cached server read; callers should use the exports below.
+ *
+ * `pendingLoader` is passed only where `supabase` is the reader's own client
+ * (`readSchedule`): without it every match reads as not pending, which is
+ * what the service-role callers get.
+ */
 export async function readScheduleWithClient(
   supabase: ScheduleClient,
   programId: string,
   eventId?: string,
   analysisLoader: AnalysisLoader = loadMatchAnalysis,
+  pendingLoader?: VerificationPendingLoader,
 ): Promise<ProgramSchedule> {
   let eventQuery = supabase
     .from("program_events")
@@ -249,10 +267,13 @@ export async function readScheduleWithClient(
   // `reap: true` is deliberately NOT passed. It is a write, and it belongs to
   // the surfaces that draw a progress bar big enough for a frozen one to
   // mislead — the matches list and match detail. These draw a dot.
-  const jobs = await analysisLoader(
-    supabase,
-    matches.map((match) => match.id),
-  );
+  const matchIds = matches.map((match) => match.id);
+  const [jobs, pending] = await Promise.all([
+    analysisLoader(supabase, matchIds),
+    pendingLoader
+      ? pendingLoader(supabase, matchIds)
+      : Promise.resolve(new Set<string>()),
+  ]);
 
   const matchesByEntry = new Map<string, EntryMatch[]>();
   for (const match of matches) {
@@ -281,6 +302,13 @@ export async function readScheduleWithClient(
       note: analysis?.note ?? null,
       errorCode: analysis?.errorCode ?? null,
       attemptsUsed: analysis?.attemptsUsed ?? null,
+      // `match_label_states` never answers for a verified match, so a
+      // pending id is an unverified one.
+      verificationPending: showsVerificationPending({
+        verification: null,
+        pending: pending.has(match.id),
+        analysis,
+      }),
     };
     const list = matchesByEntry.get(match.event_entry_id);
     if (list) list.push(entryMatch);

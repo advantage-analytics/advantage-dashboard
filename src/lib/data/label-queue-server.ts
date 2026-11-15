@@ -12,14 +12,15 @@
  * The boundary `label-assignments-server.ts` holds is kept here: the queue is
  * read with names on it, and `toLabellerBoard` copies out, field by field,
  * only what a labeller may see. A labeller's row never says whose match it
- * is — no player, program, owner or match id — and names another labeller's
- * session by nothing at all. The to-do `jobId` is the key a claim takes; it
+ * is — no player, program, owner or match id. Another labeller's session
+ * shows who holds it, by their first name and avatar only (the owner's
+ * call), and never its session id. The to-do `jobId` is the key a claim takes; it
  * grants nothing, because the claim reads this queue again on the server.
  * An admin's send-back note is their own words to one labeller: it is copied
  * onto that labeller's own row and onto no other.
  */
 
-import { readAllPages, UNDEFINED_COLUMN } from "@/lib/data/admin-range-read";
+import { readAllPages } from "@/lib/data/admin-range-read";
 import { avatarUrlFor } from "@/lib/data/admin-pilots-server";
 import {
   countLabelWorkMinutes,
@@ -118,26 +119,17 @@ export interface QueueSessionRow {
   status: string;
   started_at: string;
   open_counts: unknown;
-  /** Added by `20261114060750_label_queue_claims`. */
-  start_open_counts?: unknown;
+  start_open_counts: unknown;
   assigned_to: string | null;
   assigned_at: string | null;
-  /** Added by `20261114060750_label_queue_claims`. */
-  claimed_at?: string | null;
+  claimed_at: string | null;
   submitted_at: string | null;
   /** The last publish; null until the session reaches `complete`. */
   completed_at?: string | null;
-  /**
-   * The admin's check. Absent (not null) until
-   * `20261114091835_label_publish_check` is applied: every session completed
-   * before it was published and checked in one step, so an absent check on a
-   * `complete` session reads as checked, as the migration's backfill writes.
-   */
-  checked_at?: string | null;
-  /** Absent until `20261114091835_label_publish_check` is applied. */
-  sent_back_at?: string | null;
-  /** Absent until `20261114091835_label_publish_check` is applied. */
-  sent_back_note?: string | null;
+  /** The admin's check (`20261114091835_label_publish_check`). */
+  checked_at: string | null;
+  sent_back_at: string | null;
+  sent_back_note: string | null;
   /** Who started the session, or the labeller who submitted it. */
   labeller: string | null;
   /** Embedded `users` row through `assigned_to` (one or none). */
@@ -265,14 +257,6 @@ function sessionForJob(
   );
 }
 
-/** `checked_at` as the queue reads it; see `QueueSessionRow.checked_at`. */
-function checkedAtOf(session: QueueSessionRow): string | null {
-  if (session.checked_at !== undefined) return session.checked_at;
-  return session.status === "complete"
-    ? (session.completed_at ?? session.started_at)
-    : null;
-}
-
 function sentBackOf(session: QueueSessionRow): LabelSentBack | null {
   if (session.status !== "labelling" || !session.sent_back_at) return null;
   return { at: session.sent_back_at, note: session.sent_back_note ?? "" };
@@ -315,7 +299,7 @@ export function buildLabelQueue(source: LabelQueueSource): LabelQueueEntry[] {
         ? {
             status: session.status,
             assignedTo: session.assigned_to,
-            checkedAt: checkedAtOf(session),
+            checkedAt: session.checked_at,
             sentBackAt: session.sent_back_at ?? null,
           }
         : null,
@@ -343,7 +327,7 @@ export function buildLabelQueue(source: LabelQueueSource): LabelQueueEntry[] {
             id: session.id,
             status: session.status,
             assignedTo: session.assigned_to,
-            checkedAt: checkedAtOf(session),
+            checkedAt: session.checked_at,
             sentBackAt: session.sent_back_at ?? null,
             assignee: assignee
               ? {
@@ -625,38 +609,25 @@ export function toAdminLabelBoard(
  * ---------------------------------------------------------------------- */
 
 const SESSION_COLUMNS =
-  "id, job_id, status, started_at, completed_at, open_counts, start_open_counts, assigned_to, assigned_at, claimed_at, submitted_at, labeller, assignee:users!assigned_to(id, email, first_name, last_name, avatar_path)";
-/** Added by `20261114091835_label_publish_check`. */
-const CHECK_COLUMNS = "checked_at, sent_back_at, sent_back_note";
+  "id, job_id, status, started_at, completed_at, open_counts, start_open_counts, assigned_to, assigned_at, claimed_at, submitted_at, checked_at, sent_back_at, sent_back_note, labeller, assignee:users!assigned_to(id, email, first_name, last_name, avatar_path)";
 
 async function readQueueSessions(
   db: AdminClient,
   jobIds: readonly string[],
 ): Promise<QueueSessionRow[]> {
-  const read = (columns: string, ids: string[]) =>
-    db
-      .from("label_sessions")
-      .select(columns)
-      .in("job_id", ids)
-      // Practice copies are graded on their own page; they never enter a lane.
-      .neq("kind", "practice")
-      .returns<QueueSessionRow[]>();
-
   const chunks = await Promise.all(
     idChunks(jobIds).map(async (ids) => {
-      let result = await read(`${SESSION_COLUMNS}, ${CHECK_COLUMNS}`, ids);
-      // Before the migration the three columns do not exist. The rows then
-      // read with them absent: never sent back, and a `complete` one as
-      // already checked (`checkedAtOf`), which is what the backfill writes.
-      if (result.error?.code === UNDEFINED_COLUMN) {
-        result = await read(SESSION_COLUMNS, ids);
+      const { data, error } = await db
+        .from("label_sessions")
+        .select(SESSION_COLUMNS)
+        .in("job_id", ids)
+        // Practice copies are graded on their own page; they never enter a lane.
+        .neq("kind", "practice")
+        .returns<QueueSessionRow[]>();
+      if (error) {
+        throw new Error(`Could not read label sessions: ${error.message}`);
       }
-      if (result.error) {
-        throw new Error(
-          `Could not read label sessions: ${result.error.message}`,
-        );
-      }
-      return result.data ?? [];
+      return data ?? [];
     }),
   );
   return chunks.flat();

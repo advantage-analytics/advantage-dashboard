@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Copy, MoreHorizontal } from "lucide-react";
@@ -27,6 +27,11 @@ export function ReadOnlyRailNote() {
     </p>
   );
 }
+
+/** How long "Copied" / "Copy failed" stays beside the ⋯ button. */
+export const COPY_FEEDBACK_MS = 1600;
+export const COPIED = "Copied";
+export const COPY_FAILED = "Copy failed";
 
 /** "8f3d21c6…7b31". */
 function shortId(id: string): string {
@@ -62,6 +67,18 @@ export function AdminReportStrip({
   const router = useRouter();
   const backHref = reportBackHref(matchId);
   const [menuOpen, setMenuOpen] = useState(false);
+  // What the last copy did, said quietly beside the ⋯ button for a moment.
+  const [copied, setCopied] = useState<
+    typeof COPIED | typeof COPY_FAILED | null
+  >(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -94,9 +111,24 @@ export function AdminReportStrip({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [router, backHref]);
 
+  function say(result: typeof COPIED | typeof COPY_FAILED) {
+    setCopied(result);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopied(null), COPY_FEEDBACK_MS);
+  }
+
   function copy(value: string) {
     setMenuOpen(false);
-    navigator.clipboard?.writeText(value).catch(() => {});
+    // No clipboard (an insecure context) is a refusal too.
+    const write = navigator.clipboard?.writeText(value);
+    if (!write) {
+      say(COPY_FAILED);
+      return;
+    }
+    write.then(
+      () => say(COPIED),
+      () => say(COPY_FAILED),
+    );
   }
 
   const copyIcon = (
@@ -137,6 +169,16 @@ export function AdminReportStrip({
             Open in Labels
           </Link>
         )}
+        {/* Always mounted, so the polite region exists before its text does
+            and a screen reader announces the change; empty, it takes back the
+            gap it would add. */}
+        <span
+          role="status"
+          aria-live="polite"
+          className="min-w-0 text-[12px] whitespace-nowrap text-[var(--ink-600)] empty:-ml-2"
+        >
+          {copied}
+        </span>
         <FloatMenu
           open={menuOpen}
           onOpenChange={setMenuOpen}

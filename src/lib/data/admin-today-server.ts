@@ -474,17 +474,46 @@ interface JobRow {
   updated_at: string;
 }
 
+/** The columns `isSubmitStalled` reads, under their `processing_jobs` names. */
+interface StallColumns {
+  updated_at?: string | null;
+  external_job_id?: string | null;
+  derivation_version?: string | null;
+}
+
+/** Still `uploaded`, never handed to the vendor, and quiet past the stall limit. */
+function stalledBeforeVendor(
+  job: { status: string } & StallColumns,
+  nowMs: number,
+): boolean {
+  const status = resolveAnalysisStatus(job.status, job.derivation_version);
+  if (!status) return false;
+  return isSubmitStalled(
+    {
+      status,
+      updatedAt: job.updated_at ?? undefined,
+      jobReference: job.external_job_id ?? undefined,
+    },
+    nowMs,
+  );
+}
+
 /**
  * Each match's newest job, from rows read newest first, leaving out a
  * reprocess that has not completed: a match whose reprocess failed still has
  * its published analysis, so it is not "Analysis failed" and offers no
- * Resubmit — as Admin › Matches reads it (`hideInFlightReprocess`).
+ * Resubmit — as Admin › Matches reads it (`hideInFlightReprocess`). The one
+ * reprocess kept is one stalled before it reached the vendor
+ * (`isSubmitStalled`): nothing is analysing it, and Today is where an admin
+ * learns that ("Analysis stuck").
  */
 export function newestShownJobPerMatch<
-  T extends ReprocessLinkRow & { match_id: string },
->(rowsNewestFirst: readonly T[]): Map<string, T> {
+  T extends ReprocessLinkRow & { match_id: string } & StallColumns,
+>(rowsNewestFirst: readonly T[], nowMs: number = Date.now()): Map<string, T> {
+  const shown = new Set(hideInFlightReprocess(rowsNewestFirst));
   const newest = new Map<string, T>();
-  for (const job of hideInFlightReprocess(rowsNewestFirst)) {
+  for (const job of rowsNewestFirst) {
+    if (!shown.has(job) && !stalledBeforeVendor(job, nowMs)) continue;
     if (!newest.has(job.match_id)) newest.set(job.match_id, job);
   }
   return newest;
@@ -523,7 +552,7 @@ async function jobDrafts(db: AdminClient, nowMs: number): Promise<Draft[]> {
     return [];
   }
 
-  const newest = newestShownJobPerMatch((chain ?? []) as JobRow[]);
+  const newest = newestShownJobPerMatch((chain ?? []) as JobRow[], nowMs);
 
   const waiting: { job: JobRow; stuck: boolean }[] = [];
   for (const job of newest.values()) {

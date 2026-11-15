@@ -4,13 +4,8 @@ import { squadLabel } from "@/lib/data/squad";
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  FileSpreadsheet,
-  Video,
-  ListOrdered,
-  Trophy,
-  Check,
-} from "lucide-react";
+import { Check } from "lucide-react";
+import { ADMIN_UPLOAD_CHOICES } from "./admin-upload-kinds";
 import {
   loadAdminAttachmentTargetsAction,
   prepareAdminAttachmentAction,
@@ -35,33 +30,6 @@ function targetOf(context: AdminUploadContext): string | AdminPlayerTarget {
     ? { player: context.workspace.id, billing: context.owner.billing }
     : context.workspace.id;
 }
-
-const choices = [
-  {
-    kind: "file",
-    label: "Match file",
-    detail: "SwingVision export, .xlsx",
-    icon: FileSpreadsheet,
-  },
-  {
-    kind: "video",
-    label: "Match video",
-    detail: "Counts against the team’s hours",
-    icon: Video,
-  },
-  {
-    kind: "dual",
-    label: "Dual result",
-    detail: "Team score and every line",
-    icon: ListOrdered,
-  },
-  {
-    kind: "tournament",
-    label: "Tournament result",
-    detail: "Rounds, draws and placings",
-    icon: Trophy,
-  },
-] as const;
 
 /**
  * `programs.status` as the console says it. Only `suspended` stops an upload
@@ -407,55 +375,57 @@ export function AdminUploadEntry({
               What are you adding?
             </legend>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {choices.map(({ kind: value, label, detail, icon: Icon }) => {
-                // A player's personal workspace takes match video only.
-                const unavailable = personal && value !== "video";
-                return (
-                  <label
-                    key={value}
-                    className={`relative flex flex-col gap-1 rounded-[var(--radius-dropdown)] border bg-[var(--surface-card)] px-[18px] pt-[18px] pb-5 ${unavailable ? "cursor-default opacity-60" : "cursor-pointer"} ${kind === value ? "border-[var(--blue)] shadow-[0_0_0_3px_var(--blue-tint-12)]" : unavailable ? "border-[var(--border-field)]" : "border-[var(--border-field)] hover:border-[var(--ink-300)]"}`}
-                  >
-                    <span className="absolute top-4 right-4 size-3.5">
-                      <input
-                        type="radio"
-                        name="upload-kind"
-                        value={value}
-                        checked={kind === value}
-                        disabled={unavailable}
-                        onChange={() =>
-                          router.push(adminUploadHref(team, value))
-                        }
-                        aria-label={label}
-                        className={CHECK_DOT_INPUT}
-                      />
-                      {kind === value && (
-                        <Check
-                          aria-hidden="true"
-                          className={CHECK_DOT_MARK}
-                          strokeWidth={2.5}
+              {ADMIN_UPLOAD_CHOICES.map(
+                ({ kind: value, label, detail, icon: Icon }) => {
+                  // A player's personal workspace takes match video only.
+                  const unavailable = personal && value !== "video";
+                  return (
+                    <label
+                      key={value}
+                      className={`relative flex flex-col gap-1 rounded-[var(--radius-dropdown)] border bg-[var(--surface-card)] px-[18px] pt-[18px] pb-5 ${unavailable ? "cursor-default opacity-60" : "cursor-pointer"} ${kind === value ? "border-[var(--blue)] shadow-[0_0_0_3px_var(--blue-tint-12)]" : unavailable ? "border-[var(--border-field)]" : "border-[var(--border-field)] hover:border-[var(--ink-300)]"}`}
+                    >
+                      <span className="absolute top-4 right-4 size-3.5">
+                        <input
+                          type="radio"
+                          name="upload-kind"
+                          value={value}
+                          checked={kind === value}
+                          disabled={unavailable}
+                          onChange={() =>
+                            router.push(adminUploadHref(team, value))
+                          }
+                          aria-label={label}
+                          className={CHECK_DOT_INPUT}
                         />
-                      )}
-                    </span>
-                    <span className="mb-2 flex size-9 items-center justify-center rounded-[var(--radius-element)] bg-[var(--surface-subtle)]">
-                      <Icon
-                        className="size-[18px]"
-                        strokeWidth={1.5}
-                        aria-hidden="true"
-                      />
-                    </span>
-                    <span className="text-[13px] font-medium">{label}</span>
-                    <span className="text-[12px] text-[var(--ink-600)]">
-                      {unavailable
-                        ? "Teams only"
-                        : personal && value === "video"
-                          ? "Into their personal workspace"
-                          : !context && value === "video"
-                            ? "A team’s hours, or a player’s own"
-                            : detail}
-                    </span>
-                  </label>
-                );
-              })}
+                        {kind === value && (
+                          <Check
+                            aria-hidden="true"
+                            className={CHECK_DOT_MARK}
+                            strokeWidth={2.5}
+                          />
+                        )}
+                      </span>
+                      <span className="mb-2 flex size-9 items-center justify-center rounded-[var(--radius-element)] bg-[var(--surface-subtle)]">
+                        <Icon
+                          className="size-[18px]"
+                          strokeWidth={1.5}
+                          aria-hidden="true"
+                        />
+                      </span>
+                      <span className="text-[13px] font-medium">{label}</span>
+                      <span className="text-[12px] text-[var(--ink-600)]">
+                        {unavailable
+                          ? "Teams only"
+                          : personal && value === "video"
+                            ? "Into their personal workspace"
+                            : !context && value === "video"
+                              ? "A team’s hours, or a player’s own"
+                              : detail}
+                      </span>
+                    </label>
+                  );
+                },
+              )}
             </div>
           </fieldset>
           {context && (kind === "dual" || kind === "tournament") && (

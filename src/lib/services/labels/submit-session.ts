@@ -37,20 +37,55 @@ import {
   ACTOR_REQUIRED,
   checkSessionOpen,
   defaultLabelWriteDependencies,
+  FROZEN,
+  PRACTICE_NEVER_PUBLISHED,
+  PUBLISHING,
   racedMessage,
+  SUBMITTED,
   type LabelWriteDependencies,
 } from "./edit-session";
 import { targetId } from "./label-actor";
 import { normaliseId, type LabelOpResult } from "./operations-session";
 import type { LabelSession } from "./session";
-import { stripIds } from "./strip-ids";
+import { forLabeller } from "./strip-ids";
 import {
+  ANOTHER_SESSION_OPEN,
   writeLabelSessionComplete,
   type LabelPublish,
   type LabelSessionStatusResult,
 } from "./session-status-session";
 
 const LOG = "[labels:submit]";
+
+/** A labeller's publish failed for a reason that is not a refusal. */
+export const SUBMIT_PUBLISH_FAILED =
+  "Something went wrong publishing. Your work is saved; try again, or ask an admin.";
+/** The same for a practice copy, which is submitted, never published. */
+export const SUBMIT_PRACTICE_FAILED =
+  "Something went wrong submitting. Your work is saved; try again, or ask an admin.";
+
+/**
+ * The refusals a labeller reads as they are: the gate's, a race, and the
+ * publish gate's own sentences (each begins "Not published: "). The publish's
+ * failures after the gate ("Not published — the write failed …", a failed
+ * verify or rebuild) are not among them.
+ */
+const BUSINESS = new Set<string>([
+  ACTOR_REQUIRED,
+  FROZEN,
+  SUBMITTED,
+  PUBLISHING,
+  PRACTICE_NEVER_PUBLISHED,
+  ANOTHER_SESSION_OPEN,
+  racedMessage("session"),
+  racedMessage("row"),
+  "Invalid session id.",
+  "Session not found.",
+]);
+
+function isBusinessRefusal(sentence: string): boolean {
+  return BUSINESS.has(sentence) || sentence.startsWith("Not published: ");
+}
 
 export type LabelSubmitResult = LabelOpResult<{
   status: "submitted";
@@ -167,13 +202,26 @@ export async function writeLabelSubmit(params: {
   return { ok: true, status: "submitted", submissionId: submission.id };
 }
 
-/** A refusal as the actor may read it: a labeller's has its ids struck out (`stripIds`); an admin reads it whole. */
+/**
+ * A refusal as the actor may read it. An admin reads it whole. A labeller
+ * reads a business refusal with its ids struck out, and anything else as
+ * `fallback`, the raw text logged (`forLabeller`).
+ */
 function answerFor(
   actor: { kind: string },
   result: LabelSessionStatusResult,
+  fallback: string,
+  sessionId: string | null,
 ): LabelSessionStatusResult {
   if (actor.kind === "admin" || !("error" in result)) return result;
-  return { error: stripIds(result.error) };
+  return {
+    error: forLabeller(result.error, {
+      isBusiness: isBusinessRefusal,
+      fallback,
+      log: LOG,
+      context: { sessionId },
+    }),
+  };
 }
 
 /** What a spec swaps in for the publish, the snapshot's read and the clock. */
@@ -210,7 +258,12 @@ export async function submitLabelSession(
       .eq("id", id)
       .maybeSingle<{ kind?: string | null }>();
     if (kindError) {
-      return { error: `Could not read the session: ${kindError.message}` };
+      return answerFor(
+        actor,
+        { error: `Could not read the session: ${kindError.message}` },
+        SUBMIT_PUBLISH_FAILED,
+        id,
+      );
     }
     if (!session) return { error: "Session not found." };
 
@@ -227,6 +280,8 @@ export async function submitLabelSession(
         "error" in submitted
           ? submitted
           : { ok: true, status: submitted.status },
+        SUBMIT_PRACTICE_FAILED,
+        id,
       );
     }
 
@@ -254,12 +309,15 @@ export async function submitLabelSession(
         }
       },
     });
-    return answerFor(actor, published);
+    return answerFor(actor, published, SUBMIT_PUBLISH_FAILED, id);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`${LOG} submit threw`, { message });
-    return answerFor(actor, {
-      error: `Could not submit the session: ${message}`,
-    });
+    return answerFor(
+      actor,
+      { error: `Could not submit the session: ${message}` },
+      SUBMIT_PUBLISH_FAILED,
+      normaliseId(sessionId),
+    );
   }
 }

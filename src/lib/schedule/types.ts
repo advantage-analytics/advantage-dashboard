@@ -138,6 +138,11 @@ export interface EntryMatch {
    * empty when nobody recorded one. Optional so older fixtures need not state it.
    */
   duration?: string | null;
+  /**
+   * Waiting on a labeller (`showsVerificationPending`). Optional so fixtures
+   * need not state it; set by the reader's own schedule read.
+   */
+  verificationPending?: boolean;
   /** `matches.source_provider` — a `providers` id, or null for a hand score. */
   sourceProvider?: string | null;
   /** `processing_jobs.id` from the analysis map — what a retry acts on. */

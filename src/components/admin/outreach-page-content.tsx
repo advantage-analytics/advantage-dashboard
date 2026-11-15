@@ -11,6 +11,11 @@ import {
   type FilterMenuOption,
 } from "@/components/admin/admin-cells";
 import { AdminPage } from "@/components/admin/admin-page";
+import { InertButton } from "@/components/admin/inert-button";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import {
   OUTREACH_STATE_LABEL,
   OutreachRecipientTable,
@@ -1278,6 +1283,127 @@ export function OutreachPageContent({
         pending={bulkPending}
         onConfirm={bulkRemove}
       />
+    </AdminPage>
+  );
+}
+
+/** A no-op for the skeleton's inert controls. */
+function ignore() {}
+
+/** The email the page opens on without `?email=` (`app/admin/outreach/page.tsx`). */
+const DEFAULT_EMAIL_NO = 7;
+
+/**
+ * Admin › Outreach while the page loads (`app/admin/outreach/loading.tsx`),
+ * on the default email in Recipients mode: the title, Import send list, the
+ * email pills by name and the mode pills (inert, without list sizes), the
+ * Division / Conference / Status filters, and the recipient list's real
+ * header over rows of bars beside the preview column. The summary line is
+ * all counts, so it is a bar.
+ */
+export function OutreachPageSkeleton() {
+  const programs = outreachEmail(DEFAULT_EMAIL_NO)?.programs ?? true;
+  const header =
+    "eyebrow-sm border-b border-[var(--border-hairline)] pt-3.5 pb-2.5";
+  return (
+    <AdminPage>
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-display">Outreach</h1>
+          <PendingBar className="mt-[13px] mb-[3px] h-3 w-[420px]" />
+        </div>
+        <InertButton variant="outline" size="md">
+          Import send list
+        </InertButton>
+      </div>
+
+      <div inert className="mt-6 flex flex-wrap items-center gap-3">
+        <CountPills
+          label="Email"
+          options={OUTREACH_EMAILS.map((email) => ({
+            value: String(email.no),
+            label: email.name,
+          }))}
+          value={String(DEFAULT_EMAIL_NO)}
+          onChange={ignore}
+        />
+        <div className="flex-1" />
+        <CountPills
+          label="Mode"
+          options={MODE_OPTIONS}
+          value="recipients"
+          onChange={ignore}
+        />
+      </div>
+
+      <div className="mt-4 grid min-w-0 grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,1fr)_600px]">
+        <div className="flex min-w-0 flex-col gap-3">
+          <div inert className="flex flex-wrap items-center gap-2">
+            {["Division", "Conference", "Status"].map((label) => (
+              <FilterMenuPill<string>
+                key={label}
+                label={label}
+                options={[{ value: "", label: "All" }]}
+                value=""
+                onChange={ignore}
+              />
+            ))}
+          </div>
+          <div className="min-w-0 overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
+            <div className="overflow-x-auto px-6 pt-0.5 pb-1.5">
+              <div className="min-w-[640px]">
+                <div className="flex items-center">
+                  <span className={cn(header, "w-[30px] shrink-0")} />
+                  <span className={cn(header, "min-w-0 flex-1")}>
+                    Recipient
+                  </span>
+                  {programs ? (
+                    <span className={cn(header, "min-w-0 flex-1")}>
+                      Program
+                    </span>
+                  ) : null}
+                  <span className={cn(header, "w-[180px] shrink-0")}>
+                    Status
+                  </span>
+                </div>
+                <PendingRegion label="recipients">
+                  {Array.from({ length: 8 }, (_, i) => (
+                    <div key={i} className="flex h-[52px] items-center">
+                      <span className="w-[30px] shrink-0 pl-1">
+                        <PendingBar className="size-3.5" />
+                      </span>
+                      <span className="flex min-w-0 flex-1 flex-col gap-1.5 pr-4">
+                        <PendingBar className="h-3 w-40" />
+                        <PendingBar className="h-2.5 w-52" />
+                      </span>
+                      {programs ? (
+                        <span className="flex min-w-0 flex-1 items-center gap-2 pr-4">
+                          <PendingBar className="size-4 shrink-0" />
+                          <PendingBar className="h-3 w-36" />
+                        </span>
+                      ) : null}
+                      <span className="w-[180px] shrink-0">
+                        <PendingBar className="h-3 w-20" />
+                      </span>
+                    </div>
+                  ))}
+                </PendingRegion>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <PendingRegion
+          label="preview"
+          className="min-w-0"
+          innerClassName="flex flex-col gap-3 rounded-[12px] border border-[var(--border-hairline)] p-4"
+        >
+          <PendingBar className="h-3 w-48" />
+          <PendingBar className="h-3 w-72" />
+          <PendingBar className="mt-2 h-[320px] w-full" />
+          <PendingBar className="h-8 w-40" />
+        </PendingRegion>
+      </div>
     </AdminPage>
   );
 }

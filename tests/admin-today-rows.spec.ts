@@ -255,6 +255,67 @@ test.describe("newestShownJobPerMatch", () => {
     expect(picked.get("m3")?.id).toBe("child");
   });
 
+  const NOW = Date.parse("2026-11-15T12:00:00Z");
+  /** An `uploaded` row last moved `minutesAgo` before NOW, never handed over. */
+  const uploaded = (
+    id: string,
+    match_id: string,
+    resubmitted_from_job_id: string | null,
+    minutesAgo: number,
+    external_job_id: string | null = null,
+  ) => ({
+    ...job(id, match_id, "uploaded", resubmitted_from_job_id),
+    updated_at: new Date(NOW - minutesAgo * 60_000).toISOString(),
+    external_job_id,
+    derivation_version: null,
+  });
+
+  test("a reprocess stalled before the vendor surfaces over the completed one", () => {
+    const picked = newestShownJobPerMatch(
+      [
+        uploaded("child", "m4", "parent", 24 * 60),
+        job("parent", "m4", "completed"),
+      ],
+      NOW,
+    );
+    expect(picked.get("m4")?.id).toBe("child");
+  });
+
+  test("a reprocess still within the stall window stays hidden", () => {
+    const picked = newestShownJobPerMatch(
+      [uploaded("child", "m5", "parent", 1), job("parent", "m5", "completed")],
+      NOW,
+    );
+    expect(picked.get("m5")?.id).toBe("parent");
+  });
+
+  test("a reprocess the vendor accepted is not stalled, so it stays hidden", () => {
+    const picked = newestShownJobPerMatch(
+      [
+        uploaded("child", "m6", "parent", 24 * 60, "vendor-ref"),
+        job("parent", "m6", "completed"),
+      ],
+      NOW,
+    );
+    expect(picked.get("m6")?.id).toBe("parent");
+  });
+
+  test("a failed reprocess stays hidden however old it is", () => {
+    const picked = newestShownJobPerMatch(
+      [
+        {
+          ...job("child", "m7", "failed", "parent"),
+          updated_at: "2026-11-01T00:00:00Z",
+          external_job_id: null,
+          derivation_version: null,
+        },
+        job("parent", "m7", "completed"),
+      ],
+      NOW,
+    );
+    expect(picked.get("m7")?.id).toBe("parent");
+  });
+
   test("each match is picked on its own", () => {
     const picked = newestShownJobPerMatch([
       job("a2", "a", "failed"),

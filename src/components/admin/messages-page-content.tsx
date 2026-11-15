@@ -11,6 +11,7 @@ import {
 import { AdminPage } from "@/components/admin/admin-page";
 import {
   MessagesTable,
+  MessagesTableSkeleton,
   messagesRowId,
 } from "@/components/admin/messages-table";
 import { SupportThreadDrawer } from "@/components/admin/support-thread-drawer";
@@ -277,6 +278,43 @@ export function MessagesPageContent({
           selectedId={selectedId}
           onSelect={toggle}
         />
+      </div>
+    </AdminPage>
+  );
+}
+
+/** A no-op for the skeleton's inert controls. */
+function ignore() {}
+
+/**
+ * Admin › Messages while the page loads (`app/admin/messages/loading.tsx`):
+ * the title and its lede, the view pills on "Waiting on you" and the Started
+ * from filter on All — inert and without counts — and the table's real header
+ * over rows of bars.
+ */
+export function MessagesPageSkeleton() {
+  return (
+    <AdminPage>
+      <div className="flex flex-col">
+        <h1 className="text-display">Messages</h1>
+        <p className="text-body-sm mt-[9px] text-[var(--ink-600)]">
+          One conversation per player, wherever it started.
+        </p>
+      </div>
+
+      <div inert className="mt-6 flex flex-wrap items-center gap-3">
+        <CountPills options={VIEW_OPTIONS} value="you" onChange={ignore} />
+        <FilterDivider />
+        <FilterMenuPill<OriginFilter>
+          label="Started from"
+          options={[{ value: "any", label: "All" }]}
+          value="any"
+          onChange={ignore}
+        />
+      </div>
+
+      <div className="mt-4">
+        <MessagesTableSkeleton />
       </div>
     </AdminPage>
   );

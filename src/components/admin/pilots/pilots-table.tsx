@@ -7,6 +7,10 @@ import { Clock, MoreHorizontal, UserMinus, UserRound } from "lucide-react";
 import { AdminPersonCell, TwoLineDate } from "@/components/admin/admin-cells";
 import { SetHoursDialog } from "@/components/admin/pilots/set-hours-dialog";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
@@ -65,6 +69,76 @@ const FILL: Record<PilotUsageState, string> = {
   unlimited: "var(--blue)",
 };
 
+const TABLE_CARD =
+  "overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]";
+const TABLE_INNER = "min-w-[680px] px-6 pt-0.5 pb-1.5";
+
+function PilotsHeaderRow() {
+  return (
+    <div
+      className={cn(
+        ROW,
+        "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
+      )}
+    >
+      {COLUMNS.map((column) => (
+        <span key={column.label} className={cn(column.col, "eyebrow-sm")}>
+          {column.label}
+        </span>
+      ))}
+      <span className={COL.action} aria-hidden />
+    </div>
+  );
+}
+
+/**
+ * The table while Admin › Pilots loads: the real header over 52px rows of
+ * bars — avatar, name and email; the month's meter and hours; the match
+ * count; the two-line date.
+ */
+export function PilotsTableSkeleton({
+  rows = 6,
+  className,
+}: {
+  rows?: number;
+  className?: string;
+}) {
+  return (
+    <div className={cn(TABLE_CARD, className)}>
+      <div className={TABLE_INNER}>
+        <PilotsHeaderRow />
+        <PendingRegion label="pilots">
+          {Array.from({ length: rows }, (_, i) => (
+            <div key={i} className={cn(ROW, "h-[52px]")}>
+              <span
+                className={cn(COL.player, "flex min-w-0 items-center gap-3")}
+              >
+                <PendingBar className="size-8 shrink-0 rounded-full" />
+                <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <PendingBar className="h-3 w-40" />
+                  <PendingBar className="h-2.5 w-48" />
+                </span>
+              </span>
+              <span className={cn(COL.month, "flex flex-col gap-1.5")}>
+                <PendingBar className="h-3 w-36" />
+                <PendingBar className="h-[3px] w-full" />
+              </span>
+              <span className={cn(COL.matches, "flex")}>
+                <PendingBar className="h-3 w-6" />
+              </span>
+              <span className={cn(COL.joined, "flex flex-col gap-1.5")}>
+                <PendingBar className="h-3 w-14" />
+                <PendingBar className="h-2.5 w-10" />
+              </span>
+              <span className={COL.action} />
+            </div>
+          ))}
+        </PendingRegion>
+      </div>
+    </div>
+  );
+}
+
 export function PilotsTable({
   rows,
   emptyAction,
@@ -83,26 +157,9 @@ export function PilotsTable({
 
   return (
     <>
-      <div
-        className={cn(
-          "overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]",
-          className,
-        )}
-      >
-        <div className="min-w-[680px] px-6 pt-0.5 pb-1.5">
-          <div
-            className={cn(
-              ROW,
-              "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-            )}
-          >
-            {COLUMNS.map((column) => (
-              <span key={column.label} className={cn(column.col, "eyebrow-sm")}>
-                {column.label}
-              </span>
-            ))}
-            <span className={COL.action} aria-hidden />
-          </div>
+      <div className={cn(TABLE_CARD, className)}>
+        <div className={TABLE_INNER}>
+          <PilotsHeaderRow />
 
           {rows.length === 0 ? (
             <TableEmptyBody

@@ -58,6 +58,13 @@ export const SEND_BACK_NOTE_TOO_LONG = `Keep the note to ${SEND_BACK_NOTE_MAX} c
  */
 export const SEND_BACK_NOBODY =
   "Nobody is assigned to this match, so there is no labeller to send it back to. Reopen it instead.";
+/**
+ * Send back on a session its assigned labeller never published (no
+ * `label_submissions` row by them for it): an admin published the match
+ * themselves, so the note would reach someone with nothing of theirs to fix.
+ */
+export const SEND_BACK_ADMIN_PUBLISHED =
+  "An admin published this match, not its labeller, so there is nothing to send back. Reopen it instead.";
 
 /** The trimmed note, or the sentence that refuses it. */
 export function parseSendBackNote(
@@ -138,8 +145,9 @@ export function checkLabelSession(
  * Send back: a published session (checked or not) back to `labelling` for
  * its labeller, with the admin's note. The check is cleared with the status
  * (`label_sessions_checked_needs_complete`). Refused with
- * `ANOTHER_SESSION_OPEN` when the match already has an open session. Never
- * throws.
+ * `ANOTHER_SESSION_OPEN` when the match already has an open session, and
+ * with `SEND_BACK_ADMIN_PUBLISHED` when its labeller never submitted it (an
+ * admin published it). Never throws.
  */
 export function sendBackLabelSession(
   sessionId: unknown,
@@ -154,6 +162,35 @@ export function sendBackLabelSession(
     "send the session back",
     async (supabase, id, actorId) => {
       if ("error" in parsed) return parsed;
+      // Only a labeller who published this session can be sent it back. Read
+      // before the update; an unassigned or missing session falls through to
+      // the update, whose filters and read-back already answer for it.
+      const { data: session, error: sessionError } = await supabase
+        .from("label_sessions")
+        .select("assigned_to")
+        .eq("id", id)
+        .maybeSingle<{ assigned_to: string | null }>();
+      if (sessionError) {
+        return {
+          error: `Could not send the session back: ${sessionError.message}`,
+        };
+      }
+      if (session?.assigned_to) {
+        const { data: submitted, error: submittedError } = await supabase
+          .from("label_submissions")
+          .select("id")
+          .eq("session_id", id)
+          .eq("submitted_by", session.assigned_to)
+          .limit(1);
+        if (submittedError) {
+          return {
+            error: `Could not send the session back: ${submittedError.message}`,
+          };
+        }
+        if (!submitted || submitted.length === 0) {
+          return { error: SEND_BACK_ADMIN_PUBLISHED };
+        }
+      }
       const { data, error } = await supabase
         .from("label_sessions")
         .update({

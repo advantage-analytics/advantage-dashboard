@@ -724,6 +724,7 @@ function MatchTableRow({
           <RowLifecycle
             analysis={{ status: played.status, providerId: null }}
             label={`${label} match`}
+            verificationPending={played.verificationPending}
           />
         ) : (
           <EmptyMark label="No analysis" />

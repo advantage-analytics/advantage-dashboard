@@ -73,6 +73,9 @@ const loader = createLoader({
     "@/app/admin/seen-actions": actions,
     "@/app/admin/labels/actions": actions,
     "@/app/label/actions": actions,
+    "@/app/admin/outreach/actions": actions,
+    "@/app/admin/messages/actions": actions,
+    "@/app/admin/uploads/new/attachment-actions": actions,
   },
 });
 
@@ -204,6 +207,80 @@ const ROUTES: Route[] = [
       "Latest matches",
     ],
   },
+  {
+    // Only a redirect to Matches, so it waits on Matches' frame.
+    path: "/admin/uploads",
+    dir: "admin/uploads/(redirect)",
+    chrome: ["Matches", "Upload a match", "Program", "Status", "Uploaded"],
+  },
+  {
+    path: "/admin/uploads/new",
+    dir: "admin/uploads/new",
+    chrome: [
+      "Upload a match",
+      "What are you adding?",
+      "Match file",
+      "Match video",
+      "Dual result",
+      "Tournament result",
+    ],
+  },
+  {
+    path: "/admin/requests",
+    dir: "admin/requests",
+    chrome: [
+      "Requests",
+      "Waiting on you",
+      "Verifying",
+      "Live",
+      "Closed",
+      "Request",
+      "Email check",
+      "Received",
+    ],
+  },
+  {
+    path: "/admin/messages",
+    dir: "admin/messages",
+    chrome: [
+      "Messages",
+      "One conversation per player, wherever it started.",
+      "Waiting on you",
+      "Waiting on them",
+      "Started from",
+      "Player",
+      "Last",
+    ],
+  },
+  {
+    path: "/admin/outreach",
+    dir: "admin/outreach",
+    chrome: [
+      "Outreach",
+      "Import send list",
+      "Cold outreach",
+      "Recipients",
+      "Edit email",
+      "Division",
+      "Conference",
+      "Recipient",
+      "Program",
+      "Status",
+    ],
+  },
+  {
+    path: "/admin/pilots",
+    dir: "admin/pilots",
+    chrome: [
+      "Pilots",
+      "Set hours",
+      "Add pilot",
+      "Player",
+      "This month",
+      "Matches",
+      "Added",
+    ],
+  },
 ];
 
 /** The "‹" way back each detail route keeps, and where it goes. */
@@ -295,6 +372,7 @@ test("a list's skeleton never sits above its detail routes", () => {
     "admin/matches",
     "admin/teams",
     "admin/conferences",
+    "admin/uploads",
   ]) {
     expect(existsSync(`src/app/${dir}/loading.tsx`), dir).toBe(false);
   }

@@ -60,9 +60,14 @@ function session(
     status: "labelling",
     started_at: "2026-11-10T12:00:00Z",
     open_counts: null,
+    start_open_counts: null,
     assigned_to: null,
     assigned_at: null,
+    claimed_at: null,
     submitted_at: null,
+    checked_at: null,
+    sent_back_at: null,
+    sent_back_note: null,
     labeller: null,
     assignee: null,
     ...over,
@@ -173,7 +178,7 @@ test.describe("newest completed job per match", () => {
     expect(entries[0].session).toBeNull();
   });
 
-  test("a complete session read before the publish-check columns exist counts as checked", () => {
+  test("a checked complete session keeps its match out of the queue", () => {
     const entries = buildLabelQueue(
       source({
         jobs: [
@@ -189,7 +194,12 @@ test.describe("newest completed job per match", () => {
           }),
         ],
         sessions: [
-          session({ id: "s-done", job_id: "job-new", status: "complete" }),
+          session({
+            id: "s-done",
+            job_id: "job-new",
+            status: "complete",
+            checked_at: "2026-11-06T10:00:00Z",
+          }),
           // A later open session beside it does not bring the match back.
           session({
             id: "s-open",

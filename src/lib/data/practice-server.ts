@@ -10,11 +10,12 @@
  * (`admin/layout.tsx` gates the route already). Read-only.
  */
 
-import { isUndefinedColumn, readAllPages } from "@/lib/data/admin-range-read";
+import { readAllPages } from "@/lib/data/admin-range-read";
 import { countLabelWorkMinutes } from "@/lib/data/labels-server";
 import { isUuid } from "@/lib/admin/validation";
 import { requireAdmin } from "@/lib/services/programs/admin-guard";
 import { labellerName } from "@/lib/services/labels/assign-session";
+import { idChunks } from "@/lib/services/labels/chunks";
 import {
   gradePractice,
   strokeFamily,
@@ -403,23 +404,12 @@ type PayJob = JobVideoSpan;
 
 type PublishedSessionRow = {
   id: string;
-  status: string;
-  completed_at: string | null;
-  /** Absent before `20261114091835_label_publish_check` is applied. */
-  published_at?: string | null;
-  checked_at?: string | null;
+  published_at: string | null;
+  checked_at: string | null;
   job: PayJob | null;
 };
 
-const PUBLISHED_COLUMNS =
-  "id, status, completed_at, job:processing_jobs(start_time_seconds, end_time_seconds, billable_seconds)";
-
-/**
- * Non-practice sessions first published inside `[fromIso, toIso)`, with the
- * stamps pay reads. Before the publish-check migration `published_at` and
- * `checked_at` do not exist: a `complete` session then reads as published and
- * checked at its `completed_at`, which is what the migration's backfill writes.
- */
+/** Non-practice sessions first published inside `[fromIso, toIso)`, with the stamps pay reads. */
 async function readPublishedSessions(
   db: AdminClient,
   fromIso: string,
@@ -432,45 +422,31 @@ async function readPublishedSessions(
     job: PayJob | null;
   }[]
 > {
-  let rows: PublishedSessionRow[];
-  try {
-    rows = await readAllPages<PublishedSessionRow>(
-      db
-        .from("label_sessions")
-        .select(`${PUBLISHED_COLUMNS}, published_at, checked_at`)
-        .neq("kind", "practice")
-        .gte("published_at", fromIso)
-        .lt("published_at", toIso)
-        .order("id")
-        .returns<PublishedSessionRow[]>(),
-      "Could not read published sessions",
-    );
-  } catch (error) {
-    if (!isUndefinedColumn(error)) throw error;
-    rows = await readAllPages<PublishedSessionRow>(
-      db
-        .from("label_sessions")
-        .select(PUBLISHED_COLUMNS)
-        .neq("kind", "practice")
-        .eq("status", "complete")
-        .gte("completed_at", fromIso)
-        .lt("completed_at", toIso)
-        .order("id")
-        .returns<PublishedSessionRow[]>(),
-      "Could not read published sessions",
-    );
-  }
-  return rows.flatMap((row) => {
-    const legacy = row.published_at === undefined;
-    const publishedAt = legacy ? row.completed_at : row.published_at;
-    if (!publishedAt) return [];
-    const checkedAt = legacy
-      ? row.status === "complete"
-        ? row.completed_at
-        : null
-      : (row.checked_at ?? null);
-    return [{ id: row.id, publishedAt, checkedAt, job: row.job }];
-  });
+  const rows = await readAllPages<PublishedSessionRow>(
+    db
+      .from("label_sessions")
+      .select(
+        "id, published_at, checked_at, job:processing_jobs(start_time_seconds, end_time_seconds, billable_seconds)",
+      )
+      .neq("kind", "practice")
+      .gte("published_at", fromIso)
+      .lt("published_at", toIso)
+      .order("id")
+      .returns<PublishedSessionRow[]>(),
+    "Could not read published sessions",
+  );
+  return rows.flatMap((row) =>
+    row.published_at
+      ? [
+          {
+            id: row.id,
+            publishedAt: row.published_at,
+            checkedAt: row.checked_at ?? null,
+            job: row.job,
+          },
+        ]
+      : [],
+  );
 }
 
 /**
@@ -496,28 +472,65 @@ export async function getLabelPayReport(
   const toIso = `${dayAfter(range.to)}T00:00:00Z`;
 
   type SubmissionRow = {
+    id: string;
     session_id: string;
     submitted_by: string | null;
     submitted_at: string;
   };
-  // Every submission up to the end of the range: a session published in the
-  // range was first submitted before its publish, and a practice set whose
-  // first submission falls before `from` is not this range's to count.
-  const [submissions, published] = await Promise.all([
-    readAllPages<SubmissionRow>(
+  const SUBMISSION_COLUMNS = "id, session_id, submitted_by, submitted_at";
+  // Two reads, never the whole table: the sessions published in the range,
+  // and the submissions made in it (a practice set counts on the day of its
+  // first submission, so only a session submitted in the range can be one).
+  const [published, inRange] = await Promise.all([
+    readPublishedSessions(db, fromIso, toIso),
+    readAllPages<Pick<SubmissionRow, "session_id">>(
       db
         .from("label_submissions")
-        .select("session_id, submitted_by, submitted_at")
+        .select("session_id")
+        .gte("submitted_at", fromIso)
         .lt("submitted_at", toIso)
         .order("submitted_at")
         .order("id"),
       "Could not read submissions",
     ),
-    readPublishedSessions(db, fromIso, toIso),
   ]);
+  // Then every submission of those sessions up to the end of the range: a
+  // session published in the range was first submitted before its publish,
+  // and a practice set whose first submission falls before `from` is not
+  // this range's to count. Chunked, since the ids travel in the URL.
+  const sessionIds = [
+    ...new Set([
+      ...published.map((session) => session.id),
+      ...inRange.map((row) => row.session_id),
+    ]),
+  ];
+  const submissions = (
+    await Promise.all(
+      idChunks(sessionIds).map((ids) =>
+        readAllPages<SubmissionRow>(
+          db
+            .from("label_submissions")
+            .select(SUBMISSION_COLUMNS)
+            .in("session_id", ids)
+            .lt("submitted_at", toIso)
+            .order("submitted_at")
+            .order("id"),
+          "Could not read submissions",
+        ),
+      ),
+    )
+  ).flat();
+  // Each session's first submission, by time then id — the order the reads
+  // ask for, applied here too since the chunks arrive apart.
   const first = new Map<string, SubmissionRow>();
   for (const row of submissions) {
-    if (!first.has(row.session_id)) first.set(row.session_id, row);
+    const held = first.get(row.session_id);
+    if (
+      !held ||
+      row.submitted_at < held.submitted_at ||
+      (row.submitted_at === held.submitted_at && row.id < held.id)
+    )
+      first.set(row.session_id, row);
   }
 
   const paid = published.flatMap((session) => {
@@ -529,21 +542,21 @@ export async function getLabelPayReport(
   );
 
   type PracticeRow = { id: string; status: string };
-  const practice =
-    practiceCandidates.length === 0
-      ? []
-      : await readAllPages<PracticeRow>(
+  const practice = (
+    await Promise.all(
+      idChunks(practiceCandidates.map((row) => row.session_id)).map((ids) =>
+        readAllPages<PracticeRow>(
           db
             .from("label_sessions")
             .select("id, status")
             .eq("kind", "practice")
-            .in(
-              "id",
-              practiceCandidates.map((row) => row.session_id),
-            )
+            .in("id", ids)
             .order("id"),
           "Could not read practice sets",
-        );
+        ),
+      ),
+    )
+  ).flat();
   const practiceSets = practice.flatMap((session) => {
     const who = first.get(session.id)?.submitted_by;
     return session.status === "submitted" && who ? [who] : [];

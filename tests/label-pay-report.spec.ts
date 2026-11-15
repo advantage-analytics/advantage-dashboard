@@ -10,8 +10,7 @@ import type { AdminClient } from "@/lib/supabase/admin";
  * paid once, on the UTC day it was first published, to whoever made its first
  * submission; it reads "checked" once an admin has passed it. Offline — the
  * loader runs on an injected admin client that filters in-memory rows the way
- * PostgREST would, and can answer `42703` for the publish-check columns the
- * way today's live schema does until T31's migration is applied.
+ * PostgREST would.
  */
 
 const ANA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -53,8 +52,8 @@ function session(
 
 /**
  * A chainable stand-in for the service-role client. Filters run against the
- * rows; `legacy` drops `published_at` / `checked_at` from `label_sessions` and
- * refuses any select naming them with `42703`, as PostgREST does today.
+ * rows. Every `label_submissions` read is recorded, so a spec can see that
+ * the table is never read whole.
  */
 function fakeDb(
   tables: {
@@ -62,13 +61,9 @@ function fakeDb(
     label_submissions: Row[];
     users: Row[];
   },
-  options: { legacy?: boolean } = {},
+  reads: string[][] = [],
 ): AdminClient {
-  const sessions: Row[] = tables.label_sessions.map((s) => {
-    if (!options.legacy) return { ...s };
-    const { published_at: _p, checked_at: _c, ...rest } = s;
-    return rest;
-  });
+  const sessions: Row[] = tables.label_sessions.map((s) => ({ ...s }));
   const data: Record<string, Row[]> = {
     label_sessions: sessions,
     label_submissions: tables.label_submissions,
@@ -78,12 +73,12 @@ function fakeDb(
   return {
     from(table: string) {
       let rows = [...(data[table] ?? [])];
-      let columns = "";
+      const filters: string[] = [];
+      if (table === "label_submissions") reads.push(filters);
       const has = (row: Row, column: string) =>
         row[column] !== undefined && row[column] !== null;
       const builder = {
-        select(cols: string) {
-          columns = cols;
+        select() {
           return builder;
         },
         eq(column: string, value: unknown) {
@@ -95,18 +90,21 @@ function fakeDb(
           return builder;
         },
         gte(column: string, value: string) {
+          filters.push(`${column} gte`);
           rows = rows.filter(
             (r) => has(r, column) && (r[column] as string) >= value,
           );
           return builder;
         },
         lt(column: string, value: string) {
+          filters.push(`${column} lt`);
           rows = rows.filter(
             (r) => has(r, column) && (r[column] as string) < value,
           );
           return builder;
         },
         in(column: string, values: unknown[]) {
+          filters.push(`${column} in`);
           rows = rows.filter((r) => values.includes(r[column]));
           return builder;
         },
@@ -120,16 +118,6 @@ function fakeDb(
           return builder;
         },
         async range(start: number, end: number) {
-          if (
-            options.legacy &&
-            table === "label_sessions" &&
-            /published_at|checked_at/.test(columns)
-          ) {
-            return {
-              data: null,
-              error: { code: "42703", message: "column does not exist" },
-            };
-          }
           return { data: rows.slice(start, end + 1), error: null };
         },
       };
@@ -154,11 +142,11 @@ function submission(sessionId: string, by: string, at: string): Row {
 
 async function report(
   tables: Parameters<typeof fakeDb>[0],
-  options?: { legacy?: boolean },
+  reads?: string[][],
 ) {
   const result = await getLabelPayReport(RANGE, {
     requireAdmin: async () => ({ id: ADMIN }),
-    createAdminClient: () => fakeDb(tables, options),
+    createAdminClient: () => fakeDb(tables, reads),
   });
   if (!result.ok) throw new Error("expected a report");
   return result;
@@ -307,31 +295,43 @@ test.describe("label pay report", () => {
     ]);
   });
 
-  test("before the publish-check migration a complete session reads as published and checked at completed_at", async () => {
+  test("never reads label_submissions whole: only the range, and the sessions it names", async () => {
+    const reads: string[][] = [];
     const result = await report(
       {
         label_sessions: [
-          session({ id: "s-done", completed_at: "2026-11-15T10:00:00Z" }),
-          session({ id: "s-old", completed_at: "2026-10-15T10:00:00Z" }),
-          session({ id: "s-open", status: "labelling" }),
+          session({
+            id: "s-in",
+            completed_at: "2026-11-10T09:00:00Z",
+            published_at: "2026-11-10T09:00:00Z",
+          }),
+          session({ id: "p-in", kind: "practice", status: "submitted" }),
+          // Submitted in October and never published: nothing to read.
+          session({ id: "s-old", status: "labelling" }),
         ],
         label_submissions: [
-          submission("s-done", ANA, "2026-11-15T09:00:00Z"),
-          submission("s-old", ANA, "2026-10-15T09:00:00Z"),
-          submission("s-open", ANA, "2026-11-15T09:00:00Z"),
+          // First submitted before the range, published inside it.
+          submission("s-in", ANA, "2026-10-29T09:00:00Z"),
+          submission("p-in", BEN, "2026-11-03T09:00:00Z"),
+          submission("s-old", ANA, "2026-10-02T09:00:00Z"),
         ],
         users,
       },
-      { legacy: true },
+      reads,
     );
-
     expect(result.lines).toEqual([
-      expect.objectContaining({
-        sessionId: "s-done",
-        publishedAt: "2026-11-15T10:00:00Z",
-        state: "checked",
-      }),
+      expect.objectContaining({ sessionId: "s-in", labellerId: ANA }),
     ]);
+    expect(result.rows.find((r) => r.labellerId === BEN)).toMatchObject({
+      practiceSets: 1,
+    });
+    for (const filters of reads) {
+      expect(
+        filters.includes("submitted_at gte") ||
+          filters.includes("session_id in"),
+        filters.join(", "),
+      ).toBe(true);
+    }
   });
 
   test("the page and table say Published and Checked, never Submitted or Approved", () => {
