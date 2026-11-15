@@ -42,6 +42,7 @@ import {
 import { buildRows } from "@/lib/services/outreach/rows";
 import {
   COLD_EMAILS,
+  DEFAULT_OUTREACH_EMAIL_NO,
   IMPORTABLE_LISTS,
   OUTREACH_EMAILS,
   outreachEmail,
@@ -286,7 +287,7 @@ export function OutreachPageContent({
     setConference("");
     setSelectedId(null);
     setResult(null);
-    const query = next === 7 ? "" : `?email=${next}`;
+    const query = next === DEFAULT_OUTREACH_EMAIL_NO ? "" : `?email=${next}`;
     router.replace(`${pathname}${query}`, { scroll: false });
   }
 
@@ -1290,9 +1291,6 @@ export function OutreachPageContent({
 /** A no-op for the skeleton's inert controls. */
 function ignore() {}
 
-/** The email the page opens on without `?email=` (`app/admin/outreach/page.tsx`). */
-const DEFAULT_EMAIL_NO = 7;
-
 /**
  * Admin › Outreach while the page loads (`app/admin/outreach/loading.tsx`),
  * on the default email in Recipients mode: the title, Import send list, the
@@ -1302,7 +1300,7 @@ const DEFAULT_EMAIL_NO = 7;
  * all counts, so it is a bar.
  */
 export function OutreachPageSkeleton() {
-  const programs = outreachEmail(DEFAULT_EMAIL_NO)?.programs ?? true;
+  const programs = outreachEmail(DEFAULT_OUTREACH_EMAIL_NO)?.programs ?? true;
   const header =
     "eyebrow-sm border-b border-[var(--border-hairline)] pt-3.5 pb-2.5";
   return (
@@ -1324,7 +1322,7 @@ export function OutreachPageSkeleton() {
             value: String(email.no),
             label: email.name,
           }))}
-          value={String(DEFAULT_EMAIL_NO)}
+          value={String(DEFAULT_OUTREACH_EMAIL_NO)}
           onChange={ignore}
         />
         <div className="flex-1" />

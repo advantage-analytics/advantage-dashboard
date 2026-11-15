@@ -368,8 +368,8 @@ const SESSION_COLUMNS =
 function publishCheckOf(row: LabelSessionRow) {
   const complete = row.status === "complete";
   return {
-    publishedAt: complete ? row.completed_at : (row.published_at ?? null),
-    checkedAt: row.checked_at ?? null,
+    publishedAt: complete ? row.completed_at : row.published_at,
+    checkedAt: row.checked_at,
   };
 }
 

@@ -441,7 +441,7 @@ async function readPublishedSessions(
           {
             id: row.id,
             publishedAt: row.published_at,
-            checkedAt: row.checked_at ?? null,
+            checkedAt: row.checked_at,
             job: row.job,
           },
         ]

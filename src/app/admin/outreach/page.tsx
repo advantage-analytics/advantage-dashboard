@@ -7,6 +7,7 @@ import {
   loadTemplates,
 } from "@/lib/services/outreach/outreach-server";
 import {
+  DEFAULT_OUTREACH_EMAIL_NO,
   OUTREACH_EMAILS,
   type OutreachProgram,
 } from "@/lib/services/outreach/types";
@@ -44,7 +45,7 @@ export default async function AdminOutreachPage({
   const emailParam = Number(one(params.email));
   const emailNo = OUTREACH_EMAILS.some((email) => email.no === emailParam)
     ? emailParam
-    : 7;
+    : DEFAULT_OUTREACH_EMAIL_NO;
 
   const supabase = await createClient();
   const {

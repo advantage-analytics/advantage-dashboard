@@ -300,7 +300,7 @@ export function buildLabelQueue(source: LabelQueueSource): LabelQueueEntry[] {
             status: session.status,
             assignedTo: session.assigned_to,
             checkedAt: session.checked_at,
-            sentBackAt: session.sent_back_at ?? null,
+            sentBackAt: session.sent_back_at,
           }
         : null,
     });
@@ -328,7 +328,7 @@ export function buildLabelQueue(source: LabelQueueSource): LabelQueueEntry[] {
             status: session.status,
             assignedTo: session.assigned_to,
             checkedAt: session.checked_at,
-            sentBackAt: session.sent_back_at ?? null,
+            sentBackAt: session.sent_back_at,
             assignee: assignee
               ? {
                   id: assignee.id,

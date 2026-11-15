@@ -21,6 +21,9 @@ export const OUTREACH_EMAILS = [
   { no: 8, name: "Day-7 follow-up", list: 7, programs: true },
 ] as const;
 
+/** The email the outreach page opens on without `?email=`. */
+export const DEFAULT_OUTREACH_EMAIL_NO = 7;
+
 export type OutreachEmailNo = (typeof OUTREACH_EMAILS)[number]["no"];
 
 export const FOLLOW_UP_DAYS = 7;
