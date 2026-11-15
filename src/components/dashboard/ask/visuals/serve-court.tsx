@@ -32,10 +32,12 @@ const ZONE_LABEL: Record<ServeZoneKey, string> = {
   wide: "Wide",
 };
 
+// Square caps close the outer corners; round ones draw each as a quarter
+// circle (see `half-court-svg.tsx`'s `lineProps`).
 const LINE = {
   stroke: "var(--viz-court-fill)",
   strokeWidth: 1.5,
-  strokeLinecap: "round" as const,
+  strokeLinecap: "square" as const,
 };
 
 /** The drawing's viewBox: the court with a one-unit margin on every side. */
