@@ -250,6 +250,16 @@ function rowNoun(cut: Cut, count: number): string {
 }
 
 /**
+ * The Statistics column's first figure, named for what its "N of M" counts:
+ * "Shots won" on a rally cut, whose marks are shots (`marksAreShots`), and
+ * "Points won" everywhere else, where one mark is one point. Here, beside the
+ * rows' own words, so `tests/viz-readout.spec.ts` pins the pair together.
+ */
+export function wonFigureLabel(cut: Cut): string {
+  return marksAreShots(cut) ? "Shots won" : "Points won";
+}
+
+/**
  * The hovered or focused row's readout, in the order it reads: what the row
  * counts ("12 of 20 serves won", or on the errors cut's share rows "4 of 12
  * errors"), the group's average when it has one, then what a click does —
@@ -269,13 +279,8 @@ export function statRowTooltip(
     lines.push(`Average ${group.average}% across the court`);
   // A rally cut's marks are shots, several to a point; every other cut's
   // row counts one mark per point.
-  const kept = marksAreShots(cut)
-    ? row.count === 1
-      ? "this shot"
-      : `these ${row.count} shots`
-    : row.count === 1
-      ? "this point"
-      : `these ${row.count} points`;
+  const noun = marksAreShots(cut) ? "shot" : "point";
+  const kept = row.count === 1 ? `this ${noun}` : `these ${row.count} ${noun}s`;
   return {
     title: row.label,
     value: row.winPct === null ? null : `${row.winPct}%`,

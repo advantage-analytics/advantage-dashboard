@@ -2,8 +2,7 @@ import { Fragment, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { ChartTooltip } from "../chart-tooltip";
-import { statRowTooltip } from "./viz-readout";
-import { marksAreShots } from "./cut-kinds";
+import { statRowTooltip, wonFigureLabel } from "./viz-readout";
 import type { StatPick } from "./stat-cut";
 import { useTweenedNumber } from "./use-tweened-number";
 import {
@@ -77,7 +76,7 @@ function summaryFigures(stats: VizStats, cut: Cut): Figure[] {
     const { count: of, won } = groupTotals(first);
     figures.push({
       key: "won",
-      label: marksAreShots(cut) ? "Shots won" : "Points won",
+      label: wonFigureLabel(cut),
       count: won,
       of,
     });
