@@ -7,6 +7,7 @@ import { loadConferenceTeams } from "@/lib/services/programs/admin-conference-ac
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
 import { crestUrl, type SeatUsage } from "@/lib/data/teams-server";
+import { onAdvantageStatus } from "@/lib/data/admin-teams-server";
 import { programDisplayName } from "@/lib/data/programs-server";
 import {
   rosterMatchOwnerIds,
@@ -866,11 +867,6 @@ async function readPilot(
 // Conference — the row, plus its teams via `loadConferenceTeams`
 // ---------------------------------------------------------------------------
 
-/** `admin_list_conferences()`'s own `on_advantage` predicate, character for character. */
-function isClaimedStatus(status: string): boolean {
-  return status === "active" || status === "claim_pending";
-}
-
 /**
  * The conference this program belongs to, or null when it belongs to none.
  *
@@ -936,7 +932,7 @@ async function readConference(
     name: team.name,
     crestUrl: team.crestUrl,
     status: team.status,
-    claimed: isClaimedStatus(team.status),
+    claimed: onAdvantageStatus(team.status),
   }));
 
   return {
