@@ -483,16 +483,9 @@ interface JobRow {
 export function newestShownJobPerMatch<
   T extends ReprocessLinkRow & { match_id: string },
 >(rowsNewestFirst: readonly T[]): Map<string, T> {
-  const byMatch = new Map<string, T[]>();
-  for (const job of rowsNewestFirst) {
-    const list = byMatch.get(job.match_id);
-    if (list) list.push(job);
-    else byMatch.set(job.match_id, [job]);
-  }
   const newest = new Map<string, T>();
-  for (const [matchId, rows] of byMatch) {
-    const shown = hideInFlightReprocess(rows)[0];
-    if (shown) newest.set(matchId, shown);
+  for (const job of hideInFlightReprocess(rowsNewestFirst)) {
+    if (!newest.has(job.match_id)) newest.set(job.match_id, job);
   }
   return newest;
 }
