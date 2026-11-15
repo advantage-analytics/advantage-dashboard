@@ -3,14 +3,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
-import { WorkspaceMark } from "@/components/admin/admin-cells";
-import { CopyButton } from "@/components/admin/matches/copy-button";
+import { ChevronLeft, Copy, MoreHorizontal } from "lucide-react";
+import { MENU_ROW_ICON } from "@/components/admin/request-drawer";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
-import type { AdminMatchWorkspace } from "@/lib/data/admin-matches-server";
-
-const STRIP_LINK =
-  "inline-flex h-7 items-center rounded-[var(--radius-element)] px-2.5 text-[12px] font-medium text-[var(--ink-700)] transition-colors duration-200 hover:bg-[var(--surface-card)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
+import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
+import { advButton } from "@/lib/ui/adv-button";
+import { cn } from "@/lib/utils";
 
 /** "8f3d21c6…7b31". */
 function shortId(id: string): string {
@@ -18,34 +16,34 @@ function shortId(id: string): string {
 }
 
 /**
- * The strip under the admin header on `/admin/matches/[id]`: the way back,
- * whose match this is, that it is read-only, the match id with Copy, and the
- * two admin-only doors — the label console and the analysis job's id. One
- * line on a hairline. The score is not repeated here: the rail beneath it
- * leads with the final score.
+ * The strip under the admin header on `/admin/matches/[id]`, cut to what an
+ * admin needs: the way back, which match this is, and what they can do. The
+ * one action is the label console; the two ids the scripts and logs key on
+ * (the match's, the analysis job's) sit behind the "⋯" menu, copied on
+ * select. The rail beneath carries the score; the team, read-only state and
+ * raw id are not repeated here.
  *
  * Esc goes back to Matches, unless something on the page owns Esc right now:
  * a field, a menu, a dialog, the film room in fullscreen. The back link says
- * so (`aria-keyshortcuts`, its tooltip) rather than a hint on the strip.
+ * so (`aria-keyshortcuts`, its tooltip).
  */
 export function AdminReportStrip({
   matchId,
   player,
   opponent,
-  workspace,
   labelHref,
   job,
 }: {
   matchId: string;
   player: string;
   opponent: string;
-  workspace: AdminMatchWorkspace;
   labelHref: string | null;
   /** The latest analysis job, when the match has one. */
   job: { id: string; status: string } | null;
 }) {
   const router = useRouter();
   const backHref = `/admin/matches?id=${encodeURIComponent(matchId)}`;
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -78,11 +76,17 @@ export function AdminReportStrip({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [router, backHref]);
 
-  const workspaceLabel =
-    workspace.kind === "team" ? workspace.name : "Personal";
+  function copy(value: string) {
+    setMenuOpen(false);
+    navigator.clipboard?.writeText(value).catch(() => {});
+  }
+
+  const copyIcon = (
+    <Copy className={MENU_ROW_ICON} strokeWidth={1.5} aria-hidden />
+  );
 
   return (
-    <div className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-[var(--border-hairline)] px-6 py-2">
+    <div className="flex shrink-0 items-center gap-4 border-b border-[var(--border-hairline)] px-6 py-1.5">
       <nav
         aria-label="Breadcrumb"
         className="flex min-w-0 flex-1 items-center gap-2 text-[13px]"
@@ -107,58 +111,51 @@ export function AdminReportStrip({
           <span className="font-medium text-[var(--ink-900)]">{player}</span>{" "}
           <span className="text-[var(--ink-600)]">vs {opponent}</span>
         </span>
-        <span className="inline-flex min-w-0 shrink items-center gap-1.5 text-[12px] text-[var(--ink-600)]">
-          <WorkspaceMark workspace={workspace} />
-          <span className="truncate">{workspaceLabel}</span>
-        </span>
       </nav>
 
-      <span className="flex shrink-0 items-center gap-1 text-[12px] text-[var(--ink-600)]">
-        <span className="pr-2">Read-only</span>
-        <code className="mono text-[12px] text-[var(--ink-600)]">
-          {shortId(matchId)}
-        </code>
-        <CopyButton value={matchId} label="Copy match id" />
+      <span className="flex shrink-0 items-center gap-2">
         {labelHref && (
-          <Link href={labelHref} className={STRIP_LINK}>
+          <Link href={labelHref} className={advButton("outline", "sm")}>
             Open in Labels
           </Link>
         )}
-        {job && <JobCopy job={job} />}
+        <FloatMenu
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          width={244}
+          label="Match ids"
+          trigger={
+            <button
+              type="button"
+              aria-label="Match ids"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              className={cn(advButton("outline", "sm"), "size-8 p-0")}
+            >
+              <MoreHorizontal
+                className="size-[15px]"
+                strokeWidth={1.75}
+                aria-hidden="true"
+              />
+            </button>
+          }
+        >
+          <FloatMenuItem
+            label="Copy match id"
+            description={shortId(matchId)}
+            icon={copyIcon}
+            onSelect={() => copy(matchId)}
+          />
+          {job ? (
+            <FloatMenuItem
+              label="Copy analysis job id"
+              description={`${shortId(job.id)} · ${job.status}`}
+              icon={copyIcon}
+              onSelect={() => copy(job.id)}
+            />
+          ) : null}
+        </FloatMenu>
       </span>
     </div>
-  );
-}
-
-/**
- * "Analysis job": there is no admin page for a job, so this is the job's id
- * on the clipboard — what the scripts, the database and the logs key on —
- * with the id and its status in the tooltip.
- */
-function JobCopy({ job }: { job: { id: string; status: string } }) {
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 1600);
-    return () => clearTimeout(timer);
-  }, [copied]);
-  return (
-    <ChromeTooltip
-      label={copied ? "Copied" : "Copy analysis job id"}
-      detail={`${job.id} · ${job.status}`}
-    >
-      <button
-        type="button"
-        className={`${STRIP_LINK} cursor-pointer`}
-        onClick={() => {
-          navigator.clipboard
-            ?.writeText(job.id)
-            .then(() => setCopied(true))
-            .catch(() => {});
-        }}
-      >
-        Analysis job
-      </button>
-    </ChromeTooltip>
   );
 }

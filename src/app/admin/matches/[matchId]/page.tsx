@@ -95,7 +95,7 @@ export default async function AdminMatchReportPage({
   const report = await getAdminMatchReport(matchId);
   if (!report) notFound();
 
-  const { detail, analysis, workspace, labelHref } = report;
+  const { detail, analysis, labelHref } = report;
   const { match, statsResult, insights } = detail;
 
   // The single attribution point (guardrails §4), as on the dashboard page.
@@ -117,7 +117,6 @@ export default async function AdminMatchReportPage({
       matchId={match.id}
       player={sides.you.name}
       opponent={sides.opp.name}
-      workspace={workspace}
       labelHref={labelHref}
       job={
         analysis.jobId ? { id: analysis.jobId, status: analysis.status } : null
