@@ -26,6 +26,7 @@ import type { BandSettings } from "@/lib/data/viz-bands";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
 import type { DistanceUnit } from "@/lib/format/distance";
 import { WallMemoryProvider } from "@/components/dashboard/matches/match-detail/shots/viz-wall-memory";
+import { useVizFilterAnalytics } from "@/components/dashboard/matches/match-detail/shots/use-viz-filter-analytics";
 import { BallPathsEndpointContext } from "@/components/dashboard/matches/match-detail/film/ball-paths-endpoint";
 import { FilmHeadProvider } from "@/components/dashboard/matches/match-detail/film-head-context";
 import {
@@ -326,6 +327,8 @@ export function MatchReportProvider({
       source: viewSourceRef.current.source,
     });
   }, [matchId, view, readOnly, sample, recordView, pathname]);
+  // The Visualizations controls, under the same two exclusions.
+  useVizFilterAnalytics("match_report", matchId, !sample && recordView);
 
   // Collapse is only this visit's state; every visit opens expanded.
   const [insight, setInsight] = useState<InsightStatus>("expanded");
