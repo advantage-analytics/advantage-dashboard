@@ -6,6 +6,7 @@ import {
   collapseErrorFilter,
   computeViz,
   computeVizStats,
+  orderStatRows,
   errorKindOf,
   filterKeysFor,
   servePlacementMetrics,
@@ -2904,9 +2905,10 @@ test.describe("errors cut on judged vs unjudged matches", () => {
   });
 });
 
-test("a Depth group stays Deep, Mid, Short however the win rates fall", () => {
-  // One landing per band, won only in the shortest: by win rate this would
-  // read Short, then the two 0% rows by label. It reads as the court does.
+test("a Depth group lists its bands Deep, Mid, Short", () => {
+  // Which rows there are and in what order, with nothing in them. The order
+  // against real win rates is the next test's and the returnContact
+  // regression's above; an empty list alone would also satisfy a sort.
   for (const cut of ["returnPlacement", "rallyPlacement"] as const) {
     const stats = computeVizStats(
       [],
@@ -2924,4 +2926,23 @@ test("a Depth group stays Deep, Mid, Short however the win rates fall", () => {
       "Short",
     ]);
   }
+});
+
+test("orderStatRows leaves a Depth group as it came and sorts every other by win rate", () => {
+  // Win rates rising down the list: the opposite of what a sort gives.
+  const rows = [
+    { key: "deep", label: "Deep", count: 10, won: 2, winPct: 20 },
+    { key: "mid", label: "Mid", count: 10, won: 5, winPct: 50 },
+    { key: "short", label: "Short", count: 10, won: 9, winPct: 90 },
+  ];
+  expect(orderStatRows(rows, "depth").map((row) => row.key)).toEqual([
+    "deep",
+    "mid",
+    "short",
+  ]);
+  expect(orderStatRows(rows, "direction").map((row) => row.key)).toEqual([
+    "short",
+    "mid",
+    "deep",
+  ]);
 });

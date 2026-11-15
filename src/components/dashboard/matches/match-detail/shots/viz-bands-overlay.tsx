@@ -41,8 +41,9 @@ import type { StatRow, VizBandZones } from "./viz-model";
  * the viewer. Nothing is counted a second time here: a band and its row are
  * matched by `BandRow.key`, which is what both `depthBandRows`/
  * `contactBandRows` and the stat rows are built from. (By key and not by
- * index: `computeVizStats` SORTS its rows by win rate, so the Depth group's
- * order is not band order and never was.)
+ * index: the Depth group is in band order today, but it was sorted by win
+ * rate until 2026-11-14, and a pairing that depended on the order would
+ * break silently the day it changed again.)
  *
  * A band with no shots in it prints nothing at all rather than "0% · 0" —
  * the same rule `ServeBoxLabels` already follows for an empty service box,
