@@ -5,6 +5,7 @@ import {
   RESOLVABLE_KINDS,
   claimOffersApprove,
   messageDrafts,
+  newestShownJobPerMatch,
   sortLongestWaitFirst,
   todayActions,
   type TodayThreadRow,
@@ -219,4 +220,48 @@ test("a mixed list sorts longest wait first", () => {
     "job:1",
     "ask:1",
   ]);
+});
+
+test.describe("newestShownJobPerMatch", () => {
+  const job = (
+    id: string,
+    match_id: string,
+    status: string,
+    resubmitted_from_job_id: string | null = null,
+  ) => ({ id, match_id, status, resubmitted_from_job_id });
+
+  test("a failed reprocess of a completed job leaves the completed one", () => {
+    // Newest first: the reprocess failed on top of a published analysis.
+    const picked = newestShownJobPerMatch([
+      job("child", "m1", "failed", "parent"),
+      job("parent", "m1", "completed"),
+    ]);
+    expect(picked.get("m1")?.id).toBe("parent");
+  });
+
+  test("a failed resubmit of a failed job is still the newest failure", () => {
+    const picked = newestShownJobPerMatch([
+      job("retry", "m2", "failed", "first"),
+      job("first", "m2", "failed"),
+    ]);
+    expect(picked.get("m2")?.id).toBe("retry");
+  });
+
+  test("a completed reprocess is the newest analysis", () => {
+    const picked = newestShownJobPerMatch([
+      job("child", "m3", "completed", "parent"),
+      job("parent", "m3", "completed"),
+    ]);
+    expect(picked.get("m3")?.id).toBe("child");
+  });
+
+  test("each match is picked on its own", () => {
+    const picked = newestShownJobPerMatch([
+      job("a2", "a", "failed"),
+      job("b1", "b", "completed"),
+      job("a1", "a", "completed"),
+    ]);
+    expect(picked.get("a")?.id).toBe("a2");
+    expect(picked.get("b")?.id).toBe("b1");
+  });
 });

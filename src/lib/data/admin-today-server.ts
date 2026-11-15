@@ -31,6 +31,10 @@ import {
   currentBillingMonth,
 } from "@/lib/services/splitstep/config";
 import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
+import {
+  hideInFlightReprocess,
+  type ReprocessLinkRow,
+} from "@/lib/services/splitstep/reprocess";
 import { waitingOn } from "@/lib/data/support-view";
 import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
@@ -49,7 +53,10 @@ import { scoreSetsFrom, type ScoreLineSet } from "@/lib/ui/score-format";
  *                    failed (`isAnalysisFailed` over `resolveAnalysisStatus`)
  *                    or a submit that never happened (`isSubmitStalled`, the
  *                    3-minute clock the match page uses). A failed job that
- *                    was resubmitted is not waiting on anyone.
+ *                    was resubmitted is not waiting on anyone, and neither is
+ *                    a reprocess that has not completed: its match keeps its
+ *                    published analysis (`hideInFlightReprocess`, the rule
+ *                    Admin › Matches reads through `loadMatchAnalysis`).
  *   label            a completed Advantage Intelligence job nobody has opened
  *                    a label session for (`jobState` "todo", Labels' "Needs
  *                    labelling"), whose analysis raised at least one amber
@@ -457,6 +464,7 @@ interface JobRow {
   id: string;
   match_id: string;
   status: string;
+  resubmitted_from_job_id: string | null;
   derivation_version: string | null;
   external_job_id: string | null;
   error_message: string | null;
@@ -464,6 +472,29 @@ interface JobRow {
   error_step: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Each match's newest job, from rows read newest first, leaving out a
+ * reprocess that has not completed: a match whose reprocess failed still has
+ * its published analysis, so it is not "Analysis failed" and offers no
+ * Resubmit — as Admin › Matches reads it (`hideInFlightReprocess`).
+ */
+export function newestShownJobPerMatch<
+  T extends ReprocessLinkRow & { match_id: string },
+>(rowsNewestFirst: readonly T[]): Map<string, T> {
+  const byMatch = new Map<string, T[]>();
+  for (const job of rowsNewestFirst) {
+    const list = byMatch.get(job.match_id);
+    if (list) list.push(job);
+    else byMatch.set(job.match_id, [job]);
+  }
+  const newest = new Map<string, T>();
+  for (const [matchId, rows] of byMatch) {
+    const shown = hideInFlightReprocess(rows)[0];
+    if (shown) newest.set(matchId, shown);
+  }
+  return newest;
 }
 
 async function jobDrafts(db: AdminClient, nowMs: number): Promise<Draft[]> {
@@ -487,7 +518,7 @@ async function jobDrafts(db: AdminClient, nowMs: number): Promise<Draft[]> {
   const { data: chain, error: chainError } = await db
     .from("processing_jobs")
     .select(
-      "id, match_id, status, derivation_version, external_job_id, error_message, error_code, error_step, created_at, updated_at",
+      "id, match_id, status, resubmitted_from_job_id, derivation_version, external_job_id, error_message, error_code, error_step, created_at, updated_at",
     )
     .in("match_id", matchIds)
     .order("created_at", { ascending: false });
@@ -499,10 +530,7 @@ async function jobDrafts(db: AdminClient, nowMs: number): Promise<Draft[]> {
     return [];
   }
 
-  const newest = new Map<string, JobRow>();
-  for (const job of (chain ?? []) as JobRow[]) {
-    if (!newest.has(job.match_id)) newest.set(job.match_id, job);
-  }
+  const newest = newestShownJobPerMatch((chain ?? []) as JobRow[]);
 
   const waiting: { job: JobRow; stuck: boolean }[] = [];
   for (const job of newest.values()) {
