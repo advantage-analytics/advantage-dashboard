@@ -162,36 +162,43 @@ export function sendBackLabelSession(
     "send the session back",
     async (supabase, id, actorId) => {
       if ("error" in parsed) return parsed;
-      // Only a labeller who published this session can be sent it back. Read
-      // before the update; an unassigned or missing session falls through to
-      // the update, whose filters and read-back already answer for it.
+      // Only a labeller who published this session can be sent it back. The
+      // update is pinned to what this read saw (its labeller and when it was
+      // published), so a reassign or a reopen-and-republish landing between
+      // the read and the write matches nothing and answers RACED, rather
+      // than sending back a publish the check never looked at.
       const { data: session, error: sessionError } = await supabase
         .from("label_sessions")
-        .select("assigned_to")
+        .select("status, assigned_to, completed_at")
         .eq("id", id)
-        .maybeSingle<{ assigned_to: string | null }>();
+        .maybeSingle<{
+          status: string;
+          assigned_to: string | null;
+          completed_at: string | null;
+        }>();
       if (sessionError) {
         return {
           error: `Could not send the session back: ${sessionError.message}`,
         };
       }
-      if (session?.assigned_to) {
-        const { data: submitted, error: submittedError } = await supabase
-          .from("label_submissions")
-          .select("id")
-          .eq("session_id", id)
-          .eq("submitted_by", session.assigned_to)
-          .limit(1);
-        if (submittedError) {
-          return {
-            error: `Could not send the session back: ${submittedError.message}`,
-          };
-        }
-        if (!submitted || submitted.length === 0) {
-          return { error: SEND_BACK_ADMIN_PUBLISHED };
-        }
+      // Not published (reopened in another tab, or gone): nothing to send back.
+      if (session?.status !== "complete") return { error: RACED };
+      if (!session.assigned_to) return { error: SEND_BACK_NOBODY };
+      const { data: submitted, error: submittedError } = await supabase
+        .from("label_submissions")
+        .select("id")
+        .eq("session_id", id)
+        .eq("submitted_by", session.assigned_to)
+        .limit(1);
+      if (submittedError) {
+        return {
+          error: `Could not send the session back: ${submittedError.message}`,
+        };
       }
-      const { data, error } = await supabase
+      if (!submitted || submitted.length === 0) {
+        return { error: SEND_BACK_ADMIN_PUBLISHED };
+      }
+      const update = supabase
         .from("label_sessions")
         .update({
           status: "labelling",
@@ -205,8 +212,12 @@ export function sendBackLabelSession(
         .eq("id", id)
         .eq("status", "complete")
         .eq("kind", "analyst")
-        .not("assigned_to", "is", null)
-        .select("id");
+        .eq("assigned_to", session.assigned_to);
+      const { data, error } = await (
+        session.completed_at
+          ? update.eq("completed_at", session.completed_at)
+          : update.is("completed_at", null)
+      ).select("id");
       if (error) {
         if (error.code === UNIQUE_VIOLATION) {
           return { error: ANOTHER_SESSION_OPEN };

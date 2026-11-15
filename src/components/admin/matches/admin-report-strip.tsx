@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Copy, MoreHorizontal } from "lucide-react";
@@ -9,6 +9,7 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
+import { copyFeedback, copyText, type CopyResult } from "./admin-report-copy";
 
 /** The page's bounded box: the strip on top, the report filling the rest. */
 export const ADMIN_REPORT_BOX =
@@ -27,11 +28,6 @@ export function ReadOnlyRailNote() {
     </p>
   );
 }
-
-/** How long "Copied" / "Copy failed" stays beside the ⋯ button. */
-export const COPY_FEEDBACK_MS = 1600;
-export const COPIED = "Copied";
-export const COPY_FAILED = "Copy failed";
 
 /** "8f3d21c6…7b31". */
 function shortId(id: string): string {
@@ -68,17 +64,10 @@ export function AdminReportStrip({
   const backHref = reportBackHref(matchId);
   const [menuOpen, setMenuOpen] = useState(false);
   // What the last copy did, said quietly beside the ⋯ button for a moment.
-  const [copied, setCopied] = useState<
-    typeof COPIED | typeof COPY_FAILED | null
-  >(null);
-  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [copied, setCopied] = useState<CopyResult | null>(null);
+  const [feedback] = useState(() => copyFeedback(setCopied));
 
-  useEffect(
-    () => () => {
-      if (copiedTimer.current) clearTimeout(copiedTimer.current);
-    },
-    [],
-  );
+  useEffect(() => feedback.dispose, [feedback]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -111,24 +100,9 @@ export function AdminReportStrip({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [router, backHref]);
 
-  function say(result: typeof COPIED | typeof COPY_FAILED) {
-    setCopied(result);
-    if (copiedTimer.current) clearTimeout(copiedTimer.current);
-    copiedTimer.current = setTimeout(() => setCopied(null), COPY_FEEDBACK_MS);
-  }
-
   function copy(value: string) {
     setMenuOpen(false);
-    // No clipboard (an insecure context) is a refusal too.
-    const write = navigator.clipboard?.writeText(value);
-    if (!write) {
-      say(COPY_FAILED);
-      return;
-    }
-    write.then(
-      () => say(COPIED),
-      () => say(COPY_FAILED),
-    );
+    void copyText(navigator.clipboard, value).then(feedback.say);
   }
 
   const copyIcon = (

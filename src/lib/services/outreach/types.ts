@@ -35,6 +35,16 @@ export function outreachEmail(no: number) {
   return OUTREACH_EMAILS.find((email) => email.no === no) ?? null;
 }
 
+/**
+ * The email an `?email=` value names, or the default when it names none. The
+ * page and its loading skeleton both read the address through this, so the
+ * skeleton draws the email the page is about to.
+ */
+export function outreachEmailNoFrom(value: string | null | undefined): number {
+  const no = Number(value);
+  return outreachEmail(no) ? no : DEFAULT_OUTREACH_EMAIL_NO;
+}
+
 export interface OutreachCc {
   name: string;
   email: string;

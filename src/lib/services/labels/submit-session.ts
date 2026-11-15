@@ -69,6 +69,10 @@ export const SUBMIT_PRACTICE_FAILED =
  * publish gate's own sentences (each begins "Not published: "). The publish's
  * failures after the gate ("Not published — the write failed …", a failed
  * verify or rebuild) are not among them.
+ *
+ * Matched by sentence, so `tests/label-submit-refusals.spec.ts` reads every
+ * refusal the submit path's modules can return and fails until a new or
+ * reworded one is placed on one side of this line or the other.
  */
 const BUSINESS = new Set<string>([
   ACTOR_REQUIRED,
@@ -83,7 +87,7 @@ const BUSINESS = new Set<string>([
   "Session not found.",
 ]);
 
-function isBusinessRefusal(sentence: string): boolean {
+export function isBusinessRefusal(sentence: string): boolean {
   return BUSINESS.has(sentence) || sentence.startsWith("Not published: ");
 }
 

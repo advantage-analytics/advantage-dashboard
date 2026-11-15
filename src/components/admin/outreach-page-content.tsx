@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ExternalLink } from "lucide-react";
 import {
   CountPills,
@@ -46,6 +46,7 @@ import {
   IMPORTABLE_LISTS,
   OUTREACH_EMAILS,
   outreachEmail,
+  outreachEmailNoFrom,
   type OutreachProgram,
   type OutreachRecipient,
   type OutreachRow,
@@ -1293,14 +1294,15 @@ function ignore() {}
 
 /**
  * Admin › Outreach while the page loads (`app/admin/outreach/loading.tsx`),
- * on the default email in Recipients mode: the title, Import send list, the
- * email pills by name and the mode pills (inert, without list sizes), the
- * Division / Conference / Status filters, and the recipient list's real
- * header over rows of bars beside the preview column. The summary line is
- * all counts, so it is a bar.
+ * on the email the address names (`?email=`, else the default) in Recipients
+ * mode: the title, Import send list, the email pills by name and the mode
+ * pills (inert, without list sizes), the Division / Conference / Status
+ * filters, and the recipient list's real header over rows of bars beside the
+ * preview column. The summary line is all counts, so it is a bar.
  */
 export function OutreachPageSkeleton() {
-  const programs = outreachEmail(DEFAULT_OUTREACH_EMAIL_NO)?.programs ?? true;
+  const emailNo = outreachEmailNoFrom(useSearchParams().get("email"));
+  const programs = outreachEmail(emailNo)?.programs ?? true;
   const header =
     "eyebrow-sm border-b border-[var(--border-hairline)] pt-3.5 pb-2.5";
   return (
@@ -1322,7 +1324,7 @@ export function OutreachPageSkeleton() {
             value: String(email.no),
             label: email.name,
           }))}
-          value={String(DEFAULT_OUTREACH_EMAIL_NO)}
+          value={String(emailNo)}
           onChange={ignore}
         />
         <div className="flex-1" />
