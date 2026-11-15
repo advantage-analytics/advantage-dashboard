@@ -744,9 +744,17 @@ const CourtLines = memo(function CourtLines() {
   const top = VIEWER_COURT.farBaselineY;
   const bottom = VIEWER_COURT.nearBaselineY;
   const centreMark = 8;
-  const segments: [number, number, number, number][] = [
+  // The baselines come first and alone get square caps: with butt caps each
+  // corner stroke stops at the other's centreline, leaving a missing
+  // quarter-square at all four corners that shows plainly when zoomed in. A
+  // square cap runs the baseline on by half a line width, just over the
+  // sideline's outer edge. Every other line ends inside a crossing line, where
+  // a butt end is already hidden.
+  const baselines: [number, number, number, number][] = [
     [left, top, right, top],
     [left, bottom, right, bottom],
+  ];
+  const segments: [number, number, number, number][] = [
     [left, top, left, bottom],
     [right, top, right, bottom],
     [VIEWER_COURT.singlesLeft, top, VIEWER_COURT.singlesLeft, bottom],
@@ -779,6 +787,16 @@ const CourtLines = memo(function CourtLines() {
         strokeWidth={VIEWER_COURT.lineWidth * LINE_SCALE}
         fill="none"
       >
+        {baselines.map(([x1, y1, x2, y2], index) => (
+          <line
+            key={`baseline-${index}`}
+            x1={x1}
+            y1={y1}
+            x2={x2}
+            y2={y2}
+            strokeLinecap="square"
+          />
+        ))}
         {segments.map(([x1, y1, x2, y2], index) => (
           <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} />
         ))}
