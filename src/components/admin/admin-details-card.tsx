@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from "react";
 
 import { AdminTeamDetailsDialog } from "@/components/admin/admin-team-details-dialog";
 import { TEXT_ACTION } from "@/components/admin/admin-people-card";
+import { InertButton } from "@/components/admin/inert-button";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { advButton } from "@/lib/ui/adv-button";
 import { uploadPolicyLabel } from "@/lib/workspace/types";
 import type { AdminTeamProgram } from "@/lib/data/admin-team-server";
@@ -37,6 +42,12 @@ import type { AdminTeamJoinLink } from "@/lib/data/admin-team-links";
  * the recorded contacts and is omitted for a program with no key. Both URLs
  * are rendered and copied, never logged — the player one carries a raw token.
  */
+/** The facts every program prints, in order, after its Conference. */
+const ALWAYS_FACTS = ["Time zone", "Who can upload", "Roster"] as const;
+
+/** What the skeleton labels: the Conference fact, then `ALWAYS_FACTS`. */
+const DETAIL_FACT_LABELS = ["Conference", ...ALWAYS_FACTS] as const;
+
 export function AdminDetailsCard({
   program,
   playerLink,
@@ -56,10 +67,11 @@ export function AdminDetailsCard({
 }) {
   const [editing, setEditing] = useState(false);
 
+  const [timeZone, uploader, roster] = ALWAYS_FACTS;
   const facts: { label: string; value: React.ReactNode }[] = [
-    { label: "Time zone", value: timeZoneLabel(program.timeZone) },
-    { label: "Who can upload", value: uploadPolicyLabel(program.uploadPolicy) },
-    { label: "Roster", value: program.rosterPublic ? "Public" : "Private" },
+    { label: timeZone, value: timeZoneLabel(program.timeZone) },
+    { label: uploader, value: uploadPolicyLabel(program.uploadPolicy) },
+    { label: roster, value: program.rosterPublic ? "Public" : "Private" },
   ];
   if (program.staffPageUrl) {
     facts.push({
@@ -233,4 +245,37 @@ const TIME_ZONE_LABELS: Record<string, string> = {
 
 function timeZoneLabel(timeZone: string): string {
   return TIME_ZONE_LABELS[timeZone] ?? timeZone;
+}
+
+/**
+ * The Details section while the team page loads: the real heading and fact
+ * labels the section always prints (Conference first, as the page seats it),
+ * bars for their values. Edit details draws as itself, inert until the page
+ * lands. The two join links are not drawn: which of them a program has is
+ * not known yet.
+ */
+export function AdminDetailsCardSkeleton() {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-[14px] font-medium text-[var(--ink-900)]">
+          Details
+        </h2>
+        <InertButton>Edit details</InertButton>
+      </div>
+      <PendingRegion
+        label="details"
+        innerClassName="grid grid-cols-[repeat(auto-fill,minmax(160px,240px))] gap-x-8 gap-y-4"
+      >
+        {DETAIL_FACT_LABELS.map((label) => (
+          <div key={label} className="min-w-0">
+            <div className="text-[12px] text-[var(--ink-600)]">{label}</div>
+            <div className="mt-0.5 flex h-[19.5px] items-center">
+              <PendingBar className="h-3 w-28" />
+            </div>
+          </div>
+        ))}
+      </PendingRegion>
+    </div>
+  );
 }

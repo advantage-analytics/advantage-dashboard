@@ -19,6 +19,10 @@ import {
   HOURS_FILL,
   HoursMeter,
 } from "@/components/dashboard/settings/teams/program-hours-summary";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { cn } from "@/lib/utils";
 import { squadLabel } from "@/lib/data/squad";
 import {
@@ -58,6 +62,92 @@ import { COL, ROW, TEAMS_COLUMNS } from "@/components/admin/teams-table-layout";
  * A client component: `ApproveChip`'s `onClick` needs a real event handler,
  * which a Server Component page (T12) cannot pass across the boundary.
  */
+const TABLE_CARD =
+  "overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]";
+const TABLE_INNER = "min-w-[920px] px-6 pt-0.5 pb-1.5";
+
+function TeamsHeaderRow() {
+  return (
+    <div
+      className={cn(
+        ROW,
+        "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
+      )}
+    >
+      {TEAMS_COLUMNS.map((column) => (
+        <span
+          key={column.label}
+          className={cn(
+            column.col,
+            "eyebrow-sm",
+            column.align === "right" && "text-right",
+          )}
+        >
+          {column.align === "right" ? (
+            // The eyebrow's 1.5px tracking trails the last letter too, so
+            // a right-aligned label ends 1.5px short of the digits under
+            // it. Pull the text, not the cell, back onto their edge.
+            <span className="-mr-[1.5px]">{column.label}</span>
+          ) : (
+            column.label
+          )}
+        </span>
+      ))}
+      {/* The chevron's column. No label — it names nothing, it is the
+          row's own affordance (Data Table law 3). */}
+      <span className={COL.chevron} aria-hidden="true" />
+    </div>
+  );
+}
+
+/**
+ * The table while its rows load: the real card and column labels, and rows
+ * of bars on the same tracks (`teams-table-layout.ts`). Admin › Teams and a
+ * conference's Teams section both draw it.
+ */
+export function TeamsTableSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div className={TABLE_CARD}>
+      <div className={TABLE_INNER}>
+        <TeamsHeaderRow />
+        <PendingRegion label="teams">
+          {Array.from({ length: rows }, (_, i) => (
+            <div key={i} className={cn(ROW, "h-[52px]")}>
+              <span
+                className={cn(COL.program, "flex min-w-0 items-center gap-3")}
+              >
+                <PendingBar className="size-8 shrink-0 rounded-[var(--radius-element)]" />
+                <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <PendingBar className="h-3 w-56" />
+                  <PendingBar className="h-2.5 w-36" />
+                </span>
+              </span>
+              <span className={cn(COL.members, "flex justify-end")}>
+                <PendingBar className="h-3 w-6" />
+              </span>
+              <span
+                className={cn(COL.hours, "flex min-w-0 items-center gap-2.5")}
+              >
+                <PendingBar className="h-1.5 flex-1" />
+                <span className="min-w-[76px] shrink-0">
+                  <PendingBar className="h-3 w-16" />
+                </span>
+              </span>
+              <span
+                className={cn(COL.owner, "flex min-w-0 items-center gap-2")}
+              >
+                <PendingBar className="size-[26px] shrink-0 rounded-full" />
+                <PendingBar className="h-3 w-28" />
+              </span>
+              <span className={COL.chevron} />
+            </div>
+          ))}
+        </PendingRegion>
+      </div>
+    </div>
+  );
+}
+
 export function TeamsTable({
   rows,
   emptyTitle = "No teams match this view",
@@ -78,37 +168,9 @@ export function TeamsTable({
   onOpenRow?: (row: AdminTeamRow) => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div className="min-w-[920px] px-6 pt-0.5 pb-1.5">
-        <div
-          className={cn(
-            ROW,
-            "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-          )}
-        >
-          {TEAMS_COLUMNS.map((column) => (
-            <span
-              key={column.label}
-              className={cn(
-                column.col,
-                "eyebrow-sm",
-                column.align === "right" && "text-right",
-              )}
-            >
-              {column.align === "right" ? (
-                // The eyebrow's 1.5px tracking trails the last letter too, so
-                // a right-aligned label ends 1.5px short of the digits under
-                // it. Pull the text, not the cell, back onto their edge.
-                <span className="-mr-[1.5px]">{column.label}</span>
-              ) : (
-                column.label
-              )}
-            </span>
-          ))}
-          {/* The chevron's column. No label — it names nothing, it is the
-              row's own affordance (Data Table law 3). */}
-          <span className={COL.chevron} aria-hidden="true" />
-        </div>
+    <div className={TABLE_CARD}>
+      <div className={TABLE_INNER}>
+        <TeamsHeaderRow />
 
         {rows.length === 0 ? (
           <TableEmptyBody

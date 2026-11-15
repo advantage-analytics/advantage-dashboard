@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AdminBackLink } from "@/components/admin/admin-back-link";
 import { AdminPage } from "@/components/admin/admin-page";
 import { LabelConsole } from "@/components/admin/labels/label-console";
+import { LABEL_SESSION_PAGE } from "@/components/admin/labels/label-layout";
 import { getLabelUploadInfo } from "@/lib/data/label-overview-server";
 import { getLabelSession } from "@/lib/data/labels-server";
 import { readPracticeSourceId } from "@/lib/data/practice-server";
@@ -107,7 +108,7 @@ export default async function AdminLabelSessionPage({
   const { session, video, marks } = result;
 
   return (
-    <AdminPage className="h-[calc(100dvh-var(--header-h))] gap-3.5 overflow-hidden pb-6">
+    <AdminPage className={LABEL_SESSION_PAGE}>
       {/* The way back sits where every admin detail page keeps it (the team
           and conference pages), above the header, not among its actions. */}
       <AdminBackLink href="/admin/labels" className="shrink-0 self-start">

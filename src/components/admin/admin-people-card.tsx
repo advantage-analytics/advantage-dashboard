@@ -41,6 +41,11 @@ import {
 } from "@/lib/services/programs/admin-team-actions";
 import { claimRoleLabel } from "@/lib/services/programs/claim-roles";
 import { actionRejected } from "@/lib/ui/action-rejected";
+import { InertButton } from "@/components/admin/inert-button";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { advButton } from "@/lib/ui/adv-button";
 import { getInitials, shortDate } from "@/lib/data/match-utils";
 import {
@@ -718,6 +723,44 @@ export function AdminPeopleList({
         viewerName={owner?.name ?? "No current owner"}
         action={adminTransferProgramOwnership}
       />
+    </section>
+  );
+}
+
+/**
+ * The People list while the team page loads: the real heading and its two
+ * actions (inert until the page lands), the count and seat ledger as a bar,
+ * and rows of bars on the list's own tracks.
+ */
+export function AdminPeopleListSkeleton() {
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
+        <h2 className="flex items-center gap-1.5 text-[14px] font-medium text-[var(--ink-900)]">
+          People <PendingBar className="h-3 w-36" />
+        </h2>
+        <div className="flex gap-2">
+          <InertButton>Add player</InertButton>
+          <InertButton>Invite people</InertButton>
+        </div>
+      </div>
+      <PendingRegion label="people">
+        <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
+          <ul className="flex flex-col">
+            {[0, 1, 2, 3, 4].map((row) => (
+              <li key={row} className={ROW}>
+                <PendingBar className="size-[26px] rounded-full" />
+                <span className="flex min-w-0 flex-col gap-1.5">
+                  <PendingBar className="h-3 w-40" />
+                  <PendingBar className="h-2.5 w-52" />
+                </span>
+                <PendingBar className="h-3 w-16" />
+                <span />
+              </li>
+            ))}
+          </ul>
+        </div>
+      </PendingRegion>
     </section>
   );
 }

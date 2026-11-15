@@ -19,6 +19,14 @@
 
 export type LabelLayoutMode = "overview" | "black";
 
+/**
+ * `AdminPage`'s classes on `/admin/labels/[sessionId]`, the page and its
+ * skeleton both: bounded to the viewport under the admin header and clipped,
+ * so the console's points rail is the one thing that scrolls.
+ */
+export const LABEL_SESSION_PAGE =
+  "h-[calc(100dvh-var(--header-h))] gap-3.5 overflow-hidden pb-6";
+
 /** The page opens on the overview; a spec that reads the rail asks for black. */
 export const DEFAULT_LAYOUT_MODE: LabelLayoutMode = "black";
 

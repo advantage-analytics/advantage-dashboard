@@ -6,13 +6,16 @@ import { CountPills, FilterMenuPill } from "@/components/admin/admin-cells";
 import { PilotsTable } from "@/components/admin/pilots/pilots-table";
 import { ConferencesTable } from "@/components/admin/conferences-table";
 import { markAdminRowSeen } from "@/app/admin/seen-actions";
-import { TeamsTable } from "@/components/admin/teams-table";
+import { AdminPage } from "@/components/admin/admin-page";
+import { InertButton } from "@/components/admin/inert-button";
+import { TeamsTable, TeamsTableSkeleton } from "@/components/admin/teams-table";
 import {
   ApprovePilotPopover,
   type ApprovePilotTarget,
 } from "@/components/admin/approve-pilot-popover";
 import { CreateTeamDialog } from "@/components/admin/create-team-dialog";
 import { loadMoreAdminTeams } from "@/components/admin/teams-actions";
+import { PendingBar } from "@/components/dashboard/loading/pending";
 import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { actionRejectedWith } from "@/lib/ui/action-rejected";
@@ -103,6 +106,14 @@ export interface FacetOption {
 
 /** The facet menus' unfiltered option — never a real column value. */
 const ANY = "__any";
+
+/** The Programs view's closing line. */
+const PROGRAMS_FOOTNOTE =
+  "Programs that are not on Advantage yet only appear in search. Conferences are in the account menu.";
+
+/** The facet menus' unfiltered labels — what each pill reads at rest. */
+const ALL_DIVISIONS = "All divisions";
+const ALL_CONFERENCES = "All conferences";
 
 export interface TeamsFacetOptions {
   divisions: FacetOption[];
@@ -358,7 +369,7 @@ export function TeamsPageContent({
             <FilterMenuPill<string>
               label="Division"
               width={220}
-              options={facetOptions("All divisions", facets.divisions)}
+              options={facetOptions(ALL_DIVISIONS, facets.divisions)}
               value={cut.division ?? ANY}
               onChange={(next) =>
                 pushCut({ division: next === ANY ? null : next })
@@ -367,7 +378,7 @@ export function TeamsPageContent({
             <FilterMenuPill<string>
               label="Conference"
               width={280}
-              options={facetOptions("All conferences", facets.conferences)}
+              options={facetOptions(ALL_CONFERENCES, facets.conferences)}
               value={cut.conference ?? ANY}
               onChange={(next) =>
                 pushCut({ conference: next === ANY ? null : next })
@@ -473,7 +484,7 @@ export function TeamsPageContent({
           ? "Video hours are set per account. Pilots are added on the Pilots page, in the account menu."
           : conferencesView
             ? "Search, Missing details and Add conference are on the Conferences page, in the account menu."
-            : "Programs that are not on Advantage yet only appear in search. Conferences are in the account menu."}
+            : PROGRAMS_FOOTNOTE}
       </p>
 
       <ApprovePilotPopover
@@ -508,5 +519,67 @@ function CreateTeamButton() {
       </button>
       <CreateTeamDialog open={open} onOpenChange={setOpen} />
     </>
+  );
+}
+
+/** A no-op for the skeleton's inert controls. */
+function ignore() {}
+
+/**
+ * Admin › Teams while the page loads (`app/admin/teams/loading.tsx`), in the
+ * default Programs view — `?view=pilots` and `?view=conferences` share the
+ * route and land on this too. The title, the primary, the three view pills,
+ * the Division and Conference menus and the sort as the loaded page opens
+ * them, inert and without counts; the table's real column labels over rows
+ * of bars; and the view's closing line. The lede and the "Showing" line
+ * carry counts, so they are bars.
+ */
+export function TeamsPageSkeleton() {
+  return (
+    <AdminPage>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-display">Teams</h1>
+            <PendingBar className="mt-3 mb-[3px] h-3 w-72" />
+          </div>
+          <InertButton variant="primary" size="md">
+            Create team
+          </InertButton>
+        </div>
+
+        <div inert className="mt-2 flex flex-wrap items-center gap-3">
+          <CountPills<TeamsViewPill>
+            label="View"
+            options={TEAMS_VIEW_PILLS.map((value) => ({
+              value,
+              label: VIEW_PILL_LABELS[value],
+            }))}
+            value="programs"
+            onChange={ignore}
+          />
+          <FilterMenuPill<string>
+            label="Division"
+            width={220}
+            options={[{ value: ANY, label: ALL_DIVISIONS }]}
+            value={ANY}
+            onChange={ignore}
+          />
+          <FilterMenuPill<string>
+            label="Conference"
+            width={280}
+            options={[{ value: ANY, label: ALL_CONFERENCES }]}
+            value={ANY}
+            onChange={ignore}
+          />
+          <div className="flex-1" />
+          <SortTrigger>{SORT_OPTIONS[0].label}</SortTrigger>
+        </div>
+
+        <TeamsTableSkeleton />
+        <PendingBar className="my-[3px] h-3 w-44" />
+        <p className="text-[12px] text-[var(--ink-600)]">{PROGRAMS_FOOTNOTE}</p>
+      </div>
+    </AdminPage>
   );
 }

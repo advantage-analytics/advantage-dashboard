@@ -10,7 +10,12 @@ import {
   FilterMenuPill,
   PillSearch,
 } from "@/components/admin/admin-cells";
-import { ConferencesTable } from "@/components/admin/conferences-table";
+import {
+  ConferencesTable,
+  ConferencesTableSkeleton,
+} from "@/components/admin/conferences-table";
+import { InertButton } from "@/components/admin/inert-button";
+import { PendingBar } from "@/components/dashboard/loading/pending";
 import { AddConferenceDialog } from "@/components/admin/add-conference-dialog";
 import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
@@ -297,5 +302,54 @@ function ShowAll({ onClick }: { onClick: () => void }) {
     >
       Show all
     </button>
+  );
+}
+
+/** A no-op for the skeleton's inert controls. */
+function ignore() {}
+
+/**
+ * Admin › Conferences while the page loads (`app/admin/conferences/loading.tsx`):
+ * the title and Add conference, then the search, the view pills, the
+ * Division menu and the sort as the loaded page opens them — inert, and
+ * without counts — then the table's real column labels over rows of bars.
+ * The summary carries counts, so it is a bar.
+ */
+export function ConferencesPageSkeleton() {
+  return (
+    <AdminPage className="gap-4">
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-display">Conferences</h1>
+          <PendingBar className="mt-3 mb-[3px] h-3 w-72" />
+        </div>
+        <InertButton variant="primary" size="md">
+          <Plus className="size-3.5" strokeWidth={1.5} aria-hidden />
+          Add conference
+        </InertButton>
+      </div>
+
+      <div inert className="mt-2 flex flex-wrap items-center gap-3">
+        <PillSearch
+          value=""
+          onChange={ignore}
+          placeholder="Conference"
+          label="Search conferences"
+        />
+        <CountPills options={VIEW_OPTIONS} value="all" onChange={ignore} />
+        <FilterDivider />
+        <FilterMenuPill<string>
+          label="Division"
+          width={196}
+          options={[{ value: ANY_DIVISION, label: "All" }]}
+          value={ANY_DIVISION}
+          onChange={ignore}
+        />
+        <div className="flex-1" />
+        <SortTrigger>{SORT_OPTIONS[0].label}</SortTrigger>
+      </div>
+
+      <ConferencesTableSkeleton />
+    </AdminPage>
   );
 }

@@ -13,6 +13,10 @@ import {
 // pure name helper, nothing more — and client components already import
 // `divisionLabel` from it (`schedule/static/new-dual-flow.tsx`).
 import { divisionLabel } from "@/lib/data/programs-server";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { cn } from "@/lib/utils";
 import type { AdminConferenceRow } from "@/lib/data/admin-conferences-view";
 import {
@@ -47,24 +51,9 @@ export function ConferencesTable({
   emptyAction?: TableEmptyAction;
 }) {
   return (
-    <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div className="min-w-[760px] px-6 pt-0.5 pb-1.5">
-        <div
-          className={cn(
-            ROW,
-            "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-          )}
-        >
-          {CONFERENCES_COLUMNS.map((column) => (
-            <span
-              key={column.label || "chevron"}
-              aria-hidden={column.label ? undefined : true}
-              className={cn(column.col, "eyebrow-sm")}
-            >
-              {column.label}
-            </span>
-          ))}
-        </div>
+    <div className={TABLE_CARD}>
+      <div className={TABLE_INNER}>
+        <ConferencesHeaderRow />
 
         {rows.length === 0 ? (
           <TableEmptyBody
@@ -75,6 +64,77 @@ export function ConferencesTable({
         ) : (
           rows.map((row) => <ConferenceRow key={row.id} row={row} />)
         )}
+      </div>
+    </div>
+  );
+}
+
+const TABLE_CARD =
+  "overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]";
+const TABLE_INNER = "min-w-[760px] px-6 pt-0.5 pb-1.5";
+
+function ConferencesHeaderRow() {
+  return (
+    <div
+      className={cn(
+        ROW,
+        "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
+      )}
+    >
+      {CONFERENCES_COLUMNS.map((column) => (
+        <span
+          key={column.label || "chevron"}
+          aria-hidden={column.label ? undefined : true}
+          className={cn(column.col, "eyebrow-sm")}
+        >
+          {column.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The table while its rows load: the real card and column labels over rows
+ * of bars on the same tracks (`conferences-table-layout.ts`).
+ */
+export function ConferencesTableSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div className={TABLE_CARD}>
+      <div className={TABLE_INNER}>
+        <ConferencesHeaderRow />
+        <PendingRegion label="conferences">
+          {Array.from({ length: rows }, (_, i) => (
+            <div key={i} className={cn(ROW, "h-[52px]")}>
+              <span
+                className={cn(
+                  COL.conference,
+                  "flex min-w-0 items-center gap-3",
+                )}
+              >
+                <PendingBar className="size-8 shrink-0 rounded-[var(--radius-element)]" />
+                <span className="flex min-w-0 flex-col gap-1.5">
+                  <PendingBar className="h-3 w-56" />
+                  <PendingBar className="h-2.5 w-32" />
+                </span>
+              </span>
+              <span className={COL.division}>
+                <PendingBar className="h-3 w-10" />
+              </span>
+              <span className={cn(COL.teams, "flex justify-end")}>
+                <PendingBar className="h-3 w-6" />
+              </span>
+              <span className={cn(COL.onAdvantage, "flex flex-col gap-1.5")}>
+                <PendingBar className="h-3 w-14" />
+                <PendingBar className="h-[3px] w-full" />
+              </span>
+              <span className={cn(COL.pilot, "flex justify-end")}>
+                <PendingBar className="h-3 w-4" />
+              </span>
+              <span className={COL.chevron} />
+            </div>
+          ))}
+        </PendingRegion>
       </div>
     </div>
   );

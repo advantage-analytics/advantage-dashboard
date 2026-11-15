@@ -4,6 +4,10 @@ import Link from "next/link";
 
 import { TEXT_ACTION } from "@/components/admin/admin-people-card";
 import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
+import {
   HOURS_FILL,
   HoursMeter,
 } from "@/components/dashboard/settings/teams/program-hours-summary";
@@ -74,5 +78,25 @@ export function TeamHours({
         />
       )}
     </section>
+  );
+}
+
+/**
+ * The hours block while the team page loads: the same column, bars for the
+ * figure and the meter. "Add hours" is not drawn — its link needs the
+ * program's id, and a dead word would read as a working one.
+ */
+export function TeamHoursSkeleton() {
+  return (
+    <PendingRegion
+      label="video hours"
+      className="flex min-w-[220px] flex-[0_1_320px] flex-col"
+      innerClassName="flex flex-col gap-2"
+    >
+      <span className="flex h-[21px] items-center">
+        <PendingBar className="h-3.5 w-48" />
+      </span>
+      <PendingBar className="h-1.5 w-full" />
+    </PendingRegion>
   );
 }

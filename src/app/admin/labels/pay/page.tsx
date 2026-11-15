@@ -1,5 +1,8 @@
 import { AdminPage } from "@/components/admin/admin-page";
-import { PayReportTable } from "@/components/admin/labels-practice/pay-report-table";
+import {
+  PayReportHeading,
+  PayReportTable,
+} from "@/components/admin/labels-practice/pay-report-table";
 import { getLabelPayReport, parseDay } from "@/lib/data/practice-server";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
@@ -34,14 +37,7 @@ export default async function LabelPayPage({
 
   return (
     <AdminPage className="gap-6">
-      <div>
-        <h1 className="text-display">Pay report</h1>
-        <p className="text-body-sm mt-[9px]">
-          Hours of match video each labeller published, counted once on the day
-          it was first published. Checked is what an admin has passed. Practice
-          sets are not paid hours.
-        </p>
-      </div>
+      <PayReportHeading />
 
       <form method="get" className="flex flex-wrap items-end gap-4">
         <label className="flex flex-col gap-1.5">

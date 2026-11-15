@@ -91,7 +91,8 @@ export function Lane({
 }: {
   id: string;
   title: string;
-  count: string;
+  /** "N matches · H.HH h" — or, in the admin board's skeleton, its bar. */
+  count: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (

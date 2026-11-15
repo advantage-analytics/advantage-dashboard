@@ -11,12 +11,18 @@ import {
   type AdminLane,
 } from "@/components/admin/labels-board/label-job-row";
 import { labelJobSeenKey } from "@/components/admin/labels-board/seen-key";
+import { AdminPage } from "@/components/admin/admin-page";
 import {
   Lane,
   LaneEmpty,
+  ROW_GRID,
   TODO_VISIBLE,
   laneCount,
 } from "@/components/label/label-board";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { markAdminRowSeen } from "@/app/admin/seen-actions";
 import type { LabelJobOwner } from "@/lib/data/label-overview-server";
 import type {
@@ -142,6 +148,44 @@ function LaneRows({
   );
 }
 
+/**
+ * The page's heading: the title, the Pay report link and the lede under them.
+ * The page and its skeleton both draw it, so the two cannot drift.
+ */
+export function LabelsHeading({ lede }: { lede: React.ReactNode }) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-4">
+        <h1 className="text-display">Labels</h1>
+        <Link
+          href="/admin/labels/pay"
+          className="text-[13px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+        >
+          Pay report
+        </Link>
+      </div>
+      {lede}
+    </div>
+  );
+}
+
+/** The line under the lanes: where the queue starts, and where older ones are. */
+function QueueFromLine() {
+  return (
+    <p className="text-[12px] text-[var(--ink-500)]">
+      The board shows matches analysed from {QUEUE_FROM_TEXT}. Label older ones
+      from{" "}
+      <Link
+        href="/admin/matches"
+        className="font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+      >
+        Matches
+      </Link>
+      .
+    </p>
+  );
+}
+
 export function LabelsBoard({
   board,
   now,
@@ -180,18 +224,74 @@ export function LabelsBoard({
           );
         })}
       </div>
-      <p className="text-[12px] text-[var(--ink-500)]">
-        The board shows matches analysed from {QUEUE_FROM_TEXT}. Label older
-        ones from{" "}
-        <Link
-          href="/admin/matches"
-          className="font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-        >
-          Matches
-        </Link>
-        .
-      </p>
+      <QueueFromLine />
     </div>
+  );
+}
+
+/** Rows each lane's skeleton draws: To do runs longest. */
+const PENDING_LANE_ROWS: Readonly<Record<AdminLane, number>> = {
+  todo: 3,
+  inProgress: 2,
+  toCheck: 2,
+  submitted: 0,
+};
+
+/**
+ * Admin › Labels while the page loads (`app/admin/labels/loading.tsx`): the
+ * heading, the lane wells under their real names and the lines the page
+ * always prints, with bars for the lede, each lane's count and its rows.
+ * Submitted and Requested reviews are not drawn: both appear only while they
+ * have rows, and a skeleton cannot know that they will.
+ */
+export function LabelsPageSkeleton() {
+  return (
+    <AdminPage className="gap-8">
+      <LabelsHeading lede={<PendingBar className="mt-3 mb-[3px] h-3 w-80" />} />
+      <div className="flex flex-col gap-3">
+        <PendingRegion
+          label="the label queue"
+          innerClassName="flex flex-wrap items-start gap-4"
+        >
+          {LANES.filter((lane) => !lane.onlyWithRows).map(
+            ({ lane, id, title, foot }) => (
+              <Lane
+                key={id}
+                id={`${id}-pending`}
+                title={title}
+                count={<PendingBar className="h-3 w-24" />}
+              >
+                <div className="flex flex-col gap-1">
+                  {Array.from({ length: PENDING_LANE_ROWS[lane] }, (_, i) => (
+                    <div
+                      key={i}
+                      className="flex flex-col rounded-[var(--radius-element)] bg-[var(--surface-card)] px-3 pb-2"
+                    >
+                      <span className={cn(ROW_GRID, "h-[40px] w-full")}>
+                        <PendingBar className="h-3.5 w-10" />
+                        <PendingBar className="h-3 w-16" />
+                        <span className="col-span-2 flex justify-end">
+                          <PendingBar className="h-3 w-20" />
+                        </span>
+                      </span>
+                      <span className="flex h-[18px] items-center">
+                        <PendingBar className="h-3 w-48" />
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {foot ? (
+                  <p className="px-3 pb-2 text-[12px] leading-[1.5] text-[var(--ink-500)]">
+                    {foot}
+                  </p>
+                ) : null}
+              </Lane>
+            ),
+          )}
+        </PendingRegion>
+        <QueueFromLine />
+      </div>
+    </AdminPage>
   );
 }
 

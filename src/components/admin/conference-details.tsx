@@ -29,6 +29,11 @@ import {
   type ConferenceDraft,
 } from "@/lib/services/programs/conference-format";
 import { actionRejected } from "@/lib/ui/action-rejected";
+import { InertButton } from "@/components/admin/inert-button";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
@@ -44,6 +49,9 @@ import { cn } from "@/lib/utils";
  * the conference's record (Name, Short name, Division, Website) — renaming is
  * its Name field, so the header's `⋯` menu carries no rename of its own.
  */
+/** The facts every conference prints, in order; Website follows when set. */
+const ALWAYS_FACTS = ["Division", "Teams", "On Advantage"] as const;
+
 export function ConferenceDetails({
   conference,
 }: {
@@ -51,13 +59,14 @@ export function ConferenceDetails({
 }) {
   const [editing, setEditing] = useState(false);
 
+  const [division, teams, onAdvantage] = ALWAYS_FACTS;
   const facts: { label: string; value: React.ReactNode }[] = [
     {
-      label: "Division",
+      label: division,
       value: divisionLongLabel(conference.division) ?? "Not set",
     },
-    { label: "Teams", value: count(conference.teams) },
-    { label: "On Advantage", value: count(conference.onAdvantage) },
+    { label: teams, value: count(conference.teams) },
+    { label: onAdvantage, value: count(conference.onAdvantage) },
   ];
   if (conference.website) {
     facts.push({
@@ -360,5 +369,36 @@ function TextInput({
       onChange={(event) => onChange(event.target.value)}
       className={cn(advField("underline"), "w-full outline-none")}
     />
+  );
+}
+
+/**
+ * The Details section while the conference page loads: the real heading,
+ * Edit (inert until the page lands) and the fact labels every conference
+ * prints, with bars for their values.
+ */
+export function ConferenceDetailsSkeleton() {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-[14px] font-medium text-[var(--ink-900)]">
+          Details
+        </h2>
+        <InertButton>Edit</InertButton>
+      </div>
+      <PendingRegion
+        label="details"
+        innerClassName="grid grid-cols-[repeat(auto-fill,minmax(160px,240px))] gap-x-8 gap-y-4"
+      >
+        {ALWAYS_FACTS.map((label) => (
+          <div key={label} className="min-w-0">
+            <div className="text-[12px] text-[var(--ink-600)]">{label}</div>
+            <div className="mt-0.5 flex h-[19.5px] items-center">
+              <PendingBar className="h-3 w-20" />
+            </div>
+          </div>
+        ))}
+      </PendingRegion>
+    </div>
   );
 }

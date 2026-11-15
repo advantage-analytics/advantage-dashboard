@@ -8,6 +8,13 @@ import {
   ChevronRight,
   CircleAlert,
 } from "lucide-react";
+import { AdminBackLink } from "@/components/admin/admin-back-link";
+import { AdminPage } from "@/components/admin/admin-page";
+import { LABEL_SESSION_PAGE } from "@/components/admin/labels/label-layout";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import type { LabelUploadInfo } from "@/lib/data/label-overview-server";
 import { buildAppliedRows, expectedStats } from "@/lib/services/labels/apply";
 import {
@@ -1644,5 +1651,105 @@ function StatRow({
         {unit}
       </dd>
     </>
+  );
+}
+
+// ── The admin's page, loading ──────────────────────────────────────────────
+
+/** Rows the checklist's skeleton draws: the admin's usual set. */
+const PENDING_CHECKS = 5;
+
+/**
+ * `/admin/labels/[sessionId]` while it loads (`[sessionId]/loading.tsx`): the
+ * page's own bounded column with the way back, the console's header (the
+ * avatar pair, title and meta line, the header's buttons) and this overview's
+ * body — the "N flags left" line, the "Before you publish" card and the
+ * "Entered at upload" bar — as `LabelDashboard` draws them for an admin.
+ * Card titles are real; every value, and every button that depends on the
+ * session's status, is a bar.
+ */
+export function LabelSessionPageSkeleton() {
+  return (
+    <AdminPage className={LABEL_SESSION_PAGE}>
+      <AdminBackLink href="/admin/labels" className="shrink-0 self-start">
+        Labels
+      </AdminBackLink>
+      <div className="flex min-h-0 flex-1 flex-col gap-6">
+        <PendingRegion
+          label="the match"
+          className="shrink-0"
+          innerClassName="flex items-end justify-between gap-8"
+        >
+          <div className="flex min-w-0 items-center gap-4">
+            <span className="flex shrink-0">
+              <PendingBar className="relative size-10 rounded-full" />
+              <PendingBar className="-ml-2.5 size-10 rounded-full shadow-[0_0_0_2px_var(--surface-card)]" />
+            </span>
+            <div className="flex min-w-0 flex-col gap-1.5">
+              <span className="flex h-9 items-center">
+                <PendingBar className="h-6 w-80" />
+              </span>
+              <span className="flex h-[26px] items-center gap-1.5">
+                <PendingBar className="size-[26px] rounded-[var(--radius-element)]" />
+                <PendingBar className="h-3 w-64" />
+              </span>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-5">
+            <PendingBar className="h-8 w-[72px] rounded-[var(--radius-button)]" />
+            <PendingBar className="h-8 w-28 rounded-[var(--radius-button)]" />
+            <PendingBar className="h-3 w-20" />
+          </div>
+        </PendingRegion>
+
+        <div className="-mr-14 flex min-h-0 flex-1 flex-col overflow-y-auto pr-14 pb-10">
+          <div className="flex w-full flex-col gap-7">
+            <PendingRegion
+              label="flags left"
+              innerClassName="flex h-6 items-center"
+            >
+              <PendingBar className="h-3.5 w-96" />
+            </PendingRegion>
+
+            <Card title="Before you publish">
+              <PendingRegion label="the publish checklist">
+                <ul className="flex flex-col">
+                  {Array.from({ length: PENDING_CHECKS }, (_, i) => (
+                    <li
+                      key={i}
+                      className="grid min-h-12 grid-cols-[16px_minmax(0,1fr)_auto] items-center gap-x-3 border-t border-[var(--border-card)] py-2.5 first:border-t-0 first:pt-0 last:pb-0"
+                    >
+                      <PendingBar className="size-4 rounded-full" />
+                      <span className="flex min-w-0 flex-col gap-1.5">
+                        <PendingBar className="h-3 w-48" />
+                        <PendingBar className="h-3 w-80" />
+                      </span>
+                      <PendingBar className="h-3 w-14" />
+                    </li>
+                  ))}
+                </ul>
+              </PendingRegion>
+            </Card>
+
+            <section className="flex min-h-11 items-center justify-between gap-4 rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] py-2.5 pr-3 pl-4">
+              <span className="flex min-w-0 items-center gap-x-3">
+                <span className="text-body font-medium" style={INK[900]}>
+                  Entered at upload
+                </span>
+                <PendingRegion label="what was entered at upload">
+                  <PendingBar className="h-3 w-72" />
+                </PendingRegion>
+              </span>
+              <ChevronDown
+                className="size-3.5 shrink-0"
+                strokeWidth={1.8}
+                style={{ color: "var(--ink-400)" }}
+                aria-hidden="true"
+              />
+            </section>
+          </div>
+        </div>
+      </div>
+    </AdminPage>
   );
 }

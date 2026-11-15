@@ -5,6 +5,10 @@ import { ChevronRight } from "lucide-react";
 
 import { TEAM_LIST_GRID } from "@/components/admin/admin-people-card";
 import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
+import {
   MatchStatus,
   UploadedAt,
 } from "@/components/admin/matches/matches-page-content";
@@ -144,6 +148,50 @@ export function TeamLatestMatches(props: TeamLatestMatchesProps) {
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/**
+ * Latest matches while the page loads: the real heading, then three rows of
+ * bars on the People list's tracks. On a team page the "All N in Matches"
+ * link carries a count, so it is a bar; a conference page has no link. A
+ * conference's rows name the program under the match, so they run two lines.
+ */
+export function TeamLatestMatchesSkeleton({
+  scope = "team",
+}: {
+  scope?: "team" | "conference";
+}) {
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex items-baseline justify-between gap-4">
+        <h2 className="text-[14px] font-medium text-[var(--ink-900)]">
+          Latest matches
+        </h2>
+        {scope === "team" ? <PendingBar className="h-3 w-24" /> : null}
+      </div>
+      <PendingRegion label="latest matches">
+        <ul className="flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
+          {[0, 1, 2].map((row) => (
+            <li
+              key={row}
+              className={`${TEAM_LIST_GRID} min-h-11 border-t border-[var(--border-hairline)] px-4 py-1.5 first:border-t-0`}
+            >
+              <span className="col-span-2 flex min-w-0 flex-col gap-1.5">
+                <PendingBar className="h-3 w-56" />
+                {scope === "conference" ? (
+                  <PendingBar className="h-2.5 w-36" />
+                ) : null}
+              </span>
+              <PendingBar className="h-3 w-28" />
+              <span className="flex justify-end">
+                <PendingBar className="h-3 w-16" />
+              </span>
+            </li>
+          ))}
+        </ul>
+      </PendingRegion>
     </section>
   );
 }

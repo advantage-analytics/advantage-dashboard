@@ -27,6 +27,10 @@ import { ResubmitButton } from "@/components/admin/matches/resubmit-button";
 import { DRAWER_ATTR } from "@/components/dashboard/matches/match-drawer";
 import { VerifiedMark } from "@/components/dashboard/matches/verified-mark";
 import { AnalysisStatusLine } from "@/components/dashboard/shared/analysis-status-line";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import { markAdminRowSeen } from "@/app/admin/seen-actions";
 import { advButton } from "@/lib/ui/adv-button";
@@ -78,6 +82,56 @@ const GRID =
   "grid grid-cols-[minmax(180px,1fr)_minmax(160px,1fr)_200px_64px_96px] items-center gap-4";
 
 const COLUMNS = ["Match", "Workspace", "Status", "Video", "Uploaded"] as const;
+
+/** The view pills, in order. */
+const VIEW_PILLS: readonly { value: View; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "uploading", label: "Uploading" },
+  { value: "analyzing", label: "Analyzing" },
+  { value: "failed", label: "Failed" },
+];
+
+/** The Program menu's unfiltered option — its label is the pill's resting value. */
+const ALL_PROGRAMS = "All programs";
+
+/** The table card, the loaded page's and its skeleton's. */
+const TABLE_CARD =
+  "mt-4 overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]";
+
+/** The title, its lede and the page's one primary. */
+function MatchesHeading() {
+  return (
+    <div className="flex flex-wrap items-end gap-4">
+      <div className="min-w-0 flex-1">
+        <h1 className="text-display">Matches</h1>
+        <p className="text-body-sm mt-[9px]">
+          Every match on Advantage, newest first. Uploads in progress show here
+          too.
+        </p>
+      </div>
+      <Link href="/admin/uploads/new" className={advButton()}>
+        Upload a match
+      </Link>
+    </div>
+  );
+}
+
+function MatchesHeaderRow() {
+  return (
+    <div
+      className={cn(
+        GRID,
+        "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
+      )}
+    >
+      {COLUMNS.map((label) => (
+        <span key={label} className="eyebrow-sm">
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 const VIEW_MATCH: Record<View, (bucket: AdminMatchBucket) => boolean> = {
   all: () => true,
@@ -146,14 +200,7 @@ export function MatchesPageContent({
     [scoped, view],
   );
 
-  const pillOptions = (
-    [
-      ["all", "All"],
-      ["uploading", "Uploading"],
-      ["analyzing", "Analyzing"],
-      ["failed", "Failed"],
-    ] as const
-  ).map(([value, label]) => ({
+  const pillOptions = VIEW_PILLS.map(({ value, label }) => ({
     value,
     label,
     count: scoped.filter((row) => VIEW_MATCH[value](row.bucket)).length,
@@ -170,7 +217,7 @@ export function MatchesPageContent({
       } else personal += 1;
     }
     const options: FilterMenuOption<string>[] = [
-      { value: "all", label: "All programs", count: rows.length },
+      { value: "all", label: ALL_PROGRAMS, count: rows.length },
       ...[...teams.values()]
         .sort((a, b) =>
           workspaceName(a.row).localeCompare(workspaceName(b.row)),
@@ -363,18 +410,7 @@ export function MatchesPageContent({
         )
       }
     >
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-display">Matches</h1>
-          <p className="text-body-sm mt-[9px]">
-            Every match on Advantage, newest first. Uploads in progress show
-            here too.
-          </p>
-        </div>
-        <Link href="/admin/uploads/new" className={advButton()}>
-          Upload a match
-        </Link>
-      </div>
+      <MatchesHeading />
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <PillSearch
@@ -408,20 +444,9 @@ export function MatchesPageContent({
         />
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
+      <div className={TABLE_CARD}>
         <div className="min-w-[820px] px-6 pt-0.5 pb-1.5">
-          <div
-            className={cn(
-              GRID,
-              "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-            )}
-          >
-            {COLUMNS.map((label) => (
-              <span key={label} className="eyebrow-sm">
-                {label}
-              </span>
-            ))}
-          </div>
+          <MatchesHeaderRow />
 
           {page.length === 0 ? (
             <TableEmptyBody
@@ -473,6 +498,65 @@ export function MatchesPageContent({
           )}
         </p>
       )}
+    </AdminPage>
+  );
+}
+
+/** A no-op for the skeleton's inert controls. */
+function ignore() {}
+
+/**
+ * Admin › Matches while the page loads (`app/admin/matches/loading.tsx`): the
+ * heading, the search, the view pills and the Program menu as the loaded page
+ * opens them (All, All programs) — inert, and without the counts they do not
+ * know yet — then the table's real column labels over rows of bars.
+ */
+export function MatchesPageSkeleton() {
+  return (
+    <AdminPage className="gap-0">
+      <MatchesHeading />
+
+      <div inert className="mt-6 flex flex-wrap items-center gap-3">
+        <PillSearch
+          value=""
+          onChange={ignore}
+          placeholder="Player, team or match id"
+          label="Search matches"
+          className="w-[260px] max-w-full"
+        />
+        <CountPills options={[...VIEW_PILLS]} value="all" onChange={ignore} />
+        <FilterDivider />
+        <FilterMenuPill
+          label="Program"
+          options={[{ value: "all", label: ALL_PROGRAMS }]}
+          value="all"
+          onChange={ignore}
+          width={280}
+        />
+      </div>
+
+      <div className={TABLE_CARD}>
+        <div className="min-w-[820px] px-6 pt-0.5 pb-1.5">
+          <MatchesHeaderRow />
+          <PendingRegion label="matches">
+            {Array.from({ length: 8 }, (_, i) => (
+              <div key={i} className={cn(GRID, "min-h-[44px] py-1.5")}>
+                <span className="flex items-center gap-1.5">
+                  <PendingBar className="h-3 w-28" />
+                  <PendingBar className="h-3 w-24" />
+                </span>
+                <span className="flex items-center gap-2">
+                  <PendingBar className="size-4 rounded-full" />
+                  <PendingBar className="h-3 w-32" />
+                </span>
+                <PendingBar className="h-3 w-24" />
+                <PendingBar className="h-3 w-10" />
+                <PendingBar className="h-3 w-16" />
+              </div>
+            ))}
+          </PendingRegion>
+        </div>
+      </div>
     </AdminPage>
   );
 }

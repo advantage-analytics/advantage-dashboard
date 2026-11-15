@@ -8,7 +8,7 @@ import {
   ApprovePilotPopover,
   type ApprovePilotTarget,
 } from "@/components/admin/approve-pilot-popover";
-import { TeamsTable } from "@/components/admin/teams-table";
+import { TeamsTable, TeamsTableSkeleton } from "@/components/admin/teams-table";
 import type { AdminConferenceRow } from "@/lib/data/admin-conferences-view";
 import type { AdminTeamRow } from "@/lib/data/admin-teams-server";
 
@@ -86,6 +86,28 @@ export function ConferenceTeamsSection({
         onClose={() => setApproving(null)}
         onDecided={() => router.refresh()}
       />
+    </div>
+  );
+}
+
+/**
+ * The Teams section while the conference page loads: the real heading, "Add
+ * a team" as an inert word (its popover needs the conference), and the Teams
+ * table's own skeleton.
+ */
+export function ConferenceTeamsSectionSkeleton() {
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-4">
+        <h2 className="text-[14px] font-medium text-[var(--ink-900)]">Teams</h2>
+        <span
+          aria-hidden="true"
+          className="text-[12px] font-medium whitespace-nowrap text-[var(--blue)]"
+        >
+          Add a team
+        </span>
+      </div>
+      <TeamsTableSkeleton rows={4} />
     </div>
   );
 }
