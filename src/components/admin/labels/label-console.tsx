@@ -1,5 +1,6 @@
 "use client";
 
+import { formatMatchDayMedium } from "@/lib/data/match-day";
 import {
   Fragment,
   useCallback,
@@ -4661,6 +4662,18 @@ export function LabelConsole({
                         />
                         <span>{upload.program}</span>
                       </Fragment>
+                    ) : null,
+                    // When and where it was played: a calendar day
+                    // (match-day.ts), never a moment.
+                    upload?.playedAt ? (
+                      <span key="played" className="tabular">
+                        {formatMatchDayMedium(upload.playedAt)}
+                      </span>
+                    ) : null,
+                    upload?.event?.trim() ? (
+                      <span key="event" className="truncate">
+                        {upload.event.trim()}
+                      </span>
                     ) : null,
                     status === "complete" ? (
                       <span key="complete" data-session-complete="">

@@ -231,7 +231,8 @@ test.describe("viewerKind=admin", () => {
    * Changed on purpose since, for the admin alone: "N of M points checked"
    * left its meta (the body counts flags left). The header's wrapper is the
    * labeller's again: both run the full width of the admin page (2026-11-13).
-   * "Mark complete" reads "Publish", as the labeller's does (T37).
+   * "Mark complete" reads "Publish", as the labeller's does (T37). The meta
+   * names the day played and the event, after the program (2026-11-14).
    */
   const BEFORE = [
     `<div data-console-header="" class="flex shrink-0 items-end justify-between gap-8">`,
@@ -249,6 +250,14 @@ test.describe("viewerKind=admin", () => {
     `<span aria-hidden="true" class="size-[26px] rounded-[8px] text-[9px] font-medium tracking-[0.2px] text-[var(--ink-600)] flex flex-none items-center justify-center overflow-hidden bg-[var(--surface-subtle)] leading-none whitespace-nowrap">DW`,
     `</span>`,
     `<span>Dartmouth College · Women’s`,
+    `</span>`,
+    `<span aria-hidden="true">·`,
+    `</span>`,
+    `<span class="tabular">Aug 27, 2026`,
+    `</span>`,
+    `<span aria-hidden="true">·`,
+    `</span>`,
+    `<span class="truncate">vs Columbia University`,
     `</span>`,
     `<span aria-hidden="true">·`,
     `</span>`,

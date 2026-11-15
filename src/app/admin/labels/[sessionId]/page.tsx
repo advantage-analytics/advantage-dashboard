@@ -1,3 +1,4 @@
+import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AdminPage } from "@/components/admin/admin-page";
@@ -106,7 +107,16 @@ export default async function AdminLabelSessionPage({
   const { session, video, marks } = result;
 
   return (
-    <AdminPage className="h-[calc(100dvh-var(--header-h))] overflow-hidden pb-6">
+    <AdminPage className="h-[calc(100dvh-var(--header-h))] gap-3.5 overflow-hidden pb-6">
+      {/* The way back sits where every admin detail page keeps it (the team
+          and conference pages), above the header, not among its actions. */}
+      <Link
+        href="/admin/labels"
+        className="inline-flex shrink-0 items-center gap-1 self-start text-[12px] text-[var(--ink-600)] transition-colors duration-200 hover:text-[var(--ink-900)]"
+      >
+        <ChevronLeft aria-hidden="true" className="size-3" strokeWidth={1.75} />
+        Labels
+      </Link>
       <LabelConsole
         session={session}
         initialLayoutMode="overview"
@@ -166,8 +176,14 @@ export default async function AdminLabelSessionPage({
                 Practice copies
               </Link>
             ) : null}
-            <Link href="/admin/labels" className={HEADER_LINK}>
-              Back to Labels
+            {/* The player's report, read-only in the admin chrome: what the
+                labels published, or what the analysis shows until they do. */}
+            <Link
+              key="match-report"
+              href={`/admin/matches/${encodeURIComponent(session.matchId)}`}
+              className={HEADER_LINK}
+            >
+              Match report
             </Link>
           </span>
         }
