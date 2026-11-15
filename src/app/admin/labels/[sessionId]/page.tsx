@@ -1,6 +1,6 @@
-import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AdminBackLink } from "@/components/admin/admin-back-link";
 import { AdminPage } from "@/components/admin/admin-page";
 import { LabelConsole } from "@/components/admin/labels/label-console";
 import { getLabelUploadInfo } from "@/lib/data/label-overview-server";
@@ -110,13 +110,9 @@ export default async function AdminLabelSessionPage({
     <AdminPage className="h-[calc(100dvh-var(--header-h))] gap-3.5 overflow-hidden pb-6">
       {/* The way back sits where every admin detail page keeps it (the team
           and conference pages), above the header, not among its actions. */}
-      <Link
-        href="/admin/labels"
-        className="inline-flex shrink-0 items-center gap-1 self-start text-[12px] text-[var(--ink-600)] transition-colors duration-200 hover:text-[var(--ink-900)]"
-      >
-        <ChevronLeft aria-hidden="true" className="size-3" strokeWidth={1.75} />
+      <AdminBackLink href="/admin/labels" className="shrink-0 self-start">
         Labels
-      </Link>
+      </AdminBackLink>
       <LabelConsole
         session={session}
         initialLayoutMode="overview"

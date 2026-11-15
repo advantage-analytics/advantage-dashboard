@@ -1,11 +1,10 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 
 import {
   ACTIVITY_LOG_PREVIEW,
   AdminActivityCard,
 } from "@/components/admin/admin-activity-card";
+import { AdminBackLink } from "@/components/admin/admin-back-link";
 import { AdminConferenceCard } from "@/components/admin/admin-conference-card";
 import { AdminContactsCard } from "@/components/admin/admin-contacts-card";
 import { AdminDetailsCard } from "@/components/admin/admin-details-card";
@@ -176,17 +175,12 @@ export default async function AdminTeamPage({
       <>
         {header}
         <div className="flex flex-col gap-4">
-          <Link
+          <AdminBackLink
             href={teamViewHref(programId, "overview")}
-            className="inline-flex items-center gap-1 self-start text-[12px] text-[var(--ink-600)] transition-colors duration-200 hover:text-[var(--ink-900)]"
+            className="self-start"
           >
-            <ChevronLeft
-              aria-hidden="true"
-              className="size-3"
-              strokeWidth={1.75}
-            />
             Back to {data.program.schoolName}
-          </Link>
+          </AdminBackLink>
           {/* The People list carries its own "People" header, with its two
               actions; a second one above it would say the word twice. */}
           {view.cards[0] !== "people" && (

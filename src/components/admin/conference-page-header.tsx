@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Merge, MoreHorizontal, Trash2 } from "lucide-react";
+import { Merge, MoreHorizontal, Trash2 } from "lucide-react";
 
+import { AdminBackLink } from "@/components/admin/admin-back-link";
 import { ConferenceCrestControl } from "@/components/admin/conference-crest-control";
 import { MergeConferenceDialog } from "@/components/admin/merge-conference-dialog";
 import {
@@ -87,17 +87,7 @@ export function ConferencePageHeader({
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-center justify-between gap-4">
-        <Link
-          href="/admin/conferences"
-          className="inline-flex items-center gap-1 text-[12px] text-[var(--ink-600)] transition-colors duration-200 hover:text-[var(--ink-900)]"
-        >
-          <ChevronLeft
-            aria-hidden="true"
-            className="size-3"
-            strokeWidth={1.75}
-          />
-          Conferences
-        </Link>
+        <AdminBackLink href="/admin/conferences">Conferences</AdminBackLink>
 
         <ChromeTooltip label="Conference actions" hidden={menuOpen}>
           <span className="inline-flex shrink-0">

@@ -1,6 +1,7 @@
-import { Calendar, ChevronLeft, Globe, Landmark, MapPin } from "lucide-react";
+import { Calendar, Globe, Landmark, MapPin } from "lucide-react";
 import Link from "next/link";
 
+import { AdminBackLink } from "@/components/admin/admin-back-link";
 import { AdminTeamCrestControl } from "@/components/admin/team-crest-control";
 import { TeamHeaderActions } from "@/components/admin/team-header-actions";
 import { TeamHours } from "@/components/admin/team-hours";
@@ -107,17 +108,7 @@ export function TeamPageHeader({
   return (
     <div className="flex flex-col gap-3.5">
       <div className="flex items-center justify-between gap-4">
-        <Link
-          href="/admin/teams"
-          className="inline-flex items-center gap-1 text-[12px] text-[var(--ink-600)] transition-colors duration-200 hover:text-[var(--ink-900)]"
-        >
-          <ChevronLeft
-            aria-hidden="true"
-            className="size-3"
-            strokeWidth={1.75}
-          />
-          Teams
-        </Link>
+        <AdminBackLink href="/admin/teams">Teams</AdminBackLink>
         <div className="flex shrink-0 items-center gap-2.5">
           <Link
             href={adminUploadHref(program.id, null)}
