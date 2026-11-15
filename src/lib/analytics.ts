@@ -53,7 +53,12 @@ export interface AnalyticsEvents {
   filter_changed: { view: string; filter_name: string; value: string };
   // One per roster player page and tab shown: the team's other way into a
   // match's numbers, which `match_viewed` never sees.
-  player_profile_viewed: { player_id: string; tab: string };
+  player_profile_viewed: {
+    player_id: string;
+    tab: string;
+    /** The viewer is looking at their own page, not a coach at a player's. */
+    is_self: boolean;
+  };
 
   // Upload flow (/dashboard/matches/new)
   upload_started: { provider: string | null };

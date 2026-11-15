@@ -62,6 +62,40 @@ test("text typed into a quoted parameter is sent as other, not as written", () =
   expect(changes("", "cut=Jane%20Doe%20vs%20UGA")).toEqual([
     { filter_name: "cut", value: "other" },
   ]);
+  // One plain word is still not one of the control's words.
+  expect(changes("", "cut=Bajraliu")).toEqual([
+    { filter_name: "cut", value: "other" },
+  ]);
+  // A real word on the wrong control is not that control's word either.
+  expect(changes("", "ball=unforced")).toEqual([
+    { filter_name: "ball", value: "other" },
+  ]);
+});
+
+test("every option the controls can write is quoted, including whose court", () => {
+  expect(
+    changes(
+      "",
+      "player=opponent&game=serving&court=ad&pressure=setMatch&result=ace&rally=long&verr=doubleFault&chart=heat&vopp=left&vres=won&vsurf=clay",
+    ).map((change) => `${change.filter_name}=${change.value}`),
+  ).toEqual(
+    [
+      "cut=any",
+      "chart=heat",
+      "player=opponent",
+      "game=serving",
+      "ball=any",
+      "court=ad",
+      "zone=any",
+      "pressure=setMatch",
+      "result=ace",
+      "rally=long",
+      "verr=doubleFault",
+      "vopp=left",
+      "vres=won",
+      "vsurf=clay",
+    ].filter((entry) => !entry.endsWith("=any")),
+  );
 });
 
 test("controlName spreads as the one attribute posthog-js reads past the attribute mask", () => {

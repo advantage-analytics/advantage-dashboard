@@ -271,7 +271,7 @@ export default async function PlayerProfilePage({
         players={players}
       />
 
-      <ProfileAnalytics playerId={profile.playerId} />
+      <ProfileAnalytics playerId={profile.playerId} isSelf={isSelf} />
 
       <MatchReportFrame>
         <ProfileRail

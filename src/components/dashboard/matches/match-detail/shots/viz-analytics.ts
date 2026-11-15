@@ -1,9 +1,13 @@
+import type { Chart, Cut, PlayerFilter } from "./viz-model";
 import {
+  OPPONENT_HAND_FILTERS,
+  OPTIONS,
   SEASON_HAND_PARAM,
   SEASON_MATCH_PARAM,
+  SEASON_RESULT_FILTERS,
   SEASON_RESULT_PARAM,
+  SEASON_SURFACES,
   SEASON_SURFACE_PARAM,
-  VIZ_OPTION_KEYS,
   paramFor,
 } from "./viz-url";
 
@@ -17,24 +21,54 @@ import {
  * vocabulary are quoted — a cut, a chart, an option pill. Sets and season
  * matches send how many are picked, never which. Saved views, drafts and the
  * advanced filter blob are left out: their values are ids and free-form
- * state. A value that is not a short plain token is sent as "other", so text
+ * state. A quoted value is sent only when it is one of that control's own
+ * words; anything else — the URL is editable — is sent as "other", so text
  * typed into the address bar never reaches an event.
  */
 
-/** Parameters quoted as they are: every value is one of a few fixed words. */
-const QUOTED_PARAMS: readonly string[] = [
-  "cut",
-  "chart",
-  ...VIZ_OPTION_KEYS.map(paramFor),
-  SEASON_HAND_PARAM,
-  SEASON_RESULT_PARAM,
-  SEASON_SURFACE_PARAM,
-];
+// Keyed by the type, so a cut or chart added to `viz-model.ts` fails to
+// compile here until it is listed.
+const CUTS = {
+  serve: true,
+  returnPlacement: true,
+  returnContact: true,
+  rallyPosition: true,
+  rallyPlacement: true,
+  errors: true,
+} satisfies Record<Cut, true>;
+const CHARTS = {
+  scatter: true,
+  zones: true,
+  heat: true,
+} satisfies Record<Chart, true>;
+const PLAYERS = { you: true, opponent: true } satisfies Record<
+  PlayerFilter,
+  true
+>;
+
+/**
+ * Parameters quoted as they are, each with the only words it may carry: the
+ * URL name → that control's vocabulary.
+ */
+const QUOTED_PARAMS: ReadonlyMap<string, ReadonlySet<string>> = new Map<
+  string,
+  ReadonlySet<string>
+>([
+  ["cut", new Set(Object.keys(CUTS))],
+  ["chart", new Set(Object.keys(CHARTS))],
+  ...Object.entries(OPTIONS).map(
+    ([key, words]): [string, ReadonlySet<string>] => [
+      paramFor(key),
+      new Set(key === "player" ? Object.keys(PLAYERS) : Object.keys(words)),
+    ],
+  ),
+  [SEASON_HAND_PARAM, new Set<string>(OPPONENT_HAND_FILTERS)],
+  [SEASON_RESULT_PARAM, new Set<string>(SEASON_RESULT_FILTERS)],
+  [SEASON_SURFACE_PARAM, new Set<string>(SEASON_SURFACES)],
+]);
 
 /** Parameters sent as a count: which sets or matches is nobody's business. */
 const COUNTED_PARAMS: readonly string[] = ["vset", SEASON_MATCH_PARAM];
-
-const PLAIN_TOKEN = /^[A-Za-z0-9_-]{1,32}$/;
 
 export interface VizFilterChange {
   filter_name: string;
@@ -42,12 +76,19 @@ export interface VizFilterChange {
 }
 
 /** A parameter's values as one comparable, sendable word. */
-function quoted(params: URLSearchParams, name: string): string {
-  const values = params
-    .getAll(name)
-    .filter(Boolean)
-    .map((value) => (PLAIN_TOKEN.test(value) ? value : "other"))
-    .sort();
+function quoted(
+  params: URLSearchParams,
+  name: string,
+  words: ReadonlySet<string>,
+): string {
+  const values = [
+    ...new Set(
+      params
+        .getAll(name)
+        .filter(Boolean)
+        .map((value) => (words.has(value) ? value : "other")),
+    ),
+  ].sort();
   return values.length === 0 ? "any" : values.join("+");
 }
 
@@ -62,9 +103,9 @@ export function vizFilterChanges(
   next: URLSearchParams,
 ): VizFilterChange[] {
   const changes: VizFilterChange[] = [];
-  for (const name of QUOTED_PARAMS) {
-    const after = quoted(next, name);
-    if (quoted(prev, name) !== after) {
+  for (const [name, words] of QUOTED_PARAMS) {
+    const after = quoted(next, name, words);
+    if (quoted(prev, name, words) !== after) {
       changes.push({ filter_name: name, value: after });
     }
   }

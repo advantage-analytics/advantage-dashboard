@@ -17,11 +17,21 @@ import { useProfileView } from "@/components/dashboard/team/player-profile/profi
  * Its own component, mounted by the page beside the rail, so the switcher and
  * the title stay what they are: readers of `?tab=` with no side effects.
  */
-export function ProfileAnalytics({ playerId }: { playerId: string }) {
+export function ProfileAnalytics({
+  playerId,
+  isSelf,
+}: {
+  playerId: string;
+  isSelf: boolean;
+}) {
   const view = useProfileView();
   useEffect(() => {
-    track("player_profile_viewed", { player_id: playerId, tab: view });
-  }, [playerId, view]);
+    track("player_profile_viewed", {
+      player_id: playerId,
+      tab: view,
+      is_self: isSelf,
+    });
+  }, [playerId, view, isSelf]);
   useVizFilterAnalytics("player_profile", playerId);
   return null;
 }
