@@ -1,5 +1,6 @@
 import type { ZoneKey, ZoneStats } from "@/lib/data/serve-zones";
 import type { Cut, StatRow, VizDotMeta } from "./viz-model";
+import { marksAreShots } from "./cut-kinds";
 import { formatSpeed, type DistanceUnit } from "@/lib/format/distance";
 import { pointScoreLabel } from "@/lib/ui/score-format";
 
@@ -268,14 +269,13 @@ export function statRowTooltip(
     lines.push(`Average ${group.average}% across the court`);
   // A rally cut's marks are shots, several to a point; every other cut's
   // row counts one mark per point.
-  const kept =
-    cut === "rallyPlacement" || cut === "rallyPosition"
-      ? row.count === 1
-        ? "this shot"
-        : `these ${row.count} shots`
-      : row.count === 1
-        ? "this point"
-        : `these ${row.count} points`;
+  const kept = marksAreShots(cut)
+    ? row.count === 1
+      ? "this shot"
+      : `these ${row.count} shots`
+    : row.count === 1
+      ? "this point"
+      : `these ${row.count} points`;
   return {
     title: row.label,
     value: row.winPct === null ? null : `${row.winPct}%`,

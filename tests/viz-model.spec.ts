@@ -1913,10 +1913,14 @@ test.describe("statRowAnnouncement", () => {
       "ft",
     );
 
-    for (const stats of [serveStats, placementStats, contactStats]) {
+    for (const [cut, stats] of [
+      ["serve", serveStats],
+      ["returnPlacement", placementStats],
+      ["returnContact", contactStats],
+    ] as const) {
       for (const group of stats.groups) {
         for (const row of group.rows) {
-          const announcement = statRowAnnouncement(row);
+          const announcement = statRowAnnouncement(row, cut);
           expect(row.label.length).toBeGreaterThan(0);
           expect(announcement).toContain(row.label);
           expect(announcement.startsWith(":")).toBe(false);
@@ -1941,10 +1945,29 @@ test.describe("statRowAnnouncement", () => {
       won: 0,
       winPct: null,
     };
-    expect(statRowAnnouncement(withPoints)).toBe(
+    expect(statRowAnnouncement(withPoints, "returnPlacement")).toBe(
       "Crosscourt: 100% of 4 points won",
     );
-    expect(statRowAnnouncement(noPoints)).toBe("Ad T: no points");
+    expect(statRowAnnouncement(noPoints, "serve")).toBe("Ad T: no points");
+  });
+
+  test("a rally cut's rows count shots, several to a point, and say so", () => {
+    const deep = { key: "deep", label: "Deep", count: 50, won: 36, winPct: 72 };
+    const none = {
+      key: "short",
+      label: "Short",
+      count: 0,
+      won: 0,
+      winPct: null,
+    };
+    for (const cut of ["rallyPlacement", "rallyPosition"] as const) {
+      expect(statRowAnnouncement(deep, cut)).toBe("Deep: 72% of 50 shots won");
+      expect(statRowAnnouncement(none, cut)).toBe("Short: no shots");
+    }
+    // One mark is one point everywhere else, and it stays "points".
+    for (const cut of ["serve", "returnPlacement", "returnContact"] as const) {
+      expect(statRowAnnouncement(deep, cut)).toBe("Deep: 72% of 50 points won");
+    }
   });
 });
 
