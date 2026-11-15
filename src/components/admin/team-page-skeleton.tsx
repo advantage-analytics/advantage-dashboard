@@ -60,12 +60,11 @@ function TeamPageHeaderSkeleton() {
 
 /**
  * Admin › Teams › one program while the page loads
- * (`teams/[programId]/loading.tsx`): the default view's blocks — the header,
+ * (`teams/(team)/loading.tsx`): the default view's blocks — the header,
  * Details, People, Latest matches — in the page's order.
  *
- * No `AdminPage` and no column: `[programId]/layout.tsx` already draws both
- * around this, and the route's `loading.tsx` renders inside that layout. The
- * activity log is not drawn: it sits under the fold and its length is the
+ * No `AdminPage` and no column: `teams/(team)/loading.tsx` draws both around
+ * this, the same ones `[programId]/layout.tsx` draws. The activity log is not drawn: it sits under the fold and its length is the
  * data.
  */
 export function TeamPageSkeleton() {

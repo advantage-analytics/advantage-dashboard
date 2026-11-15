@@ -14,6 +14,12 @@ import { uploadPolicyLabel } from "@/lib/workspace/types";
 import type { AdminTeamProgram } from "@/lib/data/admin-team-server";
 import type { AdminTeamJoinLink } from "@/lib/data/admin-team-links";
 
+/** The facts every program prints, in order, after its Conference. */
+const ALWAYS_FACTS = ["Time zone", "Who can upload", "Roster"] as const;
+
+/** What the skeleton labels: the Conference fact, then `ALWAYS_FACTS`. */
+const DETAIL_FACT_LABELS = ["Conference", ...ALWAYS_FACTS] as const;
+
 /**
  * The team page's Details section (`TeamDetail.dc.html`): one row of facts,
  * one `Edit details` button, and the program's two join links, each with a
@@ -42,12 +48,6 @@ import type { AdminTeamJoinLink } from "@/lib/data/admin-team-links";
  * the recorded contacts and is omitted for a program with no key. Both URLs
  * are rendered and copied, never logged — the player one carries a raw token.
  */
-/** The facts every program prints, in order, after its Conference. */
-const ALWAYS_FACTS = ["Time zone", "Who can upload", "Roster"] as const;
-
-/** What the skeleton labels: the Conference fact, then `ALWAYS_FACTS`. */
-const DETAIL_FACT_LABELS = ["Conference", ...ALWAYS_FACTS] as const;
-
 export function AdminDetailsCard({
   program,
   playerLink,

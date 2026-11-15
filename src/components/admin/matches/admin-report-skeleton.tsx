@@ -8,6 +8,11 @@ import {
   PendingBar,
   PendingRegion,
 } from "@/components/dashboard/loading/pending";
+import {
+  ADMIN_REPORT_BOX,
+  ReadOnlyRailNote,
+  reportBackHref,
+} from "@/components/admin/matches/admin-report-strip";
 import { parseReportView } from "@/components/dashboard/matches/match-detail/report-view";
 
 /**
@@ -30,12 +35,10 @@ export function AdminMatchReportPageSkeleton() {
   const search = useSearchParams();
   const view = parseReportView(search.get("tab"));
   const matchId = params?.matchId;
-  const backHref = matchId
-    ? `/admin/matches?id=${encodeURIComponent(matchId)}`
-    : "/admin/matches";
+  const backHref = matchId ? reportBackHref(matchId) : "/admin/matches";
 
   return (
-    <div className="flex h-[calc(100dvh-var(--header-h))] w-full flex-col overflow-hidden bg-[var(--surface-card)]">
+    <div className={ADMIN_REPORT_BOX}>
       <div className="flex shrink-0 items-center gap-4 border-b border-[var(--border-hairline)] px-6 py-1.5">
         <nav
           aria-label="Breadcrumb"
@@ -68,11 +71,7 @@ export function AdminMatchReportPageSkeleton() {
       <div className="flex min-h-0 flex-1 flex-col">
         <MatchReportPendingFrame
           view={view}
-          readOnlyFooter={
-            <p className="m-0 border-t border-[var(--border-hairline)] px-5 py-4 text-[12px] text-[var(--ink-600)]">
-              Share and Ask are hidden while viewing as admin.
-            </p>
-          }
+          readOnlyFooter={<ReadOnlyRailNote />}
         />
       </div>
     </div>

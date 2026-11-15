@@ -33,6 +33,10 @@ import {
 import type { AdminTeamRow } from "@/lib/data/admin-teams-server";
 import { COL, ROW, TEAMS_COLUMNS } from "@/components/admin/teams-table-layout";
 
+const TABLE_CARD =
+  "overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]";
+const TABLE_INNER = "min-w-[920px] px-6 pt-0.5 pb-1.5";
+
 /**
  * The Admin › Teams directory table — every program on one page, T11.
  *
@@ -62,10 +66,6 @@ import { COL, ROW, TEAMS_COLUMNS } from "@/components/admin/teams-table-layout";
  * A client component: `ApproveChip`'s `onClick` needs a real event handler,
  * which a Server Component page (T12) cannot pass across the boundary.
  */
-const TABLE_CARD =
-  "overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]";
-const TABLE_INNER = "min-w-[920px] px-6 pt-0.5 pb-1.5";
-
 function TeamsHeaderRow() {
   return (
     <div

@@ -2,7 +2,11 @@ import { Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import nextDynamic from "next/dynamic";
-import { AdminReportStrip } from "@/components/admin/matches/admin-report-strip";
+import {
+  ADMIN_REPORT_BOX,
+  AdminReportStrip,
+  ReadOnlyRailNote,
+} from "@/components/admin/matches/admin-report-strip";
 import { MatchDataProvider } from "@/components/dashboard/matches/match-data-provider";
 import { AnalysisSteps } from "@/components/dashboard/matches/match-detail/analysis-steps-column";
 import {
@@ -126,7 +130,7 @@ export default async function AdminMatchReportPage({
 
   if (isAwaitingAnalysis) {
     return (
-      <div className="flex h-[calc(100dvh-var(--header-h))] w-full flex-col overflow-hidden bg-[var(--surface-card)]">
+      <div className={ADMIN_REPORT_BOX}>
         {strip}
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <AnalysisSteps
@@ -178,7 +182,7 @@ export default async function AdminMatchReportPage({
   ];
 
   return (
-    <div className="flex h-[calc(100dvh-var(--header-h))] w-full flex-col overflow-hidden bg-[var(--surface-card)]">
+    <div className={ADMIN_REPORT_BOX}>
       {strip}
       <div className="flex min-h-0 flex-1 flex-col">
         <MatchDataProvider
@@ -216,9 +220,7 @@ export default async function AdminMatchReportPage({
                     <MatchReportScoreboard />
                     <MatchReportViewSwitcher />
                     <MatchReportSpacer />
-                    <p className="m-0 border-t border-[var(--border-hairline)] px-5 py-4 text-[12px] text-[var(--ink-600)]">
-                      Share and Ask are hidden while viewing as admin.
-                    </p>
+                    <ReadOnlyRailNote />
                   </MatchReportRail>
 
                   <MatchReportPane>

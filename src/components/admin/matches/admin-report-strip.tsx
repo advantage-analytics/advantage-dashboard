@@ -10,6 +10,24 @@ import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
+/** The page's bounded box: the strip on top, the report filling the rest. */
+export const ADMIN_REPORT_BOX =
+  "flex h-[calc(100dvh-var(--header-h))] w-full flex-col overflow-hidden bg-[var(--surface-card)]";
+
+/** The way back from a match's report: the Matches list, row highlighted. */
+export function reportBackHref(matchId: string): string {
+  return `/admin/matches?id=${encodeURIComponent(matchId)}`;
+}
+
+/** The rail's closing line: an admin sees the report read-only. */
+export function ReadOnlyRailNote() {
+  return (
+    <p className="m-0 border-t border-[var(--border-hairline)] px-5 py-4 text-[12px] text-[var(--ink-600)]">
+      Share and Ask are hidden while viewing as admin.
+    </p>
+  );
+}
+
 /** "8f3d21c6…7b31". */
 function shortId(id: string): string {
   return id.length > 13 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
@@ -42,7 +60,7 @@ export function AdminReportStrip({
   job: { id: string; status: string } | null;
 }) {
   const router = useRouter();
-  const backHref = `/admin/matches?id=${encodeURIComponent(matchId)}`;
+  const backHref = reportBackHref(matchId);
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {

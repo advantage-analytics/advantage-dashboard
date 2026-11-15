@@ -38,6 +38,9 @@ import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
 
+/** The facts every conference prints, in order; Website follows when set. */
+const ALWAYS_FACTS = ["Division", "Teams", "On Advantage"] as const;
+
 /**
  * The Admin › Conferences detail page's Details section, in
  * `AdminDetailsCard`'s shape: a heading with one `Edit` button, then one row
@@ -49,9 +52,6 @@ import { cn } from "@/lib/utils";
  * the conference's record (Name, Short name, Division, Website) — renaming is
  * its Name field, so the header's `⋯` menu carries no rename of its own.
  */
-/** The facts every conference prints, in order; Website follows when set. */
-const ALWAYS_FACTS = ["Division", "Teams", "On Advantage"] as const;
-
 export function ConferenceDetails({
   conference,
 }: {

@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
-import { TEAM_LIST_GRID } from "@/components/admin/admin-people-card";
+import {
+  TEAM_LIST_GRID,
+  TEAM_LIST_ROW,
+} from "@/components/admin/admin-people-card";
 import {
   PendingBar,
   PendingRegion,
@@ -174,10 +177,7 @@ export function TeamLatestMatchesSkeleton({
       <PendingRegion label="latest matches">
         <ul className="flex flex-col overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
           {[0, 1, 2].map((row) => (
-            <li
-              key={row}
-              className={`${TEAM_LIST_GRID} min-h-11 border-t border-[var(--border-hairline)] px-4 py-1.5 first:border-t-0`}
-            >
+            <li key={row} className={TEAM_LIST_ROW}>
               <span className="col-span-2 flex min-w-0 flex-col gap-1.5">
                 <PendingBar className="h-3 w-56" />
                 {scope === "conference" ? (

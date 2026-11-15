@@ -148,7 +148,7 @@ export const TEAM_LIST_GRID =
   "grid grid-cols-[26px_minmax(0,360px)_180px_1fr] items-center gap-x-3.5";
 
 /** One row of the People list, on the shared tracks. */
-const ROW = `${TEAM_LIST_GRID} min-h-11 border-t border-[var(--border-hairline)] px-4 py-1.5 first:border-t-0`;
+export const TEAM_LIST_ROW = `${TEAM_LIST_GRID} min-h-11 border-t border-[var(--border-hairline)] px-4 py-1.5 first:border-t-0`;
 
 const NAME = "truncate text-[13px] font-medium text-[var(--ink-900)]";
 const SUB = "truncate text-[11px] text-[var(--ink-500)]";
@@ -421,7 +421,7 @@ export function AdminPeopleList({
                 const { request } = row;
                 const name = requesterName(request);
                 return (
-                  <li key={row.key} className={ROW}>
+                  <li key={row.key} className={TEAM_LIST_ROW}>
                     <Face name={name} />
                     <span className="flex min-w-0 flex-col">
                       <span className={NAME}>{name}</span>
@@ -473,7 +473,7 @@ export function AdminPeopleList({
                 const canReceive =
                   member.role === "coach" || member.role === "staff";
                 return (
-                  <li key={row.key} className={ROW}>
+                  <li key={row.key} className={TEAM_LIST_ROW}>
                     <Face name={member.name} photoUrl={member.avatarUrl} />
                     {/* The address under the name, as a request's and an
                         invitation's sit under theirs: it is what a support
@@ -551,7 +551,7 @@ export function AdminPeopleList({
               case "player": {
                 const { player } = row;
                 return (
-                  <li key={row.key} className={ROW}>
+                  <li key={row.key} className={TEAM_LIST_ROW}>
                     <Face name={player.name} />
                     <span className={NAME}>{player.name}</span>
                     <span className={ROLE}>Player</span>
@@ -577,7 +577,7 @@ export function AdminPeopleList({
               case "invite": {
                 const { invite: pending } = row;
                 return (
-                  <li key={row.key} className={ROW}>
+                  <li key={row.key} className={TEAM_LIST_ROW}>
                     {/* An invitation is a row one step early: a dashed ring
                         where the face will be, the address where the name
                         will be. */}
@@ -748,7 +748,7 @@ export function AdminPeopleListSkeleton() {
         <div className="overflow-hidden rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
           <ul className="flex flex-col">
             {[0, 1, 2, 3, 4].map((row) => (
-              <li key={row} className={ROW}>
+              <li key={row} className={TEAM_LIST_ROW}>
                 <PendingBar className="size-[26px] rounded-full" />
                 <span className="flex min-w-0 flex-col gap-1.5">
                   <PendingBar className="h-3 w-40" />
