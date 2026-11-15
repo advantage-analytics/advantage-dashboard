@@ -31,7 +31,14 @@ export interface WallSegment {
  * The card footer's count, with its unit — one wording for the summary and
  * for the card's own count while it counts to a new value.
  */
-export function wallCountLabel(cut: Cut, count: number, total: number): string {
+export function wallCountLabel(
+  cut: Cut,
+  count: number,
+  total: number,
+  /** "N in" rather than "N of M in". The card counting to new values passes
+   *  the FINAL summary's answer, so the wording never flips mid-count. */
+  allIn: boolean = count === total,
+): string {
   // The errors card counts what its bar draws: every Miss row's errors
   // (Net, Long, Wide, and Landed in when any read in), so "N total" and the
   // segments can never disagree.
@@ -39,7 +46,7 @@ export function wallCountLabel(cut: Cut, count: number, total: number): string {
   // Every return has a contact point, in or not: a count, never "in".
   if (cut === "returnContact")
     return `${count} ${count === 1 ? "return" : "returns"}`;
-  if (count === total) return `${count} in`;
+  if (allIn) return `${count} in`;
   return `${count} of ${total} in`;
 }
 

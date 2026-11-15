@@ -132,6 +132,13 @@ export function WallCard({
   }
 
   const label = `${name}, ${playerName}: ${summary.countLabel}`;
+  const courtProps = {
+    cut,
+    chart: "scatter",
+    fill: true,
+    serveFrame: serve ? "throughNet" : "half",
+  } as const;
+
   const body = (
     <>
       <div
@@ -147,11 +154,8 @@ export function WallCard({
           }}
         >
           <CourtArt
-            cut={cut}
+            {...courtProps}
             dots={dots}
-            chart="scatter"
-            fill
-            serveFrame={serve ? "throughNet" : "half"}
             // Absolutely placed so the box's 334:216 aspect alone sets the
             // card's height: in flow, a return or errors court's own svg
             // aspect (wider than the box's) grew the box under the 300px
@@ -166,15 +170,18 @@ export function WallCard({
               key={leaving.n}
               aria-hidden="true"
               inert
-              className="pointer-events-none absolute inset-0 animate-out duration-[var(--duration-hover)] fade-out-0 fill-mode-forwards"
-              onAnimationEnd={() => setLeaving(null)}
+              // Its marks are fresh nodes: without `[&_*]:animate-none` they
+              // would run `CourtMark`'s own fade-IN from nothing, under a
+              // container fading out, and never be seen to go. Only the
+              // overlay's own animation ends it — a child's bubbles here too.
+              className="pointer-events-none absolute inset-0 animate-out duration-[var(--duration-hover)] fade-out-0 fill-mode-forwards [&_*]:animate-none"
+              onAnimationEnd={(e) => {
+                if (e.target === e.currentTarget) setLeaving(null);
+              }}
             >
               <CourtArt
-                cut={cut}
+                {...courtProps}
                 dots={leaving.dots}
-                chart="scatter"
-                fill
-                serveFrame={serve ? "throughNet" : "half"}
                 className="absolute inset-0 block h-full w-full"
               />
             </div>
@@ -194,7 +201,12 @@ export function WallCard({
             className="shrink-0 text-[11px] whitespace-nowrap tabular-nums"
             style={{ color: "var(--ink-600)" }}
           >
-            {wallCountLabel(cut, shownCount, shownTotal)}
+            {wallCountLabel(
+              cut,
+              shownCount,
+              shownTotal,
+              summary.count === summary.total,
+            )}
           </span>
         </div>
         <SplitBar
