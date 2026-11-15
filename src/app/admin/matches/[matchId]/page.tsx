@@ -117,8 +117,6 @@ export default async function AdminMatchReportPage({
       matchId={match.id}
       player={sides.you.name}
       opponent={sides.opp.name}
-      won={lineWon}
-      sets={lineSets}
       workspace={workspace}
       labelHref={labelHref}
       job={
