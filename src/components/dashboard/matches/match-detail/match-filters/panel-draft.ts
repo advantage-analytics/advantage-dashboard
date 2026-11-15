@@ -4,6 +4,7 @@ import {
   MATCH_FILTER_SECTIONS,
   filtersEqual,
   toggleMatchFilter,
+  type FilterBandLabels,
   type MatchFilterAvailability,
   type MatchFilterGroup,
   type MatchFilterKey,
@@ -132,6 +133,8 @@ export function panelActions(
 export function panelSections(
   availability: MatchFilterAvailability,
   names: { you: string; opponent: string },
+  /** Contact and Landed in print the viewer's bands (`optionLabel`). */
+  labels?: FilterBandLabels,
 ): PanelSection[] {
   const sections: PanelSection[] = [];
   for (const section of MATCH_FILTER_SECTIONS) {
@@ -158,7 +161,7 @@ export function panelSections(
               ? o.value === "you"
                 ? names.you
                 : names.opponent
-              : o.label,
+              : optionLabel(group.key, o.value, labels),
           }));
         if (options.length === 0) continue;
       }
@@ -208,6 +211,7 @@ export function sectionSummary(
   draft: MatchFilters,
   sectionId: MatchFilterSectionId,
   names: { you: string; opponent: string },
+  labels?: FilterBandLabels,
 ): string | null {
   const section = MATCH_FILTER_SECTIONS.find((s) => s.id === sectionId);
   if (!section) return null;
@@ -223,7 +227,7 @@ export function sectionSummary(
       } else if (group.key === "sets") {
         parts.push(`${parts.length === 0 ? "Set" : "set"} ${String(value)}`);
       } else {
-        const label = optionLabel(group.key, value);
+        const label = optionLabel(group.key, value, labels);
         const keepCase = group.key === "scorePoints" || label.length === 1;
         parts.push(
           parts.length === 0 || keepCase ? label : label.toLowerCase(),

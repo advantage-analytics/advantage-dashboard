@@ -28,6 +28,7 @@ import type {
   SeatUsage,
 } from "@/lib/data/team-roster-server";
 import type { TeamJoinLink } from "@/lib/data/team-settings-server";
+import { controlName } from "@/lib/ui/control-name";
 
 /**
  * The coach's own three writes, which is what this dialog has always called.
@@ -209,6 +210,7 @@ export function RosterHeaderButtons({
           type="button"
           className={advButton("ghost")}
           onClick={() => setInviting(true)}
+          {...controlName("roster_invite")}
         >
           Invite
         </button>
@@ -216,6 +218,7 @@ export function RosterHeaderButtons({
           type="button"
           className={advButton("primary")}
           onClick={() => setAddingPlayer(true)}
+          {...controlName("roster_add_player")}
         >
           Add player
         </button>

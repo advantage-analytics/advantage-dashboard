@@ -319,7 +319,7 @@ test("the wall reads busy until the server's cards are the chip's — after a ch
   page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}${PROFILE}?tab=visualizations&delay=700`);
-  await expect(wallPressed(page)).toHaveText("You");
+  await expect(wallPressed(page)).toHaveText("Kim");
   await expect(wallBusy(page)).toHaveCount(0);
 
   // The chip: pressed at once; the cards dimmed and busy, still yours, with
@@ -329,7 +329,7 @@ test("the wall reads busy until the server's cards are the chip's — after a ch
     .locator('#root [role="group"][aria-label="Player"]')
     .getByRole("button", { name: "Opponent" })
     .click();
-  await expect(wallPressed(page)).toHaveText("Opponent");
+  await expect(wallPressed(page)).toHaveText("Opponents");
   await expect(wallBusy(page)).toHaveAttribute("aria-busy", "true");
   await expect(wallBusy(page)).toHaveClass(/pointer-events-none/);
   await expect(
@@ -351,7 +351,7 @@ test("the wall reads busy until the server's cards are the chip's — after a ch
   // opponents only mark it busy, hidden under the scrim.
   await page
     .locator('#root [role="group"][aria-label="Player"]')
-    .getByRole("button", { name: "You" })
+    .getByRole("button", { name: "Kim", exact: true })
     .click();
   await expect(wallBusy(page)).toHaveCount(0, { timeout: 5_000 });
   const wall = page.getByRole("list", { name: "Default views" });
@@ -370,7 +370,7 @@ test("the wall reads busy until the server's cards are the chip's — after a ch
     timeout: 5_000,
   });
   expect(new URL(page.url()).searchParams.get("player")).toBe("opponent");
-  await expect(wallPressed(page)).toHaveText("You");
+  await expect(wallPressed(page)).toHaveText("Kim");
   await expect(wallBusy(page)).toHaveAttribute("aria-busy", "true");
   await expect(
     wallList(page).locator('a[aria-label^="All serves, Avery Kim"]'),
@@ -383,7 +383,7 @@ test("the wall reads busy until the server's cards are the chip's — after a ch
   // settled on You with your cards; focus on the card that opened it.
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(wallPressed(page)).toHaveText("You");
+  await expect(wallPressed(page)).toHaveText("Kim");
   await expect(wallBusy(page)).toHaveAttribute("aria-busy", "true");
   const params = new URL(page.url()).searchParams;
   expect(params.get("cut")).toBeNull();
@@ -430,7 +430,7 @@ test("a card the other side has nothing for: switched to Opponent inside, the em
   ).toHaveCount(0);
   await page
     .locator('#root [role="group"][aria-label="Player"]')
-    .getByRole("button", { name: "You" })
+    .getByRole("button", { name: "Kim", exact: true })
     .click();
   await expect(wallBusy(page)).toHaveCount(0, { timeout: 5_000 });
   await expect(serveCard).toBeVisible();
@@ -556,10 +556,10 @@ test("Saved: the workspace's views over the season; opening one names it, and cl
   await expect(saved.getByRole("listitem")).toHaveCount(1);
   await expect(saved).toContainText("Second serves");
   await expect(saved).not.toContainText("Their rally shots");
-  await page.getByRole("button", { name: "Opponent", exact: true }).click();
+  await page.getByRole("button", { name: "Opponents", exact: true }).click();
   await expect(saved.getByRole("listitem")).toHaveCount(1);
   await expect(saved).toContainText("Their rally shots");
-  await page.getByRole("button", { name: "You", exact: true }).click();
+  await page.getByRole("button", { name: "Kim", exact: true }).click();
   await expect(saved).toContainText("Second serves");
   if (process.env.SEASON_SAVED_SHOT)
     await page.screenshot({ path: process.env.SEASON_SAVED_SHOT });
@@ -676,7 +676,7 @@ test('a season mark names its match — "vs Jordan Lee · Nov 3" and where in it
     "vs Jordan Lee · Nov 3",
   );
   await expect(readout).toContainText(
-    /Set \d+ · Game \d+ · (Avery Kim|Jordan Lee) serving/,
+    /Set \d+ · Game \d+ · (Kim|Jordan Lee) serving/,
   );
   await expect(readout.locator("[data-viz-readout-hint]")).toHaveText(
     "Click to focus",
@@ -921,7 +921,7 @@ test("with the other side streamed in, the wall's You | Opponent swaps at once: 
   // And back to You, as fast.
   await page
     .locator('#root [role="group"][aria-label="Player"]')
-    .getByRole("button", { name: "You" })
+    .getByRole("button", { name: "Kim", exact: true })
     .click();
   await expect(
     wall.getByRole("link", { name: /, Avery Kim:/ }).first(),

@@ -8,6 +8,7 @@ import { FooterMeter, SplitReadout } from "./FooterMeter";
 import { jumpToMissingField, MissingFieldsPill } from "./MissingFieldsPill";
 import { useUploadWizard } from "./UploadWizardProvider";
 import { focusRingCls } from "./styles";
+import { controlName } from "@/lib/ui/control-name";
 
 /**
  * The wizard footer's three slots, each reading the wizard context — composed
@@ -163,6 +164,7 @@ export function SaveDraftButton() {
       type="button"
       onClick={() => void saveDraft()}
       disabled={draftSaving}
+      {...controlName("wizard_save_draft")}
       className="shrink-0 cursor-pointer text-[11px] whitespace-nowrap text-[var(--ink-500)] transition-colors duration-150 hover:text-[var(--ink-900)] disabled:cursor-default"
     >
       {draftSaving ? "Saving…" : "Save draft"}

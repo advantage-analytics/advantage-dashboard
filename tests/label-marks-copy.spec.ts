@@ -76,6 +76,7 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   first_serve_fault_alone: {},
   serve_in_landing_out: { shotId: "s-1", landing: "out" },
   serve_after_serve_in: { shotId: "s-2" },
+  serves_from_both_sides: { shotId: "s-2" },
   serve_by_receiver: { shotId: "s-8", hitter: "p1", server: "p2" },
   placement_missing: { shotId: "s-1", stroke: "serve", missing: "landing" },
   pick_winner: {},
@@ -149,6 +150,7 @@ test.describe("mark copy", () => {
       first_serve_fault_alone: "Fault, no second serve",
       serve_in_landing_out: "Serve in, landing outside the box",
       serve_after_serve_in: "Serve after a serve in play",
+      serves_from_both_sides: "Serves from both sides",
       serve_by_receiver: "Serve by the receiver",
       placement_missing: "No placement",
       pick_winner: "Pick the winner",
@@ -251,6 +253,7 @@ test.describe("mark copy", () => {
       second_serve_as_first: "Make it a second serve",
       shot_after_point_end: "Split here",
       serve_after_serve_in: "Split here",
+      serves_from_both_sides: "Split here",
     });
     expect(removeAfterLabel(1)).toBe("Yes, remove 1");
     expect(removeAfterLabel(3)).toBe("Yes, remove 3");

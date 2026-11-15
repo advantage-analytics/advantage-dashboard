@@ -53,6 +53,7 @@ import { FieldCaption } from "./FieldCaption";
 import { noteSuggestion } from "./validation";
 import { formatResolution, formatTimecode, getNumberOfSets } from "./utils";
 import { VideoRequirements } from "./VideoRequirements";
+import { controlName } from "@/lib/ui/control-name";
 import { formatProbeFps } from "@/lib/services/upload/validators/splitstep-validator";
 
 export interface FileStepContentProps {
@@ -369,6 +370,7 @@ function FileStepContentImpl({
           <div
             role="button"
             tabIndex={0}
+            {...controlName("wizard_choose_file")}
             onClick={busy ? undefined : browse}
             onKeyDown={(e) => {
               if (!busy && (e.key === "Enter" || e.key === " ")) {
@@ -507,6 +509,7 @@ function FileStepContentImpl({
             <button
               type="button"
               onClick={browse}
+              {...controlName("wizard_replace_file")}
               className="cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-150 hover:text-[var(--blue-hover)]"
             >
               Replace
@@ -515,6 +518,7 @@ function FileStepContentImpl({
               type="button"
               onClick={onRemove}
               aria-label={isVideo ? "Remove video" : "Remove export"}
+              {...controlName("wizard_remove_file")}
               className="inline-flex size-7 cursor-pointer items-center justify-center rounded-[var(--radius-element)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] touch:hit-area"
             >
               <X

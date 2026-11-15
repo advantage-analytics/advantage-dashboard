@@ -3,6 +3,7 @@
 import { memo } from "react";
 
 import { AppliedFilterStrip } from "@/components/dashboard/shared/applied-filter-strip";
+import type { FilterBandLabels } from "../match-filters/model";
 import { draftCountLine } from "../match-filters/panel-draft";
 import {
   filmListActive,
@@ -38,6 +39,7 @@ export const FilmFilterStrip = memo(function FilmFilterStrip({
   shown,
   total,
   focusAfterClear,
+  bandLabels,
 }: {
   filmFilters: FilmListFilters;
   /** Short names, as the list prints them ("G. Revelli"). */
@@ -49,6 +51,8 @@ export const FilmFilterStrip = memo(function FilmFilterStrip({
   /** Focus the point list's filters trigger (`useFilterRail().focusTrigger`):
    *  it sits after the strip, so the strip's default would miss it. */
   focusAfterClear?: () => boolean;
+  /** Contact and Landed in read the viewer's bands. */
+  bandLabels?: FilterBandLabels;
 }) {
   return (
     <AppliedFilterStrip
@@ -56,7 +60,7 @@ export const FilmFilterStrip = memo(function FilmFilterStrip({
       gap={16}
       sentence={
         filmListActive(filmFilters)
-          ? filmListSentence(filmFilters, names)
+          ? filmListSentence(filmFilters, names, bandLabels)
           : null
       }
       count={draftCountLine(shown, total)}

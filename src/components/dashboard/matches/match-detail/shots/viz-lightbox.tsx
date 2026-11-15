@@ -21,9 +21,11 @@ import {
 import { shotsWriteAccess } from "./shots-write-access";
 import { serveRowDotIds, statPickDotIds, type StatPick } from "./stat-cut";
 import { useVizState } from "./use-viz-state";
-import { useVizView } from "./use-viz-view";
+import { useVizFilterContext, useVizView } from "./use-viz-view";
+import { bandLabelsOf } from "../match-filters/model";
 import { useVizBands } from "./viz-bands-context";
 import { CUT_LABEL } from "./viz-labels";
+import { useMatchPlayerChipLabels } from "./use-match-player-chip-labels";
 import { VizLightboxShell } from "./viz-lightbox-shell";
 import {
   EMPTY_VIZ_FILTERS,
@@ -39,7 +41,6 @@ import { activeFilterEntries, courtFor, sameFilterValue } from "./viz-url";
 import {
   useErrorSplitJudged,
   useFiltersPanelData,
-  useMatchFilters,
 } from "../match-filters/provider";
 import { lightboxCountLine } from "./wall-summary";
 
@@ -98,7 +99,7 @@ export function VizLightbox({
 }) {
   const { state, setState } = useVizState();
   const { meta } = useMatchReport();
-  const { context: matchCtx } = useMatchFilters();
+  const matchCtx = useVizFilterContext();
   const {
     cut,
     result,
@@ -115,6 +116,9 @@ export function VizLightbox({
     unit,
   } = useVizView();
   const { receipt, canEdit, applyBands } = useVizBands();
+  // The player switch's two words, and the same two wherever this card
+  // names a side (the subtitle, a mark's "… serving" line).
+  const chipLabels = useMatchPlayerChipLabels();
   const canSaveViews = allowSaveView && shotsWriteAccess(meta).canSaveViews;
   const cutMenuTriggerRef = useRef<HTMLButtonElement>(null);
   // A rename from the title's ⋯: the Saved wall's band saves it, and the
@@ -192,11 +196,11 @@ export function VizLightbox({
       if (point.gameNumber > 0) parts.push(`Game ${point.gameNumber}`);
       if (typeof point.serverIsPlayer1 === "boolean")
         parts.push(
-          `${point.serverIsPlayer1 === youIsPlayer1 ? "You" : "Opponent"} serving`,
+          `${point.serverIsPlayer1 === youIsPlayer1 ? chipLabels.you : chipLabels.opponent} serving`,
         );
       return parts.length > 0 ? parts.join(" · ") : null;
     },
-    [pointById, youIsPlayer1],
+    [pointById, youIsPlayer1, chipLabels.you, chipLabels.opponent],
   );
 
   // The second click on a mark or its row: that one point in the Video tab,
@@ -343,12 +347,14 @@ export function VizLightbox({
       youName: panelData.youName,
       oppName: panelData.oppName,
       count: countAdvanced,
+      bandLabels: bandLabelsOf(matchCtx),
     }),
     [
       panelData.availability,
       panelData.youName,
       panelData.oppName,
       countAdvanced,
+      matchCtx,
     ],
   );
 
@@ -413,7 +419,8 @@ export function VizLightbox({
       : savedView !== null
         ? nameOf(savedView)
         : CUT_LABEL[cut];
-  const subjectWord = state.filters.player === "you" ? "You" : "Opponent";
+  const subjectWord =
+    state.filters.player === "you" ? chipLabels.you : chipLabels.opponent;
   const subtitle = isDraft
     ? "Pick a chart and filters, then save it to reuse on any match."
     : `${CUT_LABEL[cut]} · ${subjectWord} · ${lightboxCountLine(
@@ -485,7 +492,10 @@ export function VizLightbox({
     cardFilters !== null &&
     cardKeys.includes(key) &&
     (onView ? sameFilterValue(key, liveFilters, cardFilters) : onCard);
-  const phrases = activeFilterEntries(state, names, { errorSplitJudged })
+  const phrases = activeFilterEntries(state, names, {
+    errorSplitJudged,
+    bandLabels: bandLabelsOf(matchCtx),
+  })
     .filter((e) => e.key !== "player" && !unchangedBaseKey(e.key))
     .map((e) => e.label);
   if (onView)
@@ -541,7 +551,11 @@ export function VizLightbox({
       panelActive={panelActive}
       onClose={close}
       onClearFilters={clearFilters}
-      player={{ value: state.filters.player, onChange: choosePlayer }}
+      player={{
+        value: state.filters.player,
+        onChange: choosePlayer,
+        labels: chipLabels,
+      }}
       filterPanel={{
         onChange: setFilters,
         sets,

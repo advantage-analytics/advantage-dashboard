@@ -11,6 +11,7 @@ import {
   applyMatchFilters,
   EMPTY_MATCH_FILTERS,
   filtersEqual,
+  type FilterBandLabels,
   type MatchFilterContext,
   type MatchFilters,
   type PlayerSide,
@@ -336,6 +337,8 @@ export function filmListSentence(
     pointSetLabel?: string | null;
   },
   names: PhraseNames,
+  /** Contact and Landed in read the viewer's bands (`optionLabel`). */
+  labels?: FilterBandLabels,
 ): string {
   const cut = f.remainder;
   let parts = appliedPhrases(
@@ -349,6 +352,7 @@ export function filmListSentence(
         cut && labelStatesOutcome(f.shared, cut) ? [] : f.shared.resultOutcome,
     },
     names,
+    labels,
   );
   if (f.remainder) {
     const opens = f.remainder.label.split(" · ")[0].toLowerCase();

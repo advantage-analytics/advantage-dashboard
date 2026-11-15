@@ -29,7 +29,10 @@ export interface RailScoreboardPlayer {
   name: string;
   /** One entry per set column; null is an unmeasured set (an em dash). */
   sets: (number | null)[];
-  /** Tiebreak points to superscript beside a set, aligned with `sets`. */
+  /**
+   * Tiebreak points to superscript beside a set, aligned with `sets`. Drawn
+   * on the row that WON the set — beside the 7 — and nowhere else.
+   */
   tiebreaks?: (number | null)[];
   /** Per-set "this row lost it" — final only; unused when omitted. */
   lostSets?: boolean[];
@@ -180,7 +183,8 @@ function ScoreRow({
           {player.sets.map((games, index) => {
             const won = player.wonSets?.[index] ?? false;
             const lost = player.lostSets?.[index] ?? false;
-            const tiebreak = lost ? (player.tiebreaks?.[index] ?? null) : null;
+            // The set loser's points, raised beside the winner's 7.
+            const tiebreak = won ? (player.tiebreaks?.[index] ?? null) : null;
             return (
               <span
                 key={index}
@@ -204,7 +208,13 @@ function ScoreRow({
                     <span aria-hidden="true" style={TIEBREAK_STYLE}>
                       {tiebreak}
                     </span>
-                    <span className="sr-only"> tiebreak {tiebreak}</span>
+                    {/* The digit is the OTHER row's points, so the spoken
+                        form says so: "7 tiebreak 10" on the winner's row
+                        reads as the winner scoring 10. */}
+                    <span className="sr-only">
+                      {" "}
+                      (won the tiebreak; opponent scored {tiebreak})
+                    </span>
                   </span>
                 ) : null}
               </span>

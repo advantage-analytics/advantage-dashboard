@@ -2640,12 +2640,13 @@ export function useUploadMatchWizard({
             "video_validation",
             result.error || "refused",
             file,
+            result.details?.video,
           );
           return;
         }
 
         const summary = result.details?.video ?? null;
-        trackVideoSelected(file, summary?.durationSeconds ?? null);
+        trackVideoSelected(file, summary);
 
         setVideoProbe(summary);
         setVideoWarnings(result.warnings ?? []);

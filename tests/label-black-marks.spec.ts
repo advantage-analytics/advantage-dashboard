@@ -1033,7 +1033,12 @@ test.describe("the hints read off the rows, with their answers", () => {
   });
 
   test("“Point ended here” offers Remove N and Split here; “Serve after a serve in play” Split here — each only with its write", () => {
-    const { pointHints } = createLoader().load(MARK) as { pointHints: Hints };
+    const { pointHints, firstHintAction } = createLoader().load(MARK) as {
+      pointHints: Hints;
+      firstHintAction: (hint: { actions: { label: string }[] }) => {
+        label: string;
+      } | null;
+    };
     const calls: unknown[][] = [];
     const edit = {
       onRemoveShotsAfter: (...args: unknown[]) =>
@@ -1053,6 +1058,8 @@ test.describe("the hints read off the rows, with their answers", () => {
       "Yes, remove 1",
       "Split here",
     ]);
+    // The accept key answers yes, not the split the row draws first.
+    expect(firstHintAction(ended)?.label).toBe("Yes, remove 1");
     ended.actions[0].run();
     ended.actions[1].run();
     expect(calls).toEqual([
@@ -1119,15 +1126,15 @@ test.describe("the hints read off the rows, with their answers", () => {
     expect(tag(html, "data-suggestion-text")).toContain(
       "Did the point end here? 1 shot follows",
     );
-    // Laid out as the tray lays out its own: Split first, each with its icon.
+    // The yes first, the answer the accept key gives; then the split.
     const buttons = [
       ...html.matchAll(
         /<button[^>]*data-point-hint-action="([^"]*)"[^>]*aria-label="([^":]*):/g,
       ),
     ].map((m) => [m[1], m[2]]);
     expect(buttons).toEqual([
-      ["shot_after_point_end", "Split here"],
       ["shot_after_point_end", "Yes, remove 1"],
+      ["shot_after_point_end", "Split here"],
     ]);
   });
 

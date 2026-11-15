@@ -113,7 +113,7 @@ import type {
   AttachmentPlaybackProblem,
   AttachmentResumeIntent,
 } from "./use-attachment-playback";
-import { useBallPaths } from "./use-ball-paths";
+import { useBallPaths, useBallPathsRoute } from "./use-ball-paths";
 import { useSeekSettling } from "./use-seek-settling";
 import { useFilmReadOnly } from "./film-read-only";
 
@@ -685,10 +685,14 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   // optional — with no file, no match for a shot or no bounce in the vendor's
   // data, `bounceTime` stays undefined and `estimatedBounceTime` places the
   // bounce exactly as it does today.
+  // Not on a shared link: the route asks for a session and would refuse. The
+  // admin report names a route of its own (`useBallPathsRoute`).
+  const ballPathsRoute = useBallPathsRoute(readOnly);
   const ballPaths = useBallPaths({
     matchId: match.id,
-    // Not on a shared link: the route asks for a session and would refuse.
-    enabled: courtOn && match.sourceProvider === "splitstep" && !readOnly,
+    enabled:
+      courtOn && match.sourceProvider === "splitstep" && ballPathsRoute.allowed,
+    endpoint: ballPathsRoute.endpoint,
     clock: p.clock,
   });
   // Both sides are film seconds: `ShotStop.start` already is, and the paths

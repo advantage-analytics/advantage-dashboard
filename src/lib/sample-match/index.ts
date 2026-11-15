@@ -17,10 +17,10 @@ import type { MatchDetailData } from "@/lib/data/match-detail-server";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { MatchVideo } from "@/lib/data/match-video-server";
 import { errorSplitJudged } from "@/lib/data/error-split";
-import { SAMPLE_VIDEO_ATTACHMENT } from "@/lib/services/sample-match/video";
 
 import type { SampleMatchData } from "./anonymise";
 import fixture from "./fixture.json";
+import { SAMPLE_VIDEO_ATTACHMENT } from "./video-attachment";
 
 /**
  * `getMatchDetailData()`'s shape with the one narrowing a static fixture can

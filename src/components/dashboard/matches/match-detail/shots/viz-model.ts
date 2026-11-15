@@ -51,7 +51,7 @@ import {
   type MatchFilterKey,
   type MatchFilters,
 } from "../match-filters/model";
-import { bandKindFor } from "./cut-kinds";
+import { bandKindFor, marksAreShots } from "./cut-kinds";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
@@ -417,6 +417,50 @@ function resolvedServe(p: MatchPoint) {
     (s) => s.shotType,
     (s) => s.shotNumber,
   );
+  return serveFromShot(p, shot);
+}
+
+/**
+ * The point's FIRST serve, struck — in or not. `resolvedServe` is the serve
+ * that was played (the second, after a fault), so a faulted first serve is
+ * on no court there; this is the one the Ball › 1st court draws instead
+ * (`firstServesStruck`). Null when the point has no first serve: a serve
+ * row list that holds only a second serve, or a point with no rows whose
+ * played serve was the second.
+ */
+function firstServeStruck(p: MatchPoint) {
+  const serves = (p.shots ?? []).filter((s) => isServeShotType(s.shotType));
+  if (serves.length === 0) {
+    // No serve rows: the flattened fields are the played serve, which is
+    // the first serve only when it is labelled one.
+    return isFirstServePoint(p) ? serveFromShot(p, undefined) : null;
+  }
+  const counted = serves.filter((s) => (s.shotNumber ?? 0) >= 1);
+  const pool = counted.length > 0 ? counted : serves;
+  const played = pool.find((s) => isFirstServeShotType(s.shotType));
+  if (played) return serveFromShot(p, played);
+  // Played on the second serve. A faulted first serve is stored BEFORE the
+  // serve that counted — shot 0, where `countedShots` skips it as pre-serve
+  // — so it is read here directly: the last first-serve row before it.
+  const faulted = serves
+    .filter((s) => (s.shotNumber ?? 0) < 1 && isFirstServeShotType(s.shotType))
+    .at(-1);
+  return faulted ? serveFromShot(p, faulted) : null;
+}
+
+/**
+ * The Ball filter is exactly 1st: the serve court draws every FIRST serve
+ * struck, faults included, rather than the points played on a first serve
+ * — so the court reads as first-serve percentage and where the misses
+ * went. Zone shares still count only the serves that landed in
+ * (`computeServeZoneStats`). Both pills, or neither, or 2nd alone: one
+ * serve per point, the one played, as before.
+ */
+export function firstServesStruck(cut: Cut, ball: BallFilter): boolean {
+  return cut === "serve" && ball.length === 1 && ball[0] === "first";
+}
+
+function serveFromShot(p: MatchPoint, shot: MatchShot | undefined) {
   // A resolved row is authoritative as a pair. Never manufacture a landing
   // by mixing one missing shot coordinate with a different flattened row.
   const landingX = shot ? shot.landingX : p.firstShotLandingX;
@@ -1366,6 +1410,7 @@ export function computeViz(
   }
 
   const frame = cutFrame(cut);
+  const everyFirst = firstServesStruck(cut, filters.ball);
   let total = 0;
   let count = 0;
   let serveOutOrNetCount = 0;
@@ -1376,12 +1421,36 @@ export function computeViz(
     if (frame === "serve") {
       if (p.serverIsPlayer1 !== subjectIsPlayer1) continue;
 
-      const serve = resolvedServe(p);
+      const serve = everyFirst ? firstServeStruck(p) : resolvedServe(p);
       if (!serve) continue;
       const { shot: serveShot, metrics } = serve;
 
       total++;
-      if (!pointMatchesFilters(p, filters, "serve", subjectIsPlayer1)) continue;
+      if (everyFirst) {
+        // Every first serve qualifies on Ball, and Court and Zone read THIS
+        // serve, not the one played after it — so they are checked here
+        // and the rest of the filters run without them.
+        if (
+          filters.court.length &&
+          !filters.court.includes(metrics.lateralM < 0 ? "deuce" : "ad")
+        )
+          continue;
+        if (filters.zone.length) {
+          if (metrics.kind !== "in") continue;
+          if (!filters.zone.includes(deriveZoneFromX(metrics.lateralM)))
+            continue;
+        }
+        if (
+          !pointMatchesFilters(
+            p,
+            { ...filters, ball: [], court: [], zone: [] },
+            "serve",
+            subjectIsPlayer1,
+          )
+        )
+          continue;
+      } else if (!pointMatchesFilters(p, filters, "serve", subjectIsPlayer1))
+        continue;
       if (matchPass !== null && !matchPass.point(p)) continue;
       count++;
       if (metrics.kind === "out" || metrics.kind === "net") {
@@ -1398,7 +1467,10 @@ export function computeViz(
       // ONE expression for "this serve is an ace", read by both
       // the dot's star shape and its `meta.isAce`, so the glyph and the
       // readout's first line can never disagree.
-      const isAce = p.resultType === "Ace";
+      // On the 1st court a faulted first serve is never the ace, even when
+      // the second serve that followed it was.
+      const isAce =
+        p.resultType === "Ace" && (!everyFirst || metrics.kind === "in");
 
       // Mirrors the return branch's flattened-field fallback —
       // `serveShot` can be `undefined` (a point whose `shots` row wasn't
@@ -1534,7 +1606,9 @@ export interface StatRow {
 
 /**
  * The single accessible sentence for one stat row — "Crosscourt: 100% of 4
- * points won" / "Ad T: no points". The only place this string is built:
+ * points won" / "Ad T: no points", and on a rally cut, whose rows count
+ * shots (`marksAreShots`), "Deep: 72% of 50 shots won" / "Short: no shots" —
+ * the noun the row's own tooltip uses. The only place this string is built:
  * `stats-card.tsx` renders it verbatim into a visually-hidden node and
  * hides its own visible label/number markup from assistive tech, so a
  * screen reader announces this sentence exactly once per row, never the
@@ -1542,13 +1616,14 @@ export interface StatRow {
  * rows through `computeVizStats` (not by hand) so a card row can never ship
  * with an empty label again the way the live app briefly did.
  */
-export function statRowAnnouncement(row: StatRow): string {
+export function statRowAnnouncement(row: StatRow, cut: Cut): string {
   if (row.share) {
     if (row.count === 0) return `${row.label}: no errors`;
     return `${row.label}: ${row.winPct}% of errors, ${row.count}`;
   }
-  if (row.winPct === null) return `${row.label}: no points`;
-  return `${row.label}: ${row.winPct}% of ${row.count} points won`;
+  const noun = marksAreShots(cut) ? "shots" : "points";
+  if (row.winPct === null) return `${row.label}: no ${noun}`;
+  return `${row.label}: ${row.winPct}% of ${row.count} ${noun} won`;
 }
 
 export interface StatGroup {
@@ -1623,7 +1698,14 @@ function rowTieBreak(a: StatRow, b: StatRow): number {
 }
 
 /** Rows sorted by win rate, highest first; zero-count (`winPct: null`) rows
- * sort last; ties by count desc, then label. */
+ * sort last; ties by count desc, then label.
+ *
+ * Not for a "Depth" group. Its rows are positions on the court — Deep, Mid,
+ * Short; Inside the baseline, then further behind it — and they stay in that
+ * order, the order the bands are drawn in, whatever each one's win rate. A
+ * list that reshuffled with the numbers made the reader find "Deep" again
+ * on every filter change, and put the rows out of step with the court
+ * beside them. */
 function sortRows(rows: StatRow[]): StatRow[] {
   return [...rows].sort((a, b) => {
     if (a.winPct === null && b.winPct === null) return rowTieBreak(a, b);
@@ -1637,12 +1719,14 @@ function sortRows(rows: StatRow[]): StatRow[] {
 /**
  * The order `computeVizStats` gives a group's rows, for a caller that has
  * summed rows from several matches and must put them back in it (the player
- * profile's season fold, `lib/data/player-season-viz.ts`): share rows (the
- * errors cut's, `errorStats`) by count, every other group by win rate
- * (`sortRows`). `tests/player-season-viz.spec.ts` pins that one match merged
- * with itself comes back in `computeVizStats`' own order.
+ * profile's season fold, `lib/data/player-season-viz.ts`): a "Depth" group
+ * as it came (band order — see `sortRows`), share rows (the errors cut's,
+ * `errorStats`) by count, every other group by win rate (`sortRows`).
+ * `tests/player-season-viz.spec.ts` pins that one match merged with itself
+ * comes back in `computeVizStats`' own order.
  */
-export function orderStatRows(rows: StatRow[]): StatRow[] {
+export function orderStatRows(rows: StatRow[], groupKey: string): StatRow[] {
+  if (groupKey === "depth") return rows;
   if (rows.some((row) => row.share)) {
     return [...rows].sort((a, b) => b.count - a.count || rowTieBreak(a, b));
   }
@@ -1854,10 +1938,8 @@ function returnPlacementStats(
     groups.push({
       key: "depth",
       label: "Depth",
-      rows: sortRows(
-        depthRows.map((row) =>
-          makeRow(row.key, row.label, depth[row.key].count, depth[row.key].won),
-        ),
+      rows: depthRows.map((row) =>
+        makeRow(row.key, row.label, depth[row.key].count, depth[row.key].won),
       ),
     });
   }
@@ -1902,10 +1984,8 @@ function returnContactStats(
   const depthGroup: StatGroup = {
     key: "depth",
     label: "Depth",
-    rows: sortRows(
-      contactRows.map((row) =>
-        makeRow(row.key, row.label, depth[row.key].count, depth[row.key].won),
-      ),
+    rows: contactRows.map((row) =>
+      makeRow(row.key, row.label, depth[row.key].count, depth[row.key].won),
     ),
   };
   const strokeGroup: StatGroup = {
@@ -2031,10 +2111,8 @@ export function computeVizStats(
           {
             key: "depth",
             label: "Depth",
-            rows: sortRows(
-              rows.map((r) =>
-                makeRow(r.key, r.label, acc[r.key].count, acc[r.key].won),
-              ),
+            rows: rows.map((r) =>
+              makeRow(r.key, r.label, acc[r.key].count, acc[r.key].won),
             ),
           },
         ]
@@ -2231,6 +2309,53 @@ export interface VizBandZones {
   dividersFt: number[];
   rows: BandRow[];
   statRows: StatRow[] | null;
+}
+
+/**
+ * The bands' `% · n` recounted over the marks the court is drawing — the
+ * lightbox's court once a Statistics row or a legend key narrows it, so
+ * picking "Down the line" turns every band into "of the down-the-line
+ * returns, how many landed here and how many of those were won".
+ *
+ * Bucketed from the overlay's OWN dividers (never a second read of the
+ * settings), by the same rules `computeVizStats` uses: placement cuts count
+ * only marks that landed in (`isPlacementRow`), contact cuts count every
+ * mark. Index order is band order, as `depthBandRows`/`contactBandRows`
+ * list it. A band no mark falls in comes back `count: 0`, which the overlay
+ * prints as nothing.
+ */
+export function bandStatRowsForDots(
+  cut: Cut,
+  zones: Pick<VizBandZones, "kind" | "dividersFt" | "rows">,
+  dots: readonly VizDot[],
+): StatRow[] | null {
+  const [a, b] = zones.dividersFt;
+  if (a === undefined || b === undefined || zones.rows.length !== 3)
+    return null;
+  const bucket =
+    zones.kind === "depth"
+      ? makeDepthBucketer({
+          depthScheme: "custom",
+          depthDividersFt: [a, b],
+          contactDividersFt: [0, 0],
+        })
+      : makeContactBucketer({
+          depthScheme: "none",
+          depthDividersFt: null,
+          contactDividersFt: [a, b],
+        });
+  const placement = cut === "returnPlacement" || cut === "rallyPlacement";
+  const acc = bandRowAccumulator(zones.rows);
+  for (const dot of dots) {
+    if (placement && !isPlacementRow(dot)) continue;
+    const row = zones.rows[bucket(dot.depthM)];
+    if (!row) continue;
+    acc[row.key].count++;
+    if (dot.outcome === "won") acc[row.key].won++;
+  }
+  return zones.rows.map((r) =>
+    makeRow(r.key, r.label, acc[r.key].count, acc[r.key].won),
+  );
 }
 
 export function bandZonesFor(

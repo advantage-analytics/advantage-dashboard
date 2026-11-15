@@ -1,5 +1,7 @@
 "use client";
 
+import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
+import type { PlayerChipLabels } from "@/components/dashboard/matches/match-detail/shots/player-chip-labels";
 import {
   lazy,
   Suspense,
@@ -227,6 +229,7 @@ function emptyCourt(
     },
     stats: { title: label, subtitle: "", groups: [], sentence: null, total: 0 },
     bandZones: null,
+    bands: last?.bands ?? DEFAULT_BANDS,
     subjectName: "",
     unit: last?.unit ?? "ft",
     hasFilters: false,
@@ -269,6 +272,7 @@ const NO_ADVANCED_OPTIONS = seasonAdvancedOptions([]);
 
 export function SeasonVizLightbox({
   data,
+  playerLabels,
   wallPlayer,
   analyzed,
   errorSplitJudged,
@@ -278,6 +282,8 @@ export function SeasonVizLightbox({
   /** The server's answer for the URL it last rendered; `null` on the wall
    *  and until the first answer for an opened card lands. */
   data: SeasonLightboxData | null;
+  /** The player switch's two words (`player-chips.tsx`). */
+  playerLabels: PlayerChipLabels;
   /** The wall's own You | Opponent, which closing restores — a player
    *  switched inside the lightbox does not leak onto the wall. */
   wallPlayer: PlayerFilter;
@@ -313,7 +319,6 @@ export function SeasonVizLightbox({
     return { byDot, byPoint };
   }, [dotPoints, resultDots]);
   const seasonMatches = data?.matches ?? null;
-  const playerName = data?.names.you ?? "";
   // The readout's "Set 1 · Game 4 · Maya Chen serving", as the report's.
   const whereFor = useCallback(
     (pointId: string): string | null => {
@@ -325,11 +330,11 @@ export function SeasonVizLightbox({
       if (gameNumber > 0) parts.push(`Game ${gameNumber}`);
       if (server !== -1)
         parts.push(
-          `${server === 1 ? playerName : (seasonMatches?.[m]?.opponentName ?? "Opponent")} serving`,
+          `${server === 1 ? playerLabels.you : (seasonMatches?.[m]?.opponentName ?? "Opponent")} serving`,
         );
       return parts.length > 0 ? parts.join(" · ") : null;
     },
-    [refs, playerName, seasonMatches],
+    [refs, playerLabels.you, seasonMatches],
   );
   // "vs Lee · Nov 3" — the calendar day, read as one (`match-day.ts`).
   const matchFor = useCallback(
@@ -363,6 +368,8 @@ export function SeasonVizLightbox({
   // server applies it to each match.
   const advancedOptions = data?.advancedOptions ?? null;
   const names = data?.names ?? null;
+  const bandSettings = data?.bands ?? null;
+  const bandUnit = data?.unit ?? null;
   const advanced = useMemo(
     () =>
       advancedOptions === null || names === null
@@ -371,8 +378,12 @@ export function SeasonVizLightbox({
             availability: advancedAvailability(advancedOptions),
             youName: names.you,
             oppName: names.opponent,
+            bandLabels:
+              bandSettings !== null && bandUnit !== null
+                ? { bands: bandSettings, unit: bandUnit }
+                : undefined,
           },
-    [advancedOptions, names],
+    [advancedOptions, names, bandSettings, bandUnit],
   );
   const statRowDots = useMemo(() => {
     const sets = new Map(
@@ -584,7 +595,11 @@ export function SeasonVizLightbox({
         panelActive={court.panelActive}
         onClose={close}
         onClearFilters={clearFilters}
-        player={{ value: state.filters.player, onChange: choosePlayer }}
+        player={{
+          value: state.filters.player,
+          onChange: choosePlayer,
+          labels: playerLabels,
+        }}
         filterPanel={{
           onChange: setFilters,
           sets: court.sets,

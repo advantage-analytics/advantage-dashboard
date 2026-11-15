@@ -10,6 +10,8 @@ import {
   gameOverflow,
   gameUnderflow,
   leftoverIds,
+  gameCombineOptions,
+  planGameCombine,
   planGamePull,
   planGameShift,
   planGameSplit,
@@ -18,6 +20,7 @@ import {
 import {
   pullLabelGamePoints,
   shiftLabelGameOverflow,
+  writeLabelGameCombine,
   writeLabelGamePull,
   writeLabelGameShift,
 } from "@/lib/services/labels/game-shift-session";
@@ -27,6 +30,9 @@ import {
   planGameBoundary,
 } from "@/lib/services/labels/game-boundary";
 import { gameKey, labelScores } from "@/lib/services/labels/score";
+import { gameServeRepeats } from "@/lib/services/labels/game-serve-order";
+import { setJoin } from "@/lib/services/labels/set-cut";
+import { gameBandCombineActions } from "@/components/admin/labels/label-game-band";
 import { applyUndoDiff } from "@/lib/services/labels/undo-diff";
 import type {
   LabelGameType,
@@ -1434,6 +1440,7 @@ test.describe("planGamePull", () => {
       shots: [],
       summary: {
         points: 1,
+        first: 1,
         games: 1,
         fromGame: { set: 1, gameInSet: 2 },
         swapped: 0,
@@ -1470,8 +1477,10 @@ test.describe("planGamePull", () => {
     const plan = planGamePull(two, KEY, false);
     expect(plan).toMatchObject({
       ok: true,
+      // One row lands in game 1; the other four are game 2's, from game 3.
       summary: {
         points: 5,
+        first: 1,
         games: 2,
         fromGame: { set: 1, gameInSet: 2 },
         swapped: 0,
@@ -1577,6 +1586,7 @@ test.describe("planGamePull", () => {
       ],
       summary: {
         points: 2,
+        first: 2,
         games: 1,
         fromGame: { set: 1, gameInSet: 2 },
         swapped: 1,
@@ -1792,6 +1802,29 @@ test.describe("the isn't-finished slot", () => {
     expect(calls).toEqual([["pull", KEY]]);
     // One game, nobody switching: no tooltip on the button.
     expect(findWhere(tree, (p) => typeof p.detail === "string")).toBeNull();
+
+    // A cascade: the count is what lands in this game, never the total the
+    // pull moves; the rest is the donor's own, said in the tooltip.
+    const two = match([
+      { game: 1, server: "p1", winners: ["p1", "p1", "p2", "p2", "p2"] },
+      { game: 2, server: "p2", winners: ["p2", "p1"] },
+      { game: 3, server: "p1", winners: ["p2", "p2", "p2", "p2"] },
+      { game: 4, server: "p2", winners: ["p1", "p1", "p1", "p1"] },
+    ]);
+    const cascade = BlackGameUnderflow({
+      slot: {
+        underflow: gameUnderflow(two, false)[0],
+        plan: planGamePull(two, KEY, false),
+      },
+      onPull: () => {},
+    });
+    expect(
+      findWhere(cascade, (p) => "data-game-underflow-detail" in p)?.props
+        .children,
+    ).toBe("Pull 1 point from game 2");
+    expect(
+      findWhere(cascade, (p) => typeof p.detail === "string")?.props.detail,
+    ).toBe("Game 2 is then short and takes 4 from the game after it");
 
     const add = BlackGameUnderflow({
       slot: { underflow, plan: { kind: "add_point" } },
@@ -2464,5 +2497,261 @@ test.describe("a locked game on the rail", () => {
     const undone = black(sessionWith(applyUndoDiff(moved, changed, [])));
     expect(undone).not.toContain("data-game-locked");
     expect(undone).not.toContain("set by you");
+  });
+});
+
+test.describe("combine a game with its neighbour", () => {
+  // Three games of one set: the vendor cut game 1 in two (games 1 and 2),
+  // so game 3 is really the set's second.
+  const cut = () =>
+    match([
+      { game: 1, server: "p1", winners: ["p1", "p1"] },
+      { game: 2, server: "p2", winners: ["p1", "p1"] },
+      { game: 3, server: "p1", winners: ["p2", "p2", "p2", "p2"] },
+    ]);
+
+  test("the lower game's points all join the upper: its number, its server, edited", () => {
+    const points = cut();
+    const above = planGameCombine(points, "1·2", "above", false);
+    expect(above).toEqual({
+      ok: true,
+      // Every moved row lets go of a lock: the lower game is gone.
+      writes: [UUID(3), UUID(4)].map((id) => ({
+        id,
+        set_number: 1,
+        game_number: 1,
+        server: "p1",
+        game_type: "game",
+        status: "edited",
+        game_start_locked: false,
+      })),
+      shots: [],
+      summary: {
+        points: 2,
+        into: { set: 1, gameInSet: 1 },
+        from: { set: 1, gameInSet: 2 },
+        swapped: 0,
+      },
+    });
+    // "Below" from the upper game is the same merge.
+    expect(planGameCombine(points, "1·1", "below", false)).toEqual(above);
+    if (!("ok" in above)) return;
+    const after = applyGameShift(points, above.writes);
+    expect(
+      labelScores(after, false).games.map((g) => [
+        g.gameNumber,
+        g.outcome.kind,
+      ]),
+    ).toEqual([
+      [1, "decided"],
+      [3, "decided"],
+    ]);
+    // The input is read, never written.
+    expect(points).toEqual(cut());
+    // A lock the lower game held does not follow its row into the upper.
+    const locked = cut().map((p) =>
+      p.id === UUID(3) ? { ...p, gameStartLocked: true } : p,
+    );
+    const merged = planGameCombine(locked, "1·2", "above", false);
+    if (!("ok" in merged)) throw new Error("no plan");
+    expect(
+      applyGameShift(locked, merged.writes).some((p) => p.gameStartLocked),
+    ).toBe(false);
+  });
+
+  test("refused with no neighbour, across a set, and with a tiebreak", () => {
+    const points = cut();
+    expect(planGameCombine(points, "1·1", "above", false)).toEqual({
+      error: "There is no game above this one to combine it with.",
+    });
+    expect(planGameCombine(points, "1·3", "below", false)).toEqual({
+      error: "There is no game below this one to combine it with.",
+    });
+    expect(planGameCombine(points, "1·9", "above", false)).toEqual({
+      error: "That game is not in this session.",
+    });
+    const sets = match([
+      { set: 1, game: 1, server: "p1", winners: ["p1"] },
+      { set: 2, game: 2, server: "p2", winners: ["p2"] },
+    ]);
+    expect(planGameCombine(sets, "2·2", "above", false)).toEqual({
+      error: "The game above is in another set: only games of one set combine.",
+    });
+    const tiebreak = match([
+      { game: 1, server: "p1", winners: ["p1"] },
+      { game: 2, server: "p2", type: "tiebreak", winners: ["p2"] },
+    ]);
+    expect(planGameCombine(tiebreak, "1·2", "above", false)).toEqual({
+      error: "A tiebreak is not combined with a game.",
+    });
+  });
+
+  test("the menu's options are the plan's own refusals, read off the bands", () => {
+    const options = gameCombineOptions(labelScores(cut(), false).games);
+    expect([...options]).toEqual([
+      ["1·1", { below: 2 }],
+      ["1·2", { above: 1, below: 3 }],
+      ["1·3", { above: 2 }],
+    ]);
+    const sets = match([
+      { set: 1, game: 1, server: "p1", winners: ["p1"] },
+      { set: 2, game: 2, server: "p2", winners: ["p2"] },
+    ]);
+    expect(gameCombineOptions(labelScores(sets, false).games).size).toBe(0);
+  });
+
+  test("after a merge the game below is flagged for its server, and a short set takes the next set's game", () => {
+    const points = cut();
+    const plan = planGameCombine(points, "1·2", "above", false);
+    if (!("ok" in plan)) throw new Error("no plan");
+    const after = applyGameShift(points, plan.writes).map((p) => ({
+      ...p,
+      shots: [],
+    }));
+    // Games 1 and 3 are now side by side, both p1's: game 2's number is
+    // empty, but its points were seeded there, so it is no game missing
+    // from the video and the repeat is flagged.
+    expect(gameServeRepeats(after).map((r) => r.game.gameNumber)).toEqual([3]);
+    // The set is now a game short of a 1–1 … 2–1 record: with a set after
+    // it, the join takes that set's first game.
+    const withNext = [
+      ...after,
+      ...match([{ set: 2, game: 4, server: "p2", winners: ["p2"] }]).map(
+        (p, i) => ({ ...p, id: UUID(90 + i), pointIndex: 90 + i, shots: [] }),
+      ),
+    ];
+    expect(
+      setJoin(
+        withNext,
+        false,
+        [
+          [2, 1],
+          [0, 1],
+        ],
+        null,
+        null,
+      ),
+    ).toEqual({ setNumber: 1, gameKeys: ["2·4"], join: true });
+  });
+
+  test("the band's game menu offers each combine, with the game that goes named", () => {
+    const calls: unknown[][] = [];
+    const run = (...args: unknown[]) => calls.push(args);
+    const game = { setNumber: 1, gameNumber: 2 };
+    const actions = gameBandCombineActions(game, { above: 1, below: 3 }, run);
+    expect(actions.map((a) => [a.label, a.description])).toEqual([
+      [
+        "Combine with game above",
+        "This game’s points join game 1. The servers and scores after it are checked again",
+      ],
+      [
+        "Combine with game below",
+        "Game 3’s points join this game. The servers and scores after it are checked again",
+      ],
+    ]);
+    actions.forEach((action) => action.run());
+    expect(calls).toEqual([
+      ["1·2", "above"],
+      ["1·2", "below"],
+    ]);
+    // No neighbour, or a rail that cannot write: no action.
+    expect(gameBandCombineActions(game, undefined, run)).toEqual([]);
+    expect(gameBandCombineActions(game, { above: 1 }, undefined)).toEqual([]);
+    expect(
+      gameBandCombineActions(game, { below: 3 }, run).map((a) => a.key),
+    ).toEqual(["combine-below"]);
+  });
+});
+
+test.describe("writeLabelGameCombine", () => {
+  const rows = () =>
+    rowsOf(
+      match([
+        { game: 1, server: "p1", winners: ["p1", "p1"] },
+        { game: 2, server: "p1", winners: ["p1", "p1"] },
+      ]),
+    );
+
+  test("planned on the rows as read, then one update by id list", async () => {
+    const fake = fakeClient({
+      session: { status: "labelling", ad_scoring: false, job_id: JOB_ID },
+      points: rows(),
+    });
+    const result = await writeLabelGameCombine({
+      supabase: fake.supabase,
+      sessionId: SESSION_ID,
+      gameKey: "1·2",
+      direction: "above",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      writes: [
+        { id: UUID(3), game_number: 1, server: "p1", status: "edited" },
+        { id: UUID(4), game_number: 1, server: "p1", status: "edited" },
+      ],
+      shots: [],
+    });
+    expect(writes(fake).map((c) => [c.values, c.in])).toEqual([
+      [
+        {
+          set_number: 1,
+          game_number: 1,
+          server: "p1",
+          game_type: "game",
+          status: "edited",
+          game_start_locked: false,
+        },
+        { id: [UUID(3), UUID(4)] },
+      ],
+    ]);
+  });
+
+  test("a bad key, a bad direction, a refused plan and a complete session write nothing", async () => {
+    const bad = fakeClient({});
+    expect(
+      await writeLabelGameCombine({
+        supabase: bad.supabase,
+        sessionId: SESSION_ID,
+        gameKey: "1-2",
+        direction: "above",
+      }),
+    ).toEqual({ error: "Invalid game." });
+    expect(
+      await writeLabelGameCombine({
+        supabase: bad.supabase,
+        sessionId: SESSION_ID,
+        gameKey: "1·2",
+        direction: "sideways",
+      }),
+    ).toEqual({ error: "Invalid direction." });
+    expect(bad.calls).toEqual([]);
+
+    const refused = fakeClient({
+      session: { status: "labelling", ad_scoring: false, job_id: JOB_ID },
+      points: rows(),
+    });
+    expect(
+      await writeLabelGameCombine({
+        supabase: refused.supabase,
+        sessionId: SESSION_ID,
+        gameKey: "1·1",
+        direction: "above",
+      }),
+    ).toEqual({ error: "There is no game above this one to combine it with." });
+    expect(writes(refused)).toEqual([]);
+
+    const complete = fakeClient({
+      session: { status: "complete", ad_scoring: false, job_id: JOB_ID },
+      points: rows(),
+    });
+    expect(
+      await writeLabelGameCombine({
+        supabase: complete.supabase,
+        sessionId: SESSION_ID,
+        gameKey: "1·2",
+        direction: "above",
+      }),
+    ).toHaveProperty("error");
+    expect(writes(complete)).toEqual([]);
   });
 });

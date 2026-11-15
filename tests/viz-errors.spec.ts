@@ -184,7 +184,9 @@ test("errors stats are shares of the errors shown, by miss and by stroke", () =>
     "Forehand",
     "Serve",
   ]);
-  expect(statRowAnnouncement(miss.rows[0])).toBe("Long: 33% of errors, 1");
+  expect(statRowAnnouncement(miss.rows[0], "errors")).toBe(
+    "Long: 33% of errors, 1",
+  );
   expect(chartAllowedOn("errors", "zones")).toBe(false);
   expect(chartAllowedOn("errors", "heat")).toBe(true);
 });

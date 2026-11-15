@@ -1,4 +1,5 @@
 import { cache, Suspense } from "react";
+import { seasonPlayerChipLabels } from "@/components/dashboard/matches/match-detail/shots/player-chip-labels";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
@@ -35,6 +36,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/report-title-row";
 import { ProfileHeaderSlot } from "@/components/dashboard/team/player-profile/profile-header-slot";
 import { ProfileRail } from "@/components/dashboard/team/player-profile/profile-rail";
+import { ProfileAnalytics } from "@/components/dashboard/team/player-profile/profile-analytics";
 import {
   ProfileTitle,
   ProfileViewWhen,
@@ -269,6 +271,8 @@ export default async function PlayerProfilePage({
         players={players}
       />
 
+      <ProfileAnalytics playerId={profile.playerId} isSelf={isSelf} />
+
       <MatchReportFrame>
         <ProfileRail
           profile={profile}
@@ -377,6 +381,7 @@ export default async function PlayerProfilePage({
                       playerId={playerId}
                       playerName={profile.name}
                       firstName={profile.firstName}
+                      isSelf={isSelf}
                       workspaceName={active.name}
                       workspaceRole={active.role}
                       query={query}
@@ -476,6 +481,7 @@ async function ProfileVisualizationsBody({
   playerId,
   playerName,
   firstName,
+  isSelf,
   workspaceName,
   workspaceRole,
   query,
@@ -484,6 +490,8 @@ async function ProfileVisualizationsBody({
   playerId: string;
   playerName: string;
   firstName: string;
+  /** The viewer is this player: the player switch says "You". */
+  isSelf: boolean;
   /** The program's name, for the Save dialog's "Share with team" row. */
   workspaceName: string;
   /** The viewer's role in the program: who may rename or delete a view. */
@@ -508,6 +516,9 @@ async function ProfileVisualizationsBody({
   // player is kept in the browser meanwhile (`profile-visualizations-view.tsx`)
   // and closing writes it back here, so the cards are recomputed for it.
   const side = state.filters.player;
+  // The player switch's two words, and the subject word of an opened card's
+  // subtitle: "You" only when the viewer is this player.
+  const chipLabels = seasonPlayerChipLabels(playerName, isSelf);
   // The other side's wall, streamed behind the page (a promise prop): the
   // timer lets this answer go out first, and once it lands the wall's
   // You | Opponent swaps sides in the browser with no round trip
@@ -535,6 +546,7 @@ async function ProfileVisualizationsBody({
       <ProfileVisualizationsView
         playerName={playerName}
         firstName={firstName}
+        chipLabels={chipLabels}
         analyzed={season.analyzed}
         side={side}
         cards={buildSeasonCards(season.perMatch, side, bands)}
@@ -545,6 +557,7 @@ async function ProfileVisualizationsBody({
           bands,
           { you: playerName, opponent: "Opponents" },
           savedViews,
+          chipLabels,
         )}
         errorSplitJudged={errorSplitJudged}
         saveView={{ savedViews, workspaceName, workspaceRole }}

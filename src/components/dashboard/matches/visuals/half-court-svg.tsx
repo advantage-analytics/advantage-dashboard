@@ -528,10 +528,14 @@ function renderDots(
 
 /* ── Court line helpers ──────────────────────────────────── */
 
+// Square caps, not round: every court line ends at a corner or inside a
+// crossing line, and a round cap turns each outer corner into a quarter
+// circle. A square cap reaches exactly as far (half a line width) and closes
+// the corner square. The net, whose ends are free, keeps its own round cap.
 const lineProps = {
   stroke: COURT_LINE,
   strokeWidth: LINE_W,
-  strokeLinecap: "round" as const,
+  strokeLinecap: "square" as const,
 };
 
 /* ── Half court (serve mode) ─────────────────────────────── */
@@ -686,10 +690,11 @@ export function FullCourtSVG({
   // popping. Tab/mode switches unmount the whole SVG, so those swap cleanly.
   const dotsWithExit = useDotExit(dots);
 
+  // Square caps for the same reason as `lineProps`.
   const fullLine = {
     stroke: COURT_LINE,
     strokeWidth: 2.25,
-    strokeLinecap: "round" as const,
+    strokeLinecap: "square" as const,
   };
   return (
     <svg

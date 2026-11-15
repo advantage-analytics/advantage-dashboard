@@ -150,12 +150,16 @@ export interface SeasonVizNames {
  *  inside-out never matches — the season's Filters panel does not offer it). */
 export function seasonMatchContext(
   m: Pick<SeasonVizMatch, "isPlayer1" | "isDerived" | "errorSplitJudged">,
+  /** The viewer's bands, which Contact and Landed in bucket by. */
+  bands?: SeasonVizBands,
 ): MatchFilterContext {
   return {
     youIsPlayer1: m.isPlayer1,
     hands: { player1: null, player2: null },
     isDerived: m.isDerived,
     errorSplitJudged: m.errorSplitJudged,
+    bands: bands?.bands,
+    unit: bands?.unit,
   };
 }
 
@@ -230,7 +234,7 @@ function computeSeasonPart(
   { bands, unit }: SeasonVizBands,
 ): SeasonPart {
   const points = vizPoints(m.points, m.isDerived);
-  const ctx = seasonMatchContext(m);
+  const ctx = seasonMatchContext(m, { bands, unit });
   const subjectIsPlayer1 = subjectFor(filters, m.isPlayer1);
   const result = computeViz(points, cut, filters, subjectIsPlayer1, chart, ctx);
   const stats = computeVizStats(
@@ -395,6 +399,7 @@ export function mergeVizStats(
             ? null
             : Math.round((row.won / row.count) * 100),
       })),
+      key,
     ),
   }));
   return {
@@ -644,12 +649,19 @@ const availabilityMemo = new WeakMap<
   Map<string, MatchFilterAvailability>
 >();
 
-function matchAvailability(m: SeasonVizMatch): MatchFilterAvailability {
-  const key = `${m.isPlayer1}|${m.isDerived}|${m.errorSplitJudged}`;
+function matchAvailability(
+  m: SeasonVizMatch,
+  bandsKey: string,
+  bands?: SeasonVizBands,
+): MatchFilterAvailability {
+  const key = `${m.isPlayer1}|${m.isDerived}|${m.errorSplitJudged}|${bandsKey}`;
   let memo = availabilityMemo.get(m.points);
   const hit = memo?.get(key);
   if (hit !== undefined) return hit;
-  const availability = optionAvailability(m.points, seasonMatchContext(m));
+  const availability = optionAvailability(
+    m.points,
+    seasonMatchContext(m, bands),
+  );
   if (memo === undefined) {
     memo = new Map();
     availabilityMemo.set(m.points, memo);
@@ -666,8 +678,11 @@ function matchAvailability(m: SeasonVizMatch): MatchFilterAvailability {
  */
 export function seasonAdvancedOptions(
   perMatch: readonly SeasonVizMatch[],
+  bands?: SeasonVizBands,
 ): SeasonAdvancedOptions {
-  const each = perMatch.map(matchAvailability);
+  // The bands decide which Contact and Landed in options have a point.
+  const bandsKey = JSON.stringify(bands?.bands ?? null);
+  const each = perMatch.map((m) => matchAvailability(m, bandsKey, bands));
   const out = {} as Record<MatchFilterKey, unknown[]>;
   for (const key of MATCH_FILTER_KEYS) {
     const values = new Set<unknown>();
@@ -725,6 +740,9 @@ export interface SeasonLightboxData {
   result: VizResult;
   stats: VizStats;
   bandZones: VizBandZones | null;
+  /** The bands the court was counted with — Contact and Landed in, in the
+   *  advanced filters, print their options from these. */
+  bands: BandSettings;
   subjectName: string;
   unit: DistanceUnit;
   /** Any filter beyond the defaults is on (`activeFilterEntries`). */
@@ -974,6 +992,13 @@ export function buildSeasonLightbox(
   bands: SeasonVizBands,
   names: SeasonVizNames,
   views: readonly SavedView[] = [],
+  /**
+   * The subtitle's word for each side, when it differs from `names`: the
+   * player switch's own two words (`seasonPlayerChipLabels`), so the line
+   * under the title says what the pressed chip says. `names` still words the
+   * filter phrases, which need a name ("Maya Chen’s last shot").
+   */
+  subjectWords: SeasonVizNames = names,
 ): SeasonLightboxData | null {
   const cut = state.cut;
   if (cut === null || perMatch.length === 0) return null;
@@ -1124,6 +1149,7 @@ export function buildSeasonLightbox(
     );
   const filterPhrases = activeFilterEntries(state, names, {
     errorSplitJudged: judged,
+    bandLabels: bands,
   })
     .filter(
       (entry) =>
@@ -1158,6 +1184,8 @@ export function buildSeasonLightbox(
     .sort((a, b) => compareMatchDays(b.date, a.date));
 
   const subjectName = filters.player === "you" ? names.you : names.opponent;
+  const subjectWord =
+    filters.player === "you" ? subjectWords.you : subjectWords.opponent;
   const matches = included.length;
 
   return {
@@ -1167,11 +1195,12 @@ export function buildSeasonLightbox(
     result: { ...result, dots: result.dots.map(toMillimetre) },
     stats,
     bandZones: bandZonesFor(cut, bands.bands, bands.unit, stats),
+    bands: bands.bands,
     subjectName,
     unit: bands.unit,
     hasFilters: seasonActive || activeFilterEntries(state).length > 0,
     title: baseline !== null && onCard ? baseline.name : SEASON_CUT_LABEL[cut],
-    subtitle: `${SEASON_CUT_LABEL[cut]} · ${subjectName} · ${matches} ${matches === 1 ? "match" : "matches"} · ${lightboxCountLine(
+    subtitle: `${SEASON_CUT_LABEL[cut]} · ${subjectWord} · ${matches} ${matches === 1 ? "match" : "matches"} · ${lightboxCountLine(
       cut,
       result,
       stats,
@@ -1184,7 +1213,7 @@ export function buildSeasonLightbox(
     errorSplitJudged: judged,
     statRowDots,
     optionCounts,
-    advancedOptions: seasonAdvancedOptions(perMatch),
+    advancedOptions: seasonAdvancedOptions(perMatch, bands),
     names,
     matches: perMatch.map((m) => ({
       id: m.matchId,

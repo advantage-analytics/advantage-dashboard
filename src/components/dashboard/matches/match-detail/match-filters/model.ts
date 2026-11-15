@@ -7,7 +7,7 @@ import {
 import type { Match } from "@/lib/data/types";
 
 import { playerHands } from "../../player-hands";
-import { COURT_LENGTH_M, NET_Y_M } from "../film/film-court";
+import { NET_Y_M } from "../film/film-court";
 import {
   courtSidesOf,
   normalizePointScore,
@@ -15,11 +15,22 @@ import {
   type PointScoreOption,
 } from "./score";
 import {
+  contactBandRows,
+  DEFAULT_BANDS,
+  depthBandRows,
+  type BandSettings,
+} from "@/lib/data/viz-bands";
+import type { DistanceUnit } from "@/lib/format/distance";
+import {
+  contactBandOf,
   hitterHalf,
   inferHand,
+  landedBandOf,
   shotDirection,
+  type ContactBand,
   type CourtHalf,
   type Hand,
+  type LandedBand,
   type ShotDirection,
 } from "./shot-geometry";
 import {
@@ -62,8 +73,11 @@ export type ServeType = "first" | "second";
 export type ServeZone = "Wide" | "Body" | "T";
 export type ReturnStroke = "Forehand" | "Backhand";
 export type ReturnZone = "Down the Line" | "Middle" | "Crosscourt";
-/** Return contact depth from the returner's own baseline. */
-export type ReturnContact = "inside" | "middle" | "neutral";
+/**
+ * Return › Contact, Custom › Contact, Then › Contact: the contact band the
+ * shot was struck from — the viewer's own bands (`contactBandOf`).
+ */
+export type ReturnContact = ContactBand;
 export type ResultShot =
   "Serve" | "Return" | "Forehand" | "Backhand" | "Volley" | "Overhead";
 /** Custom › Stroke and Then › Stroke — a rally stroke; serves and feeds are none. */
@@ -82,7 +96,14 @@ export type ResultMissed = "Out" | "Net";
 /** `rally-length-card.tsx`'s bands, by the same keys. */
 export type RallyLengthBand = "short" | "medium" | "long";
 
-export type { CourtHalf, ReturnSpin, ServeSpin, ShotDirection };
+export type {
+  ContactBand,
+  CourtHalf,
+  LandedBand,
+  ReturnSpin,
+  ServeSpin,
+  ShotDirection,
+};
 
 export interface MatchFilters {
   /* Score */
@@ -105,6 +126,8 @@ export interface MatchFilters {
   readonly returnSpin: readonly ReturnSpin[];
   readonly returnZone: readonly ReturnZone[];
   readonly returnContact: readonly ReturnContact[];
+  /** The depth band the return landed in (`landedBandOf`) — in balls only. */
+  readonly returnLanded: readonly LandedBand[];
   readonly returnResult: readonly ReturnResult[];
   /* Result */
   /** Won or lost from your side — never the Result player's. */
@@ -126,6 +149,8 @@ export interface MatchFilters {
   readonly customSide: readonly CourtHalf[];
   readonly customStroke: readonly ShotStroke[];
   readonly customDirection: readonly ShotDirection[];
+  readonly customContact: readonly ContactBand[];
+  readonly customLanded: readonly LandedBand[];
   /** `shot.shotNumber`, 1 = the deciding serve. */
   readonly customRallyShot: readonly number[];
   /*
@@ -137,6 +162,8 @@ export interface MatchFilters {
   readonly thenSide: readonly CourtHalf[];
   readonly thenStroke: readonly ShotStroke[];
   readonly thenDirection: readonly ShotDirection[];
+  readonly thenContact: readonly ContactBand[];
+  readonly thenLanded: readonly LandedBand[];
   readonly thenRallyShot: readonly number[];
 }
 
@@ -177,6 +204,7 @@ export const MATCH_FILTER_KEYS: readonly MatchFilterKey[] = [
   "returnSpin",
   "returnZone",
   "returnContact",
+  "returnLanded",
   "returnResult",
   "resultOutcome",
   "resultPlayer",
@@ -188,11 +216,15 @@ export const MATCH_FILTER_KEYS: readonly MatchFilterKey[] = [
   "customSide",
   "customStroke",
   "customDirection",
+  "customContact",
+  "customLanded",
   "customRallyShot",
   "thenPlayer",
   "thenSide",
   "thenStroke",
   "thenDirection",
+  "thenContact",
+  "thenLanded",
   "thenRallyShot",
 ];
 
@@ -210,6 +242,7 @@ export const EMPTY_MATCH_FILTERS: MatchFilters = Object.freeze({
   returnSpin: [],
   returnZone: [],
   returnContact: [],
+  returnLanded: [],
   returnResult: [],
   resultOutcome: [],
   resultPlayer: null,
@@ -221,11 +254,15 @@ export const EMPTY_MATCH_FILTERS: MatchFilters = Object.freeze({
   customSide: [],
   customStroke: [],
   customDirection: [],
+  customContact: [],
+  customLanded: [],
   customRallyShot: [],
   thenPlayer: null,
   thenSide: [],
   thenStroke: [],
   thenDirection: [],
+  thenContact: [],
+  thenLanded: [],
   thenRallyShot: [],
 });
 
@@ -258,6 +295,20 @@ const DIRECTION_OPTIONS: readonly FilterOption<ShotDirection>[] = [
   { value: "Down the Line", label: "Down the line" },
   { value: "Inside Out", label: "Inside out" },
   { value: "Inside In", label: "Inside in" },
+];
+/**
+ * Contact and Landed in, as the DEFAULT bands read in feet — the labels a
+ * host with no bands to hand prints. The panel and the applied words print
+ * the viewer's own bands instead (`bandOptionLabel`).
+ */
+const CONTACT_OPTIONS: readonly FilterOption<ContactBand>[] = contactBandRows(
+  DEFAULT_BANDS,
+  "ft",
+).map((row) => ({ value: row.key as ContactBand, label: row.label }));
+const LANDED_OPTIONS: readonly FilterOption<LandedBand>[] = [
+  { value: "deep", label: "Deep" },
+  { value: "mid", label: "Mid" },
+  { value: "short", label: "Short" },
 ];
 const RALLY_SHOT_OPTIONS: readonly FilterOption<number>[] =
   RALLY_SHOT_NUMBERS.map((n) => ({ value: n, label: String(n) }));
@@ -314,11 +365,8 @@ export const MATCH_FILTER_OPTIONS: {
     { value: "Middle", label: "Middle" },
     { value: "Crosscourt", label: "Crosscourt" },
   ],
-  returnContact: [
-    { value: "inside", label: "Inside the baseline" },
-    { value: "middle", label: "On the baseline" },
-    { value: "neutral", label: "Deep" },
-  ],
+  returnContact: CONTACT_OPTIONS,
+  returnLanded: LANDED_OPTIONS,
   returnResult: [
     { value: "winner", label: "Winner" },
     { value: "error", label: "Error" },
@@ -354,13 +402,61 @@ export const MATCH_FILTER_OPTIONS: {
   customSide: SIDE_OPTIONS,
   customStroke: STROKE_OPTIONS,
   customDirection: DIRECTION_OPTIONS,
+  customContact: CONTACT_OPTIONS,
+  customLanded: LANDED_OPTIONS,
   customRallyShot: RALLY_SHOT_OPTIONS,
   thenPlayer: PLAYER_OPTIONS,
   thenSide: SIDE_OPTIONS,
   thenStroke: STROKE_OPTIONS,
   thenDirection: DIRECTION_OPTIONS,
+  thenContact: CONTACT_OPTIONS,
+  thenLanded: LANDED_OPTIONS,
   thenRallyShot: RALLY_SHOT_OPTIONS,
 };
+
+/** Where Contact and Landed in read their labels: the viewer's bands, in
+ *  their unit. */
+export interface FilterBandLabels {
+  bands: BandSettings;
+  unit: DistanceUnit;
+}
+
+const CONTACT_KEYS: ReadonlySet<MatchFilterKey> = new Set([
+  "returnContact",
+  "customContact",
+  "thenContact",
+]);
+const LANDED_KEYS: ReadonlySet<MatchFilterKey> = new Set([
+  "returnLanded",
+  "customLanded",
+  "thenLanded",
+]);
+
+/**
+ * A Contact or Landed in option's label from the viewer's own bands — the
+ * court's own band labels, so the filter and the court say the same thing:
+ * "0–5 ft behind", "Deep · 0–13 ft". Null for every other group, and for a
+ * band the settings do not have (no depth bands set).
+ */
+export function bandOptionLabel(
+  key: MatchFilterKey,
+  value: unknown,
+  labels: FilterBandLabels,
+): string | null {
+  if (CONTACT_KEYS.has(key)) {
+    const row = contactBandRows(labels.bands, labels.unit).find(
+      (r) => r.key === value,
+    );
+    return row?.label ?? null;
+  }
+  if (LANDED_KEYS.has(key)) {
+    const row = depthBandRows(labels.bands, labels.unit).find(
+      (r) => r.key === value,
+    );
+    return row ? `${row.label} · ${row.rangeLabel}` : null;
+  }
+  return null;
+}
 
 export type MatchFilterSectionId =
   "score" | "serve" | "return" | "result" | "custom" | "then";
@@ -419,11 +515,8 @@ export const MATCH_FILTER_SECTIONS: readonly {
       { key: "returnType", label: "Type" },
       { key: "returnSpin", label: "Spin" },
       { key: "returnZone", label: "Zone" },
-      {
-        key: "returnContact",
-        label: "Contact depth",
-        note: "from the baseline",
-      },
+      { key: "returnContact", label: "Contact", note: "from the baseline" },
+      { key: "returnLanded", label: "Landed in", note: "from the baseline" },
       { key: "returnResult", label: "Result" },
     ],
   },
@@ -447,6 +540,8 @@ export const MATCH_FILTER_SECTIONS: readonly {
       { key: "customSide", label: "Side" },
       { key: "customStroke", label: "Stroke" },
       { key: "customDirection", label: "Direction" },
+      { key: "customContact", label: "Contact", note: "from the baseline" },
+      { key: "customLanded", label: "Landed in", note: "from the baseline" },
       { key: "customRallyShot", label: "Hit", note: "1 = the serve" },
     ],
   },
@@ -458,6 +553,8 @@ export const MATCH_FILTER_SECTIONS: readonly {
       { key: "thenSide", label: "Side" },
       { key: "thenStroke", label: "Stroke" },
       { key: "thenDirection", label: "Direction" },
+      { key: "thenContact", label: "Contact", note: "from the baseline" },
+      { key: "thenLanded", label: "Landed in", note: "from the baseline" },
       { key: "thenRallyShot", label: "Hit", note: "1 = the serve" },
     ],
   },
@@ -492,6 +589,23 @@ export interface MatchFilterContext {
    * fetch the file set it; `buildFilterContext` never does.
    */
   lobKeys?: ReadonlySet<number> | null;
+  /**
+   * The viewer's bands, which Contact and Landed in bucket by (and label
+   * with, alongside `unit`). Absent reads as `DEFAULT_BANDS`.
+   */
+  bands?: BandSettings;
+  /** The viewer's Units preference, for those labels. Absent reads as ft. */
+  unit?: DistanceUnit;
+}
+
+/** The bands a context buckets Contact and Landed in by. */
+function bandsOf(ctx: MatchFilterContext): BandSettings {
+  return ctx.bands ?? DEFAULT_BANDS;
+}
+
+/** The context's Contact and Landed in labels. */
+export function bandLabelsOf(ctx: MatchFilterContext): FilterBandLabels {
+  return { bands: bandsOf(ctx), unit: ctx.unit ?? "ft" };
 }
 
 /** A video-derived (Advantage Intelligence) match, off the match row. */
@@ -604,28 +718,6 @@ function returnZoneOf(point: MatchPoint): ReturnZone | null {
   if (z === "middle") return "Middle";
   if (z === "crosscourt") return "Crosscourt";
   return null;
-}
-
-/** Deep edge of Return › Contact — `calculate_match_stats`' 1.0 m. */
-export const RETURN_CONTACT_DEEP_M = 1.0;
-
-/**
- * Return contact depth, from the return's own `contact_y` (the return shot is
- * picked by role at load time). Metres behind the RETURNER's baseline — the
- * end they stand at is read off the contact itself, the same
- * `CASE WHEN contact_y < 11.885 THEN contact_y ELSE 23.77 - contact_y END`
- * the published return-depth stat uses. Inside = in front of the baseline,
- * Middle = 0–1.0 m behind, Neutral = more than 1.0 m behind. Null when the
- * contact was not measured.
- */
-export function returnContactOf(
-  contactY: number | null | undefined,
-): ReturnContact | null {
-  if (typeof contactY !== "number" || !Number.isFinite(contactY)) return null;
-  const behind = contactY < NET_Y_M ? -contactY : contactY - COURT_LENGTH_M;
-  if (behind < 0) return "inside";
-  if (behind <= RETURN_CONTACT_DEEP_M) return "middle";
-  return "neutral";
 }
 
 /**
@@ -978,6 +1070,8 @@ export interface ShotStep {
   readonly side: readonly CourtHalf[];
   readonly stroke: readonly ShotStroke[];
   readonly direction: readonly ShotDirection[];
+  readonly contact: readonly ContactBand[];
+  readonly landed: readonly LandedBand[];
   readonly rallyShot: readonly number[];
 }
 
@@ -987,6 +1081,8 @@ export function customStepOf(f: MatchFilters): ShotStep {
     side: f.customSide,
     stroke: f.customStroke,
     direction: f.customDirection,
+    contact: f.customContact,
+    landed: f.customLanded,
     rallyShot: f.customRallyShot,
   };
 }
@@ -997,6 +1093,8 @@ export function thenStepOf(f: MatchFilters): ShotStep {
     side: f.thenSide,
     stroke: f.thenStroke,
     direction: f.thenDirection,
+    contact: f.thenContact,
+    landed: f.thenLanded,
     rallyShot: f.thenRallyShot,
   };
 }
@@ -1007,6 +1105,8 @@ function stepIsSet(step: ShotStep): boolean {
     step.side.length > 0 ||
     step.stroke.length > 0 ||
     step.direction.length > 0 ||
+    step.contact.length > 0 ||
+    step.landed.length > 0 ||
     step.rallyShot.length > 0
   );
 }
@@ -1060,6 +1160,14 @@ export function shotMatchesStep(
   if (step.direction.length > 0) {
     const dir = shotDirection(shot, handOf(shot.isPlayer1, ctx));
     if (dir === null || !step.direction.includes(dir)) return false;
+  }
+  if (step.contact.length > 0) {
+    const band = contactBandOf(shot.contactY, bandsOf(ctx));
+    if (band === null || !step.contact.includes(band)) return false;
+  }
+  if (step.landed.length > 0) {
+    const band = landedBandOf(shot, bandsOf(ctx));
+    if (band === null || !step.landed.includes(band)) return false;
   }
   return true;
 }
@@ -1193,7 +1301,27 @@ export function matchesPoint(
   }
   if (
     f.returnContact.length > 0 &&
-    !anyOf(f.returnContact, returnContactOf(point.secondShotContactY))
+    !anyOf(
+      f.returnContact,
+      contactBandOf(point.secondShotContactY, bandsOf(ctx)),
+    )
+  ) {
+    return false;
+  }
+  if (
+    f.returnLanded.length > 0 &&
+    !anyOf(
+      f.returnLanded,
+      landedBandOf(
+        {
+          contactY: point.secondShotContactY,
+          landingX: point.secondShotLandingX,
+          landingY: point.secondShotLandingY,
+          result: point.secondShotResult,
+        },
+        bandsOf(ctx),
+      ),
+    )
   ) {
     return false;
   }
@@ -1418,6 +1546,18 @@ const DIRECTION_CODES: CodeTable<"customDirection"> = [
   ["Inside Out", "io"],
   ["Inside In", "ii"],
 ];
+/** Contact bands. "i" is the fixed-bucket filter's own Inside token; its
+ *  other two moved (`LEGACY_TOKENS`). */
+const CONTACT_CODES: CodeTable<"returnContact"> = [
+  ["inside", "i"],
+  ["near", "nr"],
+  ["far", "fr"],
+];
+const LANDED_CODES: CodeTable<"returnLanded"> = [
+  ["deep", "d"],
+  ["mid", "m"],
+  ["short", "s"],
+];
 const RALLY_SHOT_CODES: CodeTable<"customRallyShot"> = RALLY_SHOT_NUMBERS.map(
   (n) => [n, String(n)],
 );
@@ -1500,14 +1640,8 @@ const URL_CODEC: {
       ["Crosscourt", "cc"],
     ],
   },
-  returnContact: {
-    key: "rc",
-    codes: [
-      ["inside", "i"],
-      ["middle", "m"],
-      ["neutral", "n"],
-    ],
-  },
+  returnContact: { key: "rc", codes: CONTACT_CODES },
+  returnLanded: { key: "rl", codes: LANDED_CODES },
   returnResult: {
     key: "rr",
     codes: [
@@ -1561,11 +1695,15 @@ const URL_CODEC: {
   customSide: { key: "cs", codes: SIDE_CODES },
   customDirection: { key: "cd", codes: DIRECTION_CODES },
   customStroke: { key: "ck", codes: STROKE_CODES },
+  customContact: { key: "cn", codes: CONTACT_CODES },
+  customLanded: { key: "cl", codes: LANDED_CODES },
   customRallyShot: { key: "cr", codes: RALLY_SHOT_CODES },
   thenPlayer: { key: "tp", codes: PLAYER_CODES },
   thenSide: { key: "ts", codes: SIDE_CODES },
   thenStroke: { key: "tk", codes: STROKE_CODES },
   thenDirection: { key: "td", codes: DIRECTION_CODES },
+  thenContact: { key: "tn", codes: CONTACT_CODES },
+  thenLanded: { key: "tl", codes: LANDED_CODES },
   thenRallyShot: { key: "tr", codes: RALLY_SHOT_CODES },
 };
 
@@ -1637,6 +1775,12 @@ const LEGACY_TOKENS: Readonly<
   Record<string, Readonly<Record<string, [MatchFilterKey, unknown]>>>
 > = {
   xo: { wn: ["resultEnding", "winner"], er: ["resultEnding", "error"] },
+  // Return › Contact was three fixed buckets (on the baseline = 0–1 m
+  // behind, deep = past 1 m) before it took the viewer's bands; each maps
+  // to the band nearest its meaning. An accepted re-scope, like Won/Lost
+  // above: with the default bands the edge moves from 1.0 m to 5 ft
+  // (1.524 m), so an old link's 1.0–1.5 m returns move from "deep" to near.
+  rc: { m: ["returnContact", "near"], n: ["returnContact", "far"] },
 };
 
 /**
