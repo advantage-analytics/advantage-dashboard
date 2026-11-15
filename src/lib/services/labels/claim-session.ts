@@ -14,9 +14,10 @@
  * what settles a race: it assigns the session only while nobody holds it and
  * the claimer holds no other.
  *
- * Every sentence a labeller gets back has its ids struck out (`stripIds`):
+ * A labeller reads the claim's own refusals (`CLAIM_*`) and nothing else:
  * the seed's and the database's errors were written for an admin and can
- * carry a match or program id.
+ * carry a match id or the schema's names, so any of those is answered with
+ * `CLAIM_FAILED` and logged in full (`forLabeller`).
  *
  * Seeding is the existing path (results download, re-derive), so the first
  * claim of a match is slow. A seed that then loses the claim leaves an
@@ -31,7 +32,7 @@ import {
 import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { claimableJobIds, type QueueSession } from "./queue";
-import { stripIds } from "./strip-ids";
+import { forLabeller } from "./strip-ids";
 import {
   seedLabelSessionForJob,
   type SeedLabelSessionResult,
@@ -44,6 +45,24 @@ export const CLAIM_HOLDING = "Submit your match before you claim another.";
 export const CLAIM_NOT_NEXT = "That match is not one of the next three due.";
 export const CLAIM_TAKEN = "Someone claimed that match first.";
 export const CLAIM_NOT_LABELLER = "You are no longer a labeller.";
+/** Anything that went wrong that is not one of the refusals above. */
+export const CLAIM_FAILED =
+  "Something went wrong claiming that match. Try again, or ask an admin.";
+
+/**
+ * A failure as the labeller reads it: always `CLAIM_FAILED`. The claim's
+ * deliberate refusals are returned as they are and never come through here.
+ */
+function failed(detail: string, jobId: string): { error: string } {
+  return {
+    error: forLabeller(detail, {
+      isBusiness: () => false,
+      fallback: CLAIM_FAILED,
+      log: LOG,
+      context: { jobId },
+    }),
+  };
+}
 
 export type ClaimLabelMatchResult = { sessionId: string } | { error: string };
 
@@ -139,7 +158,7 @@ export async function claimLabelMatch(
         jobId: id,
         labellerId: viewer.id,
       });
-      if ("error" in seeded) return { error: stripIds(seeded.error) };
+      if ("error" in seeded) return failed(seeded.error, id);
       sessionId = seeded.sessionId;
     }
 
@@ -147,19 +166,15 @@ export async function claimLabelMatch(
       p_session_id: sessionId,
       p_user_id: viewer.id,
     });
-    if (error) {
-      return { error: stripIds(`Could not claim the match: ${error.message}`) };
-    }
+    if (error) return failed(`Could not claim the match: ${error.message}`, id);
 
     if (answer === "claimed") return { sessionId };
     if (answer === "holding") return { error: CLAIM_HOLDING };
     if (answer === "taken") return { error: CLAIM_TAKEN };
     if (answer === "not_labeller") return { error: CLAIM_NOT_LABELLER };
-    console.error(`${LOG} unexpected answer`, { jobId: id, answer });
-    return { error: "Could not claim the match." };
+    return failed(`Unexpected claim answer: ${String(answer)}`, id);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`${LOG} threw`, { jobId: id, message });
-    return { error: stripIds(`Could not claim the match: ${message}`) };
+    return failed(`Could not claim the match: ${message}`, id);
   }
 }

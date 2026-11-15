@@ -673,6 +673,7 @@ function LineTableRow({
           <RowLifecycle
             analysis={{ status: played.status, providerId: null }}
             label={`line ${slot}`}
+            verificationPending={played.verificationPending}
           />
         ) : (
           <EmptyMark label="No analysis" />

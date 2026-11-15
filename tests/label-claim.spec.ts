@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import {
+  CLAIM_FAILED,
   CLAIM_HOLDING,
   CLAIM_LABELLER_REQUIRED,
   CLAIM_NOT_LABELLER,
@@ -59,6 +60,21 @@ function harness(options: {
     },
   };
   return { deps, seeds, rpcs, holdingAsked };
+}
+
+/** Swap `console.error` for a recorder until `stop()`: the raw detail lands there. */
+function captureErrors() {
+  const calls: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    calls.push(args);
+  };
+  return {
+    calls,
+    stop: () => {
+      console.error = original;
+    },
+  };
 }
 
 test.describe("claimLabelMatch", () => {
@@ -139,18 +155,19 @@ test.describe("claimLabelMatch", () => {
     ]);
   });
 
-  test("a seed refusal reaches the labeller with every id struck out", async () => {
+  test("a seed's database error reaches the labeller as the fixed sentence, logged in full", async () => {
     const matchId = "0b5f1c2a-3d4e-4f60-8a71-92b3c4d5e6f7";
-    const h = harness({
-      seeded: {
-        error: `Could not create the session: Key (match_id)=(${matchId}) is not present`,
-      },
-    });
-    const answer = await claimLabelMatch(job(2), h.deps);
-    expect(answer).toEqual({
-      error: "Could not create the session: Key (match_id)=(…) is not present",
-    });
-    expect(JSON.stringify(answer)).not.toContain(matchId);
+    const detail = `Could not create the session: insert on table "label_sessions" violates foreign key constraint "label_sessions_match_id_fkey" Key (match_id)=(${matchId}) is not present`;
+    const h = harness({ seeded: { error: detail } });
+    const logged = captureErrors();
+    const answer = await claimLabelMatch(job(2), h.deps).finally(logged.stop);
+    expect(answer).toEqual({ error: CLAIM_FAILED });
+    expect(JSON.stringify(answer)).not.toMatch(
+      /label_sessions|constraint|match_id/,
+    );
+    expect(JSON.stringify(logged.calls)).toContain(
+      "label_sessions_match_id_fkey",
+    );
     expect(h.rpcs).toEqual([]);
   });
 
@@ -197,25 +214,34 @@ test.describe("claimLabelMatch", () => {
     ).toBe(4);
   });
 
-  test("a failed seed is answered as it is, with no claim", async () => {
+  test("a failed seed is answered with the fixed sentence, with no claim", async () => {
     const h = harness({
       seeded: { error: "Job has no readable results file." },
     });
-    expect(await claimLabelMatch(job(1), h.deps)).toEqual({
-      error: "Job has no readable results file.",
+    const logged = captureErrors();
+    expect(await claimLabelMatch(job(1), h.deps).finally(logged.stop)).toEqual({
+      error: CLAIM_FAILED,
     });
     expect(h.rpcs).toEqual([]);
   });
 
   test("an RPC error or an unknown answer never yields a sessionId", async () => {
-    const failed = harness({ rpc: { data: null, error: { message: "boom" } } });
+    const logged = captureErrors();
+    const failed = harness({
+      rpc: {
+        data: null,
+        error: { message: 'column "assigned_at" of relation "label_sessions"' },
+      },
+    });
     expect(await claimLabelMatch(job(1), failed.deps)).toEqual({
-      error: "Could not claim the match: boom",
+      error: CLAIM_FAILED,
     });
     const odd = harness({ rpc: { data: "something", error: null } });
     expect(await claimLabelMatch(job(1), odd.deps)).toEqual({
-      error: "Could not claim the match.",
+      error: CLAIM_FAILED,
     });
+    logged.stop();
+    expect(JSON.stringify(logged.calls)).toContain("assigned_at");
   });
 
   test("a viewer holding this very match is still refused, with no seed or claim", async () => {
@@ -239,9 +265,11 @@ test.describe("claimLabelMatch", () => {
     h.deps.readQueue = async () => {
       throw new Error("Could not read matches: down");
     };
-    expect(await claimLabelMatch(job(1), h.deps)).toEqual({
-      error: "Could not claim the match: Could not read matches: down",
+    const logged = captureErrors();
+    expect(await claimLabelMatch(job(1), h.deps).finally(logged.stop)).toEqual({
+      error: CLAIM_FAILED,
     });
+    expect(JSON.stringify(logged.calls)).toContain("Could not read matches");
     expect(h.seeds).toEqual([]);
   });
 });

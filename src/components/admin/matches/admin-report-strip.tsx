@@ -9,6 +9,7 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
+import { copyFeedback, copyText, type CopyResult } from "./admin-report-copy";
 
 /** The page's bounded box: the strip on top, the report filling the rest. */
 export const ADMIN_REPORT_BOX =
@@ -62,6 +63,11 @@ export function AdminReportStrip({
   const router = useRouter();
   const backHref = reportBackHref(matchId);
   const [menuOpen, setMenuOpen] = useState(false);
+  // What the last copy did, said quietly beside the ⋯ button for a moment.
+  const [copied, setCopied] = useState<CopyResult | null>(null);
+  const [feedback] = useState(() => copyFeedback(setCopied));
+
+  useEffect(() => feedback.dispose, [feedback]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -96,7 +102,7 @@ export function AdminReportStrip({
 
   function copy(value: string) {
     setMenuOpen(false);
-    navigator.clipboard?.writeText(value).catch(() => {});
+    void copyText(navigator.clipboard, value).then(feedback.say);
   }
 
   const copyIcon = (
@@ -137,6 +143,16 @@ export function AdminReportStrip({
             Open in Labels
           </Link>
         )}
+        {/* Always mounted, so the polite region exists before its text does
+            and a screen reader announces the change; empty, it takes back the
+            gap it would add. */}
+        <span
+          role="status"
+          aria-live="polite"
+          className="min-w-0 text-[12px] whitespace-nowrap text-[var(--ink-600)] empty:-ml-2"
+        >
+          {copied}
+        </span>
         <FloatMenu
           open={menuOpen}
           onOpenChange={setMenuOpen}

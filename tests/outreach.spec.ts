@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
 
 import { renderEmail } from "@/lib/services/email/shell";
 import {
@@ -9,9 +10,12 @@ import {
 } from "@/lib/services/email/templates/outreach";
 import { recipientsFromCsv } from "@/lib/services/outreach/csv";
 import { buildRows } from "@/lib/services/outreach/rows";
-import type {
-  OutreachRecipient,
-  OutreachSend,
+import {
+  DEFAULT_OUTREACH_EMAIL_NO,
+  OUTREACH_EMAILS,
+  outreachEmailNoFrom,
+  type OutreachRecipient,
+  type OutreachSend,
 } from "@/lib/services/outreach/types";
 
 /**
@@ -200,4 +204,24 @@ test("a cold template without unsubscribe or address can't be saved", () => {
 test("held rows are never sendable", () => {
   const rows = buildRows(7, [recipient({ held: true })], [], new Set());
   expect(rows[0].state).toBe("held");
+});
+
+test("the page and its skeleton read ?email= the same way", () => {
+  const other = OUTREACH_EMAILS.find(
+    (email) => email.no !== DEFAULT_OUTREACH_EMAIL_NO,
+  )!;
+  expect(outreachEmailNoFrom(String(other.no))).toBe(other.no);
+  expect(outreachEmailNoFrom(` ${other.no} `)).toBe(other.no);
+  for (const unknown of [null, undefined, "", "abc", "999"]) {
+    expect(outreachEmailNoFrom(unknown)).toBe(DEFAULT_OUTREACH_EMAIL_NO);
+  }
+  const page = readFileSync("src/app/admin/outreach/page.tsx", "utf8");
+  const content = readFileSync(
+    "src/components/admin/outreach-page-content.tsx",
+    "utf8",
+  );
+  expect(page).toContain("outreachEmailNoFrom(");
+  expect(content).toMatch(
+    /outreachEmailNoFrom\(useSearchParams\(\)\.get\("email"\)\)/,
+  );
 });

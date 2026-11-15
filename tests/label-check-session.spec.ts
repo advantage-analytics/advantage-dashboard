@@ -9,6 +9,7 @@ import {
   SEND_BACK_NOTE_REQUIRED,
   SEND_BACK_NOTE_TOO_LONG,
   sendBackLabelSession,
+  SEND_BACK_ADMIN_PUBLISHED,
   SEND_BACK_NOBODY,
   type LabelCheckDependencies,
 } from "@/lib/services/labels/check-session";
@@ -23,8 +24,10 @@ import { ANOTHER_SESSION_OPEN } from "@/lib/services/labels/session-status-sessi
 
 const SESSION_ID = "11111111-1111-4111-8111-111111111111";
 const ADMIN = "33333333-3333-4333-8333-333333333333";
+const LABELLER = "44444444-4444-4444-8444-444444444444";
 const NOW = Date.parse("2026-11-14T08:00:00.000Z");
 const STAMP = new Date(NOW).toISOString();
+const PUBLISHED_AT = "2026-11-13T20:00:00.000Z";
 
 interface Call {
   table: string;
@@ -37,8 +40,18 @@ function fakeClient(
   opts: {
     raced?: boolean;
     failCode?: string;
-    /** What a read-back of the session answers after an update matched nothing. */
-    row?: { status: string; assigned_to: string | null };
+    /**
+     * What a read of the session answers: Send back's pre-read and its
+     * read-back after an update matched nothing. Defaults to a complete
+     * session assigned to LABELLER.
+     */
+    row?: {
+      status: string;
+      assigned_to: string | null;
+      completed_at?: string | null;
+    };
+    /** Whether the assigned labeller has a `label_submissions` row. */
+    submitted?: boolean;
   } = {},
 ) {
   const calls: Call[] = [];
@@ -55,6 +68,12 @@ function fakeClient(
           return {
             data: null,
             error: { message: "duplicate key", code: opts.failCode },
+          };
+        }
+        if (call.table === "label_submissions") {
+          return {
+            data: opts.submitted === false ? [] : [{ id: "submission" }],
+            error: null,
           };
         }
         return {
@@ -86,7 +105,18 @@ function fakeClient(
           call.filters[`${column} not ${operator}`] = value;
           return builder;
         },
-        maybeSingle: async () => ({ data: opts.row ?? null, error: null }),
+        limit: (n: number) => {
+          call.filters.limit = n;
+          return builder;
+        },
+        maybeSingle: async () => ({
+          data: opts.row ?? {
+            status: "complete",
+            assigned_to: LABELLER,
+            completed_at: PUBLISHED_AT,
+          },
+          error: null,
+        }),
         then: (
           resolve: (v: unknown) => unknown,
           reject?: (e: unknown) => unknown,
@@ -203,7 +233,9 @@ test.describe("Send back", () => {
     expect(
       await sendBackLabelSession(SESSION_ID, `  ${note}  `, deps(client)),
     ).toEqual({ ok: true, status: "labelling" });
-    expect(client.calls[0].values?.sent_back_note).toBe(note);
+    expect(
+      client.calls.find((c) => c.op === "update")?.values?.sent_back_note,
+    ).toBe(note);
   });
 
   test("is one update reopening the session with the trimmed note", async () => {
@@ -216,6 +248,16 @@ test.describe("Send back", () => {
       ),
     ).toEqual({ ok: true, status: "labelling" });
     expect(client.calls).toEqual([
+      {
+        table: "label_sessions",
+        op: "select",
+        filters: { id: SESSION_ID },
+      },
+      {
+        table: "label_submissions",
+        op: "select",
+        filters: { session_id: SESSION_ID, submitted_by: LABELLER, limit: 1 },
+      },
       {
         table: "label_sessions",
         op: "update",
@@ -232,14 +274,16 @@ test.describe("Send back", () => {
           id: SESSION_ID,
           status: "complete",
           kind: "analyst",
-          "assigned_to not is": null,
+          assigned_to: LABELLER,
+          completed_at: PUBLISHED_AT,
         },
       },
     ]);
+    const update = client.calls[2];
     // A checked session goes back too: the update is not matched on the check.
-    expect(client.calls[0].filters).not.toHaveProperty("checked_at is");
+    expect(update.filters).not.toHaveProperty("checked_at is");
     // Nor is the labeller changed.
-    expect(client.calls[0].values).not.toHaveProperty("assigned_to");
+    expect(update.values).not.toHaveProperty("assigned_to");
     expectMatchUntouched(client.calls);
   });
 
@@ -259,8 +303,73 @@ test.describe("Send back", () => {
     expect(
       await sendBackLabelSession(SESSION_ID, "Fix set 2", deps(client)),
     ).toEqual({ error: SEND_BACK_NOBODY });
-    expect(client.calls.filter((c) => c.op === "update")).toHaveLength(1);
+    expect(client.calls.filter((c) => c.op === "update")).toEqual([]);
     expectMatchUntouched(client.calls);
+  });
+
+  test("refuses a match an admin published, before any update", async () => {
+    const client = fakeClient({ submitted: false });
+    expect(
+      await sendBackLabelSession(SESSION_ID, "Fix set 2", deps(client)),
+    ).toEqual({ error: SEND_BACK_ADMIN_PUBLISHED });
+    expect(client.calls.filter((c) => c.op === "update")).toEqual([]);
+    expect(
+      client.calls.find((c) => c.table === "label_submissions")?.filters,
+    ).toEqual({ session_id: SESSION_ID, submitted_by: LABELLER, limit: 1 });
+    expectMatchUntouched(client.calls);
+  });
+
+  test("an unassigned session skips the submission check", async () => {
+    const client = fakeClient({
+      raced: true,
+      row: { status: "complete", assigned_to: null },
+    });
+    await sendBackLabelSession(SESSION_ID, "Fix set 2", deps(client));
+    expect(client.calls.some((c) => c.table === "label_submissions")).toBe(
+      false,
+    );
+  });
+
+  test("a reassign or republish after the check matches nothing and answers RACED", async () => {
+    // The update is pinned to the labeller and publish time the check read,
+    // so a change landing between the two writes nothing.
+    const client = fakeClient({ raced: true });
+    expect(
+      await sendBackLabelSession(SESSION_ID, "Fix set 2", deps(client)),
+    ).toEqual({
+      error: "This session changed in another tab. Reload to see it.",
+    });
+    const update = client.calls.find((c) => c.op === "update");
+    expect(update?.filters).toMatchObject({
+      assigned_to: LABELLER,
+      completed_at: PUBLISHED_AT,
+    });
+  });
+
+  test("a session already reopened answers RACED before any submission read", async () => {
+    const client = fakeClient({
+      row: { status: "labelling", assigned_to: LABELLER, completed_at: null },
+      submitted: false,
+    });
+    expect(
+      await sendBackLabelSession(SESSION_ID, "Fix set 2", deps(client)),
+    ).toEqual({
+      error: "This session changed in another tab. Reload to see it.",
+    });
+    expect(client.calls.some((c) => c.table === "label_submissions")).toBe(
+      false,
+    );
+    expect(client.calls.filter((c) => c.op === "update")).toEqual([]);
+  });
+
+  test("a session never published pins the update to a null publish time", async () => {
+    const client = fakeClient({
+      row: { status: "complete", assigned_to: LABELLER, completed_at: null },
+    });
+    await sendBackLabelSession(SESSION_ID, "Fix set 2", deps(client));
+    const update = client.calls.find((c) => c.op === "update");
+    expect(update?.filters).toMatchObject({ "completed_at is": null });
+    expect(update?.filters).not.toHaveProperty("completed_at");
   });
 
   test("answers the raced sentence when nothing matched", async () => {

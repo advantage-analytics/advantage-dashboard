@@ -6,6 +6,7 @@ import {
   adminUploadHref,
   adminUploadSelection,
 } from "@/components/admin/admin-upload-selection";
+import { ADMIN_UPLOAD_CHOICES } from "@/components/admin/admin-upload-kinds";
 
 const nodeRequire = createRequire(`${process.cwd()}/package.json`);
 const TEAM = "11111111-1111-4111-8111-111111111111";
@@ -302,6 +303,7 @@ test("file/video mount shared wizard with target and stable retry identifiers; r
     },
     "@/components/admin/admin-upload-selection": { adminUploadHref },
     "./admin-upload-selection": { adminUploadHref },
+    "./admin-upload-kinds": { ADMIN_UPLOAD_CHOICES },
   }).AdminUploadEntry;
   for (const kind of ["file", "video"] as const) {
     // A team's file or video first asks "Where does it go?" on its own

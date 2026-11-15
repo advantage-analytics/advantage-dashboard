@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 import { isFresh, loadNavSeen, type SeenState } from "@/lib/admin/seen-server";
 import { UUID_RE } from "@/lib/admin/validation";
-import { isUndefinedColumn, readAllPages } from "@/lib/data/admin-range-read";
+import { readAllPages } from "@/lib/data/admin-range-read";
 import {
   DEFAULT_BANDS,
   rowToBandSettings,
@@ -354,29 +354,22 @@ interface LabelSessionRow {
   status: string | null;
   created_at: string;
   completed_at: string | null;
-  /** Absent before `20261114091835_label_publish_check` is applied. */
-  published_at?: string | null;
-  checked_at?: string | null;
+  published_at: string | null;
+  checked_at: string | null;
 }
 
-const SESSION_COLUMNS = "id, match_id, kind, status, created_at, completed_at";
-/** Added by `20261114091835_label_publish_check`. */
-const PUBLISH_CHECK_COLUMNS = "published_at, checked_at";
+const SESSION_COLUMNS =
+  "id, match_id, kind, status, created_at, completed_at, published_at, checked_at";
 /**
- * The publish-check stamps of a session. Before the migration the columns
- * are absent: a `complete` session then reads as published and checked at its
- * `completed_at`, which is what the migration's backfill writes.
+ * The publish-check stamps of a session: a `complete` one's latest publish
+ * (`completed_at`), else its first (`published_at`, kept while it is sent
+ * back), and the admin's check.
  */
 function publishCheckOf(row: LabelSessionRow) {
   const complete = row.status === "complete";
   return {
-    publishedAt: complete ? row.completed_at : (row.published_at ?? null),
-    checkedAt:
-      row.checked_at !== undefined
-        ? row.checked_at
-        : complete
-          ? row.completed_at
-          : null,
+    publishedAt: complete ? row.completed_at : row.published_at,
+    checkedAt: row.checked_at,
   };
 }
 
@@ -385,15 +378,13 @@ async function labelSessions(
   db: SupabaseClient,
   ids: string[],
 ): Promise<Map<string, LabelSessionFacts>> {
-  const read = (columns: string) =>
-    readByIds<LabelSessionRow>(db, "label_sessions", columns, "match_id", ids);
-  let rows: LabelSessionRow[];
-  try {
-    rows = await read(`${SESSION_COLUMNS}, ${PUBLISH_CHECK_COLUMNS}`);
-  } catch (error) {
-    if (!isUndefinedColumn(error)) throw error;
-    rows = await read(SESSION_COLUMNS);
-  }
+  const rows = await readByIds<LabelSessionRow>(
+    db,
+    "label_sessions",
+    SESSION_COLUMNS,
+    "match_id",
+    ids,
+  );
   const best = new Map<string, (typeof rows)[number]>();
   const rank = (kind: string | null) => (kind === "analyst" ? 1 : 0);
   for (const row of rows) {

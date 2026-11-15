@@ -266,3 +266,60 @@ test("a single-event read scopes outcomes to that event", async () => {
     value: ["event-a"],
   });
 });
+
+test("a match waiting on a labeller reads Verification pending, and only through the reader's loader", async () => {
+  const matchRow = (id: string) => ({
+    id,
+    event_entry_id: "entry-b",
+    round: null,
+    date: "2026-09-09T12:00:00Z",
+    score: { player1: [6, 6], player2: [3, 4] },
+    result: null,
+    player2_name: "Casey",
+    source_provider: "splitstep",
+    duration: null,
+  });
+  const rows = {
+    program_events: events,
+    program_event_entries: entries,
+    matches: [matchRow("m-pending"), matchRow("m-done")],
+    program_event_outcomes: [],
+  };
+  const analysis = (async () =>
+    new Map([
+      ["m-pending", { status: "completed", providerId: "splitstep" }],
+      ["m-done", { status: "completed", providerId: "splitstep" }],
+    ])) as never;
+  const pendingAsked: { client: unknown; ids: readonly string[] }[] = [];
+
+  const { client } = fakeClient(rows);
+  const schedule = await readScheduleWithClient(
+    client as never,
+    "program-a",
+    undefined,
+    analysis,
+    (async (asked: unknown, ids: readonly string[]) => {
+      pendingAsked.push({ client: asked, ids });
+      return new Set(["m-pending"]);
+    }) as never,
+  );
+  const matches = schedule.entriesByEvent.get("event-b")?.[0].matches ?? [];
+  expect(
+    Object.fromEntries(matches.map((m) => [m.id, m.verificationPending])),
+  ).toEqual({ "m-pending": true, "m-done": false });
+  // Asked with the same client the schedule was read with.
+  expect(pendingAsked).toEqual([{ client, ids: ["m-pending", "m-done"] }]);
+
+  // The service-role callers pass no loader: nothing reads as pending.
+  const bare = await readScheduleWithClient(
+    fakeClient(rows).client as never,
+    "program-a",
+    undefined,
+    analysis,
+  );
+  expect(
+    (bare.entriesByEvent.get("event-b")?.[0].matches ?? []).map(
+      (m) => m.verificationPending,
+    ),
+  ).toEqual([false, false]);
+});

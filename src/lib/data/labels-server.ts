@@ -8,7 +8,7 @@
 import { requireAdmin } from "@/lib/services/programs/admin-guard";
 import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
 import { PROVIDER_ID } from "@/lib/services/splitstep/config";
-import { readAllPages, UNDEFINED_COLUMN } from "@/lib/data/admin-range-read";
+import { readAllPages } from "@/lib/data/admin-range-read";
 import { isUuid } from "@/lib/admin/validation";
 import type { FlagCounts } from "@/lib/services/labels/job-groups";
 import { ADMIN_REQUIRED } from "@/lib/services/labels/edit-session";
@@ -584,10 +584,8 @@ export async function getLabelSession(
  * `label_sessions.start_open_counts` for the console, by `readOpenCounts`. A
  * read of its own, beside the rows, so the shared row read
  * (`readLabelSessionRows`, which the submit and the publish take too) is left
- * as it was. Before the claims migration the column does not exist (42703):
- * the session then has no start, which is what it is. Any other failure is
- * logged and also reads as no start — a progress line never stops the
- * console from opening.
+ * as it was. A failed read is logged and reads as no start — a progress line
+ * never stops the console from opening.
  */
 async function readStartOpenCounts(
   db: AdminClient,
@@ -599,12 +597,10 @@ async function readStartOpenCounts(
     .eq("id", sessionId)
     .maybeSingle<{ start_open_counts: unknown }>();
   if (error) {
-    if (error.code !== UNDEFINED_COLUMN) {
-      console.error("[labels] could not read the session's starting count", {
-        sessionId,
-        message: error.message,
-      });
-    }
+    console.error("[labels] could not read the session's starting count", {
+      sessionId,
+      message: error.message,
+    });
     return null;
   }
   return readOpenCounts(data?.start_open_counts);

@@ -10,6 +10,10 @@ import {
   TableEmptyBody,
   type TableEmptyAction,
 } from "@/components/dashboard/shared/table-empty-body";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { cn } from "@/lib/utils";
 import type {
   AdminRequestEmailCheck,
@@ -58,6 +62,65 @@ export function requestRowId(id: string): string {
   return `admin-request-${id}`;
 }
 
+/** The table card's frame and header row, shared with its skeleton. */
+const TABLE_CARD =
+  "overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]";
+const TABLE_INNER = "min-w-[640px] px-6 pt-0.5 pb-1.5";
+
+function RequestsHeaderRow() {
+  return (
+    <div
+      className={cn(
+        ROW,
+        "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
+      )}
+    >
+      {REQUESTS_COLUMNS.map((column) => (
+        <span key={column.label} className={cn(column.col, "eyebrow-sm")}>
+          {column.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The table while Admin › Requests loads: the real header over 64px rows of
+ * bars in the same three columns — person and program, email check, the
+ * two-line date.
+ */
+export function RequestsTableSkeleton({ rows = 6 }: { rows?: number }) {
+  return (
+    <div className={TABLE_CARD}>
+      <div className={TABLE_INNER}>
+        <RequestsHeaderRow />
+        <PendingRegion label="requests">
+          {Array.from({ length: rows }, (_, i) => (
+            <div key={i} className={cn(ROW, "h-[64px]")}>
+              <span
+                className={cn(COL.request, "flex min-w-0 items-center gap-3")}
+              >
+                <PendingBar className="size-8 shrink-0 rounded-full" />
+                <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+                  <PendingBar className="h-3 w-56" />
+                  <PendingBar className="h-2.5 w-40" />
+                </span>
+              </span>
+              <span className={cn(COL.emailCheck, "flex items-center")}>
+                <PendingBar className="h-3 w-24" />
+              </span>
+              <span className={cn(COL.received, "flex flex-col gap-1.5")}>
+                <PendingBar className="h-3 w-14" />
+                <PendingBar className="h-2.5 w-10" />
+              </span>
+            </div>
+          ))}
+        </PendingRegion>
+      </div>
+    </div>
+  );
+}
+
 export function RequestsTable({
   rows,
   emptyTitle = "No requests match this view",
@@ -78,20 +141,9 @@ export function RequestsTable({
   onSelect?: (row: AdminRequestRow) => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-      <div className="min-w-[640px] px-6 pt-0.5 pb-1.5">
-        <div
-          className={cn(
-            ROW,
-            "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-          )}
-        >
-          {REQUESTS_COLUMNS.map((column) => (
-            <span key={column.label} className={cn(column.col, "eyebrow-sm")}>
-              {column.label}
-            </span>
-          ))}
-        </div>
+    <div className={TABLE_CARD}>
+      <div className={TABLE_INNER}>
+        <RequestsHeaderRow />
 
         {rows.length === 0 ? (
           <TableEmptyBody

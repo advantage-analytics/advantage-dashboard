@@ -58,6 +58,13 @@ export const SEND_BACK_NOTE_TOO_LONG = `Keep the note to ${SEND_BACK_NOTE_MAX} c
  */
 export const SEND_BACK_NOBODY =
   "Nobody is assigned to this match, so there is no labeller to send it back to. Reopen it instead.";
+/**
+ * Send back on a session its assigned labeller never published (no
+ * `label_submissions` row by them for it): an admin published the match
+ * themselves, so the note would reach someone with nothing of theirs to fix.
+ */
+export const SEND_BACK_ADMIN_PUBLISHED =
+  "An admin published this match, not its labeller, so there is nothing to send back. Reopen it instead.";
 
 /** The trimmed note, or the sentence that refuses it. */
 export function parseSendBackNote(
@@ -138,8 +145,9 @@ export function checkLabelSession(
  * Send back: a published session (checked or not) back to `labelling` for
  * its labeller, with the admin's note. The check is cleared with the status
  * (`label_sessions_checked_needs_complete`). Refused with
- * `ANOTHER_SESSION_OPEN` when the match already has an open session. Never
- * throws.
+ * `ANOTHER_SESSION_OPEN` when the match already has an open session, and
+ * with `SEND_BACK_ADMIN_PUBLISHED` when its labeller never submitted it (an
+ * admin published it). Never throws.
  */
 export function sendBackLabelSession(
   sessionId: unknown,
@@ -154,7 +162,43 @@ export function sendBackLabelSession(
     "send the session back",
     async (supabase, id, actorId) => {
       if ("error" in parsed) return parsed;
-      const { data, error } = await supabase
+      // Only a labeller who published this session can be sent it back. The
+      // update is pinned to what this read saw (its labeller and when it was
+      // published), so a reassign or a reopen-and-republish landing between
+      // the read and the write matches nothing and answers RACED, rather
+      // than sending back a publish the check never looked at.
+      const { data: session, error: sessionError } = await supabase
+        .from("label_sessions")
+        .select("status, assigned_to, completed_at")
+        .eq("id", id)
+        .maybeSingle<{
+          status: string;
+          assigned_to: string | null;
+          completed_at: string | null;
+        }>();
+      if (sessionError) {
+        return {
+          error: `Could not send the session back: ${sessionError.message}`,
+        };
+      }
+      // Not published (reopened in another tab, or gone): nothing to send back.
+      if (session?.status !== "complete") return { error: RACED };
+      if (!session.assigned_to) return { error: SEND_BACK_NOBODY };
+      const { data: submitted, error: submittedError } = await supabase
+        .from("label_submissions")
+        .select("id")
+        .eq("session_id", id)
+        .eq("submitted_by", session.assigned_to)
+        .limit(1);
+      if (submittedError) {
+        return {
+          error: `Could not send the session back: ${submittedError.message}`,
+        };
+      }
+      if (!submitted || submitted.length === 0) {
+        return { error: SEND_BACK_ADMIN_PUBLISHED };
+      }
+      const update = supabase
         .from("label_sessions")
         .update({
           status: "labelling",
@@ -168,8 +212,12 @@ export function sendBackLabelSession(
         .eq("id", id)
         .eq("status", "complete")
         .eq("kind", "analyst")
-        .not("assigned_to", "is", null)
-        .select("id");
+        .eq("assigned_to", session.assigned_to);
+      const { data, error } = await (
+        session.completed_at
+          ? update.eq("completed_at", session.completed_at)
+          : update.is("completed_at", null)
+      ).select("id");
       if (error) {
         if (error.code === UNIQUE_VIOLATION) {
           return { error: ANOTHER_SESSION_OPEN };

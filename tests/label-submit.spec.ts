@@ -16,6 +16,8 @@ import {
   writeLabelSessionReopen,
 } from "@/lib/services/labels/session-status-session";
 import {
+  SUBMIT_PRACTICE_FAILED,
+  SUBMIT_PUBLISH_FAILED,
   submitLabelSession,
   writeLabelSubmit,
 } from "@/lib/services/labels/submit-session";
@@ -104,6 +106,21 @@ function as(kind: "labeller" | "admin", fake: ReturnType<typeof client>) {
 
 /** A publish that wrote. */
 const PUBLISHED = async () => ({ ok: true as const, points: 3, shots: 9 });
+
+/** Swap `console.error` for a recorder until `stop()`: the raw detail lands there. */
+function captureErrors() {
+  const calls: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => {
+    calls.push(args);
+  };
+  return {
+    calls,
+    stop: () => {
+      console.error = original;
+    },
+  };
+}
 
 const writes = (calls: readonly FakeLabelCall[]) =>
   calls.filter((c) => c.op === "insert" || c.op === "update");
@@ -498,7 +515,7 @@ test.describe("submitLabelSession", () => {
     const fake = client({ session: sessionRow("labelling"), failInsert: true });
     let published = 0;
     expect(
-      await submitLabelSession(SESSION_ID, as("labeller", fake), {
+      await submitLabelSession(SESSION_ID, as("admin", fake), {
         readRows: readFixture,
         publish: async () => {
           published += 1;
@@ -564,9 +581,10 @@ test.describe("submitLabelSession", () => {
     expect(writes(fake.calls).some((c) => c.values?.status)).toBe(false);
   });
 
-  test("a labeller's refusal never names the match; an admin reads it whole", async () => {
+  test("a labeller reads a failure after the gate as the fixed sentence; an admin reads it whole", async () => {
     const sentence = `Match ${MATCH_ID} not found`;
     const answers: Record<string, unknown> = {};
+    const logged = captureErrors();
     for (const kind of ["labeller", "admin"] as const) {
       const fake = client({
         session: sessionRow("labelling"),
@@ -578,14 +596,79 @@ test.describe("submitLabelSession", () => {
         publish: PUBLISHED,
       });
     }
+    logged.stop();
     expect(answers.admin).toEqual({
       error: `The labels are published, but the match could not be marked Verified by Advantage: ${sentence}. Publish again to retry.`,
     });
-    expect(answers.labeller).toEqual({
-      error:
-        "The labels are published, but the match could not be marked Verified by Advantage: Match … not found. Publish again to retry.",
-    });
+    expect(answers.labeller).toEqual({ error: SUBMIT_PUBLISH_FAILED });
     expect(JSON.stringify(answers.labeller)).not.toContain(MATCH_ID);
+    // The raw text is logged once, for the labeller's answer.
+    const refusals = logged.calls.filter(
+      ([line]) => line === "[labels:submit] refused a labeller",
+    );
+    expect(refusals).toHaveLength(1);
+    expect(JSON.stringify(refusals)).toContain(sentence);
+  });
+
+  test("a labeller never reads the database's words: a failed snapshot, a failed read, a thrown publish", async () => {
+    const logged = captureErrors();
+    const snapshot = client({
+      session: sessionRow("labelling"),
+      failInsert: true,
+    });
+    expect(
+      await submitLabelSession(SESSION_ID, as("labeller", snapshot), {
+        readRows: readFixture,
+        publish: PUBLISHED,
+      }),
+    ).toEqual({ error: SUBMIT_PUBLISH_FAILED });
+
+    const thrown = client({ session: sessionRow("labelling") });
+    expect(
+      await submitLabelSession(SESSION_ID, as("labeller", thrown), {
+        readRows: readFixture,
+        publish: async () => {
+          throw new Error(
+            'duplicate key value violates unique constraint "points_match_id_point_index_key"',
+          );
+        },
+      }),
+    ).toEqual({ error: SUBMIT_PUBLISH_FAILED });
+
+    const practice = client({
+      session: sessionRow("labelling", { kind: "practice" }),
+      failInsert: true,
+    });
+    expect(
+      await submitLabelSession(SESSION_ID, as("labeller", practice), {
+        readRows: readFixture,
+      }),
+    ).toEqual({ error: SUBMIT_PRACTICE_FAILED });
+    logged.stop();
+    expect(JSON.stringify(logged.calls)).toContain("disk full");
+    expect(JSON.stringify(logged.calls)).toContain(
+      "points_match_id_point_index_key",
+    );
+  });
+
+  test("a labeller still reads the deliberate refusals as they are", async () => {
+    const refused = client({ session: sessionRow("labelling") });
+    expect(
+      await submitLabelSession(SESSION_ID, as("labeller", refused), {
+        readRows: readFixture,
+        publish: async () => ({
+          ok: false,
+          error: "Not published: there are no points to write.",
+        }),
+      }),
+    ).toEqual({ error: "Not published: there are no points to write." });
+    const raced = client({ session: sessionRow("labelling"), raced: true });
+    expect(
+      await submitLabelSession(SESSION_ID, as("labeller", raced), {
+        readRows: readFixture,
+        publish: PUBLISHED,
+      }),
+    ).toEqual({ error: RACED });
   });
 });
 
