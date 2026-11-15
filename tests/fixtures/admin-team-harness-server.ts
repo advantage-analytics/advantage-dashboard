@@ -53,6 +53,7 @@ export async function serveHarness(
             "@/lib/services/programs/admin-conference-crest-actions$": ACTIONS,
             "@/lib/services/programs/admin-actions$": ACTIONS,
             "@/lib/services/programs/admin-program-actions$": ACTIONS,
+            "@/lib/services/programs/admin-pilot-actions$": ACTIONS,
             "@/lib/data/admin-search-server$": ACTIONS,
             "@/app/admin/labels/actions$": ACTIONS,
             "@/components/admin/teams-actions$": ACTIONS,

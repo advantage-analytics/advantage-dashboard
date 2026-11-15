@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import {
   MatchReportFrame,
   MatchReportPane,
@@ -130,7 +131,14 @@ function SwitcherPending({ active }: { active: ReportView }) {
  * facts line of three bars, with the one action every match has (the more
  * menu) as a 28px square on the right. Compare is per-match, so not drawn.
  */
-function TitleRowPending({ view }: { view: ReportView }) {
+function TitleRowPending({
+  view,
+  action = true,
+}: {
+  view: ReportView;
+  /** False on the read-only report, which draws no ⋯ menu. */
+  action?: boolean;
+}) {
   const label =
     REPORT_VIEWS.find((v) => v.value === view)?.label ?? REPORT_VIEWS[0].label;
   return (
@@ -148,9 +156,11 @@ function TitleRowPending({ view }: { view: ReportView }) {
           <PendingBar className="w-32" />
         </div>
       </div>
-      <MatchReportTitleActions>
-        <PendingBar className="size-7 rounded-[var(--radius-element)]" />
-      </MatchReportTitleActions>
+      {action ? (
+        <MatchReportTitleActions>
+          <PendingBar className="size-7 rounded-[var(--radius-element)]" />
+        </MatchReportTitleActions>
+      ) : null}
     </MatchReportTitleRow>
   );
 }
@@ -821,6 +831,47 @@ export function FilmPanePending() {
 /* ── The page ──────────────────────────────────────────────────────────── */
 
 /**
+ * The report's frame, pending: the rail and the pane for `view`, with no box
+ * around it — the caller bounds it. `readOnlyFooter` is the read-only
+ * report's (the admin's, `admin/matches/[matchId]`): its rail closes on that
+ * line instead of the Share/Ask action, and its title row has no ⋯ menu.
+ */
+export function MatchReportPendingFrame({
+  view,
+  readOnlyFooter,
+}: {
+  view: ReportView;
+  readOnlyFooter?: ReactNode;
+}) {
+  return (
+    <MatchReportFrame>
+      <MatchReportRail>
+        <PendingRegion label="match summary">
+          <ScoreboardPending />
+        </PendingRegion>
+        <SwitcherPending active={view} />
+        <MatchReportSpacer />
+        {readOnlyFooter ?? (
+          <MatchReportRailFooter>
+            <PendingBar className="h-8 rounded-[var(--radius-element)]" />
+          </MatchReportRailFooter>
+        )}
+      </MatchReportRail>
+      <MatchReportPane>
+        <TitleRowPending view={view} action={readOnlyFooter === undefined} />
+        {view === "statistics" ? (
+          <StatisticsPanePending />
+        ) : view === "shots" ? (
+          <VisualizationsPanePending />
+        ) : (
+          <FilmPanePending />
+        )}
+      </MatchReportPane>
+    </MatchReportFrame>
+  );
+}
+
+/**
  * The whole report, pending: `[matchId]/layout.tsx`'s bounded box, the rail
  * and the pane for `view`. Pure props — this is what the offline spec
  * renders — and `match-report-skeleton.tsx` is the one that reads the URL.
@@ -828,28 +879,7 @@ export function FilmPanePending() {
 export function MatchReportPending({ view }: { view: ReportView }) {
   return (
     <div className="flex h-[calc(100dvh-var(--header-h))] w-full flex-col overflow-hidden bg-white">
-      <MatchReportFrame>
-        <MatchReportRail>
-          <PendingRegion label="match summary">
-            <ScoreboardPending />
-          </PendingRegion>
-          <SwitcherPending active={view} />
-          <MatchReportSpacer />
-          <MatchReportRailFooter>
-            <PendingBar className="h-8 rounded-[var(--radius-element)]" />
-          </MatchReportRailFooter>
-        </MatchReportRail>
-        <MatchReportPane>
-          <TitleRowPending view={view} />
-          {view === "statistics" ? (
-            <StatisticsPanePending />
-          ) : view === "shots" ? (
-            <VisualizationsPanePending />
-          ) : (
-            <FilmPanePending />
-          )}
-        </MatchReportPane>
-      </MatchReportFrame>
+      <MatchReportPendingFrame view={view} />
     </div>
   );
 }

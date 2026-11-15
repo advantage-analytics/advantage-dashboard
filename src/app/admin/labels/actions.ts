@@ -90,10 +90,11 @@ import {
   reopenLabelSession,
   type LabelSessionStatusResult,
 } from "@/lib/services/labels/session-status-session";
+import { submitLabelSession } from "@/lib/services/labels/submit-session";
 import {
-  submitLabelSession,
-  type LabelSubmitResult,
-} from "@/lib/services/labels/submit-session";
+  checkLabelSession,
+  sendBackLabelSession,
+} from "@/lib/services/labels/check-session";
 import {
   redoLabelOp,
   undoLabelOp,
@@ -556,15 +557,16 @@ export async function updateLabelSessionFieldsAction(
 }
 
 /**
- * The console header's "Submit for review" (submit-session.ts): the one
- * status write a labeller may make. A snapshot of the session's rows goes to
- * `label_submissions`, then `label_sessions.status` to `submitted`; nothing is
- * published. Refused on a session that is not labelling. Outside
+ * The console header's submit (submit-session.ts): the one status write a
+ * labeller may make. A snapshot of the session's rows goes to
+ * `label_submissions`, then the session is published and closed as Mark
+ * complete does it, answering `complete`; a practice copy is only marked
+ * `submitted`. Refused on a session that is not labelling. Outside
  * `withLabelOp`, like Mark complete: a status move is not a step to undo.
  */
 export async function submitLabelSessionAction(
   sessionId: string,
-): Promise<LabelSubmitResult> {
+): Promise<LabelSessionStatusResult> {
   return submitLabelSession(sessionId);
 }
 
@@ -589,6 +591,33 @@ export async function reopenLabelSessionAction(
   sessionId: string,
 ): Promise<LabelSessionStatusResult> {
   return reopenLabelSession(sessionId);
+}
+
+/**
+ * The Labels list's "Check": pass a labeller's published session. Stamps
+ * `checked_at` / `checked_by` on a complete analyst session not yet checked;
+ * the match is not touched. Admin only.
+ */
+export async function checkLabelSessionAction(
+  sessionId: string,
+): Promise<LabelSessionStatusResult> {
+  const result = await checkLabelSession(sessionId);
+  if ("ok" in result) revalidatePath("/admin/labels");
+  return result;
+}
+
+/**
+ * The Labels list's "Send back": a published session back to `labelling` for
+ * its labeller, with the admin's note (trimmed, 1 to 2000 characters). The
+ * match keeps its published labels and Verified by Advantage. Admin only.
+ */
+export async function sendBackLabelSessionAction(
+  sessionId: string,
+  note: string,
+): Promise<LabelSessionStatusResult> {
+  const result = await sendBackLabelSession(sessionId, note);
+  if ("ok" in result) revalidatePath("/admin/labels");
+  return result;
 }
 
 /**

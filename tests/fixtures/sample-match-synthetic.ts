@@ -148,6 +148,7 @@ export const SYNTHETIC_MATCH_DETAIL: MatchDetailData = {
     },
     won: false,
     isUserPlayer1: false,
+    verificationPending: false,
     // Not on `Match`, but a tie the anonymiser is told to drop if present.
     ...({ programId: REAL_PROGRAM_ID } as object),
   },

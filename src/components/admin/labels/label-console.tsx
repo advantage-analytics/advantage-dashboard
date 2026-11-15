@@ -1,6 +1,8 @@
 "use client";
 
+import { formatMatchDayMedium } from "@/lib/data/match-day";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -206,7 +208,6 @@ import {
   errorMarkingReady,
 } from "@/lib/services/labels/session-status";
 import type { LabelSessionStatusResult } from "@/lib/services/labels/session-status-session";
-import type { LabelSubmitResult } from "@/lib/services/labels/submit-session";
 import { advButton } from "@/lib/ui/adv-button";
 import { applySiteRemovalRestore } from "@/lib/services/labels/site-removal";
 import type { LabelSiteRemovalRestoreResult } from "@/lib/services/labels/site-removal-session";
@@ -625,11 +626,13 @@ export function LabelConsole({
   /**
    * Who is looking. `"labeller"` (`/label/[sessionId]`) shows no player,
    * program or derivation, names the sides "Player 1" / "Player 2", and
-   * swaps Mark complete and Reopen for "Submit for review".
+   * drops Reopen. Its Publish goes through `submitSession`.
    */
   viewerKind?: "admin" | "labeller";
 }) {
   const labeller = viewerKind === "labeller";
+  // A practice copy is graded, never published: its button submits.
+  const practice = session.kind === "practice";
   const names = useMemo(
     () =>
       labeller
@@ -637,7 +640,7 @@ export function LabelConsole({
         : sideNames(session.player1Name, session.player2Name),
     [labeller, session.player1Name, session.player2Name],
   );
-  // Client state, so "Mark complete" and "Reopen" flip the console read-only
+  // Client state, so "Publish" and "Reopen" flip the console read-only
   // or editable without a reload.
   const [status, setStatus] = useState(session.status);
   // A status write in flight: both buttons wait for it.
@@ -2281,21 +2284,22 @@ export function LabelConsole({
   }
 
   /**
-   * "Mark complete" (after its confirm), "Reopen" and the labeller's "Submit
-   * for review": `label_sessions.status` alone. Not optimistic — the console
-   * flips read-only or editable once the server has said so.
+   * "Publish" (after its confirm) and "Reopen": `label_sessions.status`
+   * alone. The admin's Publish is `completeSession`, the labeller's
+   * `submitSession` (a practice copy's answers `submitted`). Not optimistic —
+   * the console flips read-only or editable once the server has said so.
    */
-  async function setSessionStatus(next: LabelSession["status"]) {
+  async function setSessionStatus(action: "publish" | "reopen") {
     const write:
       | ((
           sessionId: string,
         ) => Promise<{ status: LabelSession["status"] } | { error: string }>)
       | undefined =
-      next === "complete"
-        ? operations?.completeSession
-        : next === "submitted"
+      action === "reopen"
+        ? operations?.reopenSession
+        : labeller
           ? operations?.submitSession
-          : operations?.reopenSession;
+          : operations?.completeSession;
     if (!write || statusSaving) return;
     setStatusSaving(true);
     dispatchSave({ type: "start" });
@@ -2308,17 +2312,25 @@ export function LabelConsole({
     if (result.status !== "labelling") setPlacement(NO_PLACEMENT);
     setStatus(result.status);
     dispatchSave({ type: "success", at: Date.now() });
+    // A labeller reads only labelling and submitted sessions
+    // (`requireLabelReader`): once theirs is published, this page would
+    // 404 on a reload, so they go back to their matches.
+    if (labeller && result.status === "complete") {
+      window.location.replace("/label");
+    }
   }
 
   /**
-   * "Mark complete": the confirm, listing what is still open, and saying what
-   * publishing past any error not yet marked forced or unforced means.
+   * "Publish" (a practice copy's "Submit"): the confirm, listing what is
+   * still open, and saying what publishing past any error not yet marked
+   * forced or unforced means. One confirm for both audiences.
    */
   function askComplete() {
     setConfirm({
       kind: "complete-session",
       unmarked: errorsToMark.length,
       warnings: sessionWarnings,
+      ...(labeller ? { audience: practice ? "practice" : "labeller" } : {}),
     });
   }
 
@@ -3091,20 +3103,15 @@ export function LabelConsole({
         // An edit made while the confirm was open would be refused.
         if (saveStatus.pending > 0) {
           return refuse(
-            "Wait for your changes to save, then mark it complete.",
+            practice
+              ? "Wait for your changes to save, then submit it."
+              : "Wait for your changes to save, then publish it.",
           );
         }
-        void setSessionStatus("complete");
+        void setSessionStatus("publish");
         return;
       case "reopen-session":
-        void setSessionStatus("labelling");
-        return;
-      case "submit-session":
-        // An edit made while the confirm was open would be refused.
-        if (saveStatus.pending > 0) {
-          return refuse("Wait for your changes to save, then submit it.");
-        }
-        void setSessionStatus("submitted");
+        void setSessionStatus("reopen");
         return;
     }
   }
@@ -3363,7 +3370,7 @@ export function LabelConsole({
     // A cache: a failed save leaves the list a step behind, nothing more.
     void recordOpenCounts(session.id, openCounts).catch(() => {});
   }, [openCounts, recordOpenCounts, session.id]);
-  // What Mark complete would list. Memoised: the console re-renders on every
+  // What Publish would list. Memoised: the console re-renders on every
   // film tick while it plays.
   const sessionWarnings = useMemo(
     () =>
@@ -4680,6 +4687,9 @@ export function LabelConsole({
       {fullScreen ? null : (
         <div
           data-console-header=""
+          // Full width for both audiences: the admin's overview body runs the
+          // full width of the admin page (label-dashboard.tsx, the owner,
+          // 2026-11-13), so its header shares the body's left and right edge.
           className="flex shrink-0 items-end justify-between gap-8"
         >
           {labeller ? (
@@ -4710,33 +4720,57 @@ export function LabelConsole({
                 <h1 className="text-display truncate">
                   {session.player1Name} vs {session.player2Name}
                 </h1>
+                {/* No "N of M points checked": the overview's body counts
+                    the work in flags left, and the two read as rivals. The
+                    header only draws on the overview (not full screen). */}
                 <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-[var(--ink-600)]">
-                  {upload?.program ? (
-                    <>
-                      <ProgramCrest
-                        name={upload.program}
-                        crestUrl={upload.programCrestUrl}
-                        size={26}
-                      />
-                      <span>{upload.program}</span>
-                      <span aria-hidden="true">·</span>
-                    </>
-                  ) : null}
-                  <span className="tabular">
-                    {checked} of {total} points checked
-                  </span>
-                  {status === "complete" ? (
-                    <span data-session-complete="">· Complete</span>
-                  ) : null}
-                  {status === "submitted" ? (
-                    <span data-session-submitted="">
-                      · Submitted for review
-                    </span>
-                  ) : null}
-                  <span aria-hidden="true">·</span>
-                  <span className="mono text-[11px] text-[var(--ink-500)]">
-                    derivation {session.derivationVersion}
-                  </span>
+                  {[
+                    upload?.program ? (
+                      <Fragment key="program">
+                        <ProgramCrest
+                          name={upload.program}
+                          crestUrl={upload.programCrestUrl}
+                          size={26}
+                        />
+                        <span>{upload.program}</span>
+                      </Fragment>
+                    ) : null,
+                    // When and where it was played: a calendar day
+                    // (match-day.ts), never a moment.
+                    upload?.playedAt ? (
+                      <span key="played" className="tabular">
+                        {formatMatchDayMedium(upload.playedAt)}
+                      </span>
+                    ) : null,
+                    upload?.event?.trim() ? (
+                      <span key="event" className="truncate">
+                        {upload.event.trim()}
+                      </span>
+                    ) : null,
+                    status === "complete" ? (
+                      <span key="complete" data-session-complete="">
+                        Complete
+                      </span>
+                    ) : null,
+                    status === "submitted" ? (
+                      <span key="submitted" data-session-submitted="">
+                        Submitted for review
+                      </span>
+                    ) : null,
+                    <span
+                      key="derivation"
+                      className="mono text-[11px] text-[var(--ink-500)]"
+                    >
+                      derivation {session.derivationVersion}
+                    </span>,
+                  ]
+                    .filter((item) => item !== null)
+                    .map((item, at) => (
+                      <Fragment key={at}>
+                        {at > 0 ? <span aria-hidden="true">·</span> : null}
+                        {item}
+                      </Fragment>
+                    ))}
                 </p>
               </div>
             </div>
@@ -4775,7 +4809,7 @@ export function LabelConsole({
                   data-submitted-waiting=""
                   className="text-[13px] text-[var(--ink-600)]"
                 >
-                  Submitted — waiting for review
+                  Submitted
                 </span>
               ) : operable && operations?.submitSession ? (
                 <button
@@ -4783,11 +4817,11 @@ export function LabelConsole({
                   data-submit-review=""
                   className={advButton("outline", "sm")}
                   // Every edit must have landed first: one still in flight
-                  // would be refused once the session is submitted.
+                  // would be refused once the session is published.
                   disabled={saveStatus.pending > 0 || statusSaving}
-                  onClick={() => setConfirm({ kind: "submit-session" })}
+                  onClick={askComplete}
                 >
-                  Submit for review
+                  {practice ? "Submit" : "Publish"}
                 </button>
               ) : null
             ) : null}
@@ -4804,7 +4838,7 @@ export function LabelConsole({
                 disabled={saveStatus.pending > 0 || statusSaving}
                 onClick={askComplete}
               >
-                Mark complete
+                Publish
               </button>
             ) : null}
             {!labeller &&
@@ -4834,7 +4868,10 @@ export function LabelConsole({
             >
               {status === "labelling" ? "Open labelling" : "Open full screen"}
             </button>
-            {headerAction}
+            {/* Keyed: `headerAction` is built by the page (a Server
+                Component), and React's dev key check reads an element that
+                crossed that boundary as an unkeyed list child. */}
+            <Fragment key="header-action">{headerAction}</Fragment>
           </div>
         </div>
       )}
@@ -4848,6 +4885,8 @@ export function LabelConsole({
           games={scores.games}
           adScoring={adScoring}
           startScore={startScore}
+          startOpenCounts={session.startOpenCounts ?? null}
+          openCounts={openCounts}
           names={names}
           audience={viewerKind}
           finalScore={sessionFields.finalScore}
@@ -4889,7 +4928,7 @@ export function LabelConsole({
         />
       ) : null}
       {/* A complete or submitted session is not operable, but its Reopen
-          still asks — and a submitted one's Mark complete. */}
+          still asks — and a submitted one's Publish. */}
       {operable ||
       confirm?.kind === "reopen-session" ||
       (status === "submitted" && confirm?.kind === "complete-session") ? (
@@ -4907,7 +4946,7 @@ export function LabelConsole({
                 )
               : null
           }
-          // A submitted session takes no edits, so Mark complete's "Mark
+          // A submitted session takes no edits, so Publish's "Mark
           // errors" has nowhere to go: Reopen is the way back to them.
           onAlternative={
             status === "submitted" ? undefined : confirmAlternative
@@ -5079,7 +5118,7 @@ export interface LabelConsoleOperations {
     sessionId: string,
     patch: LabelSessionFieldsPatch,
   ) => Promise<LabelSessionFieldsResult>;
-  /** `label_sessions.status` to `complete`. Absent: no "Mark complete". */
+  /** `label_sessions.status` to `complete`. Absent: no admin "Publish". */
   completeSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
   /**
    * A complete or submitted session back to `labelling`. Absent: no
@@ -5087,10 +5126,11 @@ export interface LabelConsoleOperations {
    */
   reopenSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
   /**
-   * The labeller's "Submit for review": `label_sessions.status` to
-   * `submitted` (submit-session.ts). Shown only to `viewerKind="labeller"`.
+   * The labeller's submit (submit-session.ts): the session is published and
+   * answers `complete`; a practice copy answers `submitted`. The console
+   * takes its status from the answer. Shown only to `viewerKind="labeller"`.
    */
-  submitSession?: (sessionId: string) => Promise<LabelSubmitResult>;
+  submitSession?: (sessionId: string) => Promise<LabelSessionStatusResult>;
   /**
    * Rewind the session's newest action, whatever it was, and answer the rows
    * it touched as a diff (undo-session.ts). Absent: no "Undo".

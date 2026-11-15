@@ -14,6 +14,9 @@ import { crestUrl } from "@/lib/data/teams-server";
 import { pgQuoteValue } from "@/lib/data/postgrest-filter";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
 import { loadNavSeen, type SeenState } from "@/lib/admin/seen-server";
+import { currentBillingMonth } from "@/lib/services/splitstep/config";
+import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
+import type { ProgramOrgType } from "@/lib/workspace/types";
 
 /**
  * The Admin › Teams list — every program in the directory (~1,940 rows),
@@ -57,6 +60,13 @@ export interface AdminTeamsFilters {
   division?: string;
   conference?: string;
   state?: string;
+  /**
+   * `programs.conference_id` — the conference page's filter, an equality on
+   * the id. Separate from the text `conference` above, which `?conference=`
+   * still drives: a club's free-text league has text and no id, and two
+   * conferences may one day share a label.
+   */
+  conferenceId?: string;
 }
 
 /** The value sets the filter panel offers, read once from the directory. */
@@ -124,6 +134,22 @@ export interface AdminTeamRow {
    * this same lookup.
    */
   openRequestCount: number;
+  /**
+   * This calendar month's video, in seconds, on the program's ledger — the
+   * same rule the team detail loader's `readUsage` applies (and
+   * `reserve_processing_quota`, which is what refuses a submission):
+   * `sum(coalesce(actual_seconds, reserved_seconds))` over the program's
+   * unreleased `processing_usage` rows for the billing month. Read for the
+   * whole page in one batched query; null when that read failed, so the cell
+   * prints a dash rather than a confident zero.
+   */
+  videoUsedSeconds: number | null;
+  /**
+   * The month's allowance, from `monthlyCapSecondsFor({ kind: 'team', … })`
+   * exactly as the team detail page computes it. Null together with
+   * `videoUsedSeconds`: a cap with no usage beside it is half a fact.
+   */
+  videoCapSeconds: number | null;
 }
 
 export interface AdminTeamsPage {
@@ -220,6 +246,7 @@ interface RawProgramRow {
   conference: string | null;
   state: string | null;
   status: string;
+  pilot_eligible: boolean | null;
   crest_path: string | null;
   claimed_at: string | null;
   // A to-one embed (the FK lives on `programs`) comes back as an object or
@@ -240,6 +267,7 @@ const PROGRAMS_SELECT = `
   conference,
   state,
   status,
+  pilot_eligible,
   crest_path,
   claimed_at,
   owner:users!programs_owner_user_id_fkey(first_name,last_name,avatar_path),
@@ -286,6 +314,7 @@ function toAdminTeamRow(
   crestUrlValue: string | null,
   openRequestCount: number,
   avatarUrl: (path: string) => string,
+  usedSeconds: Map<string, number> | null,
 ): AdminTeamRow {
   const owner = ownerOf(row.owner);
   const claim = latestClaim(row.program_claims);
@@ -322,7 +351,26 @@ function toAdminTeamRow(
           }
         : undefined,
     openRequestCount,
+    // A program not on Advantage (`active` / `claim_pending`) has no
+    // allowance to spend, so it shows "—" rather than an empty "0 of 75 h".
+    videoUsedSeconds:
+      usedSeconds && onAdvantageStatus(row.status)
+        ? (usedSeconds.get(row.id) ?? 0)
+        : null,
+    videoCapSeconds:
+      usedSeconds && onAdvantageStatus(row.status)
+        ? monthlyCapSecondsFor({
+            kind: "team",
+            orgType: (row.org_type as ProgramOrgType | null) ?? null,
+            pilotEligible: row.pilot_eligible === true,
+          })
+        : null,
   };
+}
+
+/** On Advantage, as the `on_advantage` view counts it: claimed or being claimed. */
+export function onAdvantageStatus(status: string): boolean {
+  return status === "active" || status === "claim_pending";
 }
 
 // ---------------------------------------------------------------------------
@@ -440,6 +488,51 @@ async function openRequestCountsFor(
   return counts;
 }
 
+/**
+ * This month's video seconds per program, for exactly the ids on one page —
+ * one query, not one per row.
+ *
+ * The filter is `readUsage`'s in `admin-team-server.ts` verbatim, widened from
+ * one `account_id` to the page's: `account_type = 'program'`, the current
+ * `billing_month` (the calendar month, `currentBillingMonth()`), `not
+ * released`, and each row counted as `actual_seconds ?? reserved_seconds`. A
+ * list that showed a different total from the program's own page would be
+ * worse than no total. A program with no rows is 0; a failed read is null for
+ * the whole page, never a page of zeroes.
+ */
+async function videoUsedSecondsFor(
+  admin: SupabaseClient,
+  programIds: string[],
+): Promise<Map<string, number> | null> {
+  const used = new Map<string, number>();
+  if (programIds.length === 0) return used;
+
+  const { data, error } = await admin
+    .from("processing_usage")
+    .select("account_id, reserved_seconds, actual_seconds")
+    .eq("account_type", "program")
+    .eq("billing_month", currentBillingMonth())
+    .eq("released", false)
+    .in("account_id", programIds);
+
+  if (error) {
+    console.error("[admin teams] could not read program usage", {
+      error: error.message,
+    });
+    return null;
+  }
+
+  for (const row of (data ?? []) as {
+    account_id: string;
+    reserved_seconds: number | null;
+    actual_seconds: number | null;
+  }[]) {
+    const seconds = row.actual_seconds ?? row.reserved_seconds ?? 0;
+    used.set(row.account_id, (used.get(row.account_id) ?? 0) + seconds);
+  }
+  return used;
+}
+
 // ---------------------------------------------------------------------------
 // The loader
 // ---------------------------------------------------------------------------
@@ -506,6 +599,9 @@ export async function listAdminTeams({
   if (filters?.division) query = query.eq("division", filters.division);
   if (filters?.conference) query = query.eq("conference", filters.conference);
   if (filters?.state) query = query.eq("state", filters.state);
+  if (filters?.conferenceId) {
+    query = query.eq("conference_id", filters.conferenceId);
+  }
 
   if (cursor) {
     const name = pgQuoteValue(cursor.schoolName);
@@ -536,12 +632,11 @@ export async function listAdminTeams({
   const hasMore = allRows.length > limit;
   const page = hasMore ? allRows.slice(0, limit) : allRows;
 
-  const [crestUrls, openRequestCounts] = await Promise.all([
+  const pageIds = page.map((row) => row.id);
+  const [crestUrls, openRequestCounts, usedSeconds] = await Promise.all([
     Promise.all(page.map((row) => crestUrl(row.crest_path))),
-    openRequestCountsFor(
-      admin,
-      page.map((row) => row.id),
-    ),
+    openRequestCountsFor(admin, pageIds),
+    videoUsedSecondsFor(admin, pageIds),
   ]);
 
   const avatars = admin.storage.from(USER_AVATARS_BUCKET);
@@ -552,6 +647,7 @@ export async function listAdminTeams({
       crestUrls[index],
       openRequestCounts.get(row.id) ?? 0,
       avatarUrl,
+      usedSeconds,
     ),
   );
 
@@ -696,6 +792,9 @@ export async function countAdminTeamViews(
     if (filters.division) query = query.eq("division", filters.division);
     if (filters.conference) query = query.eq("conference", filters.conference);
     if (filters.state) query = query.eq("state", filters.state);
+    if (filters.conferenceId) {
+      query = query.eq("conference_id", filters.conferenceId);
+    }
     return query;
   };
   const counted = async (

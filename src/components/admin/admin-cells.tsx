@@ -32,14 +32,17 @@ export function AdminAvatar({
   photoUrl?: string | null;
   /** Draws the 7px Signal Blue dot on the top-right corner. */
   fresh?: boolean;
-  size?: 20 | 26 | 32;
+  /** 16 is the workspace mark's size, for a personal workspace's owner. */
+  size?: 16 | 20 | 26 | 32;
 }) {
   const box =
     size === 32
       ? "size-[32px] text-[11px]"
       : size === 26
         ? "size-[26px] text-[9px]"
-        : "size-[20px] text-[8px]";
+        : size === 20
+          ? "size-[20px] text-[8px]"
+          : "size-[16px] text-[8px]";
   return (
     <span className="relative inline-flex shrink-0">
       <PersonAvatar
@@ -231,15 +234,29 @@ export function WorkspaceMark({ workspace }: { workspace: AdminWorkspaceRef }) {
   );
 }
 
-/** Pattern 3: the workspace mark with its name beside it. */
-export function WorkspaceCell({ workspace }: { workspace: AdminWorkspaceRef }) {
+/**
+ * Pattern 3: the workspace mark with its name beside it. `ownerName` draws a
+ * personal workspace as its owner's 16px avatar instead of the person outline
+ * (Admin › Matches, where every row names the player it belongs to).
+ */
+export function WorkspaceCell({
+  workspace,
+  ownerName,
+}: {
+  workspace: AdminWorkspaceRef;
+  ownerName?: string;
+}) {
   const label =
     workspace.kind === "team" ? workspace.name : (workspace.name ?? "Personal");
   return (
     // A block-level flex row, not inline-flex: only a box with a resolved
     // width lets the name truncate instead of running into the next column.
     <span className="flex w-full max-w-full min-w-0 items-center gap-2 overflow-hidden">
-      <WorkspaceMark workspace={workspace} />
+      {workspace.kind === "personal" && ownerName ? (
+        <AdminAvatar name={ownerName} size={16} />
+      ) : (
+        <WorkspaceMark workspace={workspace} />
+      )}
       <span
         className={cn(
           "truncate text-[12px]",

@@ -766,9 +766,9 @@ test.describe("reset", () => {
   });
 });
 
-// ── Mark complete ──────────────────────────────────────────────────────────
+// ── Publish ────────────────────────────────────────────────────────────────
 
-test("Mark complete: the confirm lists what is still open, and the session is completed only on its action", async () => {
+test("Publish: the confirm lists what is still open, and the session is completed only on its action", async () => {
   const { calls, operations } = spies();
   const completed: unknown[][] = [];
   const warnings = ["2 points of 3 not checked", "Game 1 unfinished (15–15)"];
@@ -786,7 +786,7 @@ test("Mark complete: the confirm lists what is still open, and the session is co
   const dialog = dialogs.at(-1)!;
   expect(dialog).toMatchObject({
     open: true,
-    title: "Mark complete and publish?",
+    title: "Publish?",
     confirmLabel: "Publish",
     tone: "primary",
   });
@@ -799,6 +799,105 @@ test("Mark complete: the confirm lists what is still open, and the session is co
   await Promise.resolve();
   expect(completed).toEqual([[labelSessionFixture().id]]);
   expect(calls).toEqual({});
+});
+
+/**
+ * The labeller's console over `session`, its confirm the publish one, with
+ * `window.location.replace` recorded: the console's one navigation.
+ */
+async function labellerPublish(
+  session: LabelSession,
+  answer: { ok: true; status: LabelSession["status"] } | { error: string },
+) {
+  const { calls, operations } = spies();
+  const submitted: unknown[][] = [];
+  const completed: unknown[][] = [];
+  const navigated: string[] = [];
+  dialogs = [];
+  const { LabelConsole } = createLoader({
+    stubs: { "@/components/ui/confirm-dialog": { ConfirmDialog: PrintProps } },
+    globals: {
+      window: { location: { replace: (to: string) => navigated.push(to) } },
+    },
+  }).load("src/components/admin/labels/label-console.tsx") as {
+    LabelConsole: React.ComponentType<Props>;
+  };
+  const audience = session.kind === "practice" ? "practice" : "labeller";
+  const html = renderToStaticMarkup(
+    React.createElement(LabelConsole, {
+      ...SAVES,
+      session,
+      video: null,
+      viewerKind: "labeller",
+      initialLayoutMode: "overview",
+      operations: {
+        ...operations,
+        submitSession: async (...args: unknown[]) => {
+          submitted.push(args);
+          return answer;
+        },
+        completeSession: async (...args: unknown[]) => {
+          completed.push(args);
+          return { ok: true, status: "complete" };
+        },
+      },
+      initialConfirm: {
+        kind: "complete-session",
+        warnings: [],
+        unmarked: 0,
+        audience,
+      },
+    }),
+  );
+  const dialog = dialogs.at(-1)!;
+  (dialog.onConfirm as () => void)();
+  // `settle` and the write each take a turn.
+  await new Promise((done) => setTimeout(done, 0));
+  return { html, dialog, submitted, completed, navigated, calls };
+}
+
+test("a labeller's Publish: the same confirm, through submitSession, then back to /label", async () => {
+  const { html, dialog, submitted, completed, navigated, calls } =
+    await labellerPublish(labelSessionFixture(), {
+      ok: true,
+      status: "complete",
+    });
+  expect(html).toMatch(/data-submit-review="[^>]*>Publish</);
+  expect(html).not.toContain("Submit for review");
+  expect(dialog).toMatchObject({
+    open: true,
+    title: "Publish?",
+    confirmLabel: "Publish",
+    description: expect.stringContaining("Verified by Advantage"),
+  });
+  expect(String(dialog.description)).toContain("straight away");
+  expect(String(dialog.description)).toContain("send it back");
+  expect(submitted).toEqual([[labelSessionFixture().id]]);
+  expect(completed).toEqual([]);
+  expect(calls).toEqual({});
+  expect(navigated).toEqual(["/label"]);
+});
+
+test("a labeller's refused Publish stays on the page", async () => {
+  const { submitted, navigated } = await labellerPublish(
+    labelSessionFixture(),
+    {
+      error: "Could not publish.",
+    },
+  );
+  expect(submitted).toHaveLength(1);
+  expect(navigated).toEqual([]);
+});
+
+test("a practice copy submits: Submit wording, graded, and the page stays", async () => {
+  const { html, dialog, submitted, navigated } = await labellerPublish(
+    { ...labelSessionFixture(), kind: "practice" },
+    { ok: true, status: "submitted" },
+  );
+  expect(html).toMatch(/data-submit-review="[^>]*>Submit</);
+  expect(dialog).toMatchObject({ title: "Submit?", confirmLabel: "Submit" });
+  expect(submitted).toHaveLength(1);
+  expect(navigated).toEqual([]);
 });
 
 // ── Game bands (T14) ───────────────────────────────────────────────────────

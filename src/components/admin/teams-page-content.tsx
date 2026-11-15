@@ -2,23 +2,37 @@
 
 import { useCallback, useMemo, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  CountPills,
-  FilterDivider,
-  FilterMenuPill,
-} from "@/components/admin/admin-cells";
+import { CountPills, FilterMenuPill } from "@/components/admin/admin-cells";
+import { PilotsTable } from "@/components/admin/pilots/pilots-table";
+import { ConferencesTable } from "@/components/admin/conferences-table";
 import { markAdminRowSeen } from "@/app/admin/seen-actions";
-import { TeamsTable } from "@/components/admin/teams-table";
+import { AdminPage } from "@/components/admin/admin-page";
+import { InertButton } from "@/components/admin/inert-button";
+import { TeamsTable, TeamsTableSkeleton } from "@/components/admin/teams-table";
 import {
   ApprovePilotPopover,
   type ApprovePilotTarget,
 } from "@/components/admin/approve-pilot-popover";
 import { CreateTeamDialog } from "@/components/admin/create-team-dialog";
 import { loadMoreAdminTeams } from "@/components/admin/teams-actions";
+import { PendingBar } from "@/components/dashboard/loading/pending";
 import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { actionRejectedWith } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
+import type { AdminPilotRow } from "@/lib/data/admin-pilots-view";
+import {
+  sortConferences,
+  type AdminConferenceRow,
+} from "@/lib/data/admin-conferences-view";
+import {
+  TEAMS_VIEW_PILLS,
+  teamsPillView,
+  teamsViewParam,
+  teamsViewPill,
+  type TeamsPageView,
+  type TeamsViewPill,
+} from "@/components/admin/teams-views";
 import type {
   AdminTeamRow,
   AdminTeamsSort,
@@ -38,13 +52,28 @@ import type {
  * names, and putting a cursor chain in the address bar would make the back
  * button undo one page at a time), and which row's approve popover is open.
  *
- * ## Teams2's toolbar
+ * ## The toolbar
  *
- * View pills with their counts as text ("On Advantage · 9"), a hairline, then
- * one pill menu per facet — Division and Conference — whose trigger names the
- * current value, so the cut reads off the toolbar and no strip restates it. A
- * view is not a filter (law 7): switching one never clears the other, and
- * the pill counts are taken under the current facets.
+ * Three view pills with their counts as text — Programs, Pilot players and
+ * Conferences (`teams-views.ts` maps them to and from `?view=`) — then, on
+ * Programs, one pill menu per facet (Division and Conference) whose trigger
+ * names the current value, so the cut reads off the toolbar and no strip
+ * restates it, and sort. AdminTeams (T9) took away the In pilot, Needs review
+ * and Whole directory pills: Programs lists the programs on Advantage, and a
+ * program that is not is reached through the header's search, as the footnote
+ * says. `?view=` still names any of the loader's four views, so an old link
+ * keeps working, and the Programs pill stands for whichever it names.
+ *
+ * Pilot players (`?view=pilots`) is the Pilots page's list (`PilotsTable`,
+ * the same component), with its row writes. The facets do not apply to it, so
+ * their menus step aside, but the cut stays in the URL (a view is not a
+ * filter, law 7) and comes back with Programs.
+ *
+ * Conferences (`?view=conferences`) is the plain conferences table
+ * (`ConferencesTable`, the same component `/admin/conferences` uses), most
+ * teams first, whose rows open each conference's page. Search, Missing
+ * details, sort and Add conference stay on `/admin/conferences`. As on Pilot
+ * players, the facet menus and sort step aside and the cut stays in the URL.
  *
  * ## New since you last looked
  *
@@ -52,13 +81,6 @@ import type {
  * keyed on program id against `claimed_at`) and passes ids only. Opening a
  * row calls `markAdminRowSeen` and clears its dot here at once.
  */
-
-const VIEW_OPTIONS: { value: AdminTeamsView; label: string }[] = [
-  { value: "on_advantage", label: "On Advantage" },
-  { value: "in_pilot", label: "In pilot" },
-  { value: "needs_review", label: "Needs review" },
-  { value: "all", label: "Whole directory" },
-];
 
 /**
  * Both sorts `listAdminTeams` actually supports, and no more.
@@ -85,11 +107,27 @@ export interface FacetOption {
 /** The facet menus' unfiltered option — never a real column value. */
 const ANY = "__any";
 
+/** The Programs view's closing line. */
+const PROGRAMS_FOOTNOTE =
+  "Programs that are not on Advantage yet only appear in search. Conferences are in the account menu.";
+
+/** The facet menus' unfiltered labels — what each pill reads at rest. */
+const ALL_DIVISIONS = "All divisions";
+const ALL_CONFERENCES = "All conferences";
+
 export interface TeamsFacetOptions {
   divisions: FacetOption[];
   conferences: FacetOption[];
   states: FacetOption[];
 }
+
+export type { TeamsPageView };
+
+const VIEW_PILL_LABELS: Record<TeamsViewPill, string> = {
+  programs: "Programs",
+  pilots: "Pilot players",
+  conferences: "Conferences",
+};
 
 export interface TeamsCut {
   division: string | null;
@@ -102,6 +140,10 @@ type FacetKey = (typeof FACET_KEYS)[number];
 
 export function TeamsPageContent({
   rows: serverRows,
+  pilots = [],
+  pilotCount = null,
+  conferences = [],
+  conferenceCount = null,
   freshIds,
   joinedCount,
   viewCounts,
@@ -112,6 +154,14 @@ export function TeamsPageContent({
   facets,
 }: {
   rows: AdminTeamRow[];
+  /** The pilot players' rows — loaded only for the Pilot players view. */
+  pilots?: readonly AdminPilotRow[];
+  /** Pilot players in all; null when the count failed. */
+  pilotCount?: number | null;
+  /** The conferences' rows — loaded only for the Conferences view. */
+  conferences?: readonly AdminConferenceRow[];
+  /** Conferences in all; null when the count failed. */
+  conferenceCount?: number | null;
   /** Ids of the rows that are New since this admin last looked. */
   freshIds: string[];
   /** Programs that joined since the last look, across the directory. */
@@ -119,13 +169,26 @@ export function TeamsPageContent({
   /** Rows per view under the current facets; null when a count failed. */
   viewCounts: Record<AdminTeamsView, number | null>;
   nextCursor: string | null;
-  view: AdminTeamsView;
+  view: TeamsPageView;
   sort: AdminTeamsSort;
   cut: TeamsCut;
   facets: TeamsFacetOptions;
 }) {
   const router = useRouter();
   const pathname = usePathname();
+
+  const viewPill = teamsViewPill(view);
+  const pilotsView = viewPill === "pilots";
+  const conferencesView = viewPill === "conferences";
+  // The program view behind the Programs pill and "Load more".
+  const programsView: AdminTeamsView =
+    viewPill === "programs" ? (view as AdminTeamsView) : "on_advantage";
+
+  // Most teams first, as `/admin/conferences` opens.
+  const conferenceRows = useMemo(
+    () => sortConferences(conferences, "most_teams"),
+    [conferences],
+  );
 
   const [sortOpen, setSortOpen] = useState(false);
 
@@ -162,13 +225,14 @@ export function TeamsPageContent({
 
   const pushCut = useCallback(
     (
-      next: Partial<{ view: AdminTeamsView; sort: AdminTeamsSort } & TeamsCut>,
+      next: Partial<{ view: TeamsPageView; sort: AdminTeamsSort } & TeamsCut>,
     ) => {
       const params = new URLSearchParams();
       const merged = { view, sort, ...cut, ...next };
       // Defaults stay out of the URL — a first visit and a deliberate reset
       // should produce the same address.
-      if (merged.view !== "on_advantage") params.set("view", merged.view);
+      const viewParam = teamsViewParam(merged.view);
+      if (viewParam) params.set("view", viewParam);
       if (merged.sort !== "name_asc") params.set("sort", merged.sort);
       for (const key of FACET_KEYS) {
         const value = merged[key];
@@ -192,7 +256,7 @@ export function TeamsPageContent({
     setLoadMoreError(null);
     startLoadingMore(async () => {
       const page = await loadMoreAdminTeams({
-        view,
+        view: programsView,
         sort,
         after: cursor,
         filters: {
@@ -259,7 +323,19 @@ export function TeamsPageContent({
     })),
   ];
 
-  const total = viewCounts[view];
+  const total = viewCounts[programsView];
+  const onAdvantage = viewCounts.on_advantage;
+
+  const pillCounts: Record<TeamsViewPill, number | null> = {
+    programs: total ?? null,
+    pilots: pilotCount,
+    conferences: conferenceCount,
+  };
+  const viewPills = TEAMS_VIEW_PILLS.map((value) => ({
+    value,
+    label: VIEW_PILL_LABELS[value],
+    count: pillCounts[value],
+  }));
 
   return (
     <div className="flex flex-col gap-4">
@@ -267,132 +343,155 @@ export function TeamsPageContent({
       <div className="flex flex-wrap items-end gap-4">
         <div className="min-w-0 flex-1">
           <h1 className="text-display">Teams</h1>
-          <p className="text-body-sm mt-[9px]">
-            Every program in the directory.
+          <p className="text-body-sm mt-[9px] tabular-nums">
+            {onAdvantage != null
+              ? `${onAdvantage.toLocaleString("en-US")} ${onAdvantage === 1 ? "program" : "programs"}${pilotCount ? ` and ${pilotCount.toLocaleString("en-US")} ${pilotCount === 1 ? "pilot player" : "pilot players"}` : ""} ${onAdvantage === 1 && !pilotCount ? "is" : "are"} on Advantage.`
+              : "Programs on Advantage."}
             {joinedCount > 0 && ` ${joinedCount} joined since you last looked.`}
           </p>
         </div>
         <CreateTeamButton />
       </div>
 
-      {/* Views, a divider, then one pill menu per facet. */}
+      {/* The three views; on Programs, one pill menu per facet, then sort. */}
       <div className="mt-2 flex flex-wrap items-center gap-3">
-        <CountPills
-          options={VIEW_OPTIONS.map((option) => ({
-            ...option,
-            count: viewCounts[option.value],
-          }))}
-          value={view}
-          onChange={(next) => pushCut({ view: next })}
+        <CountPills<TeamsViewPill>
+          label="View"
+          options={viewPills}
+          value={viewPill}
+          onChange={(next) => {
+            if (next === viewPill) return;
+            pushCut({ view: teamsPillView(next) });
+          }}
         />
-        <FilterDivider />
-        <FilterMenuPill<string>
-          label="Division"
-          width={220}
-          options={facetOptions("All divisions", facets.divisions)}
-          value={cut.division ?? ANY}
-          onChange={(next) => pushCut({ division: next === ANY ? null : next })}
-        />
-        <FilterMenuPill<string>
-          label="Conference"
-          width={280}
-          options={facetOptions("All conferences", facets.conferences)}
-          value={cut.conference ?? ANY}
-          onChange={(next) =>
-            pushCut({ conference: next === ANY ? null : next })
-          }
-        />
-        <div className="flex-1" />
-
-        <FloatMenu
-          open={sortOpen}
-          onOpenChange={setSortOpen}
-          label="Sort teams"
-          width={196}
-          trigger={
-            <SortTrigger aria-expanded={sortOpen} engaged={sortOpen}>
-              {SORT_OPTIONS.find((o) => o.value === sort)?.label}
-            </SortTrigger>
-          }
-        >
-          {SORT_OPTIONS.map((option) => (
-            <FloatMenuItem
-              key={option.value}
-              label={option.label}
-              chosen={option.value === sort}
-              onSelect={() => {
-                setSortOpen(false);
-                pushCut({ sort: option.value });
-              }}
+        {viewPill === "programs" && (
+          <>
+            <FilterMenuPill<string>
+              label="Division"
+              width={220}
+              options={facetOptions(ALL_DIVISIONS, facets.divisions)}
+              value={cut.division ?? ANY}
+              onChange={(next) =>
+                pushCut({ division: next === ANY ? null : next })
+              }
             />
-          ))}
-        </FloatMenu>
-      </div>
+            <FilterMenuPill<string>
+              label="Conference"
+              width={280}
+              options={facetOptions(ALL_CONFERENCES, facets.conferences)}
+              value={cut.conference ?? ANY}
+              onChange={(next) =>
+                pushCut({ conference: next === ANY ? null : next })
+              }
+            />
+            <div className="flex-1" />
 
-      <div onClickCapture={captureChip}>
-        <TeamsTable
-          rows={rows}
-          emptyTitle={
-            hasCut ? "No teams fit this filter" : "No teams in this view"
-          }
-          emptyAction={
-            hasCut
-              ? { label: "Clear filters", onClick: clearFilters }
-              : {
-                  label: "Show the whole directory",
-                  onClick: () => pushCut({ view: "all" }),
-                }
-          }
-          onApprove={openApprove}
-          freshIds={fresh}
-          onOpenRow={openRow}
-        />
-      </div>
-
-      {rows.length > 0 && (
-        <p className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--ink-600)] tabular-nums">
-          <span>
-            {total != null
-              ? `Showing ${rows.length.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "program" : "programs"}`
-              : `Showing ${rows.length.toLocaleString("en-US")} programs`}
-            {stateLabel && ` in ${stateLabel}`}
-          </span>
-          {stateLabel && (
-            <button
-              type="button"
-              onClick={() => pushCut({ state: null })}
-              className="font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+            <FloatMenu
+              open={sortOpen}
+              onOpenChange={setSortOpen}
+              label="Sort teams"
+              width={196}
+              trigger={
+                <SortTrigger aria-expanded={sortOpen} engaged={sortOpen}>
+                  {SORT_OPTIONS.find((o) => o.value === sort)?.label}
+                </SortTrigger>
+              }
             >
-              Clear state
-            </button>
-          )}
-        </p>
-      )}
+              {SORT_OPTIONS.map((option) => (
+                <FloatMenuItem
+                  key={option.value}
+                  label={option.label}
+                  chosen={option.value === sort}
+                  onSelect={() => {
+                    setSortOpen(false);
+                    pushCut({ sort: option.value });
+                  }}
+                />
+              ))}
+            </FloatMenu>
+          </>
+        )}
+      </div>
 
-      {cursor && (
-        <div className="flex flex-col items-center gap-2">
-          {loadMoreError && (
-            <p role="alert" className="text-[12px] text-[var(--danger)]">
-              {loadMoreError}
+      {pilotsView ? (
+        <PilotsTable rows={pilots} />
+      ) : conferencesView ? (
+        <ConferencesTable
+          rows={conferenceRows}
+          emptyTitle="No conferences yet"
+        />
+      ) : (
+        <>
+          <div onClickCapture={captureChip}>
+            <TeamsTable
+              rows={rows}
+              emptyTitle={
+                hasCut ? "No teams fit this filter" : "No teams in this view"
+              }
+              emptyAction={
+                hasCut
+                  ? { label: "Clear filters", onClick: clearFilters }
+                  : undefined
+              }
+              onApprove={openApprove}
+              freshIds={fresh}
+              onOpenRow={openRow}
+            />
+          </div>
+
+          {rows.length > 0 && (
+            <p className="flex flex-wrap items-center gap-2 text-[12px] text-[var(--ink-600)] tabular-nums">
+              <span>
+                {total != null
+                  ? `Showing ${rows.length.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} ${total === 1 ? "program" : "programs"}`
+                  : `Showing ${rows.length.toLocaleString("en-US")} programs`}
+                {stateLabel && ` in ${stateLabel}`}
+              </span>
+              {stateLabel && (
+                <button
+                  type="button"
+                  onClick={() => pushCut({ state: null })}
+                  className="font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
+                >
+                  Clear state
+                </button>
+              )}
             </p>
           )}
-          <button
-            type="button"
-            className={advButton("outline", "sm")}
-            onClick={loadMore}
-            disabled={loadingMore}
-          >
-            {loadingMore ? "Loading…" : "Load more"}
-          </button>
-        </div>
+
+          {cursor && (
+            <div className="flex flex-col items-center gap-2">
+              {loadMoreError && (
+                <p role="alert" className="text-[12px] text-[var(--danger)]">
+                  {loadMoreError}
+                </p>
+              )}
+              <button
+                type="button"
+                className={advButton("outline", "sm")}
+                onClick={loadMore}
+                disabled={loadingMore}
+              >
+                {loadingMore ? "Loading…" : "Load more"}
+              </button>
+            </div>
+          )}
+        </>
       )}
+
+      <p className="text-[12px] text-[var(--ink-600)]">
+        {pilotsView
+          ? "Video hours are set per account. Pilots are added on the Pilots page, in the account menu."
+          : conferencesView
+            ? "Search, Missing details and Add conference are on the Conferences page, in the account menu."
+            : PROGRAMS_FOOTNOTE}
+      </p>
 
       <ApprovePilotPopover
         target={approving}
         onClose={() => setApproving(null)}
-        // The decided row's Plan cell is now wrong on screen — the server page
-        // re-renders and the chip becomes a `PilotPill` (approve) or an em
-        // dash (decline).
+        // The decided row is now wrong on screen — the server page re-renders,
+        // the chip goes, and an approved program's facts line gains "Pilot".
         onDecided={() => router.refresh()}
       />
     </div>
@@ -420,5 +519,67 @@ function CreateTeamButton() {
       </button>
       <CreateTeamDialog open={open} onOpenChange={setOpen} />
     </>
+  );
+}
+
+/** A no-op for the skeleton's inert controls. */
+function ignore() {}
+
+/**
+ * Admin › Teams while the page loads (`app/admin/teams/loading.tsx`), in the
+ * default Programs view — `?view=pilots` and `?view=conferences` share the
+ * route and land on this too. The title, the primary, the three view pills,
+ * the Division and Conference menus and the sort as the loaded page opens
+ * them, inert and without counts; the table's real column labels over rows
+ * of bars; and the view's closing line. The lede and the "Showing" line
+ * carry counts, so they are bars.
+ */
+export function TeamsPageSkeleton() {
+  return (
+    <AdminPage>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="min-w-0 flex-1">
+            <h1 className="text-display">Teams</h1>
+            <PendingBar className="mt-3 mb-[3px] h-3 w-72" />
+          </div>
+          <InertButton variant="primary" size="md">
+            Create team
+          </InertButton>
+        </div>
+
+        <div inert className="mt-2 flex flex-wrap items-center gap-3">
+          <CountPills<TeamsViewPill>
+            label="View"
+            options={TEAMS_VIEW_PILLS.map((value) => ({
+              value,
+              label: VIEW_PILL_LABELS[value],
+            }))}
+            value="programs"
+            onChange={ignore}
+          />
+          <FilterMenuPill<string>
+            label="Division"
+            width={220}
+            options={[{ value: ANY, label: ALL_DIVISIONS }]}
+            value={ANY}
+            onChange={ignore}
+          />
+          <FilterMenuPill<string>
+            label="Conference"
+            width={280}
+            options={[{ value: ANY, label: ALL_CONFERENCES }]}
+            value={ANY}
+            onChange={ignore}
+          />
+          <div className="flex-1" />
+          <SortTrigger>{SORT_OPTIONS[0].label}</SortTrigger>
+        </div>
+
+        <TeamsTableSkeleton />
+        <PendingBar className="my-[3px] h-3 w-44" />
+        <p className="text-[12px] text-[var(--ink-600)]">{PROGRAMS_FOOTNOTE}</p>
+      </div>
+    </AdminPage>
   );
 }

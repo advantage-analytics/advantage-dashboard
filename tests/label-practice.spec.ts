@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 
+import { labelConfirmCopy } from "@/components/admin/labels/label-confirm";
 import {
   publishPlanned,
   refusePracticePublish,
@@ -44,7 +45,25 @@ const LABELLER = "44444444-4444-4444-8444-444444444444";
 // ── Never published ──────────────────────────────────────────────────────────
 
 test.describe("a practice session never publishes", () => {
-  test("Mark complete refuses it at the gate, before the lease or any publish", async () => {
+  test("its confirm says Submit, never Publish: it is graded", () => {
+    const names = { p1: "Player 1", p2: "Player 2" };
+    for (const unmarked of [0, 2]) {
+      const copy = labelConfirmCopy(
+        {
+          kind: "complete-session",
+          warnings: [],
+          unmarked,
+          audience: "practice",
+        },
+        names,
+      );
+      expect(copy.title).toMatch(/^Submit/);
+      expect(copy.confirmLabel).toMatch(/^Submit/);
+      expect(`${copy.title} ${copy.description}`).not.toMatch(/publish/i);
+    }
+  });
+
+  test("an admin's Publish refuses it at the gate, before the lease or any publish", async () => {
     let published = false;
     const { supabase, calls } = fakeLabelClient((call) => {
       if (call.table === "label_sessions" && call.op === "select") {

@@ -1,0 +1,489 @@
+# Run log — claude/admin-labeler-redesign-c60016
+
+Written by `/task-next`. Do not hand-edit — the queue file is yours, this one
+is the runner's. Newest entries at the bottom.
+
+## T1 · Put the pages leaving the tab row into the admin account menu — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `admin-account-menu.tsx` exports `ADMIN_MENU_LINKS` (Requests, Messages, Ask, Conferences, Pilots, Outreach, Pay report) and renders one `FloatMenuItem` per entry above "Back to the dashboard"; `tests/admin-shell-nav.spec.ts` pins the list.
+
+**follow-ups:**
+
+1. Once the tab row is cut, decide whether the account menu needs an active-route highlight for these seven pages.
+2. The seven new rows carry no icons, unlike "Back to the dashboard" and "Sign out"; confirm that is wanted.
+
+## T2 · Cut the admin header to four tabs — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `admin-header.tsx` exports `ADMIN_TABS` (Today, Labels, Matches, Teams) and drops the More menu; `loadAdminNav` returns labels, matches and teams counts only; the nav helpers left with no importer are deleted from the requests, messages, pilots, ask, conferences and outreach loaders; `tests/admin-shell-nav.spec.ts` pins the tabs.
+
+**follow-ups:**
+
+1. `src/lib/data/admin-today-server.ts` (around line 64) still names `countAskForNav` in a comment; it no longer exists.
+2. The five loaders that lost a helper may hold imports with no caller left; lint passed, but worth a look.
+
+## T3 · Today loader: support messages and per-row actions — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `admin-today-server.ts` adds the `message` kind (one row per support thread waiting on staff, key `message:<threadId>`), replaces `primary` with an ordered `actions` list built by the pure `todayActions`, and sorts through `sortLongestWaitFirst`; resolvable kinds carry a trailing Resolve. `today-page-content.tsx` got the minimal `DrawerPrimary` that keeps the current screen working. `tests/admin-today-rows.spec.ts` pins one fixture per kind.
+
+**follow-ups:**
+
+1. T4 wires the `approve` action to `approveClaim` and the `resolve` action to the resolve form, and removes the "Review claim" relabel in `DrawerPrimary`.
+2. Message rows have no link of their own and a generic sub-line; the latest message excerpt would need one more read.
+3. `readMessageDrafts` reads every thread with a player message, uncapped. Fine at current volume.
+4. `claimOffersApprove` copies the Requests drawer's rule by hand; the reviewer did not confirm the two match.
+
+## T4 · Today screen: per-row actions, no pills — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `today-page-content.tsx` rewritten: each row lists its `actions` in a trailing cell (links, Approve through `approveClaim` with a pending state and an inline refusal, the label action through `useStartLabelling`, Resolve opening `ResolveForm` under the row), the title links to the item, and `CountPills`, the Resolved view and `TodayDrawer` are gone. Header and skeleton share one `HeaderRow` (Kind, What, Waiting). `src/app/admin/page.tsx` stops passing `resolved`.
+
+**follow-ups:**
+
+1. `admin-today-server.ts` still builds the Resolved list that nothing reads now; drop that work.
+2. Every row action is an outline button; decide whether the first one should be primary.
+3. The artboard bolds overdue waits; there is no due time to drive that until piece 2.
+4. `/admin` has had no eyes-on check yet.
+
+## T5 · Admin resubmit of a failed analysis — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** new server action `resubmitFailedAnalysisAction` (`src/app/admin/matches/resubmit-action.ts`) over the deps-injected core `adminResubmitFailedAnalysis` (`src/lib/services/splitstep/admin-resubmit.ts`): admin check before any read, takes a job id or a match id, refuses verified and non-failed jobs with the existing sentences, returns `{ ok, error, code }`, logs every attempt with the admin's id. `resubmit-job.ts` gains the `adminRetry` parameter that bills through `resolveAutoRetryWorkspace()` and skips only the roster read. `tests/admin-resubmit.spec.ts` (17 tests). `docs/ui-revamp-guardrails.md` records the exception to the frozen file.
+
+**follow-ups:**
+
+1. A job the admin console created bills the administrator who uploaded it (uncapped for personal, refused for a team the admin is not in). Same gap as the auto-retry; resolving billing from the match's audit row would close it.
+2. This path does not check for a label session in progress, unlike `/api/admin/splitstep/reprocess`.
+3. A cancelled job is refused for an admin ("only sent again by the athlete"); confirm that is wanted.
+4. `quota` and `attempt_ceiling` are the two refusal codes worth their own copy in T8.
+5. The spec README still says no admin resubmit exists; it is a point-in-time record.
+
+## T6 · Matches loader: video hours and progress steps — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `AdminMatchRow` gains `videoSeconds` (the pay report's `jobVideoSeconds`), `failedJobId`, `sentForAnalysisAt`, `resultsLandedAt`, `labelState` and `verifiedAt`, all from the loader's existing batched reads. New pure `matchProgressSteps(row)` in `src/lib/data/admin-match-progress.ts` returns Uploaded, Sent for analysis, Results landed, Being labelled, Published, Checked with a state each; an import with no job yields Uploaded alone. `tests/admin-match-progress.spec.ts` pins the fixtures.
+
+**follow-ups:**
+
+1. `videoSeconds` can be 0 when a job has neither a trimmed span nor billable seconds; T7 decides whether 0 shows as "—".
+2. Being labelled has no moment; `label_sessions.started_at` and `submitted_at` exist if the panel wants one.
+3. A cancelled job has no mark of its own in the steps.
+
+## T7 · Matches screen: one-line rows and the progress panel — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** the Matches table is five columns (Match, Workspace, Status, Video, Uploaded) with one-line rows: players, `WorkspaceCell` (crest and program, or the owner's avatar and "Personal"), one status mark with its words, video hours ("—" when 0 or null), one upload time. `MatchPeekDrawer` lists the steps from `matchProgressSteps(row)` with a sub-line each and keeps the match id, Open report and the Labels link. `page.tsx` reads `?program=` as the Program filter's initial value. `AdminAvatar` gains a 16px size.
+
+**follow-ups:**
+
+1. Write the Program filter back to `?program=` so a filtered view can be shared.
+2. `MatchStatus` repeats `RowLifecycle`'s branches; one shared "status to mark and words" helper would stop them drifting.
+3. The loader still fetches 30-day views for every row though only the drawer shows them.
+4. Search still matches `row.event` with the Event column gone.
+
+## T8 · Resubmit buttons on Matches and Today — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** new `ResubmitButton` (`src/components/admin/matches/resubmit-button.tsx`) calls `resubmitFailedAnalysisAction`, shows a pending label, prints the refusal inline (`quota` adds an "Add hours" link, `attempt_ceiling` disables the button) and refreshes on success. It renders on a failed Matches row and in its panel through the shared `resubmittableJobId(row)`, and on Today's "Analysis failed" rows through a new `resubmit` action type; "Analysis stuck" rows keep Open. `tests/admin-today-rows.spec.ts` asserts both.
+
+**follow-ups:**
+
+1. `input_rejected` can never succeed on retry either; give it the disabled treatment `attempt_ceiling` has.
+2. Success refreshes twice (the action's `revalidatePath` and `router.refresh()`).
+3. A refusal sentence under the button makes the one-line rows taller; check it on screen.
+4. `jobDrafts`' failed-or-stuck choice of `failedJobId` has no test (it reads the database).
+
+## T9 · Teams list: program rows with the video-hours bar — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `AdminTeamRow` gains `videoUsedSeconds` and `videoCapSeconds` from one batched usage read by the team page's rule (null on a failed read). `TEAMS_COLUMNS` is Program, Members, Video hours this month, Owner; squad, division and "Pilot" print as a facts line under the name; the hours cell reuses `HoursMeter` with "X of Y h", or "—". The In pilot, Needs review and Whole directory pills are gone; the Approve chip moves into the Program cell. New `tests/admin-teams-columns.spec.ts`.
+
+**follow-ups:**
+
+1. The batched usage query is under Supabase's row cap and could undercount a very busy month; a grouped-sum RPC removes the risk.
+2. `listAdminTeams` now runs the usage query for the upload wizard's team picker too, which never shows hours.
+3. `countAdminTeamViews` still counts four views; the page reads two.
+4. Claim-pending and suspended programs lose their status line once they have a squad or division.
+
+## T10 · Teams list: Pilot players view — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** Teams' toolbar has two view pills, Programs and Pilot players, each with its count. `/admin/teams?view=pilots` renders `PilotsTable` (extracted to `src/components/admin/pilots/pilots-table.tsx` and shared with the Pilots page) from `listAdminPilots()`, loaded for that view only; other views use the new `countAdminPilots()` head count. The old `?view=` values still resolve. The Teams test harness gained stubs for the pilot actions.
+
+**follow-ups:**
+
+1. The Pilot players empty state has no Add pilot action; link it to `/admin/pilots`.
+2. No spec covers the Teams harness with `view: "pilots"`.
+3. Opening the Pilot players view records a look at the "teams" surface too, clearing its New dots.
+4. `countAdminPilots` is a second query on every Programs-view load.
+
+## T11 · Team loader: player join link and latest matches — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `AdminTeamData` gains `joinLink` (`{ url, mode }` or null, from the program's live `program_join_links` row), `latestMatches` (three newest, same status rule as Admin › Matches) and `matchCount`. Both reads sit in `getAdminTeam`'s `Promise.all` behind the admin check and degrade on failure. Pure mappers in the new `src/lib/data/admin-team-links.ts`; `admin-matches-server.ts` exports `latestMatchesForProgram` and shares `resolvedAnalysis`, `seatNames` and `compareNewestUpload` with the list. `tests/admin-team-links.spec.ts`.
+
+**follow-ups:**
+
+1. `latestMatchesForProgram` reads every match of the program to find the newest three, since `matches` has no `created_at`; a large program wants a SQL-side "newest upload".
+2. `joinLink === null` does not tell "no live link" from "read failed"; add a `joinLinkFailed` flag if the page needs to.
+3. `matchCount` includes practice matches; check it against what Matches filtered to the workspace shows.
+4. The two new reads have run only through their pure mappers, never against real data.
+
+## T12 · Team detail: one centred column — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** the team page is one centred column (header, Details, People, Latest matches, activity link); `team-section-pills.tsx` and the 380px rail are gone. The header keeps the crest control and gains `TeamHours` (bar plus "Add hours" to `?view=usage`). `AdminDetailsCard` is a row of facts with one "Edit details" button and the player and coach links with Copy; the Conference card sits beneath it. New `TeamLatestMatches` links to `/admin/matches?program=`. `team-sections.ts` is now the `?view=` map (schedule, usage, activity, people; roster and unknown fall back to the default), pinned by `tests/admin-team-views.spec.ts`.
+
+**follow-ups:**
+
+1. The Conference card is still a full bordered card under Details; the artboard draws it as one fact with an inline Change.
+2. `team-latest-matches.tsx` imports `MatchStatus` and `UploadedAt` from the large `matches-page-content.tsx`; a small shared module would trim the team page's bundle.
+3. Details dropped the Program key fact (it is inside the coach link).
+4. Non-default views still render the full header, hours bar included, above their card.
+
+## T13 · Team detail: one People list — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** the team page's People section is one `AdminPeopleList` built by the pure `adminPeopleRows` (`src/lib/data/admin-team-people.ts`): join requests first with Approve and Decline (`adminResolveJoinRequest`), then staff, roster players and unrostered members with a linked player folded into one row, then pending invites with Resend and Revoke. "No account · Invite" is the only account state printed; "Add player" and "Invite people" sit in the header; role menu, Transfer ownership and the upload switch stay on member rows. The Requests and Roster cards and the roster table layout are deleted. `tests/admin-team-people.spec.ts` replaces `admin-people-card.spec.ts`; the write harness covers Approve and inviting a roster player.
+
+**follow-ups:**
+
+1. Move each member row's Transfer ownership and upload switch into a "⋯" menu; the rows are busier than the artboard.
+2. Fold a pending invite into its unclaimed profile's row instead of showing both.
+3. The artboard's "Show 10 more" truncation for a long roster is not built.
+4. The header meta adds seats used to the artboard's count line; confirm it is wanted.
+5. Rename `admin-people-card.tsx`; it is no longer a card. The roster loader still computes `matchCount` and `lastMatch` that nothing shows.
+
+## T14 · Label match overview: checklist as the body — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** for the admin audience `LabelDashboard` renders one centred column: a "N flags left" line (score-moving and wrong data, no bar), the checklist as the body, and "Entered at upload" as one closed `<details>` row. "Left to check", "Statistics from the labels", "Score" and the "Every point checked" item are gone for the admin; each open check names its target (set, point or game) and opens it; a "Wrong data fixed" row carries the grey flags. The labeller audience renders as before. `session-status.ts` and `label-console.tsx` are untouched. `tests/label-console.spec.ts` and `tests/label-error-marking.spec.ts` updated.
+
+**follow-ups:**
+
+1. The console header in `label-console.tsx` still spans the full width and still says "N of M points checked" above the centred column.
+2. Once piece 2 records a starting flag count, the progress line becomes "X of Y flags resolved" with the artboard's bar.
+3. The artboard's checklist summary ("N open") beside "Before you publish" is not built.
+4. `AdminChecklist` repeats much of `PublishCheck`'s row markup, and `publishChecks` takes an `admin` boolean.
+
+## T15 · Conference loader: one conference, its teams, its latest matches — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `getAdminConference(conferenceId)` returns a conference row, its teams (through `listAdminTeams` with a new `conferenceId` filter), its five latest matches with `programId` and `programName`, and a match count; `countAdminConferences()` is a guarded head count. `latestMatchesForPrograms(programIds, limit)` replaces the single-program body, which now calls it. `tests/admin-team-links.spec.ts` covers matches from two programs.
+
+**follow-ups:**
+
+1. `listAdminTeams` turns a query error into an empty list, so a failed teams read on the conference page would read as "no teams".
+2. Teams then matches are read in sequence; a `programs.conference_id` join would let them run together.
+3. `latestMatchesForPrograms` reads every match of every program to find the newest few.
+4. The Teams `?conference=` text filter could now move to `conference_id`.
+
+## T16 · Conference page: route, header and Details — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** new route `/admin/conferences/[conferenceId]` (full width inside `AdminPage`, `notFound()` on an unknown id) with `ConferencePageHeader` (back link, crest control, name, meta line, "⋯" with Merge into… and Delete only when the conference has no teams) and `ConferenceDetails` (Division, Teams, On Advantage, Website facts; one Edit dialog calling `saveConference`). `MAP.md` regenerated; `tests/admin-routes.spec.ts` gains the unauthenticated 307 case.
+
+**follow-ups:**
+
+1. `getAdminConference()` is not wrapped in `cache()`; a later layout or metadata caller would read twice.
+2. The merge dialog and delete confirm are duplicated between the drawer and this header until T18 deletes the drawer.
+3. The new route spec case is live-DB and was not run in the gate.
+
+## T17 · Conference page: Teams and Latest matches — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** the conference page renders a Teams section (`conference-teams-section.tsx`: the shared `TeamsTable` with the loader's teams, `AddTeamPopover` in the header refreshing on add, Approve chips opening `ApprovePilotPopover`) and `TeamLatestMatches` with a new `scope: "conference"` variant (each row links to its own program's matches and prints the program name; no "All N in Matches" link). The team page's call site is unchanged. New `tests/conference-latest-matches.spec.ts`.
+
+**follow-ups:**
+
+1. The Approve-popover wiring is now in both `teams-page-content.tsx` and `conference-teams-section.tsx`; one shared hook would do.
+2. A conference filter on Admin › Matches would let the conference variant show "All N in Matches".
+3. `TeamLatestMatches` reads `programName` through a cast, not a narrowed type.
+
+## T18 · Conferences list opens the page; the drawer retires — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** each `ConferencesTable` row is a link to `/admin/conferences/<id>` with a chevron; `conference-drawer.tsx` is deleted and the list page loses its selection state, rail, `syncUrl` and key handler while keeping search, the three view pills, Division, sort, "Show all" and "Add conference". `/admin/conferences?id=<id>` redirects to the page; a created conference lands on its page. The write harness renders `ConferencePageHeader` and `ConferenceDetails`, keeping the save and delete cases; the drawer-only teams-load cases are gone.
+
+**follow-ups:**
+
+1. `admin-conference-card.tsx`, `admin-search-server.ts` and the search mock still link to `/admin/conferences?id=`; T20 points them at the page.
+2. Two comments in `tests/fixtures/admin-team-harness-server.ts` still mention the conference drawer.
+3. `AddConferenceDialog` calls `router.refresh()` right after the caller's `router.push`.
+4. Arrow-key stepping through Missing details is gone; a "next missing" link on the conference page would bring it back.
+
+## T19 · Teams: Conferences as the third view pill — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `/admin/teams` has a third view pill, Conferences (`?view=conferences`), which loads `listAdminConferences()` only and renders the shared `ConferencesTable` sorted most teams first; the facet and sort menus show on Programs only. The other views count conferences for the pill. The pill/URL mapping is pure in the new `src/components/admin/teams-views.ts`; `tests/admin-teams-views.spec.ts` pins the three round-trips and the old `?view=` values.
+
+**follow-ups:**
+
+1. The Programs footnote still says "Conferences are in the account menu".
+2. A harness case for the Teams page on `view: "conferences"` would let a browser spec check the hidden menus and the row links.
+3. `countAdminTeamViews` still runs on the Conferences view.
+
+## T20 · Point conference links at the conference page — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** in `AdminConferenceCard`'s `fact` variant the conference name links to `/admin/conferences/<id>` ("No conference yet" stays plain); the `card` variant's "View conference" link and the admin search's conference result point at the page too. `tests/admin-conference-card.spec.ts` and the search mock carry the new hrefs; no `/admin/conferences?id=` string is left under `src/`.
+
+## T21 · Team detail: the activity log on the page — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** the team page's default view ends with an `#activity` section rendering `AdminActivityCard` with `limit={ACTIVITY_LOG_PREVIEW}` (8); the new client `AdminActivityShowAll` expands the rest in place and appears only past 8 entries. The "Activity log" link and the `activity` view are gone; `?view=activity` resolves to the default view, pinned in `tests/admin-team-views.spec.ts`. New `tests/admin-activity-log-section.spec.ts`.
+
+**follow-ups:**
+
+1. Expanding is one-way, with no "Show less".
+2. The page's doc comment could be shortened now the activity view is gone.
+
+## T22 · Migration: label claims, starting flag count, stale-claim release — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** new migration `supabase/migrations/20261114022117_label_queue_claims.sql`, written and NOT applied: `label_sessions.claimed_at` and `label_sessions.start_open_counts` (integer-shape CHECK), partial index on open analyst sessions by `assigned_to`, a `before update of open_counts` trigger recording the first count, `claim_label_session(uuid, uuid)` and `release_stale_label_claims(interval)` (service_role only), and an hourly `release-stale-label-claims` cron at 48 h. `tests/label-queue-migration.spec.ts` reads the file offline.
+
+**follow-ups:**
+
+1. Apply the migration to the live project once the owner approves; T24, T25 and T30 read its columns.
+2. The release skips a session under a fresh publish lease (not in the task text); the next run picks it up.
+3. The new CHECK requires integers where the live `open_counts` CHECK allows any non-negative number.
+4. Re-claiming your own session returns `'taken'`; the claim action should treat that as already yours.
+
+## T23 · Queue rules: due time, who can enter, sort, the first three — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** new pure `src/lib/services/labels/queue.ts`: `LABEL_DUE_WINDOW_HOURS` (36), `LABEL_QUEUE_FROM` (2026-10-29Z), `LABEL_CLAIM_CHOICES` (3), `labelDueAt`, `labelDueText`, `isOverdue`, `urgencyLevel`, `isTestOwner`, `enterLabelQueue`, `sortByDue`, `claimableJobIds`. `jobVideoSeconds` and `isTestAccountEmail` moved, unchanged, into dependency-free modules (`video-seconds.ts`, `test-account.ts`) and are re-exported from their old homes. `tests/label-queue.spec.ts` (15 tests).
+
+**follow-ups:**
+
+1. The three choices skip matches someone else holds, so a fourth open match can be a choice; counting held ones instead is a one-line change in `claimableJobIds`.
+2. A `submitted` session still enters the queue; piece 3 may want those dropped.
+3. The named-test-program rule awaits the owner; it goes in `isTestOwner` and needs the program on the job.
+
+## T24 · Queue loader: two board projections — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** new `src/lib/data/label-queue-server.ts`: `readLabelQueue` (service-role, newest completed Advantage Intelligence job per match, filtered and sorted through `queue.ts`), `loadLabellerBoard()` (guard first; rows carry no player, program, team, match id or owner) and `loadAdminLabelBoard()` (guard first; names, team, labeller, claim and last beat), pure `boardFlags`. `labels-server.ts` gains `readLastLabelBeats`. `tests/label-queue-loader.spec.ts` (15 tests).
+
+**follow-ups:**
+
+1. Remove the 42703 fallback in `readQueueSessions` once the T22 migration is live.
+2. A labeller's held session outside the queue makes `holding` true with no "mine" row; keep the assigned list beside the board or add one.
+3. Other labellers' rows have no id; add an opaque key if the board needs stable keys.
+4. `readLabelQueue` reads every newest job since the cut-off before filtering.
+5. Retire `listLabelJobs` once T28 moves `/admin/labels` onto the new loader.
+6. Add a live-DB spec for `readLabelQueue` after the migration is applied.
+
+## T25 · Self-claim: seed, claim, admin assign clears the claim — done
+
+**gate:** mechanical pass · completion needs-work, then pass after a fix
+
+**changed:** new `src/lib/services/labels/claim-session.ts` with `claimLabelMatch(jobId, deps)`: viewer from the server session only, refuses a non-labeller, a holding viewer and a job outside the recomputed `claimableJobIds`, seeds when the job has no session, then calls `claim_label_session` with the viewer's id and maps each answer to a named sentence; `{ sessionId }` only on `'claimed'`. `claimLabelMatchAction(jobId)` in `src/app/label/actions.ts`. `assignLabelSession` now writes `claimed_at: null`. Specs: new `tests/label-claim.spec.ts`, updated `tests/label-assign.spec.ts`.
+
+**note:** the first review failed because the runner's dispatch prompt asked for an "already yours" shortcut that returned the session to a holding viewer, contradicting the `done when:` rule that a holding viewer is refused. The runner removed the shortcut and its test by hand, re-ran the gate (pass) and the review (pass).
+
+**follow-ups:**
+
+1. `assignLabelSession` writes `claimed_at`, which exists only once the T22 migration is applied: admin Assign and Unassign fail against the live database until then.
+2. An admin who is not a labeller is refused a claim; T27 should hide Claim for that viewer.
+3. Each claim re-reads the whole queue, including beats it does not use.
+4. Refresh the board after any refusal so the row moves.
+
+## T26 · Urgency mark component — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** new `UrgencyMark({ level })` (`src/components/admin/labels/urgency-mark.tsx`): an `aria-hidden` 14×14 three-bar SVG (3, 2, 1 filled) and the word, coloured only with design-system variables (Express and Priority `--blue`, Standard `--ink-500` bars with `--ink-700` text, empty bars `--ink-200`). `tests/urgency-mark.spec.ts`.
+
+**follow-ups:**
+
+1. The owner picked rose for Express and violet for Priority on the canvas; the design system's one accent replaced both. Swap back if the owner asks.
+
+## T27 · Labeller board on `/label` — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `/label` renders the new `LabelBoard` (`src/components/label/label-board.tsx`) from `loadLabellerBoard()`: To do (hours, `UrgencyMark`, due text with an overdue style, Claim on the claimable rows only and never while holding or for an admin who is not a labeller; first 8 then "Show N more"), In progress (the viewer's own card first with "Continue labelling" and "X of Y flags resolved" with a progressbar, or "N flags left"; others by first name and avatar), Submitted. Claim calls `claimLabelMatchAction`, routes to the session on success and shows the refusal on the row. Practice sets still list through `AssignedSessionsList`. `claim-session.ts` exports `requireLabeller`. New `tests/label-board.spec.ts` (10 tests).
+
+**follow-ups:**
+
+1. Check `/label` in a browser as a labeller once the T22 migration is applied.
+2. Due text is as of page load; a periodic refresh would keep "Due in N min" honest.
+3. The first claim seeds and is slow; a clearer pending state may help.
+4. A non-practice assigned session outside labelling or submitted is no longer listed; confirm none is stranded.
+
+## T28 · Admin Labels board in lanes — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `/admin/labels` renders the lanes To do, In progress and Submitted from `loadAdminLabelBoard()` (players, team or Personal, hours, `UrgencyMark`, due text; labeller via the Assign pill; flag progress and "no work in N days" on In progress). Every row opens through `useStartLabelling(jobId)` with no claim check; rows with a session keep `AssignMenu`, which now refreshes the board. Requested reviews and the Pay report link stay; the view pills and Program filter are gone; a line points to Matches for matches analysed before 2026-10-29. `AdminLabelBoardRow` gains `labellerId`; the labeller board's lane parts are exported and shared. New `tests/admin-labels-board.spec.ts`.
+
+**follow-ups:**
+
+1. Requested reviews still reads every completed job through `listLabelJobs` when a report is open; a reported-matches loader would let it and two helpers go.
+2. `tests/label-queue-loader.spec.ts` could assert `labellerId`.
+3. Submitted rows could say "submitted N h ago".
+
+## T29 · Admin › Matches panel: label any analysed match — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `AdminMatchRow.labelJobId` (newest completed Advantage Intelligence job with a results file, from the loader's existing batched job read, via the pure `labelJobIdFor` in `admin-match-progress.ts`). The Matches side panel shows "Label this match" only when it is set, calling `useStartLabelling` and showing a refusal; nothing reads the queue's cut-off, so older matches can be labelled. New `tests/admin-matches-label-entry.spec.ts`.
+
+**follow-ups:**
+
+1. The panel's "Open in Labels" link leads to a list that omits matches before the cut-off; hide it when "Label this match" shows.
+2. The list row and Today could offer the same button, as Resubmit does.
+3. The provider/status/results-file filter now exists in three places; one shared predicate would do.
+
+## T30 · Match overview: "X of Y flags resolved" with a bar — done
+
+**gate:** mechanical pass · completion pass
+
+**changed:** `getLabelSession` reads `label_sessions.start_open_counts` in its own small read (`readStartOpenCounts`; a missing column or any error reads as null), and the console passes it with its `openCounts` to the dashboard. With a starting count, the admin `FlagsLeft` line reads "X of Y flags resolved" with a progressbar, then "N left: A can move the score, G wrong data"; without one (or a start of zero) it is unchanged. Submit, publish and the labeller overview are untouched. `tests/label-console.spec.ts` covers both forms.
+
+**follow-ups:**
+
+1. Add a loader spec for `readStartOpenCounts` (42703 gives null; a stored pair comes through).
+2. The console's amber count includes the "score doesn't add up" stop and `openFlags` does not, so the two differ by one; make every board count the same flags.
+
+## T31 · Migration: published, checked, sent back — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New `supabase/migrations/20261114070000_label_publish_check.sql` (written, not applied): six `label_sessions` columns (published/checked/sent back), four CHECKs, the `label_sessions_stamp_published` trigger, a backfill of the 36 complete sessions, `verify_match` widened to admins or labellers (owner approved 2026-11-14), and `release_stale_label_claims` skipping published sessions. New spec `tests/label-publish-check-migration.spec.ts`; `tests/label-queue-migration.spec.ts` now pins its own filename in place of "sorts last".
+**follow-ups:**
+
+1. Reopen (`session-status-session.ts`, `status: "labelling", completed_at: null`) must also clear `checked_at`/`checked_by`, or it breaks `label_sessions_checked_needs_complete` once this migration is applied. Ship before applying.
+2. `verify_match`'s refusal still reads "Only an Advantage admin can verify a match".
+3. The `alter table` is not re-runnable (no `add constraint if not exists`); a publish in flight at apply time rolls the backfill back.
+
+## T32 · Submit publishes through the existing publish path — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** A labeller's submit on an analyst session now runs `writeLabelSessionComplete` (lease, `beforePublish` snapshot via shared `insertLabelSubmission`, publish, `verify_match` as the labeller, close without a check); an admin's submit and Mark complete stamp `checked_at`/`checked_by`. Practice copies are unchanged. Reopen also clears `checked_at`/`checked_by` and restores them if `unverify_match` fails (orchestrator-added, for T31's CHECK). Errors returned to a labeller have UUIDs replaced with "…". `/label/[sessionId]` sets `maxDuration = 120`; the submit action returns `LabelSessionStatusResult`.
+**follow-ups:**
+
+1. After a labeller publishes, the console holds `complete` but `requireLabelReader` admits labellers only on `labelling`/`submitted`, so a reload 404s; send the labeller back to `/label` after publishing (folded into T37's dispatch).
+2. Reopen now selects `checked_at`/`checked_by`, so Reopen also needs T31 applied.
+3. The labeller console does not show the `published` summary (points, shots, left out).
+
+## T33 · Admin Check and Send back actions — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New `src/lib/services/labels/check-session.ts` (`checkLabelSession`, `sendBackLabelSession`, admin-gated single-row updates, note trimmed and limited to 1–2000 chars, no match/points/shots writes); `checkLabelSessionAction` and `sendBackLabelSessionAction` in `src/app/admin/labels/actions.ts`; spec `tests/label-check-session.spec.ts`.
+**follow-ups:**
+
+1. `ANOTHER_SESSION_OPEN` says "before reopening this one", which reads oddly after Send back.
+
+## T34 · Board loader: published-to-check lane and sent-back rows — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `enterLabelQueue` keeps complete-unchecked sessions; complete and sent-back sessions are never claimable. `loadAdminLabelBoard` returns `{ todo, inProgress, toCheck, submitted }` (toCheck oldest publish first, with `publishedAt` and `labellerName`); `loadLabellerBoard` returns `{ todo, inProgress, published, submitted, holding }`; `sentBack { at, note }` reaches only the owner's row on the labeller board. T22 columns read directly; 42703 fallback kept only for T31's columns (missing columns read as checked). Added `labelPublishedText` ("On time" / "N h late").
+**follow-ups:**
+
+1. `/label` page's on-board set should include `board.published` once T36 draws it, or the viewer's published session also lists under "Assigned to you".
+
+## T35 · Admin Labels board: "Published, to check" lane — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `/admin/labels` lanes To do, In progress, Published, to check (Submitted only while it has rows). To-check rows show labeller, "published … ago", On time / N h late, and quiet Check / Send back text actions; Send back opens `send-back-dialog.tsx` (ConfirmDialog, note required). Sent-back In progress rows show a "Sent back" pill, time and note. Lede "N published matches to check." plus overdue and sent-back counts; lane foot copy. `/design/labels` fixture gains sample rows.
+**follow-ups:**
+
+1. The dialog repeats the 2000-character note limit; move `SEND_BACK_NOTE_MAX` to a shared module.
+2. Not yet checked signed-in on the real `/admin/labels` (offline spec and design preview only).
+
+## T36 · Labeller board: Published lane and sent-back card — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `/label` third lane "Published" ("You / first name · time ago", avatar); Submitted lane only while it has rows. The viewer's sent-back match leads In progress as a card with the note, "Your first version is still published…" and "Fix and publish again". Sent-back lede and footer copy; Claim hidden while a sent-back match is held. `agoText` moved to `queue.ts` and shared by both boards; `/label` page counts `board.published` as on the board.
+**follow-ups:**
+
+1. The ordinary holding lede still says "Submit yours to claim the next one" (folded into T37's dispatch).
+
+## T37 · Rename to "Publish" for both audiences — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** Console button "Publish" for admin and labeller (practice keeps "Submit"); the labeller's Publish uses the shared `complete-session` confirm ("Publish?", player sees it with Verified by Advantage, an admin may send it back); `submit-session` confirm kind removed; "Before you publish" overview; guide section "Publish" (GUIDE_VERSION 2026-11-14); retry sentences "Publish again to retry"; `labellerWording` removed. Orchestrator additions: a labeller returns to `/label` after a successful publish (`window.location.replace`), and the board's holding lede reads "Publish yours to claim the next one."
+**follow-ups:**
+
+1. Comments and some spec test names still say "Mark complete".
+2. A practice copy's overview also reads "Before you publish".
+
+## T38 · Matches progress: split Published and Checked — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `AdminMatchRow` carries `labelPublishedAt` and `labelCheckedAt` from the existing session read (42703 fallback: complete counts as published and checked at `completed_at`); Published and Checked turn done from their own moments; a sent-back match shows Being labelled current; no session keeps the `verifiedAt` rule. `readAllPages` attaches the PostgREST error as `cause`. Live check: no non-practice `submitted` sessions exist.
+**follow-ups:**
+
+1. On a published, unchecked match, Checked shows "to do"; it could be "current" to match the board's "Published, to check" lane.
+
+## T39 · Pay report: published and checked — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `getLabelPayReport` counts non-practice sessions on the UTC day of `published_at`, credited to the first submitter; states "published" / "checked"; `PayLabellerRow` and `PaySessionLine` renamed fields; practice sets unchanged. `/admin/labels/pay` shows "Published h" / "Checked h"; CSV columns renamed. 42703 fallback reads complete sessions by `completed_at`. New spec `tests/label-pay-report.spec.ts`.
+**follow-ups:**
+
+1. A labeller whose only in-range session was sent back no longer gets a zero row.
+2. CSV column names changed (`first_published_at`, `published_*`, `checked_*`); check nothing downstream reads the old names.
+
+## T40 · Migration: `match_label_states` for the customer read — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** New `supabase/migrations/20261114151350_match_label_states.sql` (written, not applied): SECURITY DEFINER `match_label_states(uuid[])` returning `match_id, results_at, has_video, labelling` for unverified matches the caller can see (`visible_match_ids()`, checked equal to the `matches` select policy), latest completed job only; `has_video` mirrors `jobVideoSeconds` incl. a NaN/Infinity guard; execute to authenticated and service_role only. Spec `tests/match-label-states-migration.spec.ts`.
+**follow-ups:**
+
+1. After applying, call it once as a real signed-in user to exercise the visibility filter.
+2. `labelling` is match-level; 2 open analyst sessions sit on a non-latest job and 1 has no job.
+
+## T41 · Pending rule and loader wiring — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `verificationPendingFor()` and `showsVerificationPending()` in `match-verification.ts` (cutoff imported from `labels/queue.ts`); new `match-verification-server.ts` batches `match_label_states` through the caller's own client (500 ids per call, empty set and one log on error). `verificationPending` on `DisplayMatch`, `Match`, Home's `MatchRow`/`EventGroup`; wired in the matches list, match detail and Home. Fixtures gain the required field.
+**follow-ups:**
+
+1. Nothing shows as pending until T40 is applied; each server process logs one warning for the missing function until then.
+2. A coach can't read other people's job analysis, so a failed reprocess after an earlier completed job could show pending to a coach.
+
+## T42 · Match report: "Verification pending" fact and popover — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `VERIFICATION_PENDING` and the two popover sentences exported from `match-verification.ts`; `VerifiedMark` gains `pending` (greyscale, 55% opacity); new `pending-fact.tsx` reusing `VerifiedFact`'s trigger and popover; the facts line shows it last when pending and unverified. No time in the copy (owner, 2026-11-14). The "Until then…" sentence uses ink-700, not the artboard's lighter grey, for AA contrast. Spec `tests/verification-pending-fact.spec.ts`.
+**follow-ups:**
+
+1. Nobody has looked at the greyed mark and open popover on screen yet.
+
+## T43 · Lists: pending in the row state, gallery card and Home — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** `RowLifecycle` takes `verificationPending` and shows the greyed mark with "Verification pending" in the Verified line's markup (verified wins; in-flight, failed, cancelled, not analysed, stats unavailable and uploading unchanged). The gallery card shows the greyed mark labelled "Verification pending". Home's event row passes the flag to `MatchMetadataRow` (Home renders no `RowState`). New cases in `tests/matches-row-state.spec.ts`.
+**follow-ups:**
+
+1. No spec renders the gallery card or Home's `MatchMetadataRow` with the flag set.
+2. `tournament-detail.tsx` and `dual-detail.tsx` render `RowLifecycle` without the pending flag.

@@ -82,6 +82,7 @@ const MATCH: Match = {
   },
   won: true,
   isUserPlayer1: true,
+  verificationPending: false,
 };
 
 const PUBLIC_URL = "https://app.example.com/m/abc123";

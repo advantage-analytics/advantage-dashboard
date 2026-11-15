@@ -356,6 +356,7 @@ function match(id: string): Match {
     },
     won: true,
     isUserPlayer1: true,
+    verificationPending: false,
   };
 }
 

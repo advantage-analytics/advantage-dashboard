@@ -57,7 +57,7 @@ const HITS: AdminSearchHit[] = [
     id: "33333333-3333-4333-8333-333333333333",
     title: "Atlantic Coast Conference",
     subtitle: "ACC · D1",
-    href: "/admin/conferences?id=33333333-3333-4333-8333-333333333333",
+    href: "/admin/conferences/33333333-3333-4333-8333-333333333333",
     markUrl: null,
     shortCode: "ACC",
   },

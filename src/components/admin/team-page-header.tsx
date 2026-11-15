@@ -1,8 +1,11 @@
 import { Calendar, Globe, Landmark, MapPin } from "lucide-react";
 import Link from "next/link";
 
+import { AdminBackLink } from "@/components/admin/admin-back-link";
 import { AdminTeamCrestControl } from "@/components/admin/team-crest-control";
 import { TeamHeaderActions } from "@/components/admin/team-header-actions";
+import { TeamHours } from "@/components/admin/team-hours";
+import { teamViewHref } from "@/components/admin/team-sections";
 import { adminUploadHref } from "@/components/admin/admin-upload-selection";
 import { StatePill } from "@/components/ui/state-pill";
 import { PilotPill, ApprovePill } from "@/components/admin/plan-pills";
@@ -13,6 +16,7 @@ import type {
   AdminTeamClaim,
   AdminTeamProgram,
 } from "@/lib/data/admin-team-server";
+import type { ProgramUsage } from "@/lib/data/usage-server";
 
 /**
  * The claim statuses a human still has to decide — same set `admin-teams-
@@ -34,11 +38,15 @@ function programStatusLabel(status: string): string {
 }
 
 /**
- * The Admin › Teams detail page's header: the crest — uploadable here, unlike
- * every other place the console draws one — the name, the state and plan
- * pills, the four-fact line under them, and the actions at the right edge
- * (`TeamHeaderActions`, a client component: this one is a Server Component
- * and reads `programSubtitle` from a `*-server.ts` module).
+ * The Admin › Teams detail page's header (`TeamDetail.dc.html`): a way back
+ * to Teams with the page's actions on the same line, then the crest —
+ * uploadable here, unlike every other place the console draws one — the
+ * name, the state and plan pills and the four-fact line under them, and this
+ * month's video hours at the right (`TeamHours`: the figure, the bar and an
+ * `Add hours` link to `?view=usage`). The actions are `Upload for this team`
+ * and the `⋯` menu (`TeamHeaderActions`, a client component: this one is a
+ * Server Component and reads `programSubtitle` from a `*-server.ts` module);
+ * `Edit details` lives in the Details section below.
  *
  * Home venue is deliberately not one of those facts: the canvas' line is the
  * four an admin triages on (what the program is, where it is, the domain a
@@ -60,9 +68,12 @@ function programStatusLabel(status: string): string {
 export function TeamPageHeader({
   program,
   claim,
+  usage,
 }: {
   program: AdminTeamProgram;
   claim: AdminTeamClaim | null;
+  /** The current billing month's ledger, for the hours bar. */
+  usage: ProgramUsage;
 }) {
   const needsDecision = claim !== null && NEEDS_DECISION.has(claim.status);
   const plan: "pilot" | "approve" | "none" =
@@ -95,45 +106,57 @@ export function TeamPageHeader({
   ].filter((fact) => fact.text !== "");
 
   return (
-    <div className="flex items-center gap-5">
-      <AdminTeamCrestControl
-        programId={program.id}
-        name={program.name}
-        crestUrl={program.crestUrl}
-      />
-      <div className="flex min-w-0 flex-1 flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <h1 className="text-display truncate">{program.name}</h1>
-          <StatePill>{programStatusLabel(program.status)}</StatePill>
-          {plan === "pilot" ? (
-            <PilotPill />
-          ) : plan === "approve" ? (
-            <ApprovePill />
-          ) : null}
+    <div className="flex flex-col gap-3.5">
+      <div className="flex items-center justify-between gap-4">
+        <AdminBackLink href="/admin/teams">Teams</AdminBackLink>
+        <div className="flex shrink-0 items-center gap-2.5">
+          <Link
+            href={adminUploadHref(program.id, null)}
+            className={advButton("outline", "sm")}
+          >
+            Upload for this team
+          </Link>
+          <TeamHeaderActions program={program} />
         </div>
-        {facts.length > 0 && (
-          <div className="flex flex-wrap items-center gap-x-[18px] gap-y-1.5 text-[12px] text-[var(--ink-600)]">
-            {facts.map(({ key, icon: Icon, text }) => (
-              <span key={key} className="flex items-center gap-1.5">
-                <Icon
-                  aria-hidden="true"
-                  className="size-[13px] shrink-0 text-[var(--ink-400)]"
-                  strokeWidth={1.5}
-                />
-                {text}
-              </span>
-            ))}
-          </div>
-        )}
       </div>
-      <div className="flex shrink-0 items-center gap-2.5">
-        <Link
-          href={adminUploadHref(program.id, null)}
-          className={advButton("primary", "md")}
-        >
-          Upload for this team
-        </Link>
-        <TeamHeaderActions program={program} />
+
+      <div className="flex flex-wrap items-center justify-between gap-x-12 gap-y-5">
+        <div className="flex min-w-0 items-center gap-4">
+          <AdminTeamCrestControl
+            programId={program.id}
+            name={program.name}
+            crestUrl={program.crestUrl}
+          />
+          <div className="flex min-w-0 flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h1 className="text-display truncate">{program.name}</h1>
+              <StatePill>{programStatusLabel(program.status)}</StatePill>
+              {plan === "pilot" ? (
+                <PilotPill />
+              ) : plan === "approve" ? (
+                <ApprovePill />
+              ) : null}
+            </div>
+            {facts.length > 0 && (
+              <div className="flex flex-wrap items-center gap-x-[18px] gap-y-1.5 text-[12px] text-[var(--ink-600)]">
+                {facts.map(({ key, icon: Icon, text }) => (
+                  <span key={key} className="flex items-center gap-1.5">
+                    <Icon
+                      aria-hidden="true"
+                      className="size-[13px] shrink-0 text-[var(--ink-400)]"
+                      strokeWidth={1.5}
+                    />
+                    {text}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        <TeamHours
+          usage={usage}
+          addHoursHref={teamViewHref(program.id, "usage")}
+        />
       </div>
     </div>
   );

@@ -108,7 +108,7 @@ test("the overview is the match's data, read: no film, no court, no rail, one wa
   expect(text(html)).toContain("The upload’s inputs could not be read.");
 });
 
-test("the overview is six cards, with the upload's inputs and a publish checklist", () => {
+test("the admin's overview is one column: flags left, the publish checklist, the upload's inputs", () => {
   const upload = {
     playedAt: "2026-08-27T19:10:00Z",
     event: "vs Columbia University",
@@ -138,17 +138,16 @@ test("the overview is six cards, with the upload's inputs and a publish checklis
     upload,
     ...SAVES,
   } as ConsoleProps);
-  // One card a reading, the work on the left and the facts on the right.
+  // One full-width column: the flags left, the checklist as the body, and the
+  // upload's inputs. No Left to check, no statistics and no Score card.
   expect(
     [...html.matchAll(/data-dashboard-card="([^"]*)"/g)].map((m) => m[1]),
-  ).toEqual([
-    "Left to check",
-    "Statistics from the labels",
-    "Progress",
-    "Before you publish",
-    "Score",
-    "Entered at upload",
-  ]);
+  ).toEqual(["Progress", "Before you publish", "Entered at upload"]);
+  // Full width, like Matches and Teams: no centred max-width column.
+  expect(html).toMatch(
+    /data-label-dashboard=""[^>]*>\s*<div class="flex w-full flex-col gap-7">/,
+  );
+  expect(html).not.toContain("max-w-[880px]");
   // No design switch any more: one layout.
   expect(html).not.toContain("data-dashboard-design");
   // The inputs, as entered: the side that decides who every stroke is by,
@@ -170,7 +169,8 @@ test("the overview is six cards, with the upload's inputs and a publish checklis
       html.indexOf("data-label-dashboard"),
     ),
   ).toContain("Dartmouth College · Women’s");
-  // The checklist: six things, each done, open or blocking, in words.
+  // The checklist: six things, each done, open or blocking, in words. The
+  // admin works until the flags are resolved, not every point.
   const states = [...html.matchAll(/data-publish-check="([^"]*)"/g)].map(
     (m) => m[1],
   );
@@ -178,8 +178,29 @@ test("the overview is six cards, with the upload's inputs and a publish checklis
   for (const state of states) {
     expect(["done", "open", "blocking"]).toContain(state);
   }
-  expect(out).toContain("Every point checked");
-  expect(out).toContain("2 of 3 still to check.");
+  expect(
+    [...html.matchAll(/data-check-title="([^"]*)"/g)].map((m) => m[1]),
+  ).toEqual([
+    "Score adds up",
+    "Every point can be written",
+    "Nothing open that can move the score",
+    "Wrong data fixed",
+    "Every game finished",
+    "Every error marked",
+  ]);
+  expect(out).not.toContain("Every point checked");
+  expect(out).not.toContain("still to check");
+  // Nothing on the page counts points checked; the header does that.
+  const dashboard = html.slice(html.indexOf("data-label-dashboard"));
+  expect(text(dashboard)).not.toContain("points checked");
+  expect(dashboard).not.toContain('role="img" aria-label="1 of 3');
+  // The upload's inputs are one row, closed, its summary the three facts:
+  // the scoring these labels count by (this session counts ad), who starts
+  // on the far side and best-of. Opened, the facts are all still there.
+  expect(tagOf(html, "data-upload-details")).not.toContain(" open");
+  expect(out).toContain(
+    "Entered at upload Ad scoring · Vargas starts on the far side · best of 3",
+  );
 });
 
 test("a video that ends early holds no set to the record", () => {
@@ -494,10 +515,10 @@ test.describe("editing (T6)", () => {
       initialLayoutMode: "overview",
       ...SAVES,
     });
-    expect(text(overview)).toContain("· Complete");
+    expect(text(overview)).toContain("Complete · derivation 0.3.2");
   });
 
-  test("the header carries the progress and the save line, and no Save button", () => {
+  test("the header carries the match and the save line, and no Save button", () => {
     const html = render({
       session: labelSessionFixture(),
       video: null,
@@ -506,7 +527,17 @@ test.describe("editing (T6)", () => {
     });
     const out = text(html);
     expect(out).toContain("Jordan Lee vs Elena Vargas");
-    expect(out).toContain("1 of 3 points checked");
+    // The body counts the work in flags left; the admin's header no longer
+    // counts points checked beside it.
+    const header = html.slice(
+      html.indexOf("data-console-header"),
+      html.indexOf("data-label-dashboard"),
+    );
+    expect(text(header)).not.toContain("points checked");
+    // The header runs full width with the body, sharing its edges.
+    expect(header).toMatch(
+      /^data-console-header="" class="flex shrink-0 items-end justify-between gap-8">/,
+    );
     expect(out).toContain("derivation 0.3.2");
     expect(html).toContain('data-save-status="idle"');
     expect(html).not.toMatch(/<button[^>]*>(?:(?!<\/button>)[\s\S])*\bSave\b/);
@@ -1721,7 +1752,7 @@ test.describe("Undo applies a diff (undo-diff.ts), never a whole re-read", () =>
   });
 });
 
-test.describe("Mark complete with errors still unmarked", () => {
+test.describe("Publish with errors still unmarked", () => {
   type Props = Record<string, unknown>;
   const passThrough = (tagName: string) =>
     function PassThrough({
@@ -1836,7 +1867,7 @@ test.describe("Mark complete with errors still unmarked", () => {
       unmarked: 0,
     });
     expect(text(html.slice(html.indexOf("<h2"), html.indexOf("</h2>")))).toBe(
-      "Mark complete and publish?",
+      "Publish?",
     );
     expect(footer(html)).toEqual([
       { label: "Cancel", disabled: false },
@@ -1906,4 +1937,227 @@ test("a point with nothing left to ask shows the whole court; a spin key at a mi
   expect(source).toContain("? findShot(points, armedSlot.afterShotId)");
   expect(source).toContain("const spin = strokeKeyChange(key, before);");
   expect(source).toContain("if (spin) requestPatchShot(before.id, spin);");
+});
+
+test.describe("the admin's overview, read off the design fixture", () => {
+  type Dashboard = React.ComponentType<Record<string, unknown>>;
+  const { LabelDashboard, CheckTarget } = createLoader().load(
+    "src/components/admin/labels/label-dashboard.tsx",
+  ) as {
+    LabelDashboard: Dashboard;
+    CheckTarget: (props: {
+      children: React.ReactNode;
+      target: { label: string; pointId: string };
+      onOpen: (pointId?: string) => void;
+    }) => React.ReactElement<{ onClick: () => void }>;
+  };
+  const { fixtureMatch, NAMES, UPLOAD, MATCH_SCORE } = createLoader().load(
+    "src/app/design/labels/fixture.ts",
+  ) as {
+    fixtureMatch: () => { points: LabelPoint[]; marks: LabelMarks };
+    NAMES: unknown;
+    UPLOAD: unknown;
+    MATCH_SCORE: unknown;
+  };
+  const { labelScores } = createLoader().load(
+    "src/lib/services/labels/score.ts",
+  ) as {
+    labelScores: (points: LabelPoint[], ad: boolean) => { games: unknown };
+  };
+
+  /**
+   * The fixture with game 3's last point deleted: game 3 is left unfinished
+   * and set 1 no longer matches the record. Its own marks hold a flag that
+   * can move the score on point 39 and wrong data from point 35.
+   */
+  const page = (
+    audience?: "admin" | "labeller",
+    complete = false,
+    extra: Record<string, unknown> = {},
+  ) => {
+    const { points: all, marks } = fixtureMatch();
+    const game3 = all.filter((p) => p.gameNumber === 3);
+    const cut = game3[game3.length - 1];
+    const points = all.map((p) =>
+      p.id === cut.id ? { ...p, status: "deleted" as const } : p,
+    );
+    return {
+      firstOfGame3: game3[0].id,
+      html: renderToStaticMarkup(
+        React.createElement(LabelDashboard, {
+          points,
+          marks,
+          games: labelScores(points, false).games,
+          adScoring: false,
+          names: NAMES,
+          audience,
+          finalScore: null,
+          matchScore: MATCH_SCORE,
+          videoEndsEarly: null,
+          warnings: [
+            "Point 12 has no strokes and no winner, so it is left out",
+          ],
+          complete,
+          upload: UPLOAD,
+          onOpen: () => {},
+          ...extra,
+        }),
+      ),
+    };
+  };
+
+  test("every open check names the set, point or game it opens on", () => {
+    const { html, firstOfGame3 } = page();
+    const targets = [
+      ...html.matchAll(
+        /data-check-title="([^"]*)"[\s\S]*?(?:data-check-target="([^"]*)" data-check-point="([^"]*)"|<\/li>)/g,
+      ),
+    ].map((m) => [m[1], m[2] ?? null, m[3] ?? null]);
+    expect(targets).toEqual([
+      ["Score adds up", "Set 1", "p-49"],
+      ["Every point can be written", "Point 12", "p-12"],
+      ["Nothing open that can move the score", "Point 39", "p-39"],
+      ["Wrong data fixed", "Point 35", "p-35"],
+      ["Every game finished", "Set 1 · Game 3", firstOfGame3],
+      ["Every error marked", null, null],
+    ]);
+    const out = text(html);
+    expect(out).toContain("Wrong data fixed 64 flags open on 64 points.");
+    expect(out).not.toContain("Every point checked");
+  });
+
+  test("a target opens full screen on its point", () => {
+    const opened: (string | undefined)[] = [];
+    const button = CheckTarget({
+      children: "Game 9",
+      target: { label: "Game 9", pointId: "p-57" },
+      onOpen: (pointId) => opened.push(pointId),
+    });
+    button.props.onClick();
+    expect(opened).toEqual(["p-57"]);
+  });
+
+  /** The admin's progress line, up to the checklist. */
+  const progressLine = (html: string) =>
+    html.slice(
+      html.indexOf('data-dashboard-card="Progress"'),
+      html.indexOf('data-dashboard-card="Before you publish"'),
+    );
+
+  test("the progress line counts flags left, with no bar", () => {
+    // No starting count, given as null or not given at all: today's line.
+    for (const extra of [{}, { startOpenCounts: null }]) {
+      const { html } = page("admin", false, extra);
+      const line = progressLine(html);
+      expect(text(line)).toContain(
+        "69 flags left: 5 can move the score, 64 wrong data",
+      );
+      expect(text(line)).not.toContain("resolved");
+      expect(line).not.toContain('role="img"');
+      expect(line).not.toContain('role="progressbar"');
+      expect(text(html)).not.toContain("points checked");
+    }
+  });
+
+  test("with no starting count, the line takes the console's open count, as the boards do", () => {
+    // openFlags here is 5 + 64; the console's count also holds the set that
+    // doesn't add up, one more amber. The boards read that saved pair.
+    const { html } = page("admin", false, {
+      startOpenCounts: null,
+      openCounts: { amber: 6, grey: 64 },
+    });
+    const line = progressLine(html);
+    expect(text(line)).toContain(
+      "70 flags left: 5 can move the score, the score doesn't add up, 64 wrong data",
+    );
+    expect(line).not.toContain('role="progressbar"');
+  });
+
+  test("with nothing open and no starting count, the line reads No flags left", () => {
+    // No points, so nothing for the marks to flag.
+    const { html } = page("admin", false, {
+      points: [],
+      games: [],
+      marks: { points: {}, shots: {}, suggestions: [], serveSides: {} },
+      startOpenCounts: null,
+    });
+    const line = progressLine(html);
+    expect(text(line)).toContain("No flags left");
+    expect(line).not.toContain('role="progressbar"');
+  });
+
+  test("with a starting count the line reads X of Y flags resolved, over a bar", () => {
+    // Y = 8 + 70 = 78 at the start; 69 open now (openFlags: 5 + 64), so 9.
+    const { html } = page("admin", false, {
+      startOpenCounts: { amber: 8, grey: 70 },
+    });
+    const line = progressLine(html);
+    expect(text(line)).toContain(
+      "9 of 78 flags resolved 69 left: 5 can move the score, 64 wrong data",
+    );
+    expect(text(line)).not.toContain("flags left:");
+    expect(count(line, /role="progressbar"/g)).toBe(1);
+    expect(line).toContain('aria-valuenow="9"');
+    expect(line).toContain('aria-valuemax="78"');
+    expect(line).toContain('aria-valuemin="0"');
+  });
+
+  test("X counts the console's open pair, the same source as Y, and floors at 0", () => {
+    // The console's amber counts the set that doesn't add up, which openFlags
+    // leaves out: 6 + 64 = 70 open of 78, so 8. The split names that one
+    // apart, so "can move the score" says 5, as the checklist's row does.
+    const counted = progressLine(
+      page("admin", false, {
+        startOpenCounts: { amber: 8, grey: 70 },
+        openCounts: { amber: 6, grey: 64 },
+      }).html,
+    );
+    expect(text(counted)).toContain(
+      "8 of 78 flags resolved 70 left: 5 can move the score, the score doesn't add up, 64 wrong data",
+    );
+    expect(counted).toContain('aria-valuenow="8"');
+    expect(counted).toContain('aria-valuemax="78"');
+
+    // More open now than at the start: nothing resolved, never below zero.
+    const raised = progressLine(
+      page("admin", false, { startOpenCounts: { amber: 1, grey: 1 } }).html,
+    );
+    expect(text(raised)).toContain("0 of 2 flags resolved");
+    expect(raised).toContain('aria-valuenow="0"');
+    expect(raised).toContain('aria-valuemax="2"');
+  });
+
+  test("the labeller's overview draws no flags-resolved line, start or none", () => {
+    const { html } = page("labeller", false, {
+      startOpenCounts: { amber: 8, grey: 70 },
+    });
+    expect(html).not.toContain("data-flags-left");
+    expect(html).not.toContain('role="progressbar"');
+    expect(text(html)).not.toContain("flags resolved");
+  });
+
+  test("a complete session reads Published, with no flags-left line above it", () => {
+    const { html } = page("admin", true);
+    expect(html).not.toContain("data-flags-left");
+    expect(html).not.toContain('data-dashboard-card="Progress"');
+    const out = text(html);
+    expect(out).not.toMatch(/flags? left/);
+    expect(out).toContain("Published");
+  });
+
+  test("the labeller's overview keeps its cards and Every point checked", () => {
+    const { html } = page("labeller");
+    expect(
+      [...html.matchAll(/data-dashboard-card="([^"]*)"/g)].map((m) => m[1]),
+    ).toEqual([
+      "Left to check",
+      "Statistics from the labels",
+      "Progress",
+      "Before you publish",
+      "Score",
+      "Entered at upload",
+    ]);
+    expect(text(html)).toContain("Every point checked");
+    expect(html).not.toContain("data-check-target");
+  });
 });

@@ -137,6 +137,8 @@ test.describe("what it promises", () => {
   });
 });
 
+// The labeller's overview: the admin's draws no statistics (one column,
+// 2026-11-12), and the labeller's still does.
 test.describe("the statistics card", () => {
   const { LabelDashboard } = createLoader().load(
     "src/components/admin/labels/label-dashboard.tsx",
@@ -161,6 +163,7 @@ test.describe("the statistics card", () => {
         games: labelScores(points, false).games,
         adScoring: false,
         names: NAMES,
+        audience: "labeller",
         finalScore: null,
         matchScore: null,
         videoEndsEarly: true,
@@ -170,6 +173,26 @@ test.describe("the statistics card", () => {
         onOpen: () => {},
       }),
     );
+
+  test("the admin's overview draws none", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(LabelDashboard, {
+        points: fixtureMatch().points,
+        marks: null,
+        games: labelScores(fixtureMatch().points, false).games,
+        adScoring: false,
+        names: NAMES,
+        finalScore: null,
+        matchScore: null,
+        videoEndsEarly: true,
+        warnings: [],
+        complete: false,
+        upload: UPLOAD,
+        onOpen: () => {},
+      }),
+    );
+    expect(html).not.toContain("Statistics from the labels");
+  });
 
   test("errors read as one row until every one is marked", () => {
     const { points } = fixtureMatch();

@@ -2,8 +2,8 @@
 
 /**
  * The 26px pill itself, as class name and inline style, so the one set of
- * visual rules can dress a `<button>` here and an `<a>` in
- * `team-section-pills.tsx` without either file restating them.
+ * visual rules can dress a `<button>` here or a link elsewhere without
+ * restating them.
  *
  * The canvas' `.vp` rule (`TeamPage.dc.html`): 26px tall, `0 11px`, a 999px
  * radius, 12px text, a `--border-card` hairline and `--ink-600`; `.vp.on`

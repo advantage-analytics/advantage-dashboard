@@ -169,22 +169,3 @@ export async function loadAdminAskPage(): Promise<
     .map((row) => row.id);
   return { ...list, freshIds };
 }
-
-/**
- * The admin nav's Ask count. `ask_feedback` has no read/handled state — a
- * thumb is the player's word, never marked done — so the count is "New since
- * you last looked": thumbs first set after the admin's latest look at the
- * page and not opened since. Read-only; never moves the watermark.
- */
-export async function countAskForNav(adminId: string): Promise<number> {
-  const seen = (await loadNavSeen(adminId)).ask;
-  const { data, error } = await createAdminClient()
-    .from("ask_feedback")
-    .select("id, created_at")
-    .gt("created_at", seen.since)
-    .limit(MAX_ADMIN_ASK_FEEDBACK);
-  if (error) return 0;
-  return ((data ?? []) as { id: string; created_at: string }[]).filter((row) =>
-    isFresh(seen, askSeenKey(row.id), row.created_at),
-  ).length;
-}

@@ -5,26 +5,47 @@ import Link from "next/link";
 import { GalleryHorizontalEnd } from "lucide-react";
 import { AdminPage } from "@/components/admin/admin-page";
 import {
-  AdminMatchCell,
   CountPills,
   FilterDivider,
   FilterMenuPill,
+  NewLabel,
   PillSearch,
-  TwoLineDate,
   WorkspaceCell,
   WorkspaceMark,
+  ageLabel,
+  dayLabel,
+  useIsClient,
   type FilterMenuOption,
 } from "@/components/admin/admin-cells";
 import {
   MatchPeekDrawer,
+  resubmittableJobId,
+  videoHoursLabel,
   workspaceName,
 } from "@/components/admin/matches/match-peek-drawer";
+import { ResubmitButton } from "@/components/admin/matches/resubmit-button";
 import { DRAWER_ATTR } from "@/components/dashboard/matches/match-drawer";
-import { RowLifecycle } from "@/components/dashboard/matches/row-state";
+import { VerifiedMark } from "@/components/dashboard/matches/verified-mark";
+import { AnalysisStatusLine } from "@/components/dashboard/shared/analysis-status-line";
+import {
+  PendingBar,
+  PendingRegion,
+} from "@/components/dashboard/loading/pending";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import { markAdminRowSeen } from "@/app/admin/seen-actions";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
+import {
+  ANALYSIS_LABEL,
+  UPLOAD_PAUSED_LABEL,
+  inFlightMark,
+  isInFlight,
+  isSubmitStalled,
+  isUploadPaused,
+  matchListGroup,
+  matchListStatusLabel,
+} from "@/lib/data/match-analysis";
+import { VERIFIED_BY_ADVANTAGE } from "@/lib/data/match-verification";
 import type {
   AdminMatchBucket,
   AdminMatchRow,
@@ -33,7 +54,8 @@ import type {
 /**
  * Admin › Matches (Matches2): every match on Advantage, newest upload first —
  * search, the view pills, the Program menu, the table and the peek drawer a
- * row opens.
+ * row opens. One line per match (AdminMatches.dc.html): players, workspace,
+ * one status mark with its words, video hours, upload time.
  *
  * Everything is filtered here, on the rows the server sent: the page loads
  * every match up to the loader's cap, so the pill counts and the search cover
@@ -48,8 +70,68 @@ type View = "all" | "uploading" | "analyzing" | "failed";
 
 const PAGE = 50;
 
+/**
+ * Match · Workspace · Status · Video · Uploaded. Match and Workspace share the
+ * flexible width evenly — both are names, and a full program name ("University
+ * of California, Los Angeles Women's Tennis") fits whole at 1440. Status is
+ * fixed at its widest content, "Verified by Advantage" or "Failed" with
+ * Resubmit beside it, so the marks start at one x and spare width never
+ * pools after the status words.
+ */
 const GRID =
-  "grid grid-cols-[minmax(260px,1.4fr)_170px_minmax(120px,1fr)_92px_56px_160px] items-center gap-4";
+  "grid grid-cols-[minmax(180px,1fr)_minmax(160px,1fr)_200px_64px_96px] items-center gap-4";
+
+const COLUMNS = ["Match", "Workspace", "Status", "Video", "Uploaded"] as const;
+
+/** The view pills, in order. */
+const VIEW_PILLS: readonly { value: View; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "uploading", label: "Uploading" },
+  { value: "analyzing", label: "Analyzing" },
+  { value: "failed", label: "Failed" },
+];
+
+/** The Program menu's unfiltered option — its label is the pill's resting value. */
+const ALL_PROGRAMS = "All programs";
+
+/** The table card, the loaded page's and its skeleton's. */
+const TABLE_CARD =
+  "mt-4 overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]";
+
+/** The title, its lede and the page's one primary. */
+function MatchesHeading() {
+  return (
+    <div className="flex flex-wrap items-end gap-4">
+      <div className="min-w-0 flex-1">
+        <h1 className="text-display">Matches</h1>
+        <p className="text-body-sm mt-[9px]">
+          Every match on Advantage, newest first. Uploads in progress show here
+          too.
+        </p>
+      </div>
+      <Link href="/admin/uploads/new" className={advButton()}>
+        Upload a match
+      </Link>
+    </div>
+  );
+}
+
+function MatchesHeaderRow() {
+  return (
+    <div
+      className={cn(
+        GRID,
+        "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
+      )}
+    >
+      {COLUMNS.map((label) => (
+        <span key={label} className="eyebrow-sm">
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 const VIEW_MATCH: Record<View, (bucket: AdminMatchBucket) => boolean> = {
   all: () => true,
@@ -78,15 +160,26 @@ export function MatchesPageContent({
   rows,
   total,
   initialSelectedId,
+  initialProgram,
 }: {
   rows: AdminMatchRow[];
   /** Every match on Advantage; more than `rows.length` past the loader cap. */
   total: number;
   initialSelectedId: string | null;
+  /**
+   * `?program=` — a program id or "personal" — the Program filter opens on.
+   * One no loaded row carries falls back to every program, so the pill never
+   * names a choice its menu does not offer.
+   */
+  initialProgram: string | null;
 }) {
   const [query, setQuery] = useState("");
   const [view, setView] = useState<View>("all");
-  const [program, setProgram] = useState("all");
+  const [program, setProgram] = useState(() =>
+    initialProgram && rows.some((row) => programKey(row) === initialProgram)
+      ? initialProgram
+      : "all",
+  );
   const [shown, setShown] = useState(PAGE);
   const [cleared, setCleared] = useState<ReadonlySet<string>>(new Set());
 
@@ -107,14 +200,7 @@ export function MatchesPageContent({
     [scoped, view],
   );
 
-  const pillOptions = (
-    [
-      ["all", "All"],
-      ["uploading", "Uploading"],
-      ["analyzing", "Analyzing"],
-      ["failed", "Failed"],
-    ] as const
-  ).map(([value, label]) => ({
+  const pillOptions = VIEW_PILLS.map(({ value, label }) => ({
     value,
     label,
     count: scoped.filter((row) => VIEW_MATCH[value](row.bucket)).length,
@@ -131,7 +217,7 @@ export function MatchesPageContent({
       } else personal += 1;
     }
     const options: FilterMenuOption<string>[] = [
-      { value: "all", label: "All programs", count: rows.length },
+      { value: "all", label: ALL_PROGRAMS, count: rows.length },
       ...[...teams.values()]
         .sort((a, b) =>
           workspaceName(a.row).localeCompare(workspaceName(b.row)),
@@ -324,18 +410,7 @@ export function MatchesPageContent({
         )
       }
     >
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-display">Matches</h1>
-          <p className="text-body-sm mt-[9px]">
-            Every match on Advantage, newest first. Uploads in progress show
-            here too.
-          </p>
-        </div>
-        <Link href="/admin/uploads/new" className={advButton()}>
-          Upload a match
-        </Link>
-      </div>
+      <MatchesHeading />
 
       <div className="mt-6 flex flex-wrap items-center gap-3">
         <PillSearch
@@ -369,22 +444,9 @@ export function MatchesPageContent({
         />
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]">
-        <div className="min-w-[980px] px-6 pt-0.5 pb-1.5">
-          <div
-            className={cn(
-              GRID,
-              "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-            )}
-          >
-            {["Match", "Workspace", "Event", "Uploaded", "Views", "Status"].map(
-              (label) => (
-                <span key={label} className="eyebrow-sm">
-                  {label}
-                </span>
-              ),
-            )}
-          </div>
+      <div className={TABLE_CARD}>
+        <div className="min-w-[820px] px-6 pt-0.5 pb-1.5">
+          <MatchesHeaderRow />
 
           {page.length === 0 ? (
             <TableEmptyBody
@@ -440,6 +502,65 @@ export function MatchesPageContent({
   );
 }
 
+/** A no-op for the skeleton's inert controls. */
+function ignore() {}
+
+/**
+ * Admin › Matches while the page loads (`app/admin/matches/loading.tsx`): the
+ * heading, the search, the view pills and the Program menu as the loaded page
+ * opens them (All, All programs) — inert, and without the counts they do not
+ * know yet — then the table's real column labels over rows of bars.
+ */
+export function MatchesPageSkeleton() {
+  return (
+    <AdminPage className="gap-0">
+      <MatchesHeading />
+
+      <div inert className="mt-6 flex flex-wrap items-center gap-3">
+        <PillSearch
+          value=""
+          onChange={ignore}
+          placeholder="Player, team or match id"
+          label="Search matches"
+          className="w-[260px] max-w-full"
+        />
+        <CountPills options={[...VIEW_PILLS]} value="all" onChange={ignore} />
+        <FilterDivider />
+        <FilterMenuPill
+          label="Program"
+          options={[{ value: "all", label: ALL_PROGRAMS }]}
+          value="all"
+          onChange={ignore}
+          width={280}
+        />
+      </div>
+
+      <div className={TABLE_CARD}>
+        <div className="min-w-[820px] px-6 pt-0.5 pb-1.5">
+          <MatchesHeaderRow />
+          <PendingRegion label="matches">
+            {Array.from({ length: 8 }, (_, i) => (
+              <div key={i} className={cn(GRID, "min-h-[44px] py-1.5")}>
+                <span className="flex items-center gap-1.5">
+                  <PendingBar className="h-3 w-28" />
+                  <PendingBar className="h-3 w-24" />
+                </span>
+                <span className="flex items-center gap-2">
+                  <PendingBar className="size-4 rounded-full" />
+                  <PendingBar className="h-3 w-32" />
+                </span>
+                <PendingBar className="h-3 w-24" />
+                <PendingBar className="h-3 w-10" />
+                <PendingBar className="h-3 w-16" />
+              </div>
+            ))}
+          </PendingRegion>
+        </div>
+      </div>
+    </AdminPage>
+  );
+}
+
 function MatchRow({
   row,
   fresh,
@@ -451,6 +572,8 @@ function MatchRow({
   selected: boolean;
   onSelect: () => void;
 }) {
+  const against = row.opponent.trim();
+  const failedJobId = resubmittableJobId(row);
   return (
     <div
       id={rowDomId(row.id)}
@@ -468,53 +591,151 @@ function MatchRow({
       }}
       className={cn(
         GRID,
-        "-mx-4 min-h-[60px] cursor-pointer rounded-[var(--radius-element)] px-4 py-2",
+        "-mx-4 min-h-[44px] cursor-pointer rounded-[var(--radius-element)] px-4 py-1.5",
         "transition-colors duration-[var(--duration-fast)] hover:bg-[var(--surface-muted)]",
         "focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none",
         selected && "bg-[var(--surface-muted)]",
       )}
     >
-      <span className="min-w-0">
-        <AdminMatchCell
-          player={row.player}
-          opponent={row.opponent}
-          won={row.won}
-          sets={row.sets}
-          fresh={fresh}
-        />
+      <span className="flex min-w-0 items-baseline gap-1.5 whitespace-nowrap">
+        <span className="shrink-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+          {row.player}
+        </span>
+        {against ? (
+          <span className="truncate text-[13px] text-[var(--ink-600)]">
+            vs {against}
+          </span>
+        ) : null}
+        {fresh ? <NewLabel /> : null}
       </span>
       <span className="min-w-0">
-        <WorkspaceCell workspace={row.workspace} />
+        <WorkspaceCell workspace={row.workspace} ownerName={row.player} />
       </span>
-      <span
-        className={cn(
-          "min-w-0 truncate text-[12px]",
-          row.event ? "text-[var(--ink-700)]" : "text-[var(--ink-400)]",
-        )}
-      >
-        {row.event ?? "—"}
+      <span className="flex min-w-0 items-center gap-3">
+        <span className="flex min-w-0 overflow-hidden">
+          <MatchStatus row={row} />
+        </span>
+        {failedJobId ? <ResubmitButton jobId={failedJobId} /> : null}
       </span>
-      <span className="min-w-0">
-        <TwoLineDate at={row.uploadedAt} fresh={fresh} />
-      </span>
-      <span
-        className={cn(
-          "tabular-nums",
-          row.views === null
-            ? "text-[12px] text-[var(--ink-400)]"
-            : "text-[13px] text-[var(--ink-700)]",
-        )}
-      >
-        {row.views === null ? "—" : row.views.toLocaleString("en-US")}
-      </span>
-      <span className="flex min-w-0">
-        <RowLifecycle
-          analysis={row.analysis}
-          label={`${row.player} vs ${row.opponent}`}
-          verification={row.verification}
-        />
-      </span>
+      <VideoHours seconds={row.videoSeconds} />
+      <UploadedAt at={row.uploadedAt} fresh={fresh} />
     </div>
+  );
+}
+
+/**
+ * The row's one status mark and its words — `RowLifecycle`'s vocabulary on a
+ * single line: an upload's percentage rides beside the word rather than as a
+ * track beneath it, which would make the row two lines. Exported for the team
+ * page's latest matches, which pass each match's own `verification`
+ * (`verificationFor`), so a verified match reads the same there as here.
+ */
+export function MatchStatus({
+  row,
+}: {
+  row: Pick<AdminMatchRow, "analysis" | "verification">;
+}) {
+  const { analysis, verification } = row;
+  const { status } = analysis;
+
+  if (isSubmitStalled(analysis)) {
+    return <AnalysisStatusLine mark="wait">Not sent</AnalysisStatusLine>;
+  }
+  if (status === "uploading") {
+    const percent = analysis.uploadPercent;
+    const paused = isUploadPaused(analysis);
+    return (
+      <AnalysisStatusLine
+        mark={paused ? "wait" : "now"}
+        value={
+          percent === undefined
+            ? undefined
+            : `${paused ? Math.floor(percent) : Math.round(percent)}%`
+        }
+      >
+        {paused ? UPLOAD_PAUSED_LABEL : ANALYSIS_LABEL.uploading}
+      </AnalysisStatusLine>
+    );
+  }
+  if (isInFlight(status)) {
+    return (
+      <AnalysisStatusLine mark={inFlightMark(status)}>
+        {ANALYSIS_LABEL[status]}
+      </AnalysisStatusLine>
+    );
+  }
+  if (matchListGroup(analysis) === "Failed") {
+    return <AnalysisStatusLine mark="fail">Failed</AnalysisStatusLine>;
+  }
+  if (status === "cancelled") {
+    return <AnalysisStatusLine mark="stopped">Cancelled</AnalysisStatusLine>;
+  }
+  if (status === "manual") {
+    return <AnalysisStatusLine mark="none">Not analyzed</AnalysisStatusLine>;
+  }
+  if (verification && analysis.recovery !== "stats_unavailable") {
+    return (
+      <span className="inline-flex min-w-0 items-center gap-2 text-[11px] leading-none whitespace-nowrap text-[var(--ink-700)]">
+        <VerifiedMark size={14} />
+        <span className="min-w-0 truncate">{VERIFIED_BY_ADVANTAGE}</span>
+      </span>
+    );
+  }
+  return (
+    <AnalysisStatusLine
+      mark={analysis.recovery === "stats_unavailable" ? "none" : "done"}
+    >
+      {matchListStatusLabel(analysis)}
+    </AnalysisStatusLine>
+  );
+}
+
+function VideoHours({ seconds }: { seconds: number | null }) {
+  const label = videoHoursLabel(seconds);
+  return (
+    <span
+      className={cn(
+        "text-[12px] whitespace-nowrap tabular-nums",
+        label === "—" ? "text-[var(--ink-400)]" : "text-[var(--ink-600)]",
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+/**
+ * One upload time: "4 min ago" / "6 h ago" inside a week, then the day
+ * ("Oct 27", "Oct 27, 2025"). A moment in the viewer's zone, so it is drawn
+ * in the browser only (`useIsClient`, as `TwoLineDate` does).
+ */
+export function UploadedAt({
+  at,
+  fresh,
+}: {
+  at: string | null;
+  fresh: boolean;
+}) {
+  const isClient = useIsClient();
+  if (!at) {
+    return <span className="text-[12px] text-[var(--ink-400)]">—</span>;
+  }
+  const date = new Date(at);
+  const now = new Date();
+  const recent = now.getTime() - date.getTime() < 7 * 24 * 60 * 60 * 1000;
+  return (
+    <span
+      className={cn(
+        "truncate text-[12px] whitespace-nowrap tabular-nums",
+        fresh ? "font-medium text-[var(--ink-900)]" : "text-[var(--ink-600)]",
+      )}
+    >
+      {isClient
+        ? recent
+          ? `${ageLabel(date, now)} ago`
+          : dayLabel(date, now)
+        : " "}
+    </span>
   );
 }
 

@@ -99,7 +99,7 @@ test.describe("assignLabelSession", () => {
     }
   });
 
-  test("happy path: writes assigned_to and assigned_at, guarded against complete", async () => {
+  test("happy path: writes assigned_to and assigned_at and clears claimed_at, guarded against complete", async () => {
     const fake = client({ session: { status: "labelling" }, user: LABELLER });
     expect(
       await assignLabelSession(SESSION_ID, LABELLER_ID, deps(fake)),
@@ -115,6 +115,7 @@ test.describe("assignLabelSession", () => {
         values: {
           assigned_to: LABELLER_ID,
           assigned_at: "2026-11-03T22:00:00.000Z",
+          claimed_at: null,
         },
         filters: { id: SESSION_ID },
         negated: { status: "complete" },
@@ -132,7 +133,7 @@ test.describe("assignLabelSession", () => {
     expect("ok" in result && result.ok).toBe(true);
   });
 
-  test("unassign writes both columns null and never reads users", async () => {
+  test("unassign writes both columns and claimed_at null and never reads users", async () => {
     const fake = client({ session: { status: "labelling" } });
     expect(await assignLabelSession(SESSION_ID, null, deps(fake))).toEqual({
       ok: true,
@@ -143,7 +144,7 @@ test.describe("assignLabelSession", () => {
       {
         table: "label_sessions",
         op: "update",
-        values: { assigned_to: null, assigned_at: null },
+        values: { assigned_to: null, assigned_at: null, claimed_at: null },
         filters: { id: SESSION_ID },
         negated: { status: "complete" },
       },

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Urgency mark</title>
+    <script src="./support.js"></script>
+  </head>
+  <body>
+    <x-dc>
+      <helmet>
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
+        />
+        <style>
+          body {
+            margin: 0;
+          }
+        </style>
+      </helmet>
+      <span
+        style="
+          display: inline-flex;
+          align-items: center;
+          gap: 7px;
+          height: 22px;
+          font-family: Inter, system-ui, sans-serif;
+          font-size: 12px;
+          font-weight: 500;
+          color: #0d0d0d;
+          white-space: nowrap;
+          -webkit-font-smoothing: antialiased;
+        "
+      >
+        <sc-if value="{{ exp }}" hint-placeholder-val="{{ false }}"
+          ><svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14">
+            <rect x="1" y="8" width="3" height="5" rx="1" fill="#E5487D"></rect>
+            <rect
+              x="5.5"
+              y="5"
+              width="3"
+              height="8"
+              rx="1"
+              fill="#E5487D"
+            ></rect>
+            <rect
+              x="10"
+              y="1"
+              width="3"
+              height="12"
+              rx="1"
+              fill="#E5487D"
+            ></rect></svg
+          >Express</sc-if
+        >
+        <sc-if value="{{ pri }}" hint-placeholder-val="{{ false }}"
+          ><svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14">
+            <rect x="1" y="8" width="3" height="5" rx="1" fill="#7C5CFF"></rect>
+            <rect
+              x="5.5"
+              y="5"
+              width="3"
+              height="8"
+              rx="1"
+              fill="#7C5CFF"
+            ></rect>
+            <rect
+              x="10"
+              y="1"
+              width="3"
+              height="12"
+              rx="1"
+              fill="#DCDDE2"
+            ></rect></svg
+          >Priority</sc-if
+        >
+        <sc-if value="{{ std }}" hint-placeholder-val="{{ true }}"
+          ><svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14">
+            <rect x="1" y="8" width="3" height="5" rx="1" fill="#8B919C"></rect>
+            <rect
+              x="5.5"
+              y="5"
+              width="3"
+              height="8"
+              rx="1"
+              fill="#DCDDE2"
+            ></rect>
+            <rect
+              x="10"
+              y="1"
+              width="3"
+              height="12"
+              rx="1"
+              fill="#DCDDE2"
+            ></rect></svg
+          ><span style="font-weight: 400; color: #525252">Standard</span></sc-if
+        >
+      </span>
+    </x-dc>
+    <script
+      type="text/x-dc"
+      data-dc-script
+      data-props='{"level":{"editor":"enum","options":["e","p","s"],"default":"e"},"$preview":{"width":120,"height":40}}'
+    >
+      class Component extends DCLogic {
+      renderVals() {
+      const level = this.props.level ?? 'e';
+      return { exp: level === 'e', pri: level === 'p', std: level === 's' };
+      }
+      }
+    </script>
+  </body>
+</html>

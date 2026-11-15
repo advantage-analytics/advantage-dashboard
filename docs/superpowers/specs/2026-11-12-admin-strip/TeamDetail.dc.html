@@ -1,0 +1,842 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Team detail C, stacked and full width</title>
+    <script src="./support.js"></script>
+  </head>
+  <body>
+    <x-dc>
+      <helmet>
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Roboto+Mono:wght@400&display=swap"
+        />
+        <style>
+          body {
+            margin: 0;
+            background: #ffffff;
+          }
+          a {
+            color: #0d0d0d;
+            text-decoration: none;
+          }
+          a:hover {
+            color: #0d0d0d;
+          }
+        </style>
+      </helmet>
+      <div
+        style="
+          min-height: 1040px;
+          background: #ffffff;
+          color: #0d0d0d;
+          font-family: Inter, system-ui, sans-serif;
+          -webkit-font-smoothing: antialiased;
+          font-size: 13px;
+          line-height: 1.45;
+        "
+      >
+        <header
+          style="
+            min-height: 44px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px 24px;
+            padding: 0 24px;
+          "
+        >
+          <div style="display: flex; align-items: center; gap: 10px">
+            <img
+              src="/_blob/cdac635f71902c44dea602e8af131551"
+              alt="Advantage"
+              style="width: 105px; height: 18px"
+            />
+            <span
+              aria-hidden="true"
+              style="width: 1px; height: 14px; background: #e5e5ea"
+            ></span>
+            <span style="font-size: 12px; color: #6b6b76">Admin</span>
+          </div>
+          <nav
+            aria-label="Admin"
+            style="
+              display: flex;
+              flex-wrap: wrap;
+              align-items: center;
+              gap: 4px;
+            "
+          >
+            <a
+              href="#today"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                color: #6b6b76;
+              "
+              >Today</a
+            >
+            <a
+              href="#labels"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                color: #6b6b76;
+              "
+              >Labels</a
+            >
+            <a
+              href="#matches"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                color: #6b6b76;
+              "
+              >Matches</a
+            >
+            <a
+              href="#teams"
+              aria-current="page"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 500;
+                background: #f5f5f5;
+              "
+              >Teams</a
+            >
+          </nav>
+          <span
+            aria-label="Account menu, signed in as CG"
+            style="
+              width: 24px;
+              height: 24px;
+              border-radius: 999px;
+              background: #ededf0;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 11px;
+              font-weight: 600;
+              color: #52525b;
+            "
+            >CG</span
+          >
+        </header>
+
+        <main
+          style="
+            max-width: 1040px;
+            margin: 0 auto;
+            box-sizing: border-box;
+            padding: 32px clamp(16px, 4vw, 56px) 64px;
+            display: flex;
+            flex-direction: column;
+            gap: 40px;
+          "
+        >
+          <div style="display: flex; flex-direction: column; gap: 14px">
+            <a
+              href="#teams"
+              style="
+                align-self: flex-start;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 12px;
+                color: #6b6b76;
+              "
+            >
+              <svg
+                aria-hidden="true"
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="m15 6-6 6 6 6"></path>
+              </svg>
+              Teams
+            </a>
+            <div
+              style="
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: 20px 48px;
+              "
+            >
+              <div
+                style="
+                  min-width: 0;
+                  display: flex;
+                  align-items: center;
+                  gap: 16px;
+                "
+              >
+                <a
+                  href="#crest"
+                  aria-label="Upload a new crest"
+                  style="
+                    position: relative;
+                    width: 48px;
+                    height: 48px;
+                    flex-shrink: 0;
+                    border-radius: 11px;
+                    background: #e4e7ec;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 15px;
+                    font-weight: 700;
+                    color: #475467;
+                  "
+                  >WU<span
+                    aria-hidden="true"
+                    style="
+                      position: absolute;
+                      right: -7px;
+                      bottom: -7px;
+                      width: 24px;
+                      height: 24px;
+                      box-sizing: border-box;
+                      border-radius: 999px;
+                      background: #ffffff;
+                      border: 1px solid #e0e0e5;
+                      display: inline-flex;
+                      align-items: center;
+                      justify-content: center;
+                    "
+                    ><svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="#52525b"
+                      stroke-width="2.2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path
+                        d="M12 16V5M7 10l5-5 5 5M5 19h14"
+                      ></path></svg></span
+                ></a>
+                <div style="min-width: 0">
+                  <h1
+                    style="
+                      margin: 0;
+                      font-size: 30px;
+                      font-weight: 300;
+                      line-height: 1.2;
+                      letter-spacing: -0.01em;
+                    "
+                  >
+                    Westbrook University
+                  </h1>
+                  <p style="margin: 4px 0 0; font-size: 13px; color: #6b6b76">
+                    Men · Division I · Pilot until Dec 15
+                  </p>
+                </div>
+              </div>
+              <section
+                aria-label="Video hours"
+                style="
+                  flex: 0 1 320px;
+                  min-width: 220px;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 8px;
+                "
+              >
+                <div
+                  style="
+                    display: flex;
+                    align-items: baseline;
+                    justify-content: space-between;
+                    gap: 12px;
+                  "
+                >
+                  <p
+                    style="
+                      margin: 0;
+                      font-size: 14px;
+                      font-weight: 500;
+                      font-variant-numeric: tabular-nums;
+                    "
+                  >
+                    18.4
+                    <span style="font-weight: 400; color: #6b6b76"
+                      >of 20 h this month</span
+                    >
+                  </p>
+                  <a
+                    href="#add"
+                    style="font-size: 12px; font-weight: 500; color: #52525b"
+                    >Add hours</a
+                  >
+                </div>
+                <div
+                  aria-hidden="true"
+                  style="
+                    height: 4px;
+                    border-radius: 999px;
+                    overflow: hidden;
+                    background: #ececf0;
+                  "
+                >
+                  <div
+                    style="
+                      width: 92%;
+                      height: 100%;
+                      border-radius: 999px;
+                      background: #3b82f6;
+                    "
+                  ></div>
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <section style="display: flex; flex-direction: column; gap: 12px">
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 16px;
+              "
+            >
+              <h2 style="margin: 0; font-size: 14px; font-weight: 500">
+                Details
+              </h2>
+              <a
+                href="#edit"
+                style="
+                  height: 30px;
+                  box-sizing: border-box;
+                  display: inline-flex;
+                  align-items: center;
+                  padding: 0 12px;
+                  border-radius: 7px;
+                  border: 1px solid #e0e0e5;
+                  font-size: 12px;
+                  font-weight: 500;
+                "
+                >Edit details</a
+              >
+            </div>
+            <dl
+              style="
+                margin: 0;
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+                gap: 16px 32px;
+              "
+            >
+              <sc-for list="{{ facts }}" as="f" hint-placeholder-count="4">
+                <div>
+                  <dt style="font-size: 12px; color: #6b6b76">{{ f.label }}</dt>
+                  <dd style="margin: 2px 0 0; font-size: 13px">
+                    {{ f.value }}
+                  </dd>
+                </div>
+              </sc-for>
+              <sc-for list="{{ links }}" as="l" hint-placeholder-count="2">
+                <div style="min-width: 0">
+                  <dt style="font-size: 12px; color: #6b6b76">{{ l.label }}</dt>
+                  <dd
+                    style="
+                      margin: 2px 0 0;
+                      display: flex;
+                      align-items: baseline;
+                      gap: 10px;
+                      font-size: 13px;
+                    "
+                  >
+                    <span
+                      style="
+                        min-width: 0;
+                        font-family:
+                          &quot;Roboto Mono&quot;, ui-monospace, monospace;
+                        font-size: 12px;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                      "
+                      >{{ l.url }}</span
+                    ><a
+                      href="#copy"
+                      style="
+                        flex-shrink: 0;
+                        font-size: 12px;
+                        font-weight: 500;
+                        color: #52525b;
+                      "
+                      >Copy</a
+                    >
+                  </dd>
+                </div>
+              </sc-for>
+            </dl>
+          </section>
+
+          <section style="display: flex; flex-direction: column; gap: 12px">
+            <div
+              style="
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                justify-content: space-between;
+                gap: 10px 16px;
+              "
+            >
+              <h2 style="margin: 0; font-size: 14px; font-weight: 500">
+                People
+                <span style="font-weight: 400; color: #6b6b76"
+                  >16 · 2 waiting to join</span
+                >
+              </h2>
+              <div style="display: flex; gap: 8px">
+                <a
+                  href="#add-player"
+                  style="
+                    height: 30px;
+                    box-sizing: border-box;
+                    display: inline-flex;
+                    align-items: center;
+                    padding: 0 12px;
+                    border-radius: 7px;
+                    border: 1px solid #e0e0e5;
+                    font-size: 12px;
+                    font-weight: 500;
+                    white-space: nowrap;
+                  "
+                  >Add player</a
+                >
+                <a
+                  href="#invite"
+                  style="
+                    height: 30px;
+                    box-sizing: border-box;
+                    display: inline-flex;
+                    align-items: center;
+                    padding: 0 12px;
+                    border-radius: 7px;
+                    border: 1px solid #e0e0e5;
+                    font-size: 12px;
+                    font-weight: 500;
+                    white-space: nowrap;
+                  "
+                  >Invite people</a
+                >
+              </div>
+            </div>
+            <div style="overflow-x: auto">
+              <div
+                style="
+                  min-width: 520px;
+                  box-sizing: border-box;
+                  padding: 8px;
+                  border-radius: 14px;
+                  background: #f5f5f7;
+                  display: flex;
+                  flex-direction: column;
+                  gap: 4px;
+                "
+              >
+                <sc-for list="{{ waiting }}" as="p" hint-placeholder-count="2">
+                  <div
+                    style="
+                      box-sizing: border-box;
+                      min-height: 44px;
+                      padding: 6px 14px;
+                      border-radius: 8px;
+                      background: #fff;
+                      display: grid;
+                      grid-template-columns:
+                        26px minmax(0, 1fr) minmax(100px, 0.5fr)
+                        160px;
+                      column-gap: 14px;
+                      align-items: center;
+                    "
+                  >
+                    <span
+                      aria-hidden="true"
+                      style="
+                        width: 26px;
+                        height: 26px;
+                        border-radius: 999px;
+                        background: #ededf0;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 10px;
+                        font-weight: 600;
+                        color: #52525b;
+                      "
+                      >{{ p.ini }}</span
+                    >
+                    <span
+                      style="
+                        min-width: 0;
+                        font-size: 13px;
+                        font-weight: 500;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                      "
+                      >{{ p.name }}</span
+                    >
+                    <span style="font-size: 12px; color: #6b6b76"
+                      >Wants to join</span
+                    >
+                    <span
+                      style="display: flex; justify-content: flex-end; gap: 6px"
+                      ><a
+                        href="#approve"
+                        style="
+                          height: 28px;
+                          display: inline-flex;
+                          align-items: center;
+                          padding: 0 11px;
+                          border-radius: 7px;
+                          background: #3b82f6;
+                          color: #fff;
+                          font-size: 12px;
+                          font-weight: 500;
+                        "
+                        >Approve</a
+                      ><a
+                        href="#decline"
+                        style="
+                          height: 28px;
+                          box-sizing: border-box;
+                          display: inline-flex;
+                          align-items: center;
+                          padding: 0 11px;
+                          border-radius: 7px;
+                          border: 1px solid #e0e0e5;
+                          font-size: 12px;
+                          font-weight: 500;
+                        "
+                        >Decline</a
+                      ></span
+                    >
+                  </div>
+                </sc-for>
+                <sc-for list="{{ people }}" as="p" hint-placeholder-count="5">
+                  <a
+                    href="#person"
+                    style="
+                      box-sizing: border-box;
+                      min-height: 44px;
+                      padding: 6px 14px;
+                      border-radius: 8px;
+                      background: #fff;
+                      display: grid;
+                      grid-template-columns:
+                        26px minmax(0, 1fr) minmax(100px, 0.5fr)
+                        160px;
+                      column-gap: 14px;
+                      align-items: center;
+                    "
+                  >
+                    <span
+                      aria-hidden="true"
+                      style="
+                        width: 26px;
+                        height: 26px;
+                        border-radius: 999px;
+                        background: #ededf0;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 10px;
+                        font-weight: 600;
+                        color: #52525b;
+                      "
+                      >{{ p.ini }}</span
+                    >
+                    <span
+                      style="
+                        font-size: 13px;
+                        font-weight: 500;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                      "
+                      >{{ p.name }}</span
+                    >
+                    <span style="font-size: 12px; color: #6b6b76"
+                      >{{ p.role }}</span
+                    >
+                    <span
+                      style="
+                        font-size: 12px;
+                        text-align: right;
+                        white-space: nowrap;
+                      "
+                    >
+                      <sc-if
+                        value="{{ p.has }}"
+                        hint-placeholder-val="{{ true }}"
+                        ><span style="color: #6b6b76"
+                          >{{ p.active }}</span
+                        ></sc-if
+                      >
+                      <sc-if
+                        value="{{ p.none }}"
+                        hint-placeholder-val="{{ false }}"
+                        ><span style="font-weight: 500"
+                          >No account · Invite</span
+                        ></sc-if
+                      >
+                    </span>
+                  </a>
+                </sc-for>
+                <div style="padding: 8px 8px 4px 14px; font-size: 12px">
+                  <a href="#more" style="font-weight: 500; color: #52525b"
+                    >Show 10 more</a
+                  >
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section style="display: flex; flex-direction: column; gap: 12px">
+            <div
+              style="
+                display: flex;
+                align-items: baseline;
+                justify-content: space-between;
+                gap: 16px;
+              "
+            >
+              <h2 style="margin: 0; font-size: 14px; font-weight: 500">
+                Latest matches
+              </h2>
+              <a
+                href="#matches"
+                style="
+                  display: inline-flex;
+                  align-items: center;
+                  gap: 2px;
+                  font-size: 12px;
+                  color: #6b6b76;
+                "
+                >All 41 in Matches<svg
+                  aria-hidden="true"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#9a9aa3"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="m9 6 6 6-6 6"></path></svg
+              ></a>
+            </div>
+            <div
+              style="
+                overflow-x: auto;
+                box-sizing: border-box;
+                padding: 8px;
+                border-radius: 14px;
+                background: #f5f5f7;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+              "
+            >
+              <sc-for list="{{ matches }}" as="m" hint-placeholder-count="3">
+                <a
+                  href="#m"
+                  style="
+                    box-sizing: border-box;
+                    min-width: 520px;
+                    min-height: 44px;
+                    padding: 6px 14px;
+                    border-radius: 8px;
+                    background: #fff;
+                    display: grid;
+                    grid-template-columns:
+                      minmax(0, 1fr) minmax(180px, 0.5fr)
+                      160px;
+                    column-gap: 14px;
+                    align-items: center;
+                  "
+                >
+                  <span
+                    style="
+                      font-size: 13px;
+                      font-weight: 500;
+                      overflow: hidden;
+                      text-overflow: ellipsis;
+                      white-space: nowrap;
+                    "
+                    >{{ m.players }}</span
+                  >
+                  <span
+                    style="
+                      display: flex;
+                      align-items: center;
+                      gap: 8px;
+                      font-size: 12px;
+                      color: #525252;
+                      white-space: nowrap;
+                    "
+                  >
+                    <sc-if
+                      value="{{ m.fail }}"
+                      hint-placeholder-val="{{ false }}"
+                      ><span
+                        aria-hidden="true"
+                        style="
+                          width: 14px;
+                          height: 14px;
+                          border-radius: 999px;
+                          background: rgba(229, 24, 55, 0.08);
+                          display: inline-flex;
+                          align-items: center;
+                          justify-content: center;
+                        "
+                        ><svg
+                          width="8"
+                          height="8"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="#e51837"
+                          stroke-width="3.2"
+                          stroke-linecap="round"
+                        >
+                          <path d="M6 6l12 12M18 6 6 18"></path></svg></span
+                    ></sc-if>
+                    <sc-if
+                      value="{{ m.now }}"
+                      hint-placeholder-val="{{ false }}"
+                      ><span
+                        aria-hidden="true"
+                        style="
+                          width: 14px;
+                          height: 14px;
+                          box-sizing: border-box;
+                          border-radius: 999px;
+                          border: 1.5px solid #e5e5ea;
+                          border-top-color: #0d0d0d;
+                        "
+                      ></span
+                    ></sc-if>
+                    <sc-if value="{{ m.ver }}" hint-placeholder-val="{{ true }}"
+                      ><img
+                        src="/_blob/8dc400743f71ee0897f4461b274b65d4"
+                        alt=""
+                        style="width: 14px; height: 14px"
+                    /></sc-if>
+                    {{ m.status }}
+                  </span>
+                  <span
+                    style="
+                      font-size: 12px;
+                      color: #6b6b76;
+                      text-align: right;
+                      white-space: nowrap;
+                    "
+                    >{{ m.when }}</span
+                  >
+                </a>
+              </sc-for>
+            </div>
+          </section>
+
+          <a
+            href="#activity"
+            style="
+              align-self: flex-start;
+              display: inline-flex;
+              align-items: center;
+              gap: 2px;
+              font-size: 12px;
+              color: #6b6b76;
+            "
+            >Activity log · last: R. Dunn invited 2 players, yesterday<svg
+              aria-hidden="true"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#9a9aa3"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="m9 6 6 6-6 6"></path></svg
+          ></a>
+        </main>
+      </div>
+    </x-dc>
+    <script
+      type="text/x-dc"
+      data-dc-script
+      data-props='{"$preview":{"width":1360,"height":1040}}'
+    >
+      class Component extends DCLogic {
+        renderVals() {
+          const f = (label, value) => ({ label: label, value: value });
+          const w = (ini, name) => ({ ini: ini, name: name });
+          const p = (ini, name, role, active) => ({ ini: ini, name: name, role: role, active: active, has: !!active, none: !active });
+          const m = (players, mark, status, when) => ({ players: players, fail: mark === 'fail', now: mark === 'now', ver: mark === 'ver', status: status, when: when });
+          return {
+            facts: [
+              f('Conference', 'Northeast Conference'),
+              f('Time zone', 'Eastern'),
+              f('Who can upload', 'Owner and coaches'),
+              f('Roster', 'Private')
+            ],
+            links: [
+              { label: 'Player link, anyone can join', url: '/join/8f3kq2…' },
+              { label: 'Coach link, recorded contacts', url: '/claim/westbrook-m' }
+            ],
+            waiting: [w('JW', 'J. Whitfield'), w('AM', 'A. Moreno')],
+            people: [
+              p('RD', 'R. Dunn', 'Owner', 'Active today'),
+              p('KI', 'K. Iyer', 'Coach', 'Active 3 days ago'),
+              p('RO', 'R. Okafor', 'Player', 'Active today'),
+              p('CA', 'C. Amato', 'Player', 'Active yesterday'),
+              p('AC', 'A. Castell', 'Player', '')
+            ],
+            matches: [
+              m('J. Whitfield vs A. Moreno', 'fail', 'Analysis failed', '6 h ago'),
+              m('R. Okafor vs D. Lindqvist', 'now', 'Being labelled by you', '8 h ago'),
+              m('C. Amato vs N. Fields', 'ver', 'Published · to check', '2 days ago')
+            ]
+          };
+        }
+      }
+    </script>
+  </body>
+</html>
