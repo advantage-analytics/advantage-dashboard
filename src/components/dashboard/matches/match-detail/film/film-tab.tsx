@@ -56,6 +56,7 @@ import {
 import { usePublishFilmHead } from "@/components/dashboard/matches/match-detail/film-head-context";
 import { useOptionalMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import { usePendingFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
+import { bandLabelsOf } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import {
   FILTER_RAIL_ID,
@@ -295,6 +296,12 @@ function FilmRoom({
   // The shared context plus the match's lob shots, for a landed Net game or
   // Lob cut (`useFilmFilterContext`).
   const filterContext = useFilmFilterContext();
+  // Stable across a playback tick, so the memo'd filter strip that reads it
+  // does not re-render on every `currentTime` update.
+  const bandLabels = useMemo(
+    () => bandLabelsOf(filterContext),
+    [filterContext],
+  );
   const [savedOnly, setSavedOnly] = useState<boolean>(
     // Never on a shared link: its reader has no bookmarks, so a pasted
     // `?saved` would open on "You haven't saved a point yet".
@@ -1211,6 +1218,7 @@ function FilmRoom({
         shown={filteredPoints.length}
         total={points.length}
         focusAfterClear={filterRail.focusTrigger}
+        bandLabels={bandLabels}
       />
       <div
         ref={clockRef}

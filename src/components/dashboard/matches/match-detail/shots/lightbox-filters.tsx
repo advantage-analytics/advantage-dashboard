@@ -6,6 +6,7 @@ import {
 import {
   activeFilterCount,
   EMPTY_MATCH_FILTERS,
+  type FilterBandLabels,
   type MatchFilterAvailability,
   type MatchFilters,
 } from "../match-filters/model";
@@ -119,6 +120,9 @@ export interface LightboxAdvancedFilters {
   /** The court's count under `filters`. Omitted (the season, whose points
    *  stay on the server), the advanced panel shows no count. */
   count?: (filters: VizFilters) => number;
+  /** What Contact and Landed in print their options from — the bands the
+   *  court is drawn with. Omitted, the default bands in feet. */
+  bandLabels?: FilterBandLabels;
 }
 
 /**

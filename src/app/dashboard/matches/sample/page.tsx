@@ -180,7 +180,11 @@ export default async function SampleMatchPage({ searchParams }: PageProps) {
         <Suspense fallback={<MatchReportSkeleton />}>
           {/* The applied match filters sit ABOVE the view switch, seeded from
               `?f=` as read here, so the first client render matches this one. */}
-          <MatchFiltersProvider initialQuery={query[MATCH_FILTERS_PARAM]}>
+          <MatchFiltersProvider
+            initialQuery={query[MATCH_FILTERS_PARAM]}
+            bands={DEFAULT_BANDS}
+            unit={preferences.unit}
+          >
             <MatchReportProvider
               matchId={SAMPLE_MATCH_ID}
               summary={summary}

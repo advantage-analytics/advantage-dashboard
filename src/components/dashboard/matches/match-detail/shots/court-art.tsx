@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { CourtBandZones } from "./viz-bands-overlay";
 import { useId, useMemo, type ReactNode } from "react";
 import { ZONES, type ZoneKey, type ZoneStats } from "@/lib/data/serve-zones";
@@ -213,7 +214,12 @@ function CourtMark({
       }
       aria-label={interaction?.labelFor(dot)}
       aria-pressed={interaction ? interaction.selectedId === dot.id : undefined}
-      className={interaction ? "cursor-pointer outline-none" : undefined}
+      // A mark that joins the court (a card switching players, a filter let
+      // go) fades in; one already drawn keeps its node, keyed by id.
+      className={cn(
+        "animate-[fadeIn_var(--duration-hover)_var(--ease-chart)]",
+        interaction && "cursor-pointer outline-none",
+      )}
       onMouseEnter={
         interaction
           ? (event) =>

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { ChartTooltip } from "../chart-tooltip";
 import { statRowTooltip } from "./viz-readout";
 import type { StatPick } from "./stat-cut";
+import { useTweenedNumber } from "./use-tweened-number";
 import {
   statRowAnnouncement,
   statsAreEmpty,
@@ -221,41 +222,14 @@ export function LightboxStats({
             data-stat-summary=""
             className="grid grid-cols-2 gap-x-3 gap-y-4"
           >
-            {figures.map((f) => {
-              const pct =
-                f.of === 0 ? null : Math.round((f.count / f.of) * 100);
-              return (
-                <p key={f.key} className="m-0 flex min-w-0 flex-col gap-0.5">
-                  <span className="sr-only">
-                    {f.label}: {pct === null ? "none yet" : `${pct}%`},{" "}
-                    {f.count} of {f.of}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="text-[16px] leading-[1.35] text-[var(--ink-900)] tabular-nums"
-                  >
-                    {pct === null ? "—" : `${pct}%`}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="text-micro text-[var(--ink-600)] tabular-nums"
-                  >
-                    {f.label} · {f.count} of {f.of}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="relative mt-1.5 block h-1 rounded-[2px] bg-[var(--ink-100)]"
-                  >
-                    {pct !== null && (
-                      <i
-                        className="absolute inset-y-0 left-0 rounded-[2px] bg-[var(--blue)]"
-                        style={{ width: `${pct}%` }}
-                      />
-                    )}
-                  </span>
-                </p>
-              );
-            })}
+            {figures.map((f) => (
+              <SummaryFigure
+                key={f.key}
+                label={f.label}
+                count={f.count}
+                of={f.of}
+              />
+            ))}
           </div>
           <GroupSpacer edge="between" />
         </>
@@ -386,6 +360,9 @@ function StatRowButton({
 }) {
   const pct = row.winPct;
   const empty = row.count === 0;
+  const shownPct = useTweenedNumber(pct);
+  const shownWon = useTweenedNumber(row.won);
+  const shownCount = useTweenedNumber(row.count);
   return (
     <button
       type="button"
@@ -419,7 +396,7 @@ function StatRowButton({
           {row.label}
         </span>
         <span className="text-micro text-right tabular-nums">
-          {row.share ? row.count : `${row.won} of ${row.count}`}
+          {row.share ? shownCount : `${shownWon} of ${shownCount}`}
         </span>
         <span
           className={cn(
@@ -429,20 +406,74 @@ function StatRowButton({
               : "text-[var(--ink-500)]",
           )}
         >
-          {pct === null ? "—" : `${pct}%`}
+          {shownPct === null ? "—" : `${shownPct}%`}
         </span>
       </span>
       <span
         aria-hidden="true"
         className="relative block h-1 rounded-[2px] bg-[var(--ink-100)]"
       >
-        {pct !== null && (
-          <i
-            className="absolute inset-y-0 left-0 rounded-[2px] bg-[var(--blue)]"
-            style={{ width: `${pct}%` }}
-          />
-        )}
+        <StatBar pct={pct} />
       </span>
     </button>
+  );
+}
+
+/**
+ * A row's or a figure's bar. Always mounted, so a new rate GLIDES to its
+ * width (`--duration-reveal` on `--ease-chart`, the same count the figure
+ * beside it runs) instead of the bar being re-drawn; no rate is a width of
+ * 0, which collapses it. Width, not a scale: the fill sits absolutely in a
+ * fixed track, so nothing around it reflows, and its rounded ends stay
+ * round. Reduced motion snaps it.
+ */
+function StatBar({ pct }: { pct: number | null }) {
+  return (
+    <i
+      className="absolute inset-y-0 left-0 rounded-[2px] bg-[var(--blue)] transition-[width] duration-[var(--duration-reveal)] ease-[var(--ease-chart)] motion-reduce:transition-none"
+      style={{ width: `${pct ?? 0}%` }}
+    />
+  );
+}
+
+/** One of the summary's two figures ("51% · Points won · 113 of 223"),
+ *  counting to a new value as the rows do. */
+function SummaryFigure({
+  label,
+  count,
+  of,
+}: {
+  label: string;
+  count: number;
+  of: number;
+}) {
+  const pct = of === 0 ? null : Math.round((count / of) * 100);
+  const shownPct = useTweenedNumber(pct);
+  const shownCount = useTweenedNumber(count);
+  const shownOf = useTweenedNumber(of);
+  return (
+    <p className="m-0 flex min-w-0 flex-col gap-0.5">
+      <span className="sr-only">
+        {label}: {pct === null ? "none yet" : `${pct}%`}, {count} of {of}
+      </span>
+      <span
+        aria-hidden="true"
+        className="text-[16px] leading-[1.35] text-[var(--ink-900)] tabular-nums"
+      >
+        {shownPct === null ? "—" : `${shownPct}%`}
+      </span>
+      <span
+        aria-hidden="true"
+        className="text-micro text-[var(--ink-600)] tabular-nums"
+      >
+        {label} · {shownCount} of {shownOf}
+      </span>
+      <span
+        aria-hidden="true"
+        className="relative mt-1.5 block h-1 rounded-[2px] bg-[var(--ink-100)]"
+      >
+        <StatBar pct={pct} />
+      </span>
+    </p>
   );
 }

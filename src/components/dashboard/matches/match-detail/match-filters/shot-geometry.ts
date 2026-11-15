@@ -1,6 +1,14 @@
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 
-import { NET_Y_M } from "../film/film-court";
+import {
+  makeContactBucketer,
+  makeDepthBucketer,
+  resolveDepthDividersFt,
+  type BandSettings,
+} from "@/lib/data/viz-bands";
+
+import { SINGLES_HALF_WIDTH_M } from "@/lib/services/splitstep/derivation/court";
+import { COURT_LENGTH_M, NET_Y_M } from "../film/film-court";
 
 /**
  * Per-shot court geometry for the match filters — pure, no React.
@@ -205,4 +213,72 @@ export function inferHand(
     }
   }
   return handFromHalves(halves);
+}
+
+/* ── Contact and landing bands ──────────────────────────────────────────── */
+
+/**
+ * The filters' Contact and Landed in groups bucket a shot by the viewer's
+ * own bands (`BandSettings`, `lib/data/viz-bands.ts`) — the same dividers,
+ * keys and rules the Visualizations court draws and counts with, so
+ * "Landed in Deep" keeps exactly the marks the court's Deep band counted.
+ * The values are the bands' row keys (`contactBandRows` /
+ * `depthBandRows`), never a distance, so a filter survives a unit switch.
+ */
+export type ContactBand = "inside" | "near" | "far";
+export type LandedBand = "deep" | "mid" | "short";
+
+const CONTACT_BAND_KEYS: readonly ContactBand[] = ["inside", "near", "far"];
+const LANDED_BAND_KEYS: readonly LandedBand[] = ["deep", "mid", "short"];
+
+/** Singles sideline from the centre line — a landing past it is out. */
+const IN_COURT_EPS = 1e-6;
+
+/**
+ * Signed metres behind (+) or inside (−) the hitter's OWN baseline — the
+ * end they stood at, read off the contact itself (`contactMetrics` in
+ * `shots/viz-model.ts`). Null when unmeasured.
+ */
+function contactBehindM(contactY: number | null | undefined) {
+  if (!isNum(contactY)) return null;
+  return contactY > NET_Y_M ? contactY - COURT_LENGTH_M : -contactY;
+}
+
+/** The contact band a shot was struck from, or null when unmeasured. */
+export function contactBandOf(
+  contactY: number | null | undefined,
+  bands: BandSettings,
+): ContactBand | null {
+  const behind = contactBehindM(contactY);
+  if (behind === null) return null;
+  return CONTACT_BAND_KEYS[makeContactBucketer(bands)(behind)] ?? null;
+}
+
+/**
+ * The depth band a shot LANDED IN, or null when it did not land in the
+ * singles court (out, into the net, a landing past a line), was not
+ * measured, or no depth bands are set. Depth is metres past the net in the
+ * direction of travel, the hitter's end read off the contact — or, with no
+ * contact, off the landing (a landing on the low-y half was hit from the
+ * high-y end), the fallback the return placement court uses.
+ */
+export function landedBandOf(
+  shot: {
+    contactY: number | null | undefined;
+    landingX: number | null | undefined;
+    landingY: number | null | undefined;
+    result: string | null | undefined;
+  },
+  bands: BandSettings,
+): LandedBand | null {
+  const { contactY, landingX, landingY } = shot;
+  if (!isNum(landingX) || !isNum(landingY)) return null;
+  const result = (shot.result ?? "").trim().toLowerCase();
+  if (result === "out" || result === "net") return null;
+  const farEnd = isNum(contactY) ? contactY > NET_Y_M : !(landingY > NET_Y_M);
+  const depthM = farEnd ? NET_Y_M - landingY : landingY - NET_Y_M;
+  if (depthM < -IN_COURT_EPS || depthM > NET_Y_M + IN_COURT_EPS) return null;
+  if (Math.abs(landingX) > SINGLES_HALF_WIDTH_M + IN_COURT_EPS) return null;
+  if (resolveDepthDividersFt(bands).length < 2) return null;
+  return LANDED_BAND_KEYS[makeDepthBucketer(bands)(depthM)] ?? null;
 }

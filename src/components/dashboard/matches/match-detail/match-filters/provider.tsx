@@ -15,8 +15,12 @@ import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-m
 import type { LandedFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 
+import type { BandSettings } from "@/lib/data/viz-bands";
+import type { DistanceUnit } from "@/lib/format/distance";
+
 import {
   applyMatchFilters,
+  bandLabelsOf,
   buildFilterContext,
   EMPTY_MATCH_FILTERS,
   filtersEqual,
@@ -26,6 +30,7 @@ import {
   matchFiltersQuery,
   optionAvailability,
   parseMatchFilters,
+  type FilterBandLabels,
   type MatchFilterAvailability,
   type MatchFilterContext,
   type MatchFilters,
@@ -126,18 +131,28 @@ function readLocationFilters(): MatchFilters {
 interface MatchFiltersProviderProps {
   /** `searchParams[MATCH_FILTERS_PARAM]`, read by the Server Component page. */
   initialQuery?: MatchFiltersQuery;
+  /**
+   * The viewer's saved bands and Units preference, which Contact and Landed
+   * in bucket and label by — the same `bandSettings`/`unit` the page hands
+   * `MatchReportProvider` (this provider sits above it). Absent: the default
+   * bands, in feet.
+   */
+  bands?: BandSettings;
+  unit?: DistanceUnit;
   children: ReactNode;
 }
 
 export function MatchFiltersProvider({
   initialQuery,
+  bands,
+  unit,
   children,
 }: MatchFiltersProviderProps) {
   const { match, points } = useMatchData();
   const youIsPlayer1 = useMatchSides().you.isPlayer1;
   const context = useMemo(
-    () => buildFilterContext(match, points, youIsPlayer1),
-    [match, points, youIsPlayer1],
+    () => ({ ...buildFilterContext(match, points, youIsPlayer1), bands, unit }),
+    [match, points, youIsPlayer1, bands, unit],
   );
   const [filters, setFiltersState] = useState<MatchFilters>(() =>
     parseMatchFilters(firstValue(initialQuery)),
@@ -284,6 +299,8 @@ export interface FiltersPanelData {
   youName: string;
   oppName: string;
   total: number;
+  /** What Contact and Landed in print their options from. */
+  bandLabels: FilterBandLabels;
 }
 
 /**
@@ -307,5 +324,6 @@ export function useFiltersPanelData(): FiltersPanelData {
     youName: sides.you.shortName,
     oppName: sides.opp.shortName,
     total: points.length,
+    bandLabels: bandLabelsOf(context),
   };
 }

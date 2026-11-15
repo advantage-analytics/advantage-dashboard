@@ -1,5 +1,6 @@
 "use client";
 
+import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import type { PlayerChipLabels } from "@/components/dashboard/matches/match-detail/shots/player-chip-labels";
 import {
   lazy,
@@ -228,6 +229,7 @@ function emptyCourt(
     },
     stats: { title: label, subtitle: "", groups: [], sentence: null, total: 0 },
     bandZones: null,
+    bands: last?.bands ?? DEFAULT_BANDS,
     subjectName: "",
     unit: last?.unit ?? "ft",
     hasFilters: false,
@@ -366,6 +368,8 @@ export function SeasonVizLightbox({
   // server applies it to each match.
   const advancedOptions = data?.advancedOptions ?? null;
   const names = data?.names ?? null;
+  const bandSettings = data?.bands ?? null;
+  const bandUnit = data?.unit ?? null;
   const advanced = useMemo(
     () =>
       advancedOptions === null || names === null
@@ -374,8 +378,12 @@ export function SeasonVizLightbox({
             availability: advancedAvailability(advancedOptions),
             youName: names.you,
             oppName: names.opponent,
+            bandLabels:
+              bandSettings !== null && bandUnit !== null
+                ? { bands: bandSettings, unit: bandUnit }
+                : undefined,
           },
-    [advancedOptions, names],
+    [advancedOptions, names, bandSettings, bandUnit],
   );
   const statRowDots = useMemo(() => {
     const sets = new Map(
