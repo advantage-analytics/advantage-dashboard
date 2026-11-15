@@ -1049,19 +1049,21 @@ test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
       {
         key: "depth",
         label: "Depth",
-        // Order is the pre-Phase-2B `sortRows`' own: win rate, then count,
-        // then label — "0–5 ft behind" sorts before "Inside the baseline".
+        // Depth rows keep the bands' own order, nearest the net first —
+        // "Inside the baseline", then further behind it — whatever each
+        // one's win rate (2026-11-14; they used to sort by win rate, which
+        // put "0–5 ft behind" first here on a label tie-break).
         rows: [
           {
-            key: "near",
-            label: "0–5 ft behind",
+            key: "inside",
+            label: "Inside the baseline",
             count: 1,
             won: 1,
             winPct: 100,
           },
           {
-            key: "inside",
-            label: "Inside the baseline",
+            key: "near",
+            label: "0–5 ft behind",
             count: 1,
             won: 1,
             winPct: 100,
@@ -1119,7 +1121,7 @@ test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
     expect(landed!.count).toBeLessThanOrEqual(stats.total);
   });
 
-  test("regression: returnContact with DEFAULT_BANDS is byte-identical to the pre-Phase-2B output, row ORDER included", () => {
+  test("regression: returnContact with DEFAULT_BANDS keeps the pre-Phase-2B rows and figures, with Depth in band order", () => {
     const stats = computeVizStats(
       contactPts,
       "returnContact",
@@ -2900,4 +2902,26 @@ test.describe("errors cut on judged vs unjudged matches", () => {
       ).toEqual(["Unforced errors", "Forced errors", "Double faults"]);
     }
   });
+});
+
+test("a Depth group stays Deep, Mid, Short however the win rates fall", () => {
+  // One landing per band, won only in the shortest: by win rate this would
+  // read Short, then the two 0% rows by label. It reads as the court does.
+  for (const cut of ["returnPlacement", "rallyPlacement"] as const) {
+    const stats = computeVizStats(
+      [],
+      cut,
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
+    const depth = stats.groups.find((group) => group.key === "depth");
+    expect(depth?.rows.map((row) => row.label.split(" ")[0])).toEqual([
+      "Deep",
+      "Mid",
+      "Short",
+    ]);
+  }
 });

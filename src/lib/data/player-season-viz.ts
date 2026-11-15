@@ -399,6 +399,7 @@ export function mergeVizStats(
             ? null
             : Math.round((row.won / row.count) * 100),
       })),
+      key,
     ),
   }));
   return {

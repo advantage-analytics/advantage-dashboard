@@ -81,7 +81,7 @@ const BAND_RATE_X =
 /** How far the wash runs past the art on each side: the stage shows apron
  *  beyond the art's own box whenever it is wider than the court, and a wash
  *  that stopped there read as a box drawn on the green. */
-const BAND_BLEED = 600;
+export const BAND_BLEED = 600;
 
 /** How far below a band's top edge its label sits, and the height below
  *  which the label centres in the band instead (a thin band would otherwise
