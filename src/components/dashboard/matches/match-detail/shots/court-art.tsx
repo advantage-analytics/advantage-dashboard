@@ -834,6 +834,9 @@ export function CourtArt({
               y2={SERVE_COURT.baselineY}
               stroke={LINE_COLOR}
               strokeWidth={SERVE_COURT.lineWidth}
+              // Square caps fill the two corners the butt-ended sidelines
+              // leave open (see lightbox-court.tsx's CourtLines).
+              strokeLinecap="square"
             />
             <line
               x1={SERVE_COURT.doublesLeft}
