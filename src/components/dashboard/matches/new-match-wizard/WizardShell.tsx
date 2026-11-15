@@ -17,6 +17,7 @@
 import type { ReactNode, RefObject } from "react";
 import Link from "next/link";
 import { advButton } from "@/lib/ui/adv-button";
+import { controlName } from "@/lib/ui/control-name";
 import { cn } from "@/lib/utils";
 import { StepIndicator } from "./StepIndicator";
 import { CONTENT_CLS } from "./styles";
@@ -132,6 +133,7 @@ export function WizardShell({
               onClick={back}
               // Enter here goes back, never Continue — see `isWizardExit`.
               data-wizard-exit
+              {...controlName("wizard_back")}
               className={FOOTER_LINK_CLS}
             >
               Back
@@ -142,7 +144,11 @@ export function WizardShell({
             /* Esc is deliberately inert on step 1 and the breadcrumb is not
                obviously an exit — without this the flow has no way out that
                looks like one. */
-            <Link href={cancelHref} className={FOOTER_LINK_CLS}>
+            <Link
+              href={cancelHref}
+              {...controlName("wizard_cancel")}
+              className={FOOTER_LINK_CLS}
+            >
               Cancel
             </Link>
           )}
@@ -165,6 +171,7 @@ export function WizardShell({
             onClick={onContinue}
             disabled={continueDisabled}
             data-wizard-continue
+            {...controlName("wizard_continue")}
             className={advButton("primary", "md")}
           >
             {continueLabel}

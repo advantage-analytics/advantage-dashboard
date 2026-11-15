@@ -427,6 +427,9 @@ const ORDER = [
   "error",
 ] as const;
 
+/** The option filters' keys, in strip order — `OPTIONS` is their vocabulary. */
+export const VIZ_OPTION_KEYS: readonly string[] = ORDER;
+
 /**
  * The advanced (`MatchFilters`) half of `VizFilters`, in
  * `serializeMatchFilters`' compact form. Its own key, never the Video tab's

@@ -1,4 +1,11 @@
-import { safeErrorMessage, secondsSince, toMb, track } from "@/lib/analytics";
+import {
+  safeErrorMessage,
+  secondsSince,
+  toMb,
+  track,
+  type VideoFacts,
+} from "@/lib/analytics";
+import type { VideoProbe } from "@/lib/video/probe";
 
 /**
  * Upload-funnel analytics for the wizard (`upload_*`, `video_selected`,
@@ -60,16 +67,40 @@ export function trackUploadStepViewed(view: {
   });
 }
 
-export function trackVideoSelected(file: File, durationSec: number | null) {
+/** A finite number to two decimals, or null. */
+function measured(value: number | null | undefined): number | null {
+  return value != null && Number.isFinite(value)
+    ? Math.round(value * 100) / 100
+    : null;
+}
+
+/**
+ * The probe's measurements as event properties. A refusal's sentence already
+ * quotes the one number it refused on; these are the others, so "was the file
+ * that failed on frame rate at least 1080p, and how long was it" has an answer.
+ */
+function videoFacts(probe: VideoProbe | null | undefined): VideoFacts {
+  return {
+    video_width: measured(probe?.width),
+    video_height: measured(probe?.height),
+    video_fps: measured(probe?.fps),
+    video_average_fps: measured(probe?.averageFps),
+    video_duration_sec:
+      probe && probe.durationSeconds > 0
+        ? Math.round(probe.durationSeconds)
+        : null,
+  };
+}
+
+export function trackVideoSelected(file: File, probe: VideoProbe | null) {
   selectedVideoBytes = file.size;
+  const facts = videoFacts(probe);
   track("video_selected", {
     file_size_mb: toMb(file.size),
-    duration_sec:
-      durationSec != null && Number.isFinite(durationSec)
-        ? Math.round(durationSec)
-        : null,
+    duration_sec: facts.video_duration_sec,
     // The container type only; the file NAME is never sent.
     mime_type: file.type || "unknown",
+    ...facts,
   });
 }
 
@@ -114,14 +145,25 @@ export function trackUploadFailed(
     step,
     error_message: safeErrorMessage(error),
     file_size_mb: bytes == null ? null : toMb(bytes),
+    ...videoFacts(null),
   });
 }
 
-/** A picked video the wizard refused or could not read — before any upload. */
-export function trackVideoRejected(step: string, error: unknown, file: File) {
+/**
+ * A picked video the wizard refused or could not read — before any upload.
+ * `probe` is what the validator measured before refusing; absent when the file
+ * could not be read at all.
+ */
+export function trackVideoRejected(
+  step: string,
+  error: unknown,
+  file: File,
+  probe?: VideoProbe | null,
+) {
   track("upload_failed", {
     step,
     error_message: safeErrorMessage(error),
     file_size_mb: toMb(file.size),
+    ...videoFacts(probe),
   });
 }

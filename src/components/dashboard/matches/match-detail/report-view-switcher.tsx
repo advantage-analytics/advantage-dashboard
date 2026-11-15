@@ -7,6 +7,7 @@ import {
   type ReportView,
 } from "@/components/dashboard/matches/match-detail/report-view";
 import { cn } from "@/lib/utils";
+import { controlName } from "@/lib/ui/control-name";
 
 export const VIEW_ICONS: Record<ReportView, LucideIcon> = {
   statistics: Table2,
@@ -62,6 +63,7 @@ export function MatchReportViewSwitcher() {
               type="button"
               role="tab"
               aria-selected={isActive}
+              {...controlName(`report_tab_${view.value}`)}
               data-tour={
                 view.value === "shots" || view.value === "film"
                   ? view.value
