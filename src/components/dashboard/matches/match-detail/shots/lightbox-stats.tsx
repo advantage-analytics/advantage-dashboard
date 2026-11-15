@@ -2,7 +2,7 @@ import { Fragment, useState } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { ChartTooltip } from "../chart-tooltip";
-import { statRowTooltip } from "./viz-readout";
+import { statRowTooltip, wonFigureLabel } from "./viz-readout";
 import type { StatPick } from "./stat-cut";
 import { useTweenedNumber } from "./use-tweened-number";
 import {
@@ -63,13 +63,23 @@ interface Figure {
  * displayed groups, since the serve's Deuce / Ad split halves the pool — and
  * is left out for the errors cut, where every row is a lost point
  * (`share`). Landed in only for a cut that lands (`VizStats.landed`).
+ *
+ * The first figure is named for what it counts. A rally cut's rows count
+ * shots, several to a point (`marksAreShots`), so "Points won · 124 of 233"
+ * over 233 shots named the wrong thing — right under a header reading "233
+ * shots". There it is "Shots won", the words the rows' own tooltips use.
  */
-function summaryFigures(stats: VizStats): Figure[] {
+function summaryFigures(stats: VizStats, cut: Cut): Figure[] {
   const figures: Figure[] = [];
   const first = stats.groups.find((g) => g.rows.length > 0);
   if (first && !first.rows.some((r) => r.share)) {
     const { count: of, won } = groupTotals(first);
-    figures.push({ key: "won", label: "Points won", count: won, of });
+    figures.push({
+      key: "won",
+      label: wonFigureLabel(cut),
+      count: won,
+      of,
+    });
   }
   if (stats.landed) {
     figures.push({
@@ -146,7 +156,7 @@ export function LightboxStats({
     );
   }
   const groups = displayGroups(stats, cut);
-  const figures = summaryFigures(stats);
+  const figures = summaryFigures(stats, cut);
   // The tooltip's words, read off the rows as they are now — a click that
   // keeps the row turns its hint to "Click to show all again" in place.
   const tipGroup =
@@ -257,6 +267,7 @@ export function LightboxStats({
                   <li key={row.key}>
                     <StatRowButton
                       row={row}
+                      cut={cut}
                       best={
                         bestPct !== null &&
                         row.count > 0 &&
@@ -345,12 +356,15 @@ function GroupSpacer({ edge }: { edge: "top" | "between" | "bottom" }) {
 
 function StatRowButton({
   row,
+  cut,
   best,
   pressed,
   onClick,
   onHover,
 }: {
   row: StatRow;
+  /** The cut the row belongs to: it decides the announcement's noun. */
+  cut: Cut;
   /** The group's best win rate: its % reads 13/500 ink-900, the rest grey. */
   best: boolean;
   pressed: boolean;
@@ -367,7 +381,7 @@ function StatRowButton({
     <button
       type="button"
       aria-pressed={pressed}
-      aria-label={statRowAnnouncement(row)}
+      aria-label={statRowAnnouncement(row, cut)}
       disabled={empty}
       onClick={onClick}
       onPointerEnter={(e) => onHover(e.currentTarget)}

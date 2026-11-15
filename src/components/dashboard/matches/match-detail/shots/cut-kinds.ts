@@ -21,6 +21,17 @@ export function isLandingCut(cut: Cut): boolean {
   return cut === "serve" || isPlacementCut(cut);
 }
 
+/**
+ * Cuts whose marks are SHOTS, several to a point — the two rally cuts. On
+ * every other cut one mark is one point (a serve, a return, the error that
+ * ended it), so a count of marks is a count of points and may be worded as
+ * one. Here it may not: "97 points" over 97 rally shots from 77 points says
+ * something untrue. Anything that words a count of marks asks this first.
+ */
+export function marksAreShots(cut: Cut): boolean {
+  return cut === "rallyPlacement" || cut === "rallyPosition";
+}
+
 /** Which half a cut's bands describe — `null` for Serve (service boxes, no
  * bands) and Errors (shares of the errors, not points won per band). */
 export function bandKindFor(cut: Cut): "depth" | "contact" | null {

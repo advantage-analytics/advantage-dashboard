@@ -51,7 +51,7 @@ import {
   type MatchFilterKey,
   type MatchFilters,
 } from "../match-filters/model";
-import { bandKindFor } from "./cut-kinds";
+import { bandKindFor, marksAreShots } from "./cut-kinds";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
@@ -1606,7 +1606,9 @@ export interface StatRow {
 
 /**
  * The single accessible sentence for one stat row — "Crosscourt: 100% of 4
- * points won" / "Ad T: no points". The only place this string is built:
+ * points won" / "Ad T: no points", and on a rally cut, whose rows count
+ * shots (`marksAreShots`), "Deep: 72% of 50 shots won" / "Short: no shots" —
+ * the noun the row's own tooltip uses. The only place this string is built:
  * `stats-card.tsx` renders it verbatim into a visually-hidden node and
  * hides its own visible label/number markup from assistive tech, so a
  * screen reader announces this sentence exactly once per row, never the
@@ -1614,13 +1616,14 @@ export interface StatRow {
  * rows through `computeVizStats` (not by hand) so a card row can never ship
  * with an empty label again the way the live app briefly did.
  */
-export function statRowAnnouncement(row: StatRow): string {
+export function statRowAnnouncement(row: StatRow, cut: Cut): string {
   if (row.share) {
     if (row.count === 0) return `${row.label}: no errors`;
     return `${row.label}: ${row.winPct}% of errors, ${row.count}`;
   }
-  if (row.winPct === null) return `${row.label}: no points`;
-  return `${row.label}: ${row.winPct}% of ${row.count} points won`;
+  const noun = marksAreShots(cut) ? "shots" : "points";
+  if (row.winPct === null) return `${row.label}: no ${noun}`;
+  return `${row.label}: ${row.winPct}% of ${row.count} ${noun} won`;
 }
 
 export interface StatGroup {
