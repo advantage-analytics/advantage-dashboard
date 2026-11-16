@@ -61,8 +61,10 @@ test.describe("matchDraftFromPrefill", () => {
       { player: [6, 3, 7], opponent: [4, 6, 5] },
     );
     expect(draft.provider).toBe("splitstep");
-    expect(draft.step).toBe("file");
-    expect(draft.stepIndex).toBe(STEP_ORDER_BY_KIND.processing.indexOf("file"));
+    // No Format given: the draft resumes on step 1, which asks it.
+    expect(draft.step).toBe("provider");
+    expect(draft.stepIndex).toBe(0);
+    expect(draft.discipline).toBeUndefined();
     expect(draft.stepCount).toBe(STEP_ORDER_BY_KIND.processing.length);
     expect(draft.fileName).toBeNull();
     expect(draft.preset).toBeNull();
@@ -151,4 +153,20 @@ test.describe("matchDraftFromPrefill", () => {
     expect(draft.formData.numberOfSets).toBe(5);
     expect(draft.formData.playerTiebreaks).toHaveLength(5);
   });
+});
+
+test("a draft told Singles records it and resumes on the file step", () => {
+  const draft = matchDraftFromPrefill(
+    {
+      id: "00000000-0000-4000-8000-0000000000aa",
+      provider: "advantage_intelligence",
+      opponentName: "Anna Lee",
+      date: "2026-10-18",
+      discipline: "singles",
+    },
+    null,
+  );
+  expect(draft.discipline).toBe("singles");
+  expect(draft.step).toBe("file");
+  expect(draft.stepIndex).toBe(STEP_ORDER_BY_KIND.processing.indexOf("file"));
 });

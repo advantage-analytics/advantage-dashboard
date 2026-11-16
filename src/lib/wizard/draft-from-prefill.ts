@@ -52,6 +52,12 @@ export interface DraftPrefill {
   courtType?: string | null;
   /** The roster player's name in a program scope; the uploader in a personal one. */
   playerName?: string | null;
+  /**
+   * The Format answer, when the caller was told it. Only "singles": the
+   * connector refuses doubles itself. Absent, the draft resumes on step 1 so
+   * the wizard asks Format before the file.
+   */
+  discipline?: "singles" | null;
 }
 
 export type ScoreHint =
@@ -131,18 +137,21 @@ export function matchDraftFromPrefill(
     numberOfSets: sets,
     dateSource: "new",
   };
+  // The file step — where the wizard lands a resumed draft anyway, since the
+  // file never survives one — once Format is known; otherwise step 1, which
+  // asks it (`draftResumeStep`), so the Matches row says where it resumes.
+  const step = input.discipline ? "file" : "provider";
   return {
     id: input.id,
-    // The file step: where the wizard lands a resumed draft anyway, since
-    // the file never survives one.
-    step: "file",
-    stepIndex: steps.indexOf("file"),
+    step,
+    stepIndex: steps.indexOf(step),
     stepCount: steps.length,
     provider: provider.id,
     formData,
     fileName: null,
     preset: null,
     attachedLine: null,
+    ...(input.discipline ? { discipline: input.discipline } : {}),
   };
 }
 

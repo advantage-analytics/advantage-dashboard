@@ -1564,6 +1564,10 @@ export function useUploadMatchWizard({
         // Only a roster answer is worth keeping: "myself" is the uploader and
         // a personal workspace never asks. Re-checked on resume.
         subject: matchSubject?.kind === "roster" ? matchSubject : null,
+        // Format counts as answered only once step 1 was continued past
+        // (Doubles never gets here — see the return above), so a draft saved
+        // ON step 1 resumes there and asks it again.
+        ...(step === "provider" ? {} : { discipline: "singles" as const }),
       });
       if (!saved) {
         // Every reason `saveMatchDraft` returns null — no workspace context,
@@ -1831,6 +1835,7 @@ export function useUploadMatchWizard({
             askWhoPlayed,
             seeded?.kind === "roster" &&
               seeded.playerId === draft.subject?.playerId,
+            draft.discipline === "singles",
           ),
         );
       }
