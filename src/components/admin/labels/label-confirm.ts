@@ -120,8 +120,8 @@ export type LabelConfirm =
       kind: "reopen-session";
       /**
        * Reopening a submitted session hands it back to its labeller: nothing
-       * was published, so nothing loses Verified by Advantage. Absent: from
-       * complete.
+       * was published, so the athlete's match is unchanged. Absent: from
+       * complete, where the match keeps its points and Verified by Advantage.
        */
       from?: "submitted";
     };
@@ -396,9 +396,9 @@ export function labelConfirmCopy(
         };
       }
       return {
-        title: "Reopen and remove Verified by Advantage?",
+        title: "Reopen for editing?",
         description:
-          "The athlete's match keeps the published points, but no longer shows Verified by Advantage. Publish again to restore it.",
+          "The athlete keeps seeing the published match, still Verified by Advantage. Your edits reach them when you publish again.",
         confirmLabel: "Reopen",
         pendingLabel: "Reopening…",
         tone: "primary",

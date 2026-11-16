@@ -11,8 +11,8 @@
  *
  * Neither touches the match. The labels a labeller published stay published
  * and Verified by Advantage stays on while the session is back with its
- * labeller (the owner's rule) — the opposite of Reopen
- * (session-status-session.ts), which calls `unverify_match`. The next publish
+ * labeller (the owner's rule), as on a Reopen (session-status-session.ts).
+ * The next publish
  * replaces the match's points as any publish does and lands in "Published, to
  * check" again, since Send back clears the check. `assigned_to` is not
  * touched: the labeller is whoever the session is assigned to.

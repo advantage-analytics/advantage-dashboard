@@ -731,7 +731,7 @@ test.describe("the admin paths on a submitted session", () => {
     expect(raced.calls.some((c) => c.op === "rpc")).toBe(false);
   });
 
-  test("Reopen from complete still calls unverify_match", async () => {
+  test("Reopen from complete moves only the session, keeping Verified by Advantage", async () => {
     const fake = client({ session: sessionRow("complete") });
     expect(
       await writeLabelSessionReopen({
@@ -752,11 +752,7 @@ test.describe("the admin paths on a submitted session", () => {
         filters: { id: SESSION_ID, status: "complete" },
       },
     ]);
-    expect(fake.calls.at(-1)).toMatchObject({
-      table: "unverify_match",
-      op: "rpc",
-      values: { p_match_id: MATCH_ID },
-    });
+    expect(fake.calls.some((c) => c.op === "rpc")).toBe(false);
   });
 
   test("Mark complete publishes a submitted session; the close clears submitted_at with the status", async () => {
