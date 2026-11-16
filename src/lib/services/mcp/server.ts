@@ -1347,7 +1347,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
             matchType: match_type ?? null,
             courtType: court_type ?? null,
             playerName: team ? (player_name ?? null) : null,
-            discipline: format === "singles" ? "singles" : null,
+            discipline: format ?? null,
           },
           sets,
         );

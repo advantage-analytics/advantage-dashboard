@@ -140,7 +140,7 @@ export function matchDraftFromPrefill(
   // The file step — where the wizard lands a resumed draft anyway, since the
   // file never survives one — once Format is known; otherwise step 1, which
   // asks it (`draftResumeStep`), so the Matches row says where it resumes.
-  const step = input.discipline === "singles" ? "file" : "provider";
+  const step = input.discipline ? "file" : "provider";
   return {
     id: input.id,
     step,
@@ -151,9 +151,7 @@ export function matchDraftFromPrefill(
     fileName: null,
     preset: null,
     attachedLine: null,
-    ...(input.discipline === "singles"
-      ? { discipline: "singles" as const }
-      : {}),
+    ...(input.discipline ? { discipline: input.discipline } : {}),
   };
 }
 
