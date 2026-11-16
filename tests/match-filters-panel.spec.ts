@@ -170,7 +170,8 @@ test.describe("FiltersPanel markup", () => {
       "Type",
       "Spin",
       "Zone",
-      "Contact depth",
+      "Contact",
+      "Landed in",
       "Result",
     ]);
     // Outcome is from your side and Hit by is the last shot's hitter — two
@@ -189,6 +190,8 @@ test.describe("FiltersPanel markup", () => {
       "Side",
       "Stroke",
       "Direction",
+      "Contact",
+      "Landed in",
       "Hit",
     ]);
     // Then is the same shot layout as Custom.

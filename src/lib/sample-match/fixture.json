@@ -4,6 +4,7 @@
     "tournamentName": "Jordan Avery vs Sam Ellis",
     "date": "September 19, 2026",
     "matchType": "Match",
+    "verificationPending": false,
     "courtType": "Outdoor Hard Court",
     "sourceProvider": "Advantage Intelligence",
     "matchContext": "Final Score",

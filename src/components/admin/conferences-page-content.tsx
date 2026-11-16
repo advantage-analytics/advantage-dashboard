@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { AdminPage } from "@/components/admin/admin-page";
@@ -10,11 +10,13 @@ import {
   FilterMenuPill,
   PillSearch,
 } from "@/components/admin/admin-cells";
-import { ConferencesTable } from "@/components/admin/conferences-table";
-import { conferenceRowId } from "@/components/admin/conferences-table-layout";
-import { ConferenceDrawer } from "@/components/admin/conference-drawer";
+import {
+  ConferencesTable,
+  ConferencesTableSkeleton,
+} from "@/components/admin/conferences-table";
+import { InertButton } from "@/components/admin/inert-button";
+import { PendingBar } from "@/components/dashboard/loading/pending";
 import { AddConferenceDialog } from "@/components/admin/add-conference-dialog";
-import { DRAWER_ATTR } from "@/components/dashboard/matches/match-drawer";
 import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 // The client-safe half of the data layer — `admin-conferences-server.ts`
@@ -32,33 +34,29 @@ import type {
 } from "@/lib/data/admin-conferences-view";
 import { DIVISION_VALUES, divisionLabel } from "@/lib/data/programs-server";
 import { advButton } from "@/lib/ui/adv-button";
-import { cn } from "@/lib/utils";
 
 /**
- * Admin › Conferences, the whole page — title slot, views and toolbar, the
- * table and the peek drawer a row opens.
+ * Admin › Conferences, the whole page — title slot, views and toolbar, and
+ * the table. A row is a record row: it navigates to the conference's own page
+ * (`/admin/conferences/[id]`), which holds everything about one conference —
+ * crest, details, Merge, Delete, its teams and Add team. Nothing here selects.
  *
- * ## Two machines, copied from their owners
+ * ## The cut
  *
- * The **selection** is `requests-page-content.tsx`'s verbatim: `selectedId`
- * (the wash), `drawerId` (what the rail draws) and `closing` (the width
- * keyframe playing out), a 240ms fallback for reduced motion, `?id=` mirrored
- * with `history.replaceState`, Esc and ↑/↓ over the rows on screen, and a
- * render-time reset when the open row leaves them.
- *
- * The **cut** is `teams-page-content.tsx`'s `pushCut`: view, sort and division
- * are URL state pushed with `router.push`, defaults kept out of the address.
- * The search pill is local state — typing is not a navigation — and narrows
- * on name, short name or label. View pill counts are taken after the
- * division and the search, so each says what pressing it would show.
+ * `teams-page-content.tsx`'s `pushCut`: view, sort and division are URL state
+ * pushed with `router.push`, defaults kept out of the address. The search
+ * pill is local state — typing is not a navigation — and narrows on name,
+ * short name or label. View pill counts are taken after the division and the
+ * search, so each says what pressing it would show.
  *
  * ## Load all, render 50
  *
  * The directory holds ~137 conferences, so the server hands over every row and
  * the view, sort and division are applied here. The table draws the first 50;
  * "Show all" is local state (not a cursor, not the URL) and resets whenever
- * the cut changes. The drawer's counter and ↑/↓ run over what is on screen,
- * so stepping never lands on a row the table is not drawing.
+ * the cut changes.
+ *
+ * "Add conference" lands on the new conference's page once it exists.
  */
 
 const VIEW_OPTIONS: { value: AdminConferencesView; label: string }[] = [
@@ -86,7 +84,6 @@ export function ConferencesPageContent({
   view,
   sort,
   division,
-  initialSelectedId,
 }: {
   rows: AdminConferenceRow[];
   /** Programs with no conference at all. */
@@ -95,8 +92,6 @@ export function ConferencesPageContent({
   sort: AdminConferencesSort;
   /** Raw division value (`'D1'`), or null for any. */
   division: string | null;
-  /** `?id=` from the URL, or null. Ignored unless it names a row in this cut. */
-  initialSelectedId: string | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -129,183 +124,15 @@ export function ConferencesPageContent({
   // "Show all" belongs to the cut it was pressed on. Keyed rather than reset
   // in an effect, so a new cut never paints the long list for a frame.
   const cutKey = `${view}|${sort}|${division ?? ""}|${query.trim()}`;
-  const initialIndex = initialSelectedId
-    ? visible.findIndex((row) => row.id === initialSelectedId)
-    : -1;
-  const [expandedFor, setExpandedFor] = useState<string | null>(
-    // A deep link to a row past the first 50 lands with the list open.
-    initialIndex >= PAGE_SIZE ? cutKey : null,
-  );
+  const [expandedFor, setExpandedFor] = useState<string | null>(null);
   const expanded = expandedFor === cutKey;
   const shown = useMemo(
     () => (expanded ? visible : visible.slice(0, PAGE_SIZE)),
     [expanded, visible],
   );
 
-  const initial = initialIndex >= 0 ? initialSelectedId : null;
-
-  const [selectedId, setSelectedId] = useState<string | null>(initial);
-  const [drawerId, setDrawerId] = useState<string | null>(initial);
-  const [closing, setClosing] = useState(false);
-  const [openedByKeyboard, setOpenedByKeyboard] = useState(false);
-  /** A just-created conference, waiting for the refresh to bring its row. */
-  const [pendingId, setPendingId] = useState<string | null>(null);
-  /**
-   * Bumped when a landing closes the drawer instead of opening it, so an
-   * effect drops `?id=` — the decision is made during render, and the URL
-   * write must not be. A counter rather than a boolean so a second hidden
-   * landing re-runs the effect without a reset.
-   */
-  const [clearUrl, setClearUrl] = useState(0);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   const [sortOpen, setSortOpen] = useState(false);
   const [adding, setAdding] = useState(false);
-
-  const drawerRow = drawerId
-    ? (shown.find((row) => row.id === drawerId) ?? null)
-    : null;
-  const drawerIndex = drawerRow ? shown.indexOf(drawerRow) : -1;
-
-  const finishClose = useCallback(() => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-    setDrawerId(null);
-    setClosing(false);
-  }, []);
-
-  const select = useCallback(
-    (row: AdminConferenceRow, viaKeyboard: boolean) => {
-      if (closeTimer.current) clearTimeout(closeTimer.current);
-      closeTimer.current = null;
-      setClosing(false);
-      setSelectedId(row.id);
-      setDrawerId(row.id);
-      setOpenedByKeyboard(viaKeyboard);
-      syncUrl(row.id);
-    },
-    [],
-  );
-
-  const close = useCallback(
-    (returnFocusTo: string | null) => {
-      setSelectedId(null);
-      setClosing(true);
-      syncUrl(null);
-      // `onAnimationEnd` normally finishes this; the timer covers reduced
-      // motion, where no animation runs, and is harmless when both fire.
-      closeTimer.current = setTimeout(finishClose, 240);
-      if (returnFocusTo) {
-        document.getElementById(conferenceRowId(returnFocusTo))?.focus();
-      }
-    },
-    [finishClose],
-  );
-
-  const toggle = useCallback(
-    (row: AdminConferenceRow, viaKeyboard: boolean) => {
-      if (selectedId === row.id) close(viaKeyboard ? row.id : null);
-      else select(row, viaKeyboard);
-    },
-    [selectedId, select, close],
-  );
-
-  const step = useCallback(
-    (direction: 1 | -1) => {
-      if (!selectedId) return;
-      const index = shown.findIndex((row) => row.id === selectedId);
-      const next = shown[index + direction];
-      if (!next) return;
-      select(next, true);
-      document
-        .getElementById(conferenceRowId(next.id))
-        ?.scrollIntoView({ block: "nearest" });
-    },
-    [shown, selectedId, select],
-  );
-
-  // A landing — a conference just added, or a merge target: once its row is
-  // loaded and in this cut, open it (past the first 50, open the list too).
-  //
-  // If the row is loaded but this cut excludes it — a new conference has no
-  // teams on Advantage, a merge target outside the division filter — the
-  // landing target is not in this view → close and clear the URL. Switching
-  // to the All view instead was rejected: the view is a URL-held cut
-  // (`pushCut`), and changing it on the user's behalf discards their filter.
-  // Closing here also stops the drawer lingering on a merged-away source.
-  if (pendingId && rows.some((row) => row.id === pendingId)) {
-    const index = visible.findIndex((row) => row.id === pendingId);
-    const landed = index >= 0 ? pendingId : null;
-    setPendingId(null);
-    setSelectedId(landed);
-    setDrawerId(landed);
-    setClosing(false);
-    if (index >= PAGE_SIZE) setExpandedFor(cutKey);
-    if (!landed) setClearUrl((n) => n + 1);
-  }
-
-  // The row the drawer showed is gone — deleted or merged, or the cut no
-  // longer shows it. Adjusted during render rather than in an effect, so
-  // nothing paints a drawer for a row that is not on screen.
-  if (drawerId && !drawerRow && drawerId !== pendingId) {
-    setSelectedId(null);
-    setDrawerId(null);
-    setClosing(false);
-  }
-
-  useEffect(() => {
-    return () => {
-      if (closeTimer.current) clearTimeout(closeTimer.current);
-    };
-  }, []);
-
-  // The URL half of a hidden landing, kept out of render.
-  useEffect(() => {
-    if (clearUrl > 0) syncUrl(null);
-  }, [clearUrl]);
-
-  useEffect(() => {
-    if (!selectedId) return;
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (
-        event.defaultPrevented ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey
-      )
-        return;
-      const target = event.target as HTMLElement | null;
-      if (target) {
-        if (target.closest("input, textarea, select, [contenteditable=true]"))
-          return;
-        // The drawer's own `role="dialog"` is not a modal; a dialog opened
-        // from inside it is — including `ConfirmDialog`, which renders
-        // `role="alertdialog"` — and Esc and ↑/↓ there belong to the dialog.
-        if (
-          target.closest(
-            `[role="dialog"]:not([${DRAWER_ATTR}] [role="dialog"]), [role="alertdialog"]`,
-          )
-        )
-          return;
-        if (target.closest("[data-radix-popper-content-wrapper]")) return;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-        close(selectedId);
-      } else if (event.key === "ArrowDown") {
-        event.preventDefault();
-        step(1);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        step(-1);
-      }
-    }
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedId, close, step]);
 
   const pushCut = useCallback(
     (
@@ -315,10 +142,6 @@ export function ConferencesPageContent({
         division: string | null;
       }>,
     ) => {
-      // The rows on screen are about to change, so the open record goes with
-      // them — and `?id=` is not carried into the new address.
-      setSelectedId(null);
-      finishClose();
       const merged = { view, sort, division, ...next };
       const params = new URLSearchParams();
       // Defaults stay out of the URL — a first visit and a deliberate reset
@@ -329,7 +152,7 @@ export function ConferencesPageContent({
       const query = params.toString();
       router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
     },
-    [division, finishClose, pathname, router, sort, view],
+    [division, pathname, router, sort, view],
   );
 
   const clearFilter = useCallback(() => pushCut({ division: null }), [pushCut]);
@@ -348,40 +171,7 @@ export function ConferencesPageContent({
   const truncated = !expanded && visible.length > shown.length;
 
   return (
-    // The column eases to 40px on the right while the drawer is open; the
-    // drawer itself goes in `rail`, outside the padding, on the screen edge.
-    <AdminPage
-      className={cn("gap-4", drawerRow && "pr-10")}
-      rail={
-        drawerRow && (
-          <ConferenceDrawer
-            row={drawerRow}
-            index={drawerIndex}
-            total={shown.length}
-            canPrev={drawerIndex > 0}
-            canNext={drawerIndex < shown.length - 1}
-            closing={closing}
-            autoFocus={openedByKeyboard}
-            onPrev={() => step(-1)}
-            onNext={() => step(1)}
-            onClose={() => close(drawerRow.id)}
-            onClosed={finishClose}
-            onChanged={() => router.refresh()}
-            conferences={rows}
-            onMerged={(targetId) => {
-              // The merge target is already a loaded row, so the pending-id
-              // pass opens it at once — or, when this cut hides it, closes the
-              // drawer and clears `?id=`. The refresh then brings the new
-              // counts and drops the source.
-              setPendingId(targetId);
-              syncUrl(targetId);
-              router.refresh();
-            }}
-            onDeleted={() => close(null)}
-          />
-        )
-      }
-    >
+    <AdminPage className="gap-4">
       {/* Title slot — the page's one primary sits here. */}
       <div className="flex flex-wrap items-end gap-4">
         <div className="min-w-0 flex-1">
@@ -477,10 +267,6 @@ export function ConferencesPageContent({
                   }
                 : undefined
         }
-        selectedId={selectedId}
-        onSelect={(row) =>
-          toggle(row, document.activeElement?.id === conferenceRowId(row.id))
-        }
       />
 
       {truncated && (
@@ -498,10 +284,9 @@ export function ConferencesPageContent({
       <AddConferenceDialog
         open={adding}
         onOpenChange={setAdding}
-        onCreated={(id) => {
-          setPendingId(id);
-          syncUrl(id);
-        }}
+        onCreated={(id) =>
+          router.push(`/admin/conferences/${encodeURIComponent(id)}`)
+        }
       />
     </AdminPage>
   );
@@ -520,15 +305,51 @@ function ShowAll({ onClick }: { onClick: () => void }) {
   );
 }
 
+/** A no-op for the skeleton's inert controls. */
+function ignore() {}
+
 /**
- * Mirror the selection into `?id=` without a navigation — the Requests page's
- * `syncUrl`. `history.replaceState` rather than `router.replace`, which the
- * App Router treats as a navigation and re-renders from the server.
+ * Admin › Conferences while the page loads (`app/admin/conferences/loading.tsx`):
+ * the title and Add conference, then the search, the view pills, the
+ * Division menu and the sort as the loaded page opens them — inert, and
+ * without counts — then the table's real column labels over rows of bars.
+ * The summary carries counts, so it is a bar.
  */
-function syncUrl(id: string | null) {
-  if (typeof window === "undefined") return;
-  const url = new URL(window.location.href);
-  if (id) url.searchParams.set("id", id);
-  else url.searchParams.delete("id");
-  window.history.replaceState(window.history.state, "", url);
+export function ConferencesPageSkeleton() {
+  return (
+    <AdminPage className="gap-4">
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-display">Conferences</h1>
+          <PendingBar className="mt-3 mb-[3px] h-3 w-72" />
+        </div>
+        <InertButton variant="primary" size="md">
+          <Plus className="size-3.5" strokeWidth={1.5} aria-hidden />
+          Add conference
+        </InertButton>
+      </div>
+
+      <div inert className="mt-2 flex flex-wrap items-center gap-3">
+        <PillSearch
+          value=""
+          onChange={ignore}
+          placeholder="Conference"
+          label="Search conferences"
+        />
+        <CountPills options={VIEW_OPTIONS} value="all" onChange={ignore} />
+        <FilterDivider />
+        <FilterMenuPill<string>
+          label="Division"
+          width={196}
+          options={[{ value: ANY_DIVISION, label: "All" }]}
+          value={ANY_DIVISION}
+          onChange={ignore}
+        />
+        <div className="flex-1" />
+        <SortTrigger>{SORT_OPTIONS[0].label}</SortTrigger>
+      </div>
+
+      <ConferencesTableSkeleton />
+    </AdminPage>
+  );
 }

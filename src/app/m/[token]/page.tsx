@@ -206,7 +206,11 @@ export default async function SharedMatchPage({
             this context, and the Video view's filters live in it — seeded
             from `?f=` as on the dashboard, so a reload or a forwarded URL
             keeps the cut it names. Statistics takes no filters. */}
-        <MatchFiltersProvider initialQuery={query[MATCH_FILTERS_PARAM]}>
+        <MatchFiltersProvider
+          initialQuery={query[MATCH_FILTERS_PARAM]}
+          bands={bandSettings}
+          unit="ft"
+        >
           <MatchReportProvider
             matchId={match.id}
             summary={summary}

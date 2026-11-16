@@ -139,6 +139,21 @@ async function readUsedSeconds(
   return used;
 }
 
+/**
+ * How many accounts are pilot individuals — the "Pilot players" pill's count
+ * on Admin › Teams while the Programs view is showing, so that view need not
+ * run `listAdminPilots()` (and record a look at the Pilots list) for a number.
+ * A failed count is null, which the pill prints as no number.
+ */
+export async function countAdminPilots(): Promise<number | null> {
+  await requireAdminOrNotFound();
+  const { count, error } = await createAdminClient()
+    .from("users")
+    .select("id", { count: "exact", head: true })
+    .eq("individual_pilot", true);
+  return error ? null : (count ?? 0);
+}
+
 export async function listAdminPilots(): Promise<AdminPilotRow[]> {
   const admin = await requireAdminOrNotFound();
   const db = createAdminClient();
@@ -189,37 +204,4 @@ export async function listAdminPilots(): Promise<AdminPilotRow[]> {
       ...personalAllowance(user),
     };
   });
-}
-
-/**
- * The nav's count for Pilots: pilots at or past 90% of their own cap this
- * month — the ones an admin may want to give more hours. An admin pilot with
- * no override is unlimited and never counts.
- */
-export async function countPilotsForNav(adminId: string): Promise<number> {
-  void adminId; // Not a "new since" count: it reads the same for every admin.
-  const db = createAdminClient();
-  const users = await readPilots(db);
-  if (users.length === 0) return 0;
-  const used = await readUsedSeconds(
-    db,
-    users.map((user) => user.id),
-  );
-  return users.filter((user) => {
-    const state = pilotUsageState(
-      used.get(user.id) ?? 0,
-      personalAllowance(user).capSeconds,
-    );
-    return state === "low" || state === "spent";
-  }).length;
-}
-
-/** The More menu's sub-line for Pilots: "4 of 20 places used". */
-export async function pilotsNavSub(): Promise<string> {
-  const { count, error } = await createAdminClient()
-    .from("users")
-    .select("id", { count: "exact", head: true })
-    .eq("individual_pilot", true);
-  if (error) throw new Error(`Could not count pilots: ${error.message}`);
-  return pilotPlacesLabel(count ?? 0);
 }

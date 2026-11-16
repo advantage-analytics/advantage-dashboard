@@ -4,6 +4,7 @@ import vm from "node:vm";
 import ts from "typescript";
 import * as types from "@/components/dashboard/matches/new-match-wizard/types";
 import * as validation from "@/components/dashboard/matches/new-match-wizard/validation";
+import * as wizardView from "@/components/dashboard/matches/new-match-wizard/wizard-view";
 import * as scoreState from "@/components/dashboard/matches/new-match-wizard/score-state";
 import * as subjectEligibility from "@/components/dashboard/matches/new-match-wizard/subject-eligibility";
 import * as opponentTeam from "@/components/dashboard/matches/new-match-wizard/opponent-team";
@@ -315,6 +316,7 @@ export function uploadWizardHarness(
     "./upload-analytics": {
       trackVideoSelected: () => {},
       trackVideoRejected: () => {},
+      trackFormatSelected: () => {},
     },
     "@/lib/utils": { capitalize: (value: string) => value },
     "next/navigation": { useRouter: () => ({ refresh() {} }) },
@@ -420,6 +422,8 @@ export function uploadWizardHarness(
     "./opponent-team": opponentTeam,
     "./teammates": teammates,
     "./validation": validation,
+    // Pure: `resumesPastSource`, the rule a reload resumes past step 1 by.
+    "./wizard-view": wizardView,
     "./score-state": scoreState,
     "./court-options": courtOptions,
     // The real thing: pure, and it is the seam under test. It pulls in the
@@ -429,6 +433,7 @@ export function uploadWizardHarness(
       STORAGE_KEYS: {
         UPLOADED_FILE: "file",
         SELECTED_PROVIDER: "provider",
+        FORMAT_ANSWERED: "format",
         DRAFT_KEPT: "draft",
       },
       loadFormDataFromStorage: () => null,

@@ -14,6 +14,7 @@
  */
 
 import type { MatchScore as FoldedMatchScore } from "@/lib/services/splitstep/derivation";
+import type { FlagCounts } from "./job-groups";
 import type {
   LabelEnding,
   LabelPointSeedValues,
@@ -490,6 +491,15 @@ export interface LabelSession {
    * someone else's work: the console makes no fix of its own there.
    */
   assignedToOther?: boolean;
+  /**
+   * The flags open when the console first counted them
+   * (`label_sessions.start_open_counts`, read by `readOpenCounts`), amber and
+   * grey — what the admin's "X of Y flags resolved" counts from. Null when the
+   * session has no start: opened before the column existed, never counted, or
+   * the column not migrated yet. Absent on sessions built without
+   * `getLabelSession` (fixtures, scripts, the publish), which reads as null.
+   */
+  startOpenCounts?: FlagCounts | null;
   /** In `point_index` order. */
   points: LabelPoint[];
 }

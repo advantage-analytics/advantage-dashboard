@@ -174,7 +174,7 @@ export async function adminSearch(term: string): Promise<AdminSearchHit[]> {
           id: row.id,
           title,
           subtitle,
-          href: `/admin/conferences?id=${row.id}`,
+          href: `/admin/conferences/${row.id}`,
           markUrl: publicUrl(PROGRAM_CRESTS_BUCKET, text(extra.crestPath)),
           shortCode: text(extra.shortName),
         };

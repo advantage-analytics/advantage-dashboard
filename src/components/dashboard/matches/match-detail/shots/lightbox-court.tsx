@@ -33,6 +33,7 @@ import {
 } from "./court-geometry";
 import type { PanZoom, Size } from "./pan-zoom";
 import {
+  BAND_BLEED,
   VizBandsOverlay,
   type VizBandsOverlayProps,
 } from "./viz-bands-overlay";
@@ -261,7 +262,7 @@ export function LightboxCourt({
   canWatchMark?: (dot: VizDot) => boolean;
   /** A hovered Statistics row's marks: the rest sit back at 40%. */
   focusIds?: ReadonlySet<string> | null;
-  /** The hovered or chosen Statistics row's zone, outlined dashed white. */
+  /** The hovered or chosen Statistics row's zone or band, outlined dashed white. */
   outline?: CourtOutline | null;
   onReadoutEnter?: () => void;
   onReadoutLeave?: () => void;
@@ -615,8 +616,51 @@ export function LightboxCourt({
   );
 }
 
-/** The dashed white outline of a Statistics row's zone or band. */
+/** The outline's stroke: the court's line colour, dashed so it reads as a
+ *  marker laid over the court and never as one of its painted lines. */
+const OUTLINE_STROKE = {
+  fill: "none",
+  stroke: LINE_COLOR,
+  strokeWidth: 1.5,
+  strokeDasharray: "4 3",
+  vectorEffect: "non-scaling-stroke",
+} as const;
+
+/**
+ * The dashed white outline of a Statistics row's place on the court.
+ *
+ * A serve zone is a box, and a landing depth is a slice of the court, so
+ * both are boxed where the court lines put them. A CONTACT band is neither:
+ * it is how far behind the baseline the ball was met, a depth with no sides.
+ * It runs the full width of the stage (`viz-bands-overlay.tsx`,
+ * `BAND_BLEED`) and its marks run with it — a return is met wherever the
+ * ball is, outside the singles lines as often as inside. Boxing it at those
+ * lines drew sides the band does not have, through the middle of the
+ * returns it was meant to contain. So a contact band is marked by the two
+ * edges it does have, each ruled from one side of the stage to the other.
+ */
 function OutlineRect({ outline }: { outline: CourtOutline }) {
+  if (outline.kind === "band" && outline.band === "contact") {
+    const edges = viewerBandEdges(outline.band, outline.dividersFt);
+    const left = VIEWER_COURT.viewBox.minX - BAND_BLEED;
+    const right =
+      VIEWER_COURT.viewBox.minX + VIEWER_COURT.viewBox.w + BAND_BLEED;
+    return (
+      <g data-viz-outline="contact" pointerEvents="none">
+        {[edges[outline.index], edges[outline.index + 1]].map((y, index) => (
+          <line
+            key={index}
+            x1={left}
+            x2={right}
+            y1={y}
+            y2={y}
+            {...OUTLINE_STROKE}
+          />
+        ))}
+      </g>
+    );
+  }
+
   let x: number;
   let y: number;
   let w: number;
@@ -636,16 +680,12 @@ function OutlineRect({ outline }: { outline: CourtOutline }) {
   }
   return (
     <rect
-      data-viz-outline=""
+      data-viz-outline={outline.kind}
       x={x}
       y={y}
       width={w}
       height={Math.max(0, h)}
-      fill="none"
-      stroke={LINE_COLOR}
-      strokeWidth={1.5}
-      strokeDasharray="4 3"
-      vectorEffect="non-scaling-stroke"
+      {...OUTLINE_STROKE}
       pointerEvents="none"
     />
   );
@@ -704,9 +744,17 @@ const CourtLines = memo(function CourtLines() {
   const top = VIEWER_COURT.farBaselineY;
   const bottom = VIEWER_COURT.nearBaselineY;
   const centreMark = 8;
-  const segments: [number, number, number, number][] = [
+  // The baselines come first and alone get square caps: with butt caps each
+  // corner stroke stops at the other's centreline, leaving a missing
+  // quarter-square at all four corners that shows plainly when zoomed in. A
+  // square cap runs the baseline on by half a line width, just over the
+  // sideline's outer edge. Every other line ends inside a crossing line, where
+  // a butt end is already hidden.
+  const baselines: [number, number, number, number][] = [
     [left, top, right, top],
     [left, bottom, right, bottom],
+  ];
+  const segments: [number, number, number, number][] = [
     [left, top, left, bottom],
     [right, top, right, bottom],
     [VIEWER_COURT.singlesLeft, top, VIEWER_COURT.singlesLeft, bottom],
@@ -739,6 +787,16 @@ const CourtLines = memo(function CourtLines() {
         strokeWidth={VIEWER_COURT.lineWidth * LINE_SCALE}
         fill="none"
       >
+        {baselines.map(([x1, y1, x2, y2], index) => (
+          <line
+            key={`baseline-${index}`}
+            x1={x1}
+            y1={y1}
+            x2={x2}
+            y2={y2}
+            strokeLinecap="square"
+          />
+        ))}
         {segments.map(([x1, y1, x2, y2], index) => (
           <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} />
         ))}
@@ -893,7 +951,13 @@ const MarkLayer = memo(function MarkLayer({
             role="button"
             aria-label={label}
             aria-pressed={dot.id === selectedId}
-            className="cursor-pointer outline-none"
+            // A mark that joins the court (a pick or filter let go, "Back
+            // to all points") fades in rather than popping; one already on
+            // court keeps its node (keyed by id) and never re-runs it. A
+            // dim or undim eases too. Opacity only: no stagger, no travel —
+            // 200 marks choreographed would be noise, and the counts and
+            // bands are what say the numbers changed.
+            className="animate-[fadeIn_var(--duration-hover)_var(--ease-chart)] cursor-pointer transition-opacity duration-[var(--duration-hover)] outline-none"
             opacity={dimmed ? UNSELECTED_OPACITY : undefined}
             onMouseEnter={() => onActivate(dot.id, false)}
             onMouseLeave={() => onDeactivate(dot.id)}

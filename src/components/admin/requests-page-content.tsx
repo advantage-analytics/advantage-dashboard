@@ -4,7 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { CountPills } from "@/components/admin/admin-cells";
 import { markAdminRowSeen } from "@/app/admin/seen-actions";
-import { RequestsTable, requestRowId } from "@/components/admin/requests-table";
+import {
+  RequestsTable,
+  RequestsTableSkeleton,
+  requestRowId,
+} from "@/components/admin/requests-table";
+import { PendingBar } from "@/components/dashboard/loading/pending";
 import { RequestDrawer } from "@/components/admin/request-drawer";
 import { AdminPage } from "@/components/admin/admin-page";
 import { DRAWER_ATTR } from "@/components/dashboard/matches/match-drawer";
@@ -287,6 +292,30 @@ export function RequestsPageContent({
           toggle(row, document.activeElement?.id === requestRowId(row.id))
         }
       />
+    </AdminPage>
+  );
+}
+
+/** A no-op for the skeleton's inert pills. */
+function ignore() {}
+
+/**
+ * Admin › Requests while the page loads (`app/admin/requests/loading.tsx`),
+ * in the default "Waiting on you" view: the title, the view pills without
+ * their counts (inert), and the table's real header over rows of bars. The
+ * lede's second sentence carries a count, so the lede is a bar.
+ */
+export function RequestsPageSkeleton() {
+  return (
+    <AdminPage className="gap-4">
+      <div>
+        <h1 className="text-display">Requests</h1>
+        <PendingBar className="mt-[13px] mb-[3px] h-3 w-96" />
+      </div>
+      <div inert>
+        <CountPills options={VIEW_OPTIONS} value="waiting" onChange={ignore} />
+      </div>
+      <RequestsTableSkeleton />
     </AdminPage>
   );
 }

@@ -224,7 +224,8 @@ function FilterRailShell({
   }, [phase]);
 
   const { filters, setFilters, filmRemainder } = useMatchFilters();
-  const { availability, youName, oppName, total } = useFiltersPanelData();
+  const { availability, youName, oppName, total, bandLabels } =
+    useFiltersPanelData();
 
   // Take focus on open so Esc and Tab start inside the drawer. A frame
   // late: the quick menu that opened it hands focus back to its trigger as
@@ -299,6 +300,7 @@ function FilterRailShell({
             oppName={oppName}
             countFor={countFor}
             total={total}
+            bandLabels={bandLabels}
             filmCut={filmRemainder?.label ?? null}
             onApply={(next) => {
               setFilters(next);

@@ -6,6 +6,7 @@ import {
   markClickHint,
   placeReadout,
   statRowTooltip,
+  wonFigureLabel,
 } from "@/components/dashboard/matches/match-detail/shots/viz-readout";
 import type { VizDotMeta } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 
@@ -452,4 +453,17 @@ test.describe("statRowTooltip (a Statistics row's readout)", () => {
       hint: "Click to keep these 4 points",
     });
   });
+});
+
+test("the Statistics headline is named for what it counts: shots on a rally cut, points elsewhere", () => {
+  expect(wonFigureLabel("rallyPlacement")).toBe("Shots won");
+  expect(wonFigureLabel("rallyPosition")).toBe("Shots won");
+  for (const cut of [
+    "serve",
+    "returnPlacement",
+    "returnContact",
+    "errors",
+  ] as const) {
+    expect(wonFigureLabel(cut)).toBe("Points won");
+  }
 });

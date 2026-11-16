@@ -27,6 +27,29 @@ export interface WallSegment {
   pct: number | null;
 }
 
+/**
+ * The card footer's count, with its unit — one wording for the summary and
+ * for the card's own count while it counts to a new value.
+ */
+export function wallCountLabel(
+  cut: Cut,
+  count: number,
+  total: number,
+  /** "N in" rather than "N of M in". The card counting to new values passes
+   *  the FINAL summary's answer, so the wording never flips mid-count. */
+  allIn: boolean = count === total,
+): string {
+  // The errors card counts what its bar draws: every Miss row's errors
+  // (Net, Long, Wide, and Landed in when any read in), so "N total" and the
+  // segments can never disagree.
+  if (cut === "errors") return `${count} total`;
+  // Every return has a contact point, in or not: a count, never "in".
+  if (cut === "returnContact")
+    return `${count} ${count === 1 ? "return" : "returns"}`;
+  if (allIn) return `${count} in`;
+  return `${count} of ${total} in`;
+}
+
 export interface WallSummary {
   /** The footer's count, with its unit: "27 of 31 in", "64 in", "14 total". */
   countLabel: string;
@@ -141,19 +164,8 @@ export function wallSummaryFor(
   const count = segments.reduce((n, s) => n + s.count, 0);
   const won = segments.reduce((n, s) => n + s.won, 0);
 
-  let countLabel: string;
-  // The errors card counts what its bar draws: every Miss row's errors
-  // (Net, Long, Wide, and Landed in when any read in), so "N total" and the
-  // segments can never disagree.
-  if (cut === "errors") countLabel = `${count} total`;
-  // Every return has a contact point, in or not: a count, never "in".
-  else if (cut === "returnContact")
-    countLabel = `${count} ${count === 1 ? "return" : "returns"}`;
-  else if (count === total) countLabel = `${count} in`;
-  else countLabel = `${count} of ${total} in`;
-
   return {
-    countLabel,
+    countLabel: wallCountLabel(cut, count, total),
     count,
     total,
     keyLead,

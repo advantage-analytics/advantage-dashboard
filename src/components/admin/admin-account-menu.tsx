@@ -28,10 +28,22 @@ import { isPostHogConfigured } from "@/lib/posthog-client";
  * thing on both sides of the app and never revokes a phone's session by
  * accident (auth-js defaults the scope to "global").
  *
- * Two rows only. Admin has no preferences, no usage and no plan, so the
- * dashboard profile menu's capsules and workspace list have nothing to say
- * here; inventing them would be chrome imitating chrome.
+ * The menu holds the pages that left the tab row (`ADMIN_MENU_LINKS`, one
+ * item each, no badges), then "Back to the dashboard" and "Sign out". Admin
+ * has no preferences, no usage and no plan, so the dashboard profile menu's
+ * capsules and workspace list have nothing to say here; inventing them would
+ * be chrome imitating chrome.
  */
+export const ADMIN_MENU_LINKS = [
+  { label: "Requests", href: "/admin/requests" },
+  { label: "Messages", href: "/admin/messages" },
+  { label: "Ask", href: "/admin/ask" },
+  { label: "Conferences", href: "/admin/conferences" },
+  { label: "Pilots", href: "/admin/pilots" },
+  { label: "Outreach", href: "/admin/outreach" },
+  { label: "Pay report", href: "/admin/labels/pay" },
+] as const;
+
 export function AdminAccountMenu({
   name,
   email,
@@ -92,6 +104,17 @@ export function AdminAccountMenu({
           </button>
         }
       >
+        {ADMIN_MENU_LINKS.map((link) => (
+          <FloatMenuItem
+            key={link.href}
+            label={link.label}
+            onSelect={() => {
+              setIsMenuOpen(false);
+              router.push(link.href);
+            }}
+          />
+        ))}
+        <FloatMenuDivider />
         <FloatMenuItem
           label="Back to the dashboard"
           icon={

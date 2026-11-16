@@ -19,6 +19,22 @@ import { isPostHogConfigured } from "@/lib/posthog-client";
 export type MatchViewSource = "list" | "share_link" | "dashboard";
 export type ShareMethod = "copy_link" | "native_share" | "email";
 
+/**
+ * What a picked video measured as, on `video_selected` and `upload_failed`.
+ * Numbers read from the file's header, never its name. All null where the
+ * file was never probed (a failure after the picker) or the browser would not
+ * say.
+ */
+export interface VideoFacts {
+  video_width: number | null;
+  video_height: number | null;
+  /** The frame rate the browser sampled. */
+  video_fps: number | null;
+  /** Frames over length for the whole file: what a variable-rate file hides. */
+  video_average_fps: number | null;
+  video_duration_sec: number | null;
+}
+
 export interface AnalyticsEvents {
   // Match engagement
   match_viewed: {
@@ -35,9 +51,23 @@ export interface AnalyticsEvents {
   video_played: { match_id: string; position_sec: number };
   match_shared: { match_id: string; method: ShareMethod };
   filter_changed: { view: string; filter_name: string; value: string };
+  // One per roster player page and tab shown: the team's other way into a
+  // match's numbers, which `match_viewed` never sees.
+  player_profile_viewed: {
+    player_id: string;
+    tab: string;
+    /** The viewer is looking at their own page, not a coach at a player's. */
+    is_self: boolean;
+  };
 
   // Upload flow (/dashboard/matches/new)
   upload_started: { provider: string | null };
+  // Step 1's Format field, sent on a change only. Doubles is refused there,
+  // so the doubles count is how many people tried to upload one.
+  upload_format_selected: {
+    format: "singles" | "doubles";
+    provider: string | null;
+  };
   // One per step a visitor lands on, and one more when they change the source
   // on step 1. The last one before the visit ends is where they left from.
   upload_step_viewed: {
@@ -54,12 +84,12 @@ export interface AnalyticsEvents {
     file_size_mb: number;
     duration_sec: number | null;
     mime_type: string;
-  };
+  } & VideoFacts;
   upload_failed: {
     step: string;
     error_message: string;
     file_size_mb: number | null;
-  };
+  } & VideoFacts;
   upload_completed: { file_size_mb: number; upload_duration_sec: number };
   match_created: {
     match_id: string | null;

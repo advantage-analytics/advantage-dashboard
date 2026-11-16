@@ -446,7 +446,11 @@ export default async function MatchDetailPage({
           (`MatchReportWhen` unmounts an inactive view), so they survive a
           trip to another view and back. Seeded from `?f=` as read here, on
           the server, so the first client render matches this one. */}
-      <MatchFiltersProvider initialQuery={query[MATCH_FILTERS_PARAM]}>
+      <MatchFiltersProvider
+        initialQuery={query[MATCH_FILTERS_PARAM]}
+        bands={bandSettings}
+        unit={unit}
+      >
         <MatchReportProvider
           matchId={matchId}
           summary={summary}

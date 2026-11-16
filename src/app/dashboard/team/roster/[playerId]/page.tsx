@@ -36,6 +36,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/report-title-row";
 import { ProfileHeaderSlot } from "@/components/dashboard/team/player-profile/profile-header-slot";
 import { ProfileRail } from "@/components/dashboard/team/player-profile/profile-rail";
+import { ProfileAnalytics } from "@/components/dashboard/team/player-profile/profile-analytics";
 import {
   ProfileTitle,
   ProfileViewWhen,
@@ -269,6 +270,8 @@ export default async function PlayerProfilePage({
         playerId={profile.playerId}
         players={players}
       />
+
+      <ProfileAnalytics playerId={profile.playerId} isSelf={isSelf} />
 
       <MatchReportFrame>
         <ProfileRail

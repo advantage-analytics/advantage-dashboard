@@ -10,7 +10,7 @@
  * (line 535). The labels come from the card's header row, canvas lines
  * 1153–1156.
  *
- * A grid, like `admin-roster-table-layout.ts` and for the same reason: the
+ * A grid, like the old admin roster table's and for the same reason: the
  * canvas draws one, and a five-track grid has no per-cell width that could
  * fall out of step with a separately-written header, so
  * `ADMIN_SCHEDULE_COLUMNS`' ORDER is the column order and nothing can

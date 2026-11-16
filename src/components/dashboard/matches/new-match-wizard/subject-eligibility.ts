@@ -329,12 +329,20 @@ export function identityAthleteFor(input: {
  * the wrong player with nothing on screen looking wrong. The draft itself
  * stays whole either way — the provider, the form and any attached line are
  * all seeded; only the step differs.
+ *
+ * Format is the same kind of answer: a draft that never recorded Singles
+ * (`MatchDraft.discipline` — a row saved before Format existed, or a
+ * connector draft that was not told) resumes on the provider step, where
+ * Format is asked, rather than past its doubles refusal.
  */
 export function draftResumeStep(
   asksWhoPlayed: boolean,
   subjectConfirmed = false,
+  formatAnswered = true,
 ): Step {
-  return asksWhoPlayed && !subjectConfirmed ? "provider" : "file";
+  return (asksWhoPlayed && !subjectConfirmed) || !formatAnswered
+    ? "provider"
+    : "file";
 }
 
 /**

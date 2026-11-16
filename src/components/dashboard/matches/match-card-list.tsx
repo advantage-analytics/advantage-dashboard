@@ -275,6 +275,7 @@ export function MatchCardList({
         <RowLifecycle
           analysis={match.analysis}
           verification={match.verification}
+          verificationPending={match.verificationPending}
           label={[match.player2.name, match.tournamentName]
             .filter(Boolean)
             .join(", ")}

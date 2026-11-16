@@ -52,6 +52,12 @@ export interface DisplayMatch {
   courtType?: string;
   /** Verified by Advantage (`verificationFor`), or null. */
   verification?: MatchVerification | null;
+  /**
+   * Waiting on a labeller (`showsVerificationPending`). Always false when
+   * `verification` is set; `transformDbMatch` starts every row false and the
+   * page sets it once `match_label_states` has answered.
+   */
+  verificationPending: boolean;
   round?: string;
   matchContext?: string;
   duration?: string;
@@ -133,6 +139,7 @@ export function transformDbMatch(
     matchType: row.match_type ?? "Match",
     courtType: row.court_type ?? undefined,
     verification: verificationFor(row),
+    verificationPending: false,
     round: row.round ?? undefined,
     matchContext: matchContextCaption(row.result),
     duration: formatMatchDuration(row.duration),

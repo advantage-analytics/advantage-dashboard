@@ -89,14 +89,15 @@ import {
 import type { VizBandsOverlayProps } from "./viz-bands-overlay";
 import { legendItemsFor } from "./viz-labels";
 import { isMarkRovingKey } from "./viz-mark-roving";
-import type {
-  Chart,
-  Cut,
-  PlayerFilter,
-  VizDot,
-  VizFilters,
-  VizResult,
-  VizStats,
+import {
+  bandStatRowsForDots,
+  type Chart,
+  type Cut,
+  type PlayerFilter,
+  type VizDot,
+  type VizFilters,
+  type VizResult,
+  type VizStats,
 } from "./viz-model";
 
 /** What the Points column draws, handed to the host's `render`. */
@@ -583,8 +584,15 @@ export function VizLightboxShell({
         editing: true,
       };
     }
+    // A Statistics row or a legend key narrows the court: the bands count
+    // the marks still drawn, so "Down the line" reads as where the
+    // down-the-line returns landed. Nothing picked: the stats' own rows.
+    if (savedBandZones !== null && (pickIds !== null || legendPick !== null)) {
+      const statRows = bandStatRowsForDots(cut, savedBandZones, dots);
+      if (statRows !== null) return { ...savedBandZones, statRows };
+    }
     return savedBandZones;
-  }, [unit, savedBandZones, activeEditor]);
+  }, [unit, savedBandZones, activeEditor, cut, dots, pickIds, legendPick]);
 
   /* ── Advanced filters drawer ─────────────────────────────────────────── */
 

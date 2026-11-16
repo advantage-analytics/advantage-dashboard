@@ -3,10 +3,12 @@ import * as React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import type { AdminTeamProgram } from "@/lib/data/admin-team-server";
+import type { AdminTeamJoinLink } from "@/lib/data/admin-team-links";
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
- * Admin › Teams › `#details` — the Details rail card (T18).
+ * Admin › Teams › `#details` — the Details section (T18, reshaped in T12 to
+ * a row of facts with one `Edit details` and the two join links).
  *
  * Rendered offline through `fixtures/vm-modules`. The card pulls in the T10
  * `AdminTeamDetailsDialog` to back its `Edit` button, and that dialog in turn
@@ -15,7 +17,7 @@ import { createLoader } from "./fixtures/vm-modules";
  * as `admin-conference-card.spec.ts` stubs its own action module. The dialog
  * renders closed (`open=false`) in every case here, so Radix's `DialogContent`
  * never mounts and nothing about the dialog's own body is under test; this
- * spec is only the card's six rows and its `Edit` trigger.
+ * spec is only the section's facts, links and its `Edit details` trigger.
  */
 
 function load() {
@@ -27,16 +29,40 @@ function load() {
     },
   });
   return loader.load("src/components/admin/admin-details-card.tsx") as {
-    AdminDetailsCard: React.ComponentType<{ program: AdminTeamProgram }>;
+    AdminDetailsCard: React.ComponentType<{
+      program: AdminTeamProgram;
+      playerLink: AdminTeamJoinLink | null;
+      coachLink: string | null;
+      conference?: React.ReactNode;
+    }>;
   };
 }
 
-function html(program: AdminTeamProgram): string {
+function html(
+  program: AdminTeamProgram,
+  links: {
+    playerLink?: AdminTeamJoinLink | null;
+    coachLink?: string | null;
+    conference?: React.ReactNode;
+  } = {},
+): string {
   const { AdminDetailsCard } = load();
   return renderToStaticMarkup(
-    React.createElement(AdminDetailsCard, { program }),
+    React.createElement(AdminDetailsCard, {
+      program,
+      playerLink: links.playerLink ?? null,
+      coachLink: links.coachLink ?? null,
+      conference: links.conference,
+    }),
   );
 }
+
+// Fake values only — never a real token.
+const PLAYER_LINK: AdminTeamJoinLink = {
+  url: "https://example.test/join/fake-token",
+  mode: "open",
+};
+const COACH_LINK = "https://example.test/claim/dartmouth-college-womens";
 
 function text(markup: string): string {
   return markup
@@ -78,21 +104,14 @@ const BASE: AdminTeamProgram = {
 };
 
 test.describe("AdminDetailsCard", () => {
-  test("titles the card and lists the six rows in order with mapped labels", () => {
+  test("titles the section and lists the facts in order with mapped labels", () => {
     const markup = html(BASE);
     const out = text(markup);
 
     expect(out).toContain("Details");
-    expect(out).toContain("Edit");
+    expect(out.match(/Edit details/g)).toHaveLength(1);
 
-    const order = [
-      "Program key",
-      "Staff page",
-      "Time zone",
-      "Who can upload",
-      "Who edits the schedule",
-      "Roster",
-    ];
+    const order = ["Time zone", "Who can upload", "Roster", "Staff page"];
     let cursor = -1;
     for (const label of order) {
       const at = out.indexOf(label);
@@ -100,12 +119,13 @@ test.describe("AdminDetailsCard", () => {
       cursor = at;
     }
 
-    expect(out).toContain("dartmouth-college-womens");
     expect(out).toContain("dartmouthsports.com");
     expect(out).toContain("Eastern");
     expect(out).toContain("Everyone on the team");
-    expect(out).toContain("All staff");
     expect(out).toContain("Private");
+    // The schedule is switched off, so who edits it is not a fact.
+    expect(out).not.toContain("Who edits the schedule");
+    expect(out).not.toContain("All staff");
 
     expect(markup).toContain(
       'href="https://dartmouthsports.com/sports/wten/coaches"',
@@ -119,18 +139,65 @@ test.describe("AdminDetailsCard", () => {
     expect(out).not.toContain("Private");
   });
 
-  test("upload and events policies map through uploadPolicyLabel, not a literal", () => {
+  test("the upload policy maps through uploadPolicyLabel, not a literal", () => {
     const out = text(
       html({ ...BASE, uploadPolicy: "owner_coaches", eventsPolicy: "owner" }),
     );
     expect(out).toContain("Owner and coaches");
-    expect(out).toContain("Owner only");
+    expect(out).not.toContain("Owner only");
   });
 
-  test("a null program key and a null staff page each print an em dash", () => {
-    const out = text(html({ ...BASE, programKey: null, staffPageUrl: null }));
-    expect(out).toContain("—");
+  test("no staff page leaves the fact out rather than printing a dash", () => {
+    const out = text(html({ ...BASE, staffPageUrl: null }));
+    expect(out).not.toContain("Staff page");
+    expect(out).not.toContain("—");
     expect(out).not.toContain("null");
+  });
+
+  test("the conference slot is drawn first in the facts row", () => {
+    const markup = html(BASE, {
+      conference: React.createElement(
+        "div",
+        { id: "conference" },
+        React.createElement("dt", null, "Conference"),
+        React.createElement("dd", null, "Ivy League"),
+      ),
+    });
+    const out = text(markup);
+    expect(out.indexOf("Conference")).toBeGreaterThan(-1);
+    expect(out.indexOf("Conference")).toBeLessThan(out.indexOf("Time zone"));
+    expect(markup).toMatch(/<dl[^>]*><div id="conference">/);
+  });
+
+  test("both links print with a Copy each, worded for the player link's mode", () => {
+    const open = text(
+      html(BASE, { playerLink: PLAYER_LINK, coachLink: COACH_LINK }),
+    );
+    expect(open).toContain("Player link, anyone can join");
+    expect(open).toContain(PLAYER_LINK.url);
+    expect(open).toContain("Coach link, recorded contacts");
+    expect(open).toContain(COACH_LINK);
+    expect(open.match(/\bCopy\b/g)).toHaveLength(2);
+
+    const approve = text(
+      html(BASE, {
+        playerLink: { ...PLAYER_LINK, mode: "approve" },
+        coachLink: COACH_LINK,
+      }),
+    );
+    expect(approve).toContain("Player link, joins with approval");
+    expect(approve).not.toContain("anyone can join");
+  });
+
+  test("a missing link is omitted, not printed empty", () => {
+    const none = text(html(BASE));
+    expect(none).not.toContain("Player link");
+    expect(none).not.toContain("Coach link");
+    expect(none).not.toContain("Copy");
+
+    const coachOnly = text(html(BASE, { coachLink: COACH_LINK }));
+    expect(coachOnly).not.toContain("Player link");
+    expect(coachOnly).toContain("Coach link, recorded contacts");
   });
 
   test("an unrecognised time zone prints the raw IANA string verbatim", () => {

@@ -11,10 +11,13 @@ import { viewIdentityKey } from "./viz-url";
 import { useVizState } from "./use-viz-state";
 import { courtTileDomId } from "./viz-court-transition";
 import {
+  wallCountLabel,
   wallSegmentReadout,
   type WallSegment,
   type WallSummary,
 } from "./wall-summary";
+import { prefersReducedMotion } from "@/components/dashboard/shared/use-reduced-motion";
+import { useTweenedNumber } from "./use-tweened-number";
 
 /**
  * One of the wall's four default cards (canvas W5, card D3 "Court first ·
@@ -96,6 +99,29 @@ export function WallCard({
   const domId = ownKey !== null ? courtTileDomId(ownKey) : undefined;
   const serve = cut === "serve";
 
+  // Switching players keeps the card mounted (the wall keys it by cut), so
+  // the court crossfades: the last player's marks fade out over the new
+  // player's, which fade in (`CourtMark`), and the figures below count
+  // across. Only a PLAYER change does this — a card whose dots merely
+  // recompute must not flash. Reduced motion: the marks just swap.
+  const [shownPlayer, setShownPlayer] = useState(playerName);
+  const [leaving, setLeaving] = useState<{
+    dots: VizDot[];
+    n: number;
+  } | null>(null);
+  const [shownDots, setShownDots] = useState(dots);
+  if (shownDots !== dots) setShownDots(dots);
+  if (shownPlayer !== playerName) {
+    setShownPlayer(playerName);
+    setLeaving(
+      prefersReducedMotion()
+        ? null
+        : { dots: shownDots, n: (leaving?.n ?? 0) + 1 },
+    );
+  }
+  const shownCount = useTweenedNumber(summary.count) ?? summary.count;
+  const shownTotal = useTweenedNumber(summary.total) ?? summary.total;
+
   // A plain click opens the lightbox over the wall through the store (no
   // navigation, so the wall keeps its scroll); a modified click is left to
   // the link, so a card still opens in a new tab.
@@ -106,6 +132,13 @@ export function WallCard({
   }
 
   const label = `${name}, ${playerName}: ${summary.countLabel}`;
+  const courtProps = {
+    cut,
+    chart: "scatter",
+    fill: true,
+    serveFrame: serve ? "throughNet" : "half",
+  } as const;
+
   const body = (
     <>
       <div
@@ -121,17 +154,38 @@ export function WallCard({
           }}
         >
           <CourtArt
-            cut={cut}
+            {...courtProps}
             dots={dots}
-            chart="scatter"
-            fill
-            serveFrame={serve ? "throughNet" : "half"}
             // Absolutely placed so the box's 334:216 aspect alone sets the
             // card's height: in flow, a return or errors court's own svg
             // aspect (wider than the box's) grew the box under the 300px
             // cap, and its card ended taller than the serve card beside it.
             className="absolute inset-0 block h-full w-full"
           />
+          {leaving !== null && (
+            // The last player's court, over the new one, fading out. Its
+            // lines sit exactly on the new court's, so only its marks are
+            // seen to go. Inert and hidden: it is a picture of what was.
+            <div
+              key={leaving.n}
+              aria-hidden="true"
+              inert
+              // Its marks are fresh nodes: without `[&_*]:animate-none` they
+              // would run `CourtMark`'s own fade-IN from nothing, under a
+              // container fading out, and never be seen to go. Only the
+              // overlay's own animation ends it — a child's bubbles here too.
+              className="pointer-events-none absolute inset-0 animate-out duration-[var(--duration-hover)] fade-out-0 fill-mode-forwards [&_*]:animate-none"
+              onAnimationEnd={(e) => {
+                if (e.target === e.currentTarget) setLeaving(null);
+              }}
+            >
+              <CourtArt
+                {...courtProps}
+                dots={leaving.dots}
+                className="absolute inset-0 block h-full w-full"
+              />
+            </div>
+          )}
         </div>
       </div>
       <div className="flex flex-col gap-1 border-t border-[var(--border-hairline)] px-5 pt-[14px] pb-[18px]">
@@ -147,7 +201,12 @@ export function WallCard({
             className="shrink-0 text-[11px] whitespace-nowrap tabular-nums"
             style={{ color: "var(--ink-600)" }}
           >
-            {summary.countLabel}
+            {wallCountLabel(
+              cut,
+              shownCount,
+              shownTotal,
+              summary.count === summary.total,
+            )}
           </span>
         </div>
         <SplitBar
@@ -170,13 +229,7 @@ export function WallCard({
                 className="size-2 rounded-[2px]"
                 style={{ backgroundColor: SEGMENT_FILLS[i] }}
               />
-              {segment.label}{" "}
-              <span
-                className="tabular-nums"
-                style={{ color: "var(--ink-900)" }}
-              >
-                {segment.count}
-              </span>
+              {segment.label} <TweenedCount value={segment.count} />
             </span>
           ))}
         </div>
@@ -332,6 +385,16 @@ function SegmentReadout({
           </span>
         )}
       </ChartTooltip>
+    </span>
+  );
+}
+
+/** A key segment's count, counting to a new value with the card's own. */
+function TweenedCount({ value }: { value: number }) {
+  const shown = useTweenedNumber(value) ?? value;
+  return (
+    <span className="tabular-nums" style={{ color: "var(--ink-900)" }}>
+      {shown}
     </span>
   );
 }

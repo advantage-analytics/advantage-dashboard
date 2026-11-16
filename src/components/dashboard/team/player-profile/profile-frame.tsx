@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { ScatterChart, Table2, type LucideIcon } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
+import { controlName } from "@/lib/ui/control-name";
 import { viewRowClass } from "@/components/dashboard/matches/match-detail/report-view-switcher";
 import {
   PROFILE_VIEWS,
@@ -81,6 +82,7 @@ export function ProfileViewSwitcher() {
             aria-selected={isActive}
             onClick={() => select(view.value)}
             className={viewRowClass(isActive)}
+            {...controlName(`profile_tab_${view.value}`)}
           >
             <span className="flex size-10 shrink-0 items-center justify-center">
               <Icon className="size-4" strokeWidth={1.5} aria-hidden="true" />

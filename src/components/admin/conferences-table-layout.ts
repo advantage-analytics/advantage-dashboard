@@ -38,12 +38,3 @@ export const CONFERENCES_COLUMNS: readonly {
   { label: "Pilot", col: COL.pilot },
   { label: "", col: COL.chevron },
 ];
-
-/**
- * The DOM id of one row, for the drawer's selection machine: returning focus
- * to the row it closed from and scrolling the next one into view on `↑`/`↓`.
- * Mirrors `requestRowId` in `requests-table.tsx`.
- */
-export function conferenceRowId(id: string): string {
-  return `admin-conference-${id}`;
-}

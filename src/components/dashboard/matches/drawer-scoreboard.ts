@@ -61,7 +61,7 @@ export function drawerScoreboardProps(
     id: seat,
     name: match[seat].name,
     sets: sets.map((set) => set[seat]),
-    // `tiebreakOf` returns the LOSER's points; only drawn on a lost set.
+    // `tiebreakOf` returns the LOSER's points; drawn beside the winner's 7.
     tiebreaks: sets.map((set) => tiebreakOf(set)),
     lostSets: outcomes.map(
       (outcome, index) =>

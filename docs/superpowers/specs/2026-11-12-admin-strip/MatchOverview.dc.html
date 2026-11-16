@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Match overview, stripped back</title>
+    <script src="./support.js"></script>
+  </head>
+  <body>
+    <x-dc>
+      <helmet>
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
+        />
+        <style>
+          body {
+            margin: 0;
+            background: #ffffff;
+          }
+          a {
+            color: #0d0d0d;
+            text-decoration: none;
+          }
+          a:hover {
+            color: #0d0d0d;
+          }
+        </style>
+      </helmet>
+      <div
+        style="
+          min-height: 800px;
+          background: #ffffff;
+          color: #0d0d0d;
+          font-family: Inter, system-ui, sans-serif;
+          -webkit-font-smoothing: antialiased;
+          font-size: 13px;
+          line-height: 1.45;
+        "
+      >
+        <header
+          style="
+            min-height: 44px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px 24px;
+            padding: 0 24px;
+          "
+        >
+          <div style="display: flex; align-items: center; gap: 10px">
+            <img
+              src="/_blob/cdac635f71902c44dea602e8af131551"
+              alt="Advantage"
+              style="width: 105px; height: 18px"
+            />
+            <span
+              aria-hidden="true"
+              style="width: 1px; height: 14px; background: #e5e5ea"
+            ></span>
+            <span style="font-size: 12px; color: #6b6b76">Admin</span>
+          </div>
+          <nav
+            aria-label="Admin"
+            style="
+              display: flex;
+              flex-wrap: wrap;
+              align-items: center;
+              gap: 4px;
+            "
+          >
+            <a
+              href="#today"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                color: #6b6b76;
+              "
+              >Today</a
+            >
+            <a
+              href="#labels"
+              aria-current="page"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 500;
+                background: #f5f5f5;
+              "
+              >Labels</a
+            >
+            <a
+              href="#matches"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                color: #6b6b76;
+              "
+              >Matches</a
+            >
+            <a
+              href="#teams"
+              style="
+                height: 30px;
+                display: flex;
+                align-items: center;
+                padding: 0 10px;
+                border-radius: 6px;
+                font-size: 12px;
+                color: #6b6b76;
+              "
+              >Teams</a
+            >
+          </nav>
+          <span
+            aria-label="Account menu, signed in as CG"
+            style="
+              width: 24px;
+              height: 24px;
+              border-radius: 999px;
+              background: #ededf0;
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 10px;
+              font-weight: 600;
+              color: #52525b;
+            "
+            >CG</span
+          >
+        </header>
+
+        <main
+          style="
+            max-width: 1040px;
+            margin: 0 auto;
+            box-sizing: border-box;
+            padding: 32px clamp(16px, 4vw, 56px) 56px;
+            display: flex;
+            flex-direction: column;
+            gap: 28px;
+          "
+        >
+          <div style="display: flex; flex-direction: column; gap: 14px">
+            <a
+              href="#labels"
+              style="
+                align-self: flex-start;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+                font-size: 12px;
+                color: #6b6b76;
+              "
+            >
+              <svg
+                aria-hidden="true"
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="m15 6-6 6 6 6"></path>
+              </svg>
+              Labels
+            </a>
+            <div
+              style="
+                display: flex;
+                flex-wrap: wrap;
+                align-items: flex-end;
+                justify-content: space-between;
+                gap: 16px 24px;
+              "
+            >
+              <div style="min-width: 0">
+                <h1
+                  style="
+                    margin: 0;
+                    font-size: 30px;
+                    font-weight: 300;
+                    line-height: 1.2;
+                    letter-spacing: -0.01em;
+                  "
+                >
+                  Saje Menon vs Sebastian Mendoza
+                </h1>
+                <p
+                  style="
+                    margin: 8px 0 0;
+                    display: flex;
+                    flex-wrap: wrap;
+                    align-items: center;
+                    gap: 6px;
+                    font-size: 13px;
+                    color: #6b6b76;
+                    font-variant-numeric: tabular-nums;
+                  "
+                >
+                  <span
+                    aria-hidden="true"
+                    style="
+                      width: 16px;
+                      height: 16px;
+                      border-radius: 4px;
+                      background: #e3efe8;
+                      display: inline-flex;
+                      align-items: center;
+                      justify-content: center;
+                      font-size: 8px;
+                      font-weight: 600;
+                      color: #1f6b47;
+                    "
+                    >BC</span
+                  >
+                  <span
+                    >Babson College · Men’s · 1.35 h of video · due in 3 h</span
+                  >
+                </p>
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px">
+                <span
+                  role="button"
+                  aria-disabled="true"
+                  title="Publishing is off until the score adds up"
+                  style="
+                    height: 36px;
+                    box-sizing: border-box;
+                    display: inline-flex;
+                    align-items: center;
+                    padding: 0 14px;
+                    border-radius: 8px;
+                    border: 1px solid #ececf0;
+                    background: #fafafa;
+                    font-size: 13px;
+                    font-weight: 500;
+                    color: #a1a1aa;
+                    white-space: nowrap;
+                    cursor: not-allowed;
+                  "
+                  >Publish</span
+                >
+                <a
+                  href="#continue"
+                  style="
+                    height: 36px;
+                    display: inline-flex;
+                    align-items: center;
+                    padding: 0 14px;
+                    border-radius: 8px;
+                    background: #3b82f6;
+                    color: #ffffff;
+                    font-size: 13px;
+                    font-weight: 500;
+                    white-space: nowrap;
+                  "
+                  >Continue labelling</a
+                >
+              </div>
+            </div>
+          </div>
+
+          <section
+            aria-label="Progress"
+            style="display: flex; flex-direction: column; gap: 10px"
+          >
+            <div
+              style="
+                display: flex;
+                flex-wrap: wrap;
+                align-items: baseline;
+                justify-content: space-between;
+                gap: 4px 24px;
+              "
+            >
+              <p
+                style="
+                  margin: 0;
+                  font-size: 14px;
+                  font-weight: 500;
+                  font-variant-numeric: tabular-nums;
+                "
+              >
+                12
+                <span style="font-weight: 400; color: #6b6b76"
+                  >of 92 flags resolved</span
+                >
+              </p>
+              <p
+                style="
+                  margin: 0;
+                  font-size: 12px;
+                  color: #6b6b76;
+                  font-variant-numeric: tabular-nums;
+                "
+              >
+                80 left: 70 can move the score, 10 wrong data
+              </p>
+            </div>
+            <div
+              aria-hidden="true"
+              style="
+                height: 4px;
+                border-radius: 999px;
+                overflow: hidden;
+                background: #ececf0;
+              "
+            >
+              <div
+                style="
+                  width: 13%;
+                  height: 100%;
+                  border-radius: 999px;
+                  background: #3b82f6;
+                "
+              ></div>
+            </div>
+          </section>
+
+          <section style="display: flex; flex-direction: column; gap: 10px">
+            <div
+              style="
+                display: flex;
+                align-items: baseline;
+                justify-content: space-between;
+                gap: 16px;
+              "
+            >
+              <h2 style="margin: 0; font-size: 14px; font-weight: 500">
+                Before you publish
+              </h2>
+              <span style="font-size: 12px; color: #6b6b76"
+                >Publish is off until the score adds up · 5 more open</span
+              >
+            </div>
+            <div
+              style="
+                box-sizing: border-box;
+                padding: 8px;
+                border-radius: 14px;
+                background: #f5f5f7;
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+              "
+            >
+              <a
+                href="#p"
+                style="
+                  box-sizing: border-box;
+                  min-height: 56px;
+                  padding: 9px 8px 9px 14px;
+                  border-radius: 8px;
+                  background: #fff;
+                  display: grid;
+                  grid-template-columns: 16px minmax(0, 1fr) auto;
+                  column-gap: 12px;
+                  align-items: center;
+                "
+              >
+                <span
+                  aria-hidden="true"
+                  style="
+                    width: 16px;
+                    height: 16px;
+                    border-radius: 999px;
+                    background: #fdecec;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                  "
+                  ><svg
+                    width="9"
+                    height="9"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#d92d20"
+                    stroke-width="3.2"
+                    stroke-linecap="round"
+                  >
+                    <path d="M6 6l12 12M18 6 6 18"></path></svg
+                ></span>
+                <span style="min-width: 0"
+                  ><span
+                    style="display: block; font-size: 13px; font-weight: 500"
+                    >Score adds up</span
+                  ><span style="display: block; font-size: 12px; color: #6b6b76"
+                    >Set 1 is labelled 5–6 against a record of 7–6. Publishing
+                    waits for this.</span
+                  ></span
+                >
+                <span
+                  style="
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 2px;
+                    font-size: 12px;
+                    color: #6b6b76;
+                    white-space: nowrap;
+                  "
+                  >Set 1<svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#9a9aa3"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="m9 6 6 6-6 6"></path></svg
+                ></span>
+              </a>
+              <a
+                href="#p"
+                style="
+                  box-sizing: border-box;
+                  min-height: 56px;
+                  padding: 9px 8px 9px 14px;
+                  border-radius: 8px;
+                  background: #fff;
+                  display: grid;
+                  grid-template-columns: 16px minmax(0, 1fr) auto;
+                  column-gap: 12px;
+                  align-items: center;
+                "
+              >
+                <svg
+                  aria-hidden="true"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                >
+                  <circle
+                    cx="8"
+                    cy="8"
+                    r="6.5"
+                    fill="none"
+                    stroke="#aaaaaa"
+                    stroke-width="1.5"
+                    stroke-dasharray="2.6 2.3"
+                  ></circle>
+                </svg>
+                <span style="min-width: 0"
+                  ><span
+                    style="display: block; font-size: 13px; font-weight: 500"
+                    >Nothing open that can move the score</span
+                  ><span style="display: block; font-size: 12px; color: #6b6b76"
+                    >70 flags open on 70 points.</span
+                  ></span
+                >
+                <span
+                  style="
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 2px;
+                    font-size: 12px;
+                    color: #6b6b76;
+                    white-space: nowrap;
+                  "
+                  >Point 57<svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#9a9aa3"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="m9 6 6 6-6 6"></path></svg
+                ></span>
+              </a>
+              <a
+                href="#p"
+                style="
+                  box-sizing: border-box;
+                  min-height: 56px;
+                  padding: 9px 8px 9px 14px;
+                  border-radius: 8px;
+                  background: #fff;
+                  display: grid;
+                  grid-template-columns: 16px minmax(0, 1fr) auto;
+                  column-gap: 12px;
+                  align-items: center;
+                "
+              >
+                <svg
+                  aria-hidden="true"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                >
+                  <circle
+                    cx="8"
+                    cy="8"
+                    r="6.5"
+                    fill="none"
+                    stroke="#aaaaaa"
+                    stroke-width="1.5"
+                    stroke-dasharray="2.6 2.3"
+                  ></circle>
+                </svg>
+                <span style="min-width: 0"
+                  ><span
+                    style="display: block; font-size: 13px; font-weight: 500"
+                    >Wrong data fixed</span
+                  ><span style="display: block; font-size: 12px; color: #6b6b76"
+                    >10 flags open on 8 points. None blocks publishing.</span
+                  ></span
+                >
+                <span
+                  style="
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 2px;
+                    font-size: 12px;
+                    color: #6b6b76;
+                    white-space: nowrap;
+                  "
+                  >Point 45<svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#9a9aa3"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="m9 6 6 6-6 6"></path></svg
+                ></span>
+              </a>
+              <a
+                href="#p"
+                style="
+                  box-sizing: border-box;
+                  min-height: 56px;
+                  padding: 9px 8px 9px 14px;
+                  border-radius: 8px;
+                  background: #fff;
+                  display: grid;
+                  grid-template-columns: 16px minmax(0, 1fr) auto;
+                  column-gap: 12px;
+                  align-items: center;
+                "
+              >
+                <svg
+                  aria-hidden="true"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                >
+                  <circle
+                    cx="8"
+                    cy="8"
+                    r="6.5"
+                    fill="none"
+                    stroke="#aaaaaa"
+                    stroke-width="1.5"
+                    stroke-dasharray="2.6 2.3"
+                  ></circle>
+                </svg>
+                <span style="min-width: 0"
+                  ><span
+                    style="display: block; font-size: 13px; font-weight: 500"
+                    >Every point can be written</span
+                  ><span style="display: block; font-size: 12px; color: #6b6b76"
+                    >On 33 points the strokes and the labelled winner disagree.
+                    They publish with the labelled winner.</span
+                  ></span
+                >
+                <span
+                  style="
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 2px;
+                    font-size: 12px;
+                    color: #6b6b76;
+                    white-space: nowrap;
+                  "
+                  >Point 58<svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#9a9aa3"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="m9 6 6 6-6 6"></path></svg
+                ></span>
+              </a>
+              <a
+                href="#p"
+                style="
+                  box-sizing: border-box;
+                  min-height: 56px;
+                  padding: 9px 8px 9px 14px;
+                  border-radius: 8px;
+                  background: #fff;
+                  display: grid;
+                  grid-template-columns: 16px minmax(0, 1fr) auto;
+                  column-gap: 12px;
+                  align-items: center;
+                "
+              >
+                <svg
+                  aria-hidden="true"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                >
+                  <circle
+                    cx="8"
+                    cy="8"
+                    r="6.5"
+                    fill="none"
+                    stroke="#aaaaaa"
+                    stroke-width="1.5"
+                    stroke-dasharray="2.6 2.3"
+                  ></circle>
+                </svg>
+                <span style="min-width: 0"
+                  ><span
+                    style="display: block; font-size: 13px; font-weight: 500"
+                    >Every game finished</span
+                  ><span style="display: block; font-size: 12px; color: #6b6b76"
+                    >3 games are unfinished or have points past their end.</span
+                  ></span
+                >
+                <span
+                  style="
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 2px;
+                    font-size: 12px;
+                    color: #6b6b76;
+                    white-space: nowrap;
+                  "
+                  >Game 9<svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#9a9aa3"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="m9 6 6 6-6 6"></path></svg
+                ></span>
+              </a>
+              <a
+                href="#p"
+                style="
+                  box-sizing: border-box;
+                  min-height: 56px;
+                  padding: 9px 8px 9px 14px;
+                  border-radius: 8px;
+                  background: #fff;
+                  display: grid;
+                  grid-template-columns: 16px minmax(0, 1fr) auto;
+                  column-gap: 12px;
+                  align-items: center;
+                "
+              >
+                <svg
+                  aria-hidden="true"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                >
+                  <circle
+                    cx="8"
+                    cy="8"
+                    r="6.5"
+                    fill="none"
+                    stroke="#cccccc"
+                    stroke-width="1.5"
+                    stroke-dasharray="2.6 2.3"
+                  ></circle>
+                </svg>
+                <span style="min-width: 0"
+                  ><span
+                    style="display: block; font-size: 13px; font-weight: 500"
+                    >Every error marked</span
+                  ><span style="display: block; font-size: 12px; color: #6b6b76"
+                    >47 to mark as forced or unforced. It asks once the score is
+                    settled.</span
+                  ></span
+                >
+                <span
+                  style="
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 2px;
+                    font-size: 12px;
+                    color: #6b6b76;
+                    white-space: nowrap;
+                  "
+                  >Mark now<svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#9a9aa3"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="m9 6 6 6-6 6"></path></svg
+                ></span>
+              </a>
+            </div>
+          </section>
+
+          <a
+            href="#details"
+            style="
+              box-sizing: border-box;
+              min-height: 44px;
+              padding: 0 8px 0 14px;
+              border-radius: 10px;
+              border: 1px solid #ececf0;
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 16px;
+            "
+          >
+            <span
+              style="
+                min-width: 0;
+                display: flex;
+                flex-wrap: wrap;
+                align-items: baseline;
+                gap: 2px 12px;
+              "
+              ><span style="font-size: 13px; font-weight: 500"
+                >Upload details</span
+              ><span style="font-size: 12px; color: #6b6b76"
+                >No-ad scoring · Menon starts on the far side · best of 3</span
+              ></span
+            >
+            <svg
+              aria-hidden="true"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#9a9aa3"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              style="flex-shrink: 0"
+            >
+              <path d="m6 9 6 6 6-6"></path>
+            </svg>
+          </a>
+        </main>
+      </div>
+    </x-dc>
+    <script
+      type="text/x-dc"
+      data-dc-script
+      data-props='{"$preview":{"width":1360,"height":800}}'
+    >
+      class Component extends DCLogic {
+        renderVals() {
+          return {};
+        }
+      }
+    </script>
+  </body>
+</html>

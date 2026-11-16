@@ -1,0 +1,587 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Labeller board, a match sent back</title>
+    <script src="./support.js"></script>
+  </head>
+  <body>
+    <x-dc>
+      <helmet>
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap"
+        />
+        <style>
+          body {
+            margin: 0;
+            background: #ffffff;
+          }
+          a {
+            color: #0d0d0d;
+            text-decoration: none;
+          }
+          a:hover {
+            color: #0d0d0d;
+          }
+        </style>
+      </helmet>
+      <div
+        style="
+          min-height: 760px;
+          background: #ffffff;
+          color: #0d0d0d;
+          font-family: Inter, system-ui, sans-serif;
+          -webkit-font-smoothing: antialiased;
+          font-size: 13px;
+          line-height: 1.45;
+        "
+      >
+        <main
+          style="
+            max-width: 1360px;
+            margin: 0 auto;
+            box-sizing: border-box;
+            padding: 48px clamp(16px, 4vw, 56px) 64px;
+            display: flex;
+            flex-direction: column;
+            gap: 32px;
+          "
+        >
+          <div
+            style="
+              display: flex;
+              flex-wrap: wrap;
+              align-items: flex-end;
+              justify-content: space-between;
+              gap: 20px 48px;
+            "
+          >
+            <div style="min-width: 0; flex: 1 1 420px">
+              <h1
+                style="
+                  margin: 0;
+                  font-size: 30px;
+                  font-weight: 300;
+                  line-height: 1.2;
+                  letter-spacing: -0.01em;
+                "
+              >
+                14 matches to label
+              </h1>
+              <p style="margin: 8px 0 0; font-size: 13px; color: #6b6b76">
+                A match was sent back to you. Fix and resubmit it to claim the
+                next one.
+              </p>
+            </div>
+            <dl style="margin: 0; display: flex; gap: 32px">
+              <div>
+                <dt style="font-size: 12px; color: #6b6b76">
+                  Your submitted hours, November
+                </dt>
+                <dd
+                  style="
+                    margin: 2px 0 0;
+                    font-size: 20px;
+                    line-height: 1.2;
+                    font-variant-numeric: tabular-nums;
+                  "
+                >
+                  7.60 <span style="font-size: 13px; color: #6b6b76">h</span>
+                </dd>
+              </div>
+            </dl>
+          </div>
+
+          <div
+            style="
+              display: flex;
+              flex-wrap: wrap;
+              align-items: flex-start;
+              gap: 16px;
+            "
+          >
+            <section
+              aria-labelledby="sb-todo"
+              style="
+                flex: 1 1 300px;
+                min-width: 0;
+                box-sizing: border-box;
+                padding: 16px 8px 8px;
+                border-radius: 14px;
+                background: #f5f5f7;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+              "
+            >
+              <h2
+                id="sb-todo"
+                style="
+                  margin: 0;
+                  padding: 0 12px;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: baseline;
+                  gap: 12px;
+                  font-size: 13px;
+                  font-weight: 600;
+                "
+              >
+                <span>To do</span
+                ><span
+                  style="
+                    font-size: 12px;
+                    font-weight: 400;
+                    color: #6b6b76;
+                    font-variant-numeric: tabular-nums;
+                  "
+                  >14 matches · 15.90 h</span
+                >
+              </h2>
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <div
+                  aria-hidden="true"
+                  style="
+                    padding: 0 12px 2px;
+                    display: grid;
+                    grid-template-columns: 56px 96px minmax(0, 1fr) auto;
+                    column-gap: 8px;
+                    font-size: 11px;
+                    color: #6b6b76;
+                  "
+                >
+                  <span>Video</span><span>Urgency</span><span></span
+                  ><span>Due</span>
+                </div>
+                <sc-for list="{{ todo }}" as="m" hint-placeholder-count="8">
+                  <div
+                    style="
+                      box-sizing: border-box;
+                      height: 44px;
+                      padding: 0 12px;
+                      border-radius: 8px;
+                      background: #ffffff;
+                      display: grid;
+                      grid-template-columns: 56px 96px minmax(0, 1fr) auto;
+                      align-items: center;
+                      column-gap: 8px;
+                    "
+                  >
+                    <span
+                      style="
+                        font-size: 14px;
+                        font-weight: 500;
+                        font-variant-numeric: tabular-nums;
+                        white-space: nowrap;
+                      "
+                      >{{ m.hours }}
+                      <span style="font-weight: 400; color: #6b6b76"
+                        >h</span
+                      ></span
+                    >
+                    <dc-import
+                      name="Urgency"
+                      level="{{ m.lv }}"
+                      hint-size="88px,22px"
+                    ></dc-import>
+                    <sc-if
+                      value="{{ m.late }}"
+                      hint-placeholder-val="{{ false }}"
+                      ><span
+                        style="
+                          grid-column: 4;
+                          font-size: 12px;
+                          font-weight: 600;
+                          font-variant-numeric: tabular-nums;
+                          white-space: nowrap;
+                        "
+                        >{{ m.due }}</span
+                      ></sc-if
+                    >
+                    <sc-if value="{{ m.ok }}" hint-placeholder-val="{{ true }}"
+                      ><span
+                        style="
+                          grid-column: 4;
+                          font-size: 12px;
+                          color: #6b6b76;
+                          font-variant-numeric: tabular-nums;
+                          white-space: nowrap;
+                        "
+                        >{{ m.due }}</span
+                      ></sc-if
+                    >
+                  </div>
+                </sc-for>
+              </div>
+              <a
+                href="#more"
+                style="
+                  padding: 4px 12px 8px;
+                  font-size: 12px;
+                  font-weight: 500;
+                  color: #52525b;
+                "
+                >Show 6 more</a
+              >
+            </section>
+
+            <section
+              aria-labelledby="sb-doing"
+              style="
+                flex: 1 1 300px;
+                min-width: 0;
+                box-sizing: border-box;
+                padding: 16px 8px 8px;
+                border-radius: 14px;
+                background: #f5f5f7;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+              "
+            >
+              <h2
+                id="sb-doing"
+                style="
+                  margin: 0;
+                  padding: 0 12px;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: baseline;
+                  gap: 12px;
+                  font-size: 13px;
+                  font-weight: 600;
+                "
+              >
+                <span>In progress</span
+                ><span
+                  style="
+                    font-size: 12px;
+                    font-weight: 400;
+                    color: #6b6b76;
+                    font-variant-numeric: tabular-nums;
+                  "
+                  >4 matches · 5.00 h</span
+                >
+              </h2>
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <article
+                  style="
+                    box-sizing: border-box;
+                    padding: 0 12px 12px;
+                    border-radius: 8px;
+                    background: #ffffff;
+                    box-shadow: 0 0 0 1px #d4d4db;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 12px;
+                  "
+                >
+                  <div
+                    style="
+                      height: 44px;
+                      display: grid;
+                      grid-template-columns: 56px 96px minmax(0, 1fr) auto;
+                      align-items: center;
+                      column-gap: 8px;
+                    "
+                  >
+                    <span
+                      style="
+                        font-size: 14px;
+                        font-weight: 500;
+                        font-variant-numeric: tabular-nums;
+                        white-space: nowrap;
+                      "
+                      >1.20
+                      <span style="font-weight: 400; color: #6b6b76"
+                        >h</span
+                      ></span
+                    >
+                    <dc-import
+                      name="Urgency"
+                      level="p"
+                      hint-size="88px,22px"
+                    ></dc-import>
+                    <span
+                      style="
+                        text-align: right;
+                        font-size: 12px;
+                        font-weight: 600;
+                        white-space: nowrap;
+                      "
+                      >Your match</span
+                    >
+                    <span
+                      aria-hidden="true"
+                      style="
+                        width: 24px;
+                        height: 24px;
+                        border-radius: 999px;
+                        background: #ededf0;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 10px;
+                        font-weight: 600;
+                        color: #52525b;
+                      "
+                      >SO</span
+                    >
+                  </div>
+                  <div
+                    style="
+                      box-sizing: border-box;
+                      padding: 10px 12px;
+                      border-radius: 8px;
+                      background: #f5f5f7;
+                      display: flex;
+                      flex-direction: column;
+                      gap: 4px;
+                    "
+                  >
+                    <div style="font-size: 12px; font-weight: 600">
+                      Sent back 2 h ago
+                    </div>
+                    <p style="margin: 0; font-size: 12px; color: #525252">
+                      Set 2, game 5 has two points merged into one. Split them
+                      and recheck the game score.
+                    </p>
+                  </div>
+                  <div style="font-size: 12px; color: #6b6b76">
+                    Your first version is still published. Resubmitting replaces
+                    it.
+                  </div>
+                  <a
+                    href="#fix"
+                    style="
+                      display: flex;
+                      align-items: center;
+                      justify-content: center;
+                      gap: 4px;
+                      height: 36px;
+                      border-radius: 8px;
+                      background: #3b82f6;
+                      color: #ffffff;
+                      font-size: 13px;
+                      font-weight: 500;
+                      white-space: nowrap;
+                    "
+                    >Fix and resubmit<svg
+                      aria-hidden="true"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="m9 6 6 6-6 6"></path></svg
+                  ></a>
+                </article>
+                <sc-for list="{{ doing }}" as="m" hint-placeholder-count="3">
+                  <div
+                    style="
+                      box-sizing: border-box;
+                      height: 44px;
+                      padding: 0 12px;
+                      border-radius: 8px;
+                      background: #ffffff;
+                      display: grid;
+                      grid-template-columns: 56px 96px minmax(0, 1fr) auto;
+                      align-items: center;
+                      column-gap: 8px;
+                    "
+                  >
+                    <span
+                      style="
+                        font-size: 14px;
+                        font-weight: 500;
+                        font-variant-numeric: tabular-nums;
+                        white-space: nowrap;
+                      "
+                      >{{ m.hours }}
+                      <span style="font-weight: 400; color: #6b6b76"
+                        >h</span
+                      ></span
+                    >
+                    <dc-import
+                      name="Urgency"
+                      level="{{ m.lv }}"
+                      hint-size="88px,22px"
+                    ></dc-import>
+                    <span
+                      style="
+                        min-width: 0;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        text-align: right;
+                        font-size: 12px;
+                        color: #6b6b76;
+                        white-space: nowrap;
+                      "
+                      >{{ m.first }}</span
+                    >
+                    <span
+                      aria-hidden="true"
+                      style="
+                        width: 24px;
+                        height: 24px;
+                        border-radius: 999px;
+                        background: #ededf0;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 10px;
+                        font-weight: 600;
+                        color: #52525b;
+                      "
+                      >{{ m.ini }}</span
+                    >
+                  </div>
+                </sc-for>
+              </div>
+            </section>
+
+            <section
+              aria-labelledby="sb-done"
+              style="
+                flex: 1 1 300px;
+                min-width: 0;
+                box-sizing: border-box;
+                padding: 16px 8px 8px;
+                border-radius: 14px;
+                background: #f5f5f7;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+              "
+            >
+              <h2
+                id="sb-done"
+                style="
+                  margin: 0;
+                  padding: 0 12px;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: baseline;
+                  gap: 12px;
+                  font-size: 13px;
+                  font-weight: 600;
+                "
+              >
+                <span>Published</span
+                ><span
+                  style="
+                    font-size: 12px;
+                    font-weight: 400;
+                    color: #6b6b76;
+                    font-variant-numeric: tabular-nums;
+                  "
+                  >3 matches · 3.65 h</span
+                >
+              </h2>
+              <div style="display: flex; flex-direction: column; gap: 4px">
+                <sc-for list="{{ done }}" as="m" hint-placeholder-count="3">
+                  <div
+                    style="
+                      box-sizing: border-box;
+                      height: 44px;
+                      padding: 0 12px;
+                      border-radius: 8px;
+                      background: #ffffff;
+                      display: grid;
+                      grid-template-columns: 56px 96px minmax(0, 1fr) auto;
+                      align-items: center;
+                      column-gap: 8px;
+                    "
+                  >
+                    <span
+                      style="
+                        font-size: 14px;
+                        font-weight: 500;
+                        font-variant-numeric: tabular-nums;
+                        white-space: nowrap;
+                      "
+                      >{{ m.hours }}
+                      <span style="font-weight: 400; color: #6b6b76"
+                        >h</span
+                      ></span
+                    >
+                    <dc-import
+                      name="Urgency"
+                      level="{{ m.lv }}"
+                      hint-size="88px,22px"
+                    ></dc-import>
+                    <span
+                      style="
+                        min-width: 0;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        text-align: right;
+                        font-size: 12px;
+                        color: #6b6b76;
+                        white-space: nowrap;
+                      "
+                      >{{ m.first }} · {{ m.when }}</span
+                    >
+                    <span
+                      aria-hidden="true"
+                      style="
+                        width: 24px;
+                        height: 24px;
+                        border-radius: 999px;
+                        background: #ededf0;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 10px;
+                        font-weight: 600;
+                        color: #52525b;
+                      "
+                      >{{ m.ini }}</span
+                    >
+                  </div>
+                </sc-for>
+              </div>
+              <p
+                style="
+                  margin: 0;
+                  padding: 0 12px 8px;
+                  font-size: 12px;
+                  color: #6b6b76;
+                "
+              >
+                Submitting publishes a match to the player straight away. It can
+                still be sent back to you.
+              </p>
+            </section>
+          </div>
+        </main>
+      </div>
+    </x-dc>
+    <script
+      type="text/x-dc"
+      data-dc-script
+      data-props='{"$preview":{"width":1360,"height":760}}'
+    >
+      class Component extends DCLogic {
+      renderVals() {
+      const q = (lv, hours, due, late) => ({ lv: lv, hours: hours, due: due, late: !!late, ok: !late });
+      const w = (lv, hours, name, when) => ({ lv: lv, hours: hours, when: when || '', first: name === 'Sam Ortiz' ? 'You' : name.split(' ')[0], ini: name.split(' ').map((x) => x[0]).join('') });
+      return {
+      todo: [
+      q('s', '1.30', 'Overdue by 1 h', true), q('e', '1.40', 'Due in 40 min'), q('e', '0.85', 'Due in 3 h'),
+      q('p', '1.65', 'Due in 9 h'), q('p', '1.10', 'Due in 13 h'), q('s', '0.95', 'Due in 17 h'),
+      q('s', '1.50', 'Due in 22 h'), q('s', '1.05', 'Due tomorrow')
+      ],
+      doing: [w('e', '1.05', 'Maya Rao'), w('p', '1.45', 'Tobi Adler'), w('s', '1.30', 'Lena Kovac')],
+      done: [w('p', '1.55', 'Dev Patel', 'today'), w('s', '1.20', 'Sam Ortiz', 'yesterday'), w('s', '0.90', 'Maya Rao', 'yesterday')]
+      };
+      }
+      }
+    </script>
+  </body>
+</html>

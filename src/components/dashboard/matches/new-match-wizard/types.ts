@@ -444,7 +444,7 @@ export const STEP_CONFIG: Record<Step, { title: string; description: string }> =
     provider: {
       title: "Where this match lives, and what it's made from.",
       description:
-        "Three facts before the file. Once we know whose match it is, the schedule fills the rest.",
+        "Four facts before the file. Once we know whose match it is, the schedule fills the rest.",
     },
     // The import copy; the video copy is the processing override below.
     file: {
@@ -785,6 +785,14 @@ export interface MatchDraft {
    * resumes onto the picker instead of onto a stranger's `player1_id`.
    */
   subject?: RosterSubject | null;
+  /**
+   * Step 1's Format answer — "singles", present only once step 1 was
+   * continued past (Doubles is refused there and never saved). Optional
+   * because rows saved before Format existed carry none, and neither does a
+   * connector draft that was not told; those resume ON step 1 so the
+   * question is asked (`draftResumeStep`).
+   */
+  discipline?: "singles";
   updatedAt: string;
 }
 

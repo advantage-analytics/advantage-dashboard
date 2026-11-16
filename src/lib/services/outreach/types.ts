@@ -21,6 +21,9 @@ export const OUTREACH_EMAILS = [
   { no: 8, name: "Day-7 follow-up", list: 7, programs: true },
 ] as const;
 
+/** The email the outreach page opens on without `?email=`. */
+export const DEFAULT_OUTREACH_EMAIL_NO = 7;
+
 export type OutreachEmailNo = (typeof OUTREACH_EMAILS)[number]["no"];
 
 export const FOLLOW_UP_DAYS = 7;
@@ -30,6 +33,16 @@ export const IMPORTABLE_LISTS = [1, 3, 4, 6, 7] as const;
 
 export function outreachEmail(no: number) {
   return OUTREACH_EMAILS.find((email) => email.no === no) ?? null;
+}
+
+/**
+ * The email an `?email=` value names, or the default when it names none. The
+ * page and its loading skeleton both read the address through this, so the
+ * skeleton draws the email the page is about to.
+ */
+export function outreachEmailNoFrom(value: string | null | undefined): number {
+  const no = Number(value);
+  return outreachEmail(no) ? no : DEFAULT_OUTREACH_EMAIL_NO;
 }
 
 export interface OutreachCc {

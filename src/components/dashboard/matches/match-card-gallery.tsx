@@ -5,7 +5,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { Calendar, Swords } from "lucide-react";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
-import { VERIFIED_BY_ADVANTAGE } from "@/lib/data/match-verification";
+import {
+  VERIFICATION_PENDING,
+  VERIFIED_BY_ADVANTAGE,
+} from "@/lib/data/match-verification";
 import { MatchActionsMenu } from "@/components/dashboard/matches/match-actions/match-actions-menu";
 
 interface ScoreRowProps {
@@ -132,8 +135,16 @@ export function MatchCardGallery({
               <span className="eyebrow">
                 {match.matchContext ?? "Final Score"}
               </span>
-              {match.verification && (
+              {match.verification ? (
                 <VerifiedMark size={14} label={VERIFIED_BY_ADVANTAGE} />
+              ) : (
+                match.verificationPending && (
+                  <VerifiedMark
+                    size={14}
+                    label={VERIFICATION_PENDING}
+                    pending
+                  />
+                )
               )}
             </div>
             {match.duration && (

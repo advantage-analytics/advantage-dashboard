@@ -270,6 +270,19 @@ test.describe("Admin console route smoke test (live)", () => {
     expect(locationPathname(response)).toBe("/login");
   });
 
+  test("unauthenticated GET /admin/conferences/<id> redirects 307 to /login", async ({
+    request,
+  }) => {
+    // Any id: the admin layout sends a signed-out request to /login before
+    // the page looks the conference up.
+    const response = await get(
+      request,
+      "/admin/conferences/00000000-0000-0000-0000-000000000000",
+    );
+    expect(response.status()).toBe(307);
+    expect(locationPathname(response)).toBe("/login");
+  });
+
   test("/admin/claims redirects 307 to /admin/requests, unauthenticated or not", async ({
     request,
   }) => {

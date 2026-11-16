@@ -86,6 +86,7 @@ function match(
     tournamentName: "Fall Classic",
     date,
     matchType: "Singles",
+    verificationPending: false,
     player1: { name: "Dana Brooks", id: "viewer-1", profileId: null },
     player2: { name: opponent },
     score: {

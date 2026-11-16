@@ -27,28 +27,6 @@ export const LABELLER_SIDE_NAMES: Record<LabelSide, string> = {
 };
 
 /**
- * The overview checklist's sentences, said to a labeller. A labeller never
- * publishes — they submit, and an admin publishes — so every "publish" in
- * `completeWarnings` and the dashboard's checks reads as what submitting
- * hands over instead. Ordered: the longer phrases go first.
- */
-const LABELLER_WORDING: readonly (readonly [RegExp, string])[] = [
-  [/\bwill publish\b/g, "will go in"],
-  [/\bpublishes\b/g, "goes in"],
-  [/\ba publish\b/g, "submitting"],
-  [/\bPublish\b/g, "Submit"],
-  [/\bpublishing\b/g, "submitting"],
-];
-
-/** `text` with a publisher's words swapped for a labeller's (`LABELLER_WORDING`). */
-export function labellerWording(text: string): string {
-  return LABELLER_WORDING.reduce(
-    (out, [from, to]) => out.replace(from, to),
-    text,
-  );
-}
-
-/**
  * `session` with every identifying field replaced: the player names become
  * the side labels, and the match id, job id and derivation version are
  * blanked. The rows, the scoring and the score fields stay — they are the

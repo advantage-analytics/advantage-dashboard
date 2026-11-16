@@ -1,7 +1,9 @@
 import { capitalize } from "@/lib/utils";
 
 import {
+  bandOptionLabel,
   MATCH_FILTER_OPTIONS,
+  type FilterBandLabels,
   type MatchFilterKey,
   type MatchFilters,
   type PlayerSide,
@@ -43,8 +45,18 @@ function playerName(value: unknown, names: PhraseNames): string {
   return (value as PlayerSide) === "you" ? names.you : names.opponent;
 }
 
-/** The catalog label of `value` in `key`, or the value itself if it has none. */
-export function optionLabel(key: MatchFilterKey, value: unknown): string {
+/**
+ * The label of `value` in `key`: Contact and Landed in from the viewer's
+ * bands when `labels` is given, else the catalog's; the value itself if it
+ * has none.
+ */
+export function optionLabel(
+  key: MatchFilterKey,
+  value: unknown,
+  labels?: FilterBandLabels,
+): string {
+  const banded = labels ? bandOptionLabel(key, value, labels) : null;
+  if (banded !== null) return banded;
   const option = (
     MATCH_FILTER_OPTIONS[key] as readonly { value: unknown; label: string }[]
   ).find((o) => o.value === value);
@@ -83,10 +95,21 @@ const RALLY_LENGTH_PHRASE: Record<RallyLengthBand, string> = {
   long: "long rally (9+)",
 };
 
+/** "Inside the baseline" → "inside the baseline"; "0–5 ft behind" as is. */
+function contactWords(option: string): string {
+  return option.charAt(0).toLowerCase() + option.slice(1);
+}
+
+/** "Deep · 0–13 ft" → "deep (0–13 ft)"; a bare "Deep" → "deep". */
+function landedWords(option: string): string {
+  const [name, range] = option.split(" · ");
+  return range ? `${name.toLowerCase()} (${range})` : name.toLowerCase();
+}
+
 /**
  * How each group reads in the sentence. A bare option label is ambiguous
- * across groups ("slice" is a serve spin and a return spin; "middle" is a
- * return zone and a return contact), so each group says which it is.
+ * across groups ("slice" is a serve spin and a return spin; "deep" is
+ * where a return landed, never where it was struck), so each group says which it is.
  */
 const PHRASE: {
   readonly [K in MatchFilterKey]: (
@@ -108,12 +131,8 @@ const PHRASE: {
   returnType: (option) => `${lower(option)} return`,
   returnSpin: (option) => `${lower(option)} return`,
   returnZone: (option) => `${lower(option)} return`,
-  returnContact: (_, value) =>
-    value === "inside"
-      ? "contact inside the baseline"
-      : value === "middle"
-        ? "contact on the baseline"
-        : "deep contact",
+  returnContact: (option) => `return struck ${contactWords(option)}`,
+  returnLanded: (option) => `return landed ${landedWords(option)}`,
   returnResult: (option, value) =>
     RETURN_RESULT_PHRASE[value as ReturnResult] ?? lower(option),
   // Says who won rather than "points lost": Outcome reads from the viewer's
@@ -133,6 +152,8 @@ const PHRASE: {
   customSide: (option) => `from the ${lower(option)} side`,
   customStroke: (option) => article(lower(option)),
   customDirection: (option) => `${lower(option)} shot`,
+  customContact: (option) => `a shot struck ${contactWords(option)}`,
+  customLanded: (option) => `a shot landed ${landedWords(option)}`,
   customRallyShot: (_, value) => `rally shot ${String(value)}`,
   // Then reads as Custom's phrase after "then", each value on its own — the
   // Visualizations strip draws one token per value, so each must say so.
@@ -140,6 +161,8 @@ const PHRASE: {
   thenSide: (option) => `then from the ${lower(option)} side`,
   thenStroke: (option) => `then ${article(lower(option))}`,
   thenDirection: (option) => `then ${lower(option)} shot`,
+  thenContact: (option) => `then a shot struck ${contactWords(option)}`,
+  thenLanded: (option) => `then a shot landed ${landedWords(option)}`,
   thenRallyShot: (_, value) => `then rally shot ${String(value)}`,
 };
 
@@ -193,6 +216,7 @@ export const SENTENCE_KEYS: readonly MatchFilterKey[] = [
   "returnSpin",
   "returnZone",
   "returnContact",
+  "returnLanded",
   "returnResult",
   "sets",
   "scoreType",
@@ -207,11 +231,15 @@ export const SENTENCE_KEYS: readonly MatchFilterKey[] = [
   "customSide",
   "customStroke",
   "customDirection",
+  "customContact",
+  "customLanded",
   "customRallyShot",
   "thenPlayer",
   "thenSide",
   "thenStroke",
   "thenDirection",
+  "thenContact",
+  "thenLanded",
   "thenRallyShot",
 ];
 
@@ -223,11 +251,12 @@ export const SENTENCE_KEYS: readonly MatchFilterKey[] = [
 export function appliedPhrases(
   filters: MatchFilters,
   names: PhraseNames,
+  labels?: FilterBandLabels,
 ): string[] {
   const out: string[] = [];
   for (const key of SENTENCE_KEYS) {
     for (const value of appliedValues(filters, key)) {
-      out.push(phraseFor(key, optionLabel(key, value), value, names));
+      out.push(phraseFor(key, optionLabel(key, value, labels), value, names));
     }
   }
   return out;

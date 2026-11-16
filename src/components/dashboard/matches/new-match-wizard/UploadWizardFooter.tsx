@@ -8,6 +8,7 @@ import { FooterMeter, SplitReadout } from "./FooterMeter";
 import { jumpToMissingField, MissingFieldsPill } from "./MissingFieldsPill";
 import { useUploadWizard } from "./UploadWizardProvider";
 import { focusRingCls } from "./styles";
+import { controlName } from "@/lib/ui/control-name";
 
 /**
  * The wizard footer's three slots, each reading the wizard context — composed
@@ -154,16 +155,20 @@ export function WizardFooterStatus() {
 
 export function SaveDraftButton() {
   const {
-    wizard: { draftSaving },
+    wizard: { draftSaving, discipline },
     actions: { saveDraft },
   } = useUploadWizard();
+  // Doubles cannot be submitted, so there is no draft of it to keep: the
+  // Format field's strip already says why, and `saveDraft` refuses it too.
+  const doubles = discipline === "doubles";
 
   return (
     <button
       type="button"
       onClick={() => void saveDraft()}
-      disabled={draftSaving}
-      className="shrink-0 cursor-pointer text-[11px] whitespace-nowrap text-[var(--ink-500)] transition-colors duration-150 hover:text-[var(--ink-900)] disabled:cursor-default"
+      disabled={draftSaving || doubles}
+      {...controlName("wizard_save_draft")}
+      className="shrink-0 cursor-pointer text-[11px] whitespace-nowrap text-[var(--ink-500)] transition-colors duration-150 hover:text-[var(--ink-900)] disabled:cursor-default disabled:opacity-50 disabled:hover:text-[var(--ink-500)]"
     >
       {draftSaving ? "Saving…" : "Save draft"}
     </button>

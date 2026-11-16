@@ -15,7 +15,12 @@ import { formatMatchDayLong } from "@/lib/data/match-day";
 import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
 import { formatMatchDuration } from "@/lib/format/duration";
 import type { Match, SetScore } from "@/lib/data/types";
-import { verificationFor } from "@/lib/data/match-verification";
+import {
+  showsVerificationPending,
+  verificationFor,
+} from "@/lib/data/match-verification";
+import { loadVerificationPending } from "@/lib/data/match-verification-server";
+import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { errorSplitJudged } from "@/lib/data/error-split";
 import { seatCrestUrls, type MatchCrestEmbeds } from "@/lib/data/match-crests";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
@@ -276,6 +281,9 @@ export function transformDbMatchToMatch(
     isPractice: isPracticeMatch(row.match_type),
     courtType: row.court_type ?? undefined,
     verification,
+    // Set by `loadMatchDetail` from `match_label_states`; false for every
+    // other reader of this transform (the share link, the sample build).
+    verificationPending: false,
     sourceProvider: row.source_provider ?? undefined,
     errorSplitJudged: errorSplitJudged({
       sourceProvider: row.source_provider,
@@ -558,6 +566,29 @@ async function resolveFoldUnreconciled(dbRow: DbMatch): Promise<boolean> {
 }
 
 /**
+ * Whether the report says "Verification pending" for this match.
+ *
+ * Through the client handed in, so the signed-in viewer's own: the admin
+ * console and the sample build pass the service role, which
+ * `match_label_states` answers with nothing. Only a match the function calls
+ * pending spends a second read — its analysis, so a reprocess in flight or a
+ * match whose statistics were refused never reads as pending. Never throws.
+ */
+async function resolveVerificationPending(
+  supabase: SupabaseClient,
+  dbRow: DbMatch,
+): Promise<boolean> {
+  const verification = verificationFor(dbRow);
+  if (verification) return false;
+  const pending = await loadVerificationPending(supabase, [dbRow.id]);
+  if (!pending.has(dbRow.id)) return false;
+  const analysis = await loadMatchAnalysis(supabase, [dbRow.id])
+    .then((jobs) => jobs.get(dbRow.id) ?? null)
+    .catch(() => null);
+  return showsVerificationPending({ verification, pending: true, analysis });
+}
+
+/**
  * The `matches` columns the report reads — one string, so the public share
  * loader (`match-share-server.ts`) and this one cannot drift apart on which
  * fields `DbMatch` actually carries. The embeds name their FKs: `matches`
@@ -644,6 +675,7 @@ export async function loadMatchDetail(
     windowSeconds,
     foldUnreconciled,
     opponentPlayerOnRoster,
+    verificationPending,
   ] = await Promise.all([
     getMatchStatisticsFromSupabase(matchId, supabase),
     getMatchPointsFromSupabase(matchId, supabase, {
@@ -682,6 +714,8 @@ export async function loadMatchDetail(
     // Same wave: only a rival or an unseated teammate named by
     // `opponent_player_id` spends the read (`opponentIsTeammate`).
     resolveOpponentPlayerOnRoster(supabase, dbRow),
+    // Same wave: one `match_label_states` read, none for a verified match.
+    resolveVerificationPending(supabase, dbRow),
   ]);
 
   const profiles = new Map<string, PlayerProfile>();
@@ -716,6 +750,7 @@ export async function loadMatchDetail(
   match.uploadedBy = uploadedBy;
   match.createdBy = dbRow.created_by;
   match.programId = dbRow.program_id;
+  match.verificationPending = verificationPending;
   if (!(match.durationSec && match.durationSec > 0) && windowSeconds) {
     match.durationSec = windowSeconds;
     match.duration = formatMatchDuration(windowSeconds * 1000);

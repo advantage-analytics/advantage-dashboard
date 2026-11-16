@@ -7,7 +7,7 @@ import {
   loadTemplates,
 } from "@/lib/services/outreach/outreach-server";
 import {
-  OUTREACH_EMAILS,
+  outreachEmailNoFrom,
   type OutreachProgram,
 } from "@/lib/services/outreach/types";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
@@ -41,10 +41,7 @@ export default async function AdminOutreachPage({
   await requireAdminOrNotFound();
   const params = await searchParams;
 
-  const emailParam = Number(one(params.email));
-  const emailNo = OUTREACH_EMAILS.some((email) => email.no === emailParam)
-    ? emailParam
-    : 7;
+  const emailNo = outreachEmailNoFrom(one(params.email));
 
   const supabase = await createClient();
   const {

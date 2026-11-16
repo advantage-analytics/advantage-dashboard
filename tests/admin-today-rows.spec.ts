@@ -1,0 +1,328 @@
+import { expect, test } from "@playwright/test";
+
+import type { AdminRequestRow } from "@/lib/data/admin-requests-server";
+import {
+  RESOLVABLE_KINDS,
+  claimOffersApprove,
+  messageDrafts,
+  newestShownJobPerMatch,
+  sortLongestWaitFirst,
+  todayActions,
+  type TodayThreadRow,
+} from "@/lib/data/admin-today-server";
+
+/**
+ * Admin › Today rows (T3) — pure, no I/O: the kind-to-actions mapping, the
+ * support-message row builder and the longest-wait-first order.
+ */
+
+const ID = "11111111-2222-3333-4444-555555555555";
+
+function claimRow(
+  overrides: Partial<Omit<AdminRequestRow, "detail">> & {
+    detail?: Partial<Extract<AdminRequestRow["detail"], { source: "claim" }>>;
+  } = {},
+): AdminRequestRow {
+  const { detail, ...rest } = overrides;
+  return {
+    id: ID,
+    source: "claim",
+    date: "2026-11-01T10:00:00.000Z",
+    team: "Stanford Women's Tennis",
+    crestUrl: null,
+    for: "Head coach",
+    from: { name: "Pat Coach", email: "pat@example.com" },
+    emailCheck: "none",
+    status: "pending_review",
+    ...rest,
+    detail: {
+      source: "claim",
+      claimId: ID,
+      programId: "p1",
+      schoolName: "Stanford",
+      team: null,
+      division: null,
+      state: null,
+      staffPageUrl: null,
+      reviewReasons: null,
+      primaryDomain: null,
+      claimantRole: "head_coach",
+      claimantMessage: null,
+      domainMatched: false,
+      contactMatched: false,
+      skipsManualReview: false,
+      matchReason: null,
+      reviewNotes: null,
+      voucherNote: null,
+      verificationSentAt: null,
+      verificationOpenedAt: null,
+      verifiedAt: null,
+      reviewReason: "Needs a look",
+      ...detail,
+    },
+  };
+}
+
+test.describe("todayActions", () => {
+  test("a claim the drawer would approve gets Approve, then Decline", () => {
+    const row = claimRow({ detail: { domainMatched: true } });
+    expect(claimOffersApprove(row)).toBe(true);
+    expect(
+      todayActions({
+        kind: "claim",
+        requestId: row.id,
+        claimId: ID,
+        approvable: claimOffersApprove(row),
+      }),
+    ).toEqual([
+      { type: "approve", label: "Approve", claimId: ID },
+      { type: "link", label: "Decline", href: `/admin/requests?id=${ID}` },
+    ]);
+  });
+
+  test("an unvouched or objected claim gets one Open into Requests", () => {
+    expect(claimOffersApprove(claimRow())).toBe(false);
+    expect(
+      claimOffersApprove(
+        claimRow({ status: "objected", detail: { verifiedAt: "x" } }),
+      ),
+    ).toBe(false);
+    expect(
+      todayActions({
+        kind: "claim",
+        requestId: ID,
+        claimId: ID,
+        approvable: false,
+      }),
+    ).toEqual([
+      { type: "link", label: "Open", href: `/admin/requests?id=${ID}` },
+    ]);
+  });
+
+  test("a request gets one Open into Requests", () => {
+    expect(todayActions({ kind: "request", requestId: ID })).toEqual([
+      { type: "link", label: "Open", href: `/admin/requests?id=${ID}` },
+    ]);
+  });
+
+  test("an Analysis failed job gets Resubmit, then Resolve", () => {
+    expect(RESOLVABLE_KINDS).toContain("job");
+    const JOB = "99999999-8888-7777-6666-555555555555";
+    const actions = todayActions({
+      kind: "job",
+      matchId: ID,
+      failedJobId: JOB,
+    });
+    expect(actions).toEqual([
+      { type: "resubmit", label: "Resubmit", jobId: JOB },
+      { type: "resolve", label: "Resolve" },
+    ]);
+    expect(actions.some((a) => a.type === "link")).toBe(false);
+  });
+
+  test("an Analysis stuck job keeps Open into Matches, then Resolve", () => {
+    const actions = todayActions({
+      kind: "job",
+      matchId: ID,
+      failedJobId: null,
+    });
+    expect(actions).toEqual([
+      { type: "link", label: "Open", href: `/admin/matches?id=${ID}` },
+      { type: "resolve", label: "Resolve" },
+    ]);
+    expect(actions.some((a) => a.type === "resubmit")).toBe(false);
+  });
+
+  test("a label starts labelling, then Resolve", () => {
+    expect(todayActions({ kind: "label", jobId: ID })).toEqual([
+      { type: "label", label: "Open", startLabellingJobId: ID },
+      { type: "resolve", label: "Resolve" },
+    ]);
+  });
+
+  test("an ask opens Ask, then Resolve", () => {
+    expect(todayActions({ kind: "ask", feedbackId: ID })).toEqual([
+      { type: "link", label: "Open", href: `/admin/ask?id=${ID}` },
+      { type: "resolve", label: "Resolve" },
+    ]);
+  });
+
+  test("a pilot gets Add hours on Pilots", () => {
+    expect(todayActions({ kind: "pilot" })).toEqual([
+      { type: "link", label: "Add hours", href: "/admin/pilots" },
+    ]);
+  });
+
+  test("a message gets Reply and no Resolve", () => {
+    expect(RESOLVABLE_KINDS).not.toContain("message");
+    const actions = todayActions({ kind: "message", threadId: ID });
+    expect(actions).toEqual([
+      { type: "link", label: "Reply", href: `/admin/messages?id=${ID}` },
+    ]);
+    expect(actions.some((a) => a.type === "resolve")).toBe(false);
+  });
+
+  test("RESOLVABLE_KINDS is job, label, ask", () => {
+    expect([...RESOLVABLE_KINDS]).toEqual(["job", "label", "ask"]);
+  });
+});
+
+test.describe("messageDrafts", () => {
+  const thread = (over: Partial<TodayThreadRow>): TodayThreadRow => ({
+    id: ID,
+    user_id: "u1",
+    last_player_message_at: "2026-11-10T09:00:00.000Z",
+    last_staff_message_at: null,
+    ...over,
+  });
+
+  test("one row per thread the player wrote last, since their message", () => {
+    const rows = messageDrafts(
+      [
+        thread({}),
+        // Staff answered last: waiting on the player, not on us.
+        thread({
+          id: "t2",
+          last_player_message_at: "2026-11-10T09:00:00.000Z",
+          last_staff_message_at: "2026-11-10T10:00:00.000Z",
+        }),
+        // The player wrote back after staff.
+        thread({
+          id: "t3",
+          last_player_message_at: "2026-11-11T09:00:00.000Z",
+          last_staff_message_at: "2026-11-10T10:00:00.000Z",
+        }),
+      ],
+      new Map([["u1", { name: "Sam Player", photoUrl: null }]]),
+    );
+    expect(rows.map((row) => row.key)).toEqual([`message:${ID}`, "message:t3"]);
+    const [first] = rows;
+    expect(first.kind).toBe("message");
+    expect(first.since).toBe("2026-11-10T09:00:00.000Z");
+    expect(rows[1].since).toBe("2026-11-11T09:00:00.000Z");
+    expect(first.cell).toMatchObject({ type: "person", name: "Sam Player" });
+    expect(first.actions).toEqual([
+      { type: "link", label: "Reply", href: `/admin/messages?id=${ID}` },
+    ]);
+  });
+});
+
+test("a mixed list sorts longest wait first", () => {
+  const sorted = sortLongestWaitFirst([
+    { key: "ask:1", since: "2026-11-12T08:00:00.000Z" },
+    { key: "message:1", since: "2026-11-01T08:00:00.000Z" },
+    { key: "job:1", since: "2026-11-05T08:00:00.000Z" },
+    { key: "pilot:1", since: "2026-10-30T08:00:00.000Z" },
+  ]);
+  expect(sorted.map((row) => row.key)).toEqual([
+    "pilot:1",
+    "message:1",
+    "job:1",
+    "ask:1",
+  ]);
+});
+
+test.describe("newestShownJobPerMatch", () => {
+  const job = (
+    id: string,
+    match_id: string,
+    status: string,
+    resubmitted_from_job_id: string | null = null,
+  ) => ({ id, match_id, status, resubmitted_from_job_id });
+
+  test("a failed reprocess of a completed job leaves the completed one", () => {
+    // Newest first: the reprocess failed on top of a published analysis.
+    const picked = newestShownJobPerMatch([
+      job("child", "m1", "failed", "parent"),
+      job("parent", "m1", "completed"),
+    ]);
+    expect(picked.get("m1")?.id).toBe("parent");
+  });
+
+  test("a failed resubmit of a failed job is still the newest failure", () => {
+    const picked = newestShownJobPerMatch([
+      job("retry", "m2", "failed", "first"),
+      job("first", "m2", "failed"),
+    ]);
+    expect(picked.get("m2")?.id).toBe("retry");
+  });
+
+  test("a completed reprocess is the newest analysis", () => {
+    const picked = newestShownJobPerMatch([
+      job("child", "m3", "completed", "parent"),
+      job("parent", "m3", "completed"),
+    ]);
+    expect(picked.get("m3")?.id).toBe("child");
+  });
+
+  const NOW = Date.parse("2026-11-15T12:00:00Z");
+  /** An `uploaded` row last moved `minutesAgo` before NOW, never handed over. */
+  const uploaded = (
+    id: string,
+    match_id: string,
+    resubmitted_from_job_id: string | null,
+    minutesAgo: number,
+    external_job_id: string | null = null,
+  ) => ({
+    ...job(id, match_id, "uploaded", resubmitted_from_job_id),
+    updated_at: new Date(NOW - minutesAgo * 60_000).toISOString(),
+    external_job_id,
+    derivation_version: null,
+  });
+
+  test("a reprocess stalled before the vendor surfaces over the completed one", () => {
+    const picked = newestShownJobPerMatch(
+      [
+        uploaded("child", "m4", "parent", 24 * 60),
+        job("parent", "m4", "completed"),
+      ],
+      NOW,
+    );
+    expect(picked.get("m4")?.id).toBe("child");
+  });
+
+  test("a reprocess still within the stall window stays hidden", () => {
+    const picked = newestShownJobPerMatch(
+      [uploaded("child", "m5", "parent", 1), job("parent", "m5", "completed")],
+      NOW,
+    );
+    expect(picked.get("m5")?.id).toBe("parent");
+  });
+
+  test("a reprocess the vendor accepted is not stalled, so it stays hidden", () => {
+    const picked = newestShownJobPerMatch(
+      [
+        uploaded("child", "m6", "parent", 24 * 60, "vendor-ref"),
+        job("parent", "m6", "completed"),
+      ],
+      NOW,
+    );
+    expect(picked.get("m6")?.id).toBe("parent");
+  });
+
+  test("a failed reprocess stays hidden however old it is", () => {
+    const picked = newestShownJobPerMatch(
+      [
+        {
+          ...job("child", "m7", "failed", "parent"),
+          updated_at: "2026-11-01T00:00:00Z",
+          external_job_id: null,
+          derivation_version: null,
+        },
+        job("parent", "m7", "completed"),
+      ],
+      NOW,
+    );
+    expect(picked.get("m7")?.id).toBe("parent");
+  });
+
+  test("each match is picked on its own", () => {
+    const picked = newestShownJobPerMatch([
+      job("a2", "a", "failed"),
+      job("b1", "b", "completed"),
+      job("a1", "a", "completed"),
+    ]);
+    expect(picked.get("a")?.id).toBe("a2");
+    expect(picked.get("b")?.id).toBe("b1");
+  });
+});

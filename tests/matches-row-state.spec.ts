@@ -19,8 +19,13 @@ const { RowLifecycle } = loader.load(
   RowLifecycle: React.ComponentType<{
     analysis?: MatchAnalysis;
     label: string;
+    verification?: { verifiedAt: string } | null;
+    verificationPending?: boolean;
   }>;
 };
+const { VERIFICATION_PENDING, VERIFIED_BY_ADVANTAGE } = loader.load(
+  "src/lib/data/match-verification.ts",
+) as { VERIFICATION_PENDING: string; VERIFIED_BY_ADVANTAGE: string };
 
 const render = (analysis: MatchAnalysis) =>
   renderToStaticMarkup(
@@ -111,5 +116,85 @@ test.describe("RowLifecycle leads every settled word with a mark", () => {
       const ink = word === "Failed" ? "--ink-900" : "--ink-500";
       expect(render(analysis)).toContain(`color:var(${ink})`);
     }
+  });
+});
+
+/**
+ * "Verification pending" (T43, CustList artboard): the Verified line's own
+ * markup with the mark greyed — on a settled, unverified row whose
+ * statistics stand. Verified wins, and every other state keeps its words.
+ */
+test.describe("RowLifecycle: Verification pending", () => {
+  const renderWith = (
+    analysis: MatchAnalysis,
+    extra: {
+      verification?: { verifiedAt: string } | null;
+      verificationPending?: boolean;
+    },
+  ) =>
+    renderToStaticMarkup(
+      React.createElement(RowLifecycle, {
+        analysis,
+        label: "Maya v Sofia",
+        ...extra,
+      }),
+    );
+  const completed: MatchAnalysis = { status: "completed", providerId: null };
+  const verified = { verifiedAt: "2026-11-10T18:00:00Z" };
+
+  test("a pending settled row reads Verification pending, mark greyed", () => {
+    const html = renderWith(completed, { verificationPending: true });
+    expect(html).toContain(
+      `<span class="min-w-0 truncate">${VERIFICATION_PENDING}</span>`,
+    );
+    expect(html).toContain("grayscale");
+    expect(html).toContain("opacity-55");
+    expect(html).toContain("verified-check-icon");
+    expect(html).not.toContain("Analyzed");
+    // The Verified line's own wrapper, not a new one.
+    const verifiedHtml = renderWith(completed, { verification: verified });
+    const wrapper = (h: string) => h.slice(0, h.indexOf("<img"));
+    expect(wrapper(html)).toBe(wrapper(verifiedHtml));
+  });
+
+  test("pending + verified: verified wins", () => {
+    const html = renderWith(completed, {
+      verification: verified,
+      verificationPending: true,
+    });
+    expect(html).toContain(VERIFIED_BY_ADVANTAGE);
+    expect(html).not.toContain(VERIFICATION_PENDING);
+    expect(html).not.toContain("grayscale");
+  });
+
+  test("pending + in flight: in flight wins", () => {
+    for (const status of ["processing", "queued", "deriving"] as const) {
+      const analysis: MatchAnalysis = { status, providerId: null };
+      const html = renderWith(analysis, { verificationPending: true });
+      expect(html).not.toContain(VERIFICATION_PENDING);
+      expect(html).toBe(renderWith(analysis, {}));
+    }
+  });
+
+  test("Failed, Cancelled, Not analyzed and Stats unavailable render as before", () => {
+    for (const { word, analysis } of CASES) {
+      if (
+        !["Failed", "Cancelled", "Not analyzed", "Stats unavailable"].includes(
+          word,
+        )
+      )
+        continue;
+      expect(renderWith(analysis, { verificationPending: true })).toBe(
+        render(analysis),
+      );
+    }
+    const uploading: MatchAnalysis = {
+      status: "uploading",
+      providerId: null,
+      uploadPercent: 40,
+    };
+    expect(renderWith(uploading, { verificationPending: true })).toBe(
+      renderWith(uploading, {}),
+    );
   });
 });

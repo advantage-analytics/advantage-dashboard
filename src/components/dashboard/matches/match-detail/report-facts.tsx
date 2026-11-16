@@ -7,6 +7,7 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { shortMonthDate } from "@/components/dashboard/matches/match-detail/format-clock";
 import { totalGames } from "@/components/dashboard/matches/match-detail/set-scope";
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
+import { PendingFact } from "@/components/dashboard/matches/match-detail/pending-fact";
 import { VerifiedFact } from "@/components/dashboard/matches/match-detail/verified-fact";
 import { savedViewsCountFact } from "@/lib/data/saved-views-logic";
 import { cn } from "@/lib/utils";
@@ -125,6 +126,9 @@ export function MatchReportFacts() {
           verification={match.verification}
           canReport={!meta.readOnly}
         />
+      ) : match.verificationPending ? (
+        /* Verification pending: the same slot, until the check is made. */
+        <PendingFact />
       ) : null}
     </div>
   );

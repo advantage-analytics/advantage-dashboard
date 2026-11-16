@@ -6,6 +6,7 @@ import {
   collapseErrorFilter,
   computeViz,
   computeVizStats,
+  orderStatRows,
   errorKindOf,
   filterKeysFor,
   servePlacementMetrics,
@@ -1049,19 +1050,21 @@ test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
       {
         key: "depth",
         label: "Depth",
-        // Order is the pre-Phase-2B `sortRows`' own: win rate, then count,
-        // then label — "0–5 ft behind" sorts before "Inside the baseline".
+        // Depth rows keep the bands' own order, nearest the net first —
+        // "Inside the baseline", then further behind it — whatever each
+        // one's win rate (2026-11-14; they used to sort by win rate, which
+        // put "0–5 ft behind" first here on a label tie-break).
         rows: [
           {
-            key: "near",
-            label: "0–5 ft behind",
+            key: "inside",
+            label: "Inside the baseline",
             count: 1,
             won: 1,
             winPct: 100,
           },
           {
-            key: "inside",
-            label: "Inside the baseline",
+            key: "near",
+            label: "0–5 ft behind",
             count: 1,
             won: 1,
             winPct: 100,
@@ -1119,7 +1122,7 @@ test.describe("computeVizStats — bands (Phase 2B Task 2)", () => {
     expect(landed!.count).toBeLessThanOrEqual(stats.total);
   });
 
-  test("regression: returnContact with DEFAULT_BANDS is byte-identical to the pre-Phase-2B output, row ORDER included", () => {
+  test("regression: returnContact with DEFAULT_BANDS keeps the pre-Phase-2B rows and figures, with Depth in band order", () => {
     const stats = computeVizStats(
       contactPts,
       "returnContact",
@@ -1910,10 +1913,14 @@ test.describe("statRowAnnouncement", () => {
       "ft",
     );
 
-    for (const stats of [serveStats, placementStats, contactStats]) {
+    for (const [cut, stats] of [
+      ["serve", serveStats],
+      ["returnPlacement", placementStats],
+      ["returnContact", contactStats],
+    ] as const) {
       for (const group of stats.groups) {
         for (const row of group.rows) {
-          const announcement = statRowAnnouncement(row);
+          const announcement = statRowAnnouncement(row, cut);
           expect(row.label.length).toBeGreaterThan(0);
           expect(announcement).toContain(row.label);
           expect(announcement.startsWith(":")).toBe(false);
@@ -1938,10 +1945,29 @@ test.describe("statRowAnnouncement", () => {
       won: 0,
       winPct: null,
     };
-    expect(statRowAnnouncement(withPoints)).toBe(
+    expect(statRowAnnouncement(withPoints, "returnPlacement")).toBe(
       "Crosscourt: 100% of 4 points won",
     );
-    expect(statRowAnnouncement(noPoints)).toBe("Ad T: no points");
+    expect(statRowAnnouncement(noPoints, "serve")).toBe("Ad T: no points");
+  });
+
+  test("a rally cut's rows count shots, several to a point, and say so", () => {
+    const deep = { key: "deep", label: "Deep", count: 50, won: 36, winPct: 72 };
+    const none = {
+      key: "short",
+      label: "Short",
+      count: 0,
+      won: 0,
+      winPct: null,
+    };
+    for (const cut of ["rallyPlacement", "rallyPosition"] as const) {
+      expect(statRowAnnouncement(deep, cut)).toBe("Deep: 72% of 50 shots won");
+      expect(statRowAnnouncement(none, cut)).toBe("Short: no shots");
+    }
+    // One mark is one point everywhere else, and it stays "points".
+    for (const cut of ["serve", "returnPlacement", "returnContact"] as const) {
+      expect(statRowAnnouncement(deep, cut)).toBe("Deep: 72% of 50 points won");
+    }
   });
 });
 
@@ -2900,4 +2926,46 @@ test.describe("errors cut on judged vs unjudged matches", () => {
       ).toEqual(["Unforced errors", "Forced errors", "Double faults"]);
     }
   });
+});
+
+test("a Depth group lists its bands Deep, Mid, Short", () => {
+  // Which rows there are and in what order, with nothing in them. The order
+  // against real win rates is the next test's and the returnContact
+  // regression's above; an empty list alone would also satisfy a sort.
+  for (const cut of ["returnPlacement", "rallyPlacement"] as const) {
+    const stats = computeVizStats(
+      [],
+      cut,
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+    );
+    const depth = stats.groups.find((group) => group.key === "depth");
+    expect(depth?.rows.map((row) => row.label.split(" ")[0])).toEqual([
+      "Deep",
+      "Mid",
+      "Short",
+    ]);
+  }
+});
+
+test("orderStatRows leaves a Depth group as it came and sorts every other by win rate", () => {
+  // Win rates rising down the list: the opposite of what a sort gives.
+  const rows = [
+    { key: "deep", label: "Deep", count: 10, won: 2, winPct: 20 },
+    { key: "mid", label: "Mid", count: 10, won: 5, winPct: 50 },
+    { key: "short", label: "Short", count: 10, won: 9, winPct: 90 },
+  ];
+  expect(orderStatRows(rows, "depth").map((row) => row.key)).toEqual([
+    "deep",
+    "mid",
+    "short",
+  ]);
+  expect(orderStatRows(rows, "direction").map((row) => row.key)).toEqual([
+    "short",
+    "mid",
+    "deep",
+  ]);
 });

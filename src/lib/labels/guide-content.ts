@@ -13,7 +13,7 @@
  * labeller can tell the guide they read from the one in front of them.
  */
 
-export const GUIDE_VERSION = "2026-11-04";
+export const GUIDE_VERSION = "2026-11-14";
 
 export type GuideBlock =
   | { kind: "paragraph"; text: string }
@@ -54,7 +54,7 @@ export const HOW_TO_SECTIONS: readonly GuideSection[] = [
         "Mute (M) turns the sound off and on.",
       ),
       p(
-        "The exit button at the top of the rail leaves full screen, and from the rail it goes to the match overview: the checklist of what is left before you submit.",
+        "The exit button at the top of the rail leaves full screen, and from the rail it goes to the match overview: the checklist of what is left before you publish.",
       ),
     ],
   },
@@ -169,20 +169,20 @@ export const HOW_TO_SECTIONS: readonly GuideSection[] = [
     ],
   },
   {
-    id: "submit-for-review",
-    heading: "Submit for review",
+    id: "publish",
+    heading: "Publish",
     blocks: [
       p(
-        "When the match meets the cleaning standard, use the exit button at the top of the rail to reach the match overview, and press Submit for review at the top of the page. The button waits until every change has saved.",
+        "When the match meets the cleaning standard, use the exit button at the top of the rail to reach the match overview, and press Publish at the top of the page. The button waits until every change has saved.",
       ),
       p(
-        "The match goes to an Advantage reviewer as it stands, and you can no longer edit it. Your list shows it as Submitted. If the reviewer sends it back, it reopens for you to finish.",
+        "The player sees the match straight away, with Verified by Advantage, and you can no longer edit it. Your list shows it as Published. An admin checks it after, and may send it back for you to finish.",
       ),
     ],
   },
 ];
 
-/** The six rules, verbatim: the review holds a submitted match to these. */
+/** The six rules, verbatim: the check holds a published match to these. */
 const CLEANING_STANDARD_RULES = [
   "Structure and amber flags first, then grey, then forced/unforced error marks.",
   "Watch the whole match: a clean flag count does not mean a correct match — a hitter swap raises no flag.",
@@ -208,7 +208,7 @@ export const CLEANING_STANDARD_SECTIONS: readonly GuideSection[] = [
         "Clear the grey flags with '.",
         "Mark each error forced or unforced.",
         "Watch the match through once more, checking each point with ⌘ Enter.",
-        "Submit for review.",
+        "Publish.",
       ),
     ],
   },

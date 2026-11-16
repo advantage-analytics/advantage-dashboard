@@ -33,6 +33,23 @@ import { programDisplayName } from "@/lib/data/programs-server";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import { getMatchViews30d } from "@/lib/services/posthog/match-views-server";
 import { playedSets, type ScoreLineSet } from "@/lib/ui/score-format";
+import {
+  jobVideoSeconds,
+  type JobVideoSpan,
+} from "@/lib/services/labels/video-seconds";
+import {
+  labelJobIdFor,
+  type AdminLabelState,
+  type LabelJobCandidate,
+} from "@/lib/data/admin-match-progress";
+import {
+  ADMIN_TEAM_LATEST_MATCHES,
+  adminTeamLatestMatches,
+  compareNewestUpload,
+  newestUploads,
+  type AdminTeamLatestMatch,
+  type AdminTeamMatchBucket,
+} from "@/lib/data/admin-team-links";
 
 /**
  * Admin › Matches — every match on Advantage, personal and team, through the
@@ -57,7 +74,7 @@ import { playedSets, type ScoreLineSet } from "@/lib/ui/score-format";
 export const ADMIN_MATCHES_CAP = 2000;
 
 /** The page's filter buckets — the view pills. */
-export type AdminMatchBucket = "uploading" | "analyzing" | "failed" | "settled";
+export type AdminMatchBucket = AdminTeamMatchBucket;
 
 export type AdminMatchWorkspace =
   | {
@@ -92,6 +109,38 @@ export interface AdminMatchRow {
   fresh: boolean;
   /** The label console for this match, or the Labels list, or null. */
   labelHref: string | null;
+  /**
+   * Seconds of match video the analysis job covers — its trimmed span, else
+   * what was billed, as the pay report counts it (`jobVideoSeconds`). Null
+   * when the match has no video (no processing job).
+   */
+  videoSeconds: number | null;
+  /** The failed job "Resubmit" retries; null outside the `failed` bucket. */
+  failedJobId: string | null;
+  /**
+   * The job "Label this match" seeds a session on: the newest completed
+   * Advantage Intelligence job with a results file, else null
+   * (`labelJobIdFor`). Not limited by the label queue's cut-off.
+   */
+  labelJobId: string | null;
+  // The moments `matchProgressSteps()` (admin-match-progress.ts) reads, with
+  // `uploadedAt` and `analysis` above. All from the analysis job — the one
+  // `analysis` describes — and read in the list's batched reads.
+  /** `processing_jobs.submitted_at`, or null. */
+  sentForAnalysisAt: string | null;
+  /** `processing_jobs.completed_at`, or null. */
+  resultsLandedAt: string | null;
+  /** The match's own label session's status (never a practice copy). */
+  labelState: AdminLabelState | null;
+  /**
+   * When that session was published: its `completed_at` while complete, else
+   * its `published_at` (a sent-back session keeps it). Null with no session.
+   */
+  labelPublishedAt: string | null;
+  /** That session's `checked_at`, or null. */
+  labelCheckedAt: string | null;
+  /** `matches.verified_at` while the match is verified, else null. */
+  verifiedAt: string | null;
 }
 
 export interface AdminMatchesResult {
@@ -160,19 +209,36 @@ function earlier(a: string | null | undefined, b: string | null | undefined) {
   return Date.parse(a) <= Date.parse(b) ? a : b;
 }
 
+/** The job columns the list reads beyond the upload moment. */
+interface JobFacts extends LabelJobCandidate, JobVideoSpan {
+  id: string;
+  match_id: string;
+  created_at: string;
+  submitted_at: string | null;
+  completed_at: string | null;
+}
+
 /**
  * When each match was uploaded (file header), plus which have statistics —
- * the stats read answers both questions.
+ * the stats read answers both questions — and every job row by id, for the
+ * progress moments and the video's length, and the job each match can be
+ * labelled on (`labelJobIdFor`), all from the one job read.
  */
 async function uploadMoments(
   db: SupabaseClient,
   ids: string[],
-): Promise<{ uploadedAt: Map<string, string>; withStats: Set<string> }> {
+): Promise<{
+  uploadedAt: Map<string, string>;
+  withStats: Set<string>;
+  jobs: Map<string, JobFacts>;
+  newestJob: Map<string, JobFacts>;
+  labelJob: Map<string, string>;
+}> {
   const [jobs, files, stats] = await Promise.all([
-    readByIds<{ match_id: string; created_at: string }>(
+    readByIds<JobFacts>(
       db,
       "processing_jobs",
-      "match_id, created_at",
+      "id, match_id, created_at, submitted_at, completed_at, start_time_seconds, end_time_seconds, billable_seconds, provider, status, results_object_key",
       "match_id",
       ids,
     ),
@@ -212,7 +278,29 @@ async function uploadMoments(
   for (const [id, at] of statsAt) {
     if (!uploadedAt.has(id)) uploadedAt.set(id, at);
   }
-  return { uploadedAt, withStats };
+  const newestJob = new Map<string, JobFacts>();
+  const jobsByMatch = new Map<string, JobFacts[]>();
+  for (const job of jobs) {
+    const held = newestJob.get(job.match_id);
+    if (!held || Date.parse(job.created_at) > Date.parse(held.created_at)) {
+      newestJob.set(job.match_id, job);
+    }
+    const list = jobsByMatch.get(job.match_id);
+    if (list) list.push(job);
+    else jobsByMatch.set(job.match_id, [job]);
+  }
+  const labelJob = new Map<string, string>();
+  for (const [matchId, matchJobs] of jobsByMatch) {
+    const jobId = labelJobIdFor(matchJobs);
+    if (jobId) labelJob.set(matchId, jobId);
+  }
+  return {
+    uploadedAt,
+    withStats,
+    jobs: new Map(jobs.map((job) => [job.id, job])),
+    newestJob,
+    labelJob,
+  };
 }
 
 /** Score sets as stored, player1-first. */
@@ -234,7 +322,9 @@ function storedSets(score: MatchScore | null): ScoreLineSet[] {
  * in seat two, else seat one — the seat every upload path writes the athlete
  * into (a personal player's own login, a program's roster player).
  */
-function playerSeat(row: DbListMatch): "player1" | "player2" {
+function playerSeat(
+  row: Pick<DbListMatch, "created_by" | "player2_id">,
+): "player1" | "player2" {
   return row.created_by && row.created_by === row.player2_id
     ? "player2"
     : "player1";
@@ -248,17 +338,53 @@ function bucketFor(analysis: MatchAnalysis): AdminMatchBucket {
   return "settled";
 }
 
+interface LabelSessionFacts {
+  id: string;
+  status: AdminLabelState | null;
+  /** `completed_at` while complete, else `published_at` (a sent-back one). */
+  publishedAt: string | null;
+  /** `checked_at`. */
+  checkedAt: string | null;
+}
+
+interface LabelSessionRow {
+  id: string;
+  match_id: string;
+  kind: string | null;
+  status: string | null;
+  created_at: string;
+  completed_at: string | null;
+  published_at: string | null;
+  checked_at: string | null;
+}
+
+const SESSION_COLUMNS =
+  "id, match_id, kind, status, created_at, completed_at, published_at, checked_at";
+/**
+ * The publish-check stamps of a session: a `complete` one's latest publish
+ * (`completed_at`), else its first (`published_at`, kept while it is sent
+ * back), and the admin's check.
+ */
+function publishCheckOf(row: LabelSessionRow) {
+  const complete = row.status === "complete";
+  return {
+    publishedAt: complete ? row.completed_at : row.published_at,
+    checkedAt: row.checked_at,
+  };
+}
+
 /** Latest label session per match, an analyst's ahead of a player's own. */
 async function labelSessions(
   db: SupabaseClient,
   ids: string[],
-): Promise<Map<string, string>> {
-  const rows = await readByIds<{
-    id: string;
-    match_id: string;
-    kind: string | null;
-    created_at: string;
-  }>(db, "label_sessions", "id, match_id, kind, created_at", "match_id", ids);
+): Promise<Map<string, LabelSessionFacts>> {
+  const rows = await readByIds<LabelSessionRow>(
+    db,
+    "label_sessions",
+    SESSION_COLUMNS,
+    "match_id",
+    ids,
+  );
   const best = new Map<string, (typeof rows)[number]>();
   const rank = (kind: string | null) => (kind === "analyst" ? 1 : 0);
   for (const row of rows) {
@@ -274,7 +400,20 @@ async function labelSessions(
       best.set(row.match_id, row);
     }
   }
-  return new Map([...best].map(([matchId, row]) => [matchId, row.id]));
+  return new Map(
+    [...best].map(([matchId, row]) => [
+      matchId,
+      { id: row.id, status: labelStateOf(row.status), ...publishCheckOf(row) },
+    ]),
+  );
+}
+
+function labelStateOf(status: string | null): AdminLabelState | null {
+  return status === "labelling" ||
+    status === "submitted" ||
+    status === "complete"
+    ? status
+    : null;
 }
 
 /**
@@ -345,17 +484,41 @@ async function analyses(
   return new Map(maps.flatMap((map) => [...map]));
 }
 
-function compareRows(
-  a: { uploadedAt: string | null; date: string | null; id: string },
-  b: { uploadedAt: string | null; date: string | null; id: string },
-): number {
-  if (a.uploadedAt && b.uploadedAt) {
-    const diff = Date.parse(b.uploadedAt) - Date.parse(a.uploadedAt);
-    if (diff !== 0) return diff;
-  } else if (a.uploadedAt) return -1;
-  else if (b.uploadedAt) return 1;
-  const day = (b.date ?? "").localeCompare(a.date ?? "");
-  return day !== 0 ? day : b.id.localeCompare(a.id);
+/**
+ * A match's analysis as every admin surface reads it: the job's, promoted to
+ * published once statistics exist. The one status rule — Admin › Matches and
+ * the team page's latest matches both come through here.
+ */
+function resolvedAnalysis(
+  jobAnalysis: Map<string, MatchAnalysis>,
+  withStats: Set<string>,
+  m: Pick<DbListMatch, "id" | "source_provider">,
+): MatchAnalysis {
+  const base = analysisFor(jobAnalysis, {
+    id: m.id,
+    sourceProvider: m.source_provider ?? undefined,
+  });
+  return {
+    ...base,
+    status: withStatsPublished(base.status, withStats.has(m.id)),
+  };
+}
+
+/** The row's two names, the "Player" seat first (`playerSeat`). */
+function seatNames(
+  m: Pick<
+    DbListMatch,
+    "created_by" | "player2_id" | "player1_name" | "player2_name"
+  >,
+): { seat: "player1" | "player2"; player: string; opponent: string } {
+  const seat = playerSeat(m);
+  const p1 = m.player1_name?.trim() || "Unknown player";
+  const p2 = m.player2_name?.trim() || "Unknown opponent";
+  return {
+    seat,
+    player: seat === "player1" ? p1 : p2,
+    opponent: seat === "player1" ? p2 : p1,
+  };
 }
 
 /**
@@ -396,7 +559,7 @@ export async function listAdminMatches(
   const ordered = matches
     .map((m) => ({ m, uploadedAt: moments.uploadedAt.get(m.id) ?? null }))
     .sort((a, b) =>
-      compareRows(
+      compareNewestUpload(
         { uploadedAt: a.uploadedAt, date: a.m.date, id: a.m.id },
         { uploadedAt: b.uploadedAt, date: b.m.date, id: b.m.id },
       ),
@@ -404,7 +567,7 @@ export async function listAdminMatches(
     .slice(0, ADMIN_MATCHES_CAP);
 
   const rows = ordered.map(({ m, uploadedAt }): AdminMatchRow => {
-    const seat = playerSeat(m);
+    const { seat, player, opponent } = seatNames(m);
     const sets = playedSets(storedSets(m.score)).map((set) =>
       seat === "player1"
         ? set
@@ -416,20 +579,18 @@ export async function listAdminMatches(
           },
     );
     const winner = scoreWinner(m.score);
-    const base = analysisFor(jobAnalysis, {
-      id: m.id,
-      sourceProvider: m.source_provider ?? undefined,
-    });
-    const analysis = {
-      ...base,
-      status: withStatsPublished(base.status, moments.withStats.has(m.id)),
-    };
-    const p1 = m.player1_name?.trim() || "Unknown player";
-    const p2 = m.player2_name?.trim() || "Unknown opponent";
+    const analysis = resolvedAnalysis(jobAnalysis, moments.withStats, m);
+    // The job `analysis` describes; else the newest, for its video length.
+    const job =
+      (analysis.jobId && moments.jobs.get(analysis.jobId)) ||
+      moments.newestJob.get(m.id);
+    const bucket = bucketFor(analysis);
+    const verification = verificationFor(m);
+    const session = sessions.get(m.id);
     return {
       id: m.id,
-      player: seat === "player1" ? p1 : p2,
-      opponent: seat === "player1" ? p2 : p1,
+      player,
+      opponent,
       won: winner === null ? null : winner === seat,
       sets,
       workspace:
@@ -447,14 +608,137 @@ export async function listAdminMatches(
       uploadedAt,
       views: views ? (views.get(m.id) ?? 0) : null,
       analysis,
-      verification: verificationFor(m),
-      bucket: bucketFor(analysis),
+      verification,
+      bucket,
       fresh: isFresh(seen, matchSeenKey(m.id), uploadedAt),
-      labelHref: labelHrefFor(sessions.get(m.id), m.source_provider, analysis),
+      labelHref: labelHrefFor(session?.id, m.source_provider, analysis),
+      videoSeconds: job ? jobVideoSeconds(job) : null,
+      failedJobId: bucket === "failed" ? (analysis.jobId ?? null) : null,
+      labelJobId: moments.labelJob.get(m.id) ?? null,
+      sentForAnalysisAt: job?.submitted_at ?? null,
+      resultsLandedAt: job?.completed_at ?? null,
+      labelState: session?.status ?? null,
+      labelPublishedAt: session?.publishedAt ?? null,
+      labelCheckedAt: session?.checkedAt ?? null,
+      verifiedAt: verification?.verifiedAt ?? null,
     };
   });
 
   return { rows, total: matches.length, viewsMeasured: views !== null };
+}
+
+/** What the latest-matches lists read off a `matches` row. */
+type DbProgramMatch = Pick<
+  DbListMatch,
+  | "id"
+  | "program_id"
+  | "player2_id"
+  | "player1_name"
+  | "player2_name"
+  | "created_by"
+  | "date"
+  | "source_provider"
+  | "verified"
+  | "verified_at"
+>;
+
+/**
+ * The newest matches across a set of programs and how many those programs have
+ * in all — the team page's "latest matches" block (one program) and the
+ * conference page's (every team in the conference). Same upload moment, seat
+ * rule, analysis resolution and bucket as `listAdminMatches`, by calling the
+ * same helpers; nothing here decides a status of its own.
+ *
+ * Every match of the programs is read for its upload moment (`matches` has no
+ * `created_at`, so "newest" cannot be an `order by`), but the analysis is
+ * resolved only for the few that are kept. The order is newest upload first
+ * across all the programs together, and each match carries its `programId`.
+ * No ids means no query. Throws when a read fails — the caller decides how the
+ * page degrades.
+ */
+export async function latestMatchesForPrograms(
+  programIds: readonly string[],
+  limit: number = ADMIN_TEAM_LATEST_MATCHES,
+): Promise<{ matches: AdminTeamLatestMatch[]; total: number }> {
+  await requireAdminOrNotFound();
+  const ids = [...new Set(programIds)];
+  if (ids.length === 0) return { matches: [], total: 0 };
+  const db = createAdminClient();
+
+  // Chunked like `readByIds`, so a large conference keeps the URL short.
+  const pages = await Promise.all(
+    chunks(ids).map((chunk) =>
+      readAllPages<DbProgramMatch>(
+        db
+          .from("matches")
+          .select(
+            "id, program_id, player2_id, player1_name, player2_name, created_by, date, source_provider, verified, verified_at",
+          )
+          .in("program_id", chunk)
+          .order("id")
+          .returns<DbProgramMatch[]>(),
+        "program matches read failed",
+      ),
+    ),
+  );
+  const matches = pages.flat();
+  if (matches.length === 0) return { matches: [], total: 0 };
+
+  const moments = await uploadMoments(
+    db,
+    matches.map((m) => m.id),
+  );
+  const newest = newestUploads(
+    matches.map((m) => ({
+      m,
+      id: m.id,
+      date: m.date,
+      uploadedAt: moments.uploadedAt.get(m.id) ?? null,
+    })),
+    limit,
+  );
+  const jobAnalysis = await analyses(
+    db,
+    newest.map((row) => row.id),
+  );
+
+  return {
+    total: matches.length,
+    matches: adminTeamLatestMatches(
+      newest.flatMap(({ m, id, date, uploadedAt }) => {
+        // The filter is `program_id in (…)`, so this is never null; the guard
+        // is for the type, not for a row.
+        if (!m.program_id) return [];
+        const analysis = resolvedAnalysis(jobAnalysis, moments.withStats, m);
+        const { player, opponent } = seatNames(m);
+        return [
+          {
+            id,
+            programId: m.program_id,
+            date,
+            uploadedAt,
+            player,
+            opponent,
+            analysis,
+            bucket: bucketFor(analysis),
+            verification: verificationFor(m),
+          },
+        ];
+      }),
+      limit,
+    ),
+  };
+}
+
+/**
+ * One program's newest matches and how many it has in all — the team page's
+ * "latest matches" block. `latestMatchesForPrograms` with a single id.
+ */
+export async function latestMatchesForProgram(
+  programId: string,
+  limit: number = ADMIN_TEAM_LATEST_MATCHES,
+): Promise<{ matches: AdminTeamLatestMatch[]; total: number }> {
+  return latestMatchesForPrograms([programId], limit);
 }
 
 /**
@@ -630,7 +914,7 @@ export const getAdminMatchReport = cache(async function getAdminMatchReport(
           }
         : { kind: "personal" }),
     labelHref: labelHrefFor(
-      sessions.get(matchId),
+      sessions.get(matchId)?.id,
       row.source_provider,
       analysis,
     ),

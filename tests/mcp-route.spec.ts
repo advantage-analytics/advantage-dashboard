@@ -1634,7 +1634,8 @@ test.describe("POST /api/mcp · prepare_video_upload", () => {
     expect(seed?.args).toMatchObject({
       p_id: structured.draft_id,
       p_program_id: null,
-      p_step: "file",
+      // No format given: the draft resumes on step 1, where Format is asked.
+      p_step: "provider",
       p_provider: "splitstep",
       p_player_name: null,
       p_event_label: "Fall Open",
@@ -1688,6 +1689,38 @@ test.describe("POST /api/mcp · prepare_video_upload", () => {
     expect(
       userCalls(calls).filter((call) => call.fn === "ask_seed_match_draft"),
     ).toHaveLength(1);
+  });
+
+  test("format singles is recorded on the draft, and it resumes on the file step", async () => {
+    const { route, calls } = loadRoute(world());
+    const result = await callTool(route, "prepare_video_upload", {
+      opponent_name: "Anna Lee",
+      date: "2026-10-18",
+      format: "singles",
+    });
+    expect(result.isError).toBeUndefined();
+    const seed = userCalls(calls).find(
+      (call) => call.fn === "ask_seed_match_draft",
+    );
+    expect(seed?.args).toMatchObject({ p_step: "file" });
+    expect(
+      (seed?.args as { p_payload: { discipline?: string } }).p_payload
+        .discipline,
+    ).toBe("singles");
+  });
+
+  test("format doubles is refused before any write", async () => {
+    const { route, calls } = loadRoute(world());
+    const result = await callTool(route, "prepare_video_upload", {
+      opponent_name: "Anna Lee",
+      date: "2026-10-18",
+      format: "doubles",
+    });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/^doubles_unsupported: /);
+    expect(
+      userCalls(calls).filter((call) => call.fn === "ask_seed_match_draft"),
+    ).toHaveLength(0);
   });
 });
 

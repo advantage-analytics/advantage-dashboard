@@ -1003,6 +1003,34 @@ to put a testable seam.
 > Unchanged: what is sent to the vendor, the five vendor fields, the trim
 > invariants, and `reserveQuota()` as the only authority.
 
+> **A reviewed exception, added 2026-11-13: an admin's retry of a failed
+> analysis, from `claude/admin-labeler-redesign-c60016`.** Until now only the
+> uploader's own "Retry analysis" could resend a failed job; the athlete's
+> route 404s for anyone else, bills the caller's workspaces and reads the
+> roster as the caller. Owner decision: an admin may retry on the uploader's
+> behalf, billed to the match's own workspace exactly as the automatic retry
+> resolves it. One frozen file changed:
+>
+> - `resubmit-job.ts` — a third mode, `adminRetry: { requestedBy }`, reached
+>   only from `adminResubmitFailedAnalysis()` (`admin-resubmit.ts`, called by
+>   the `resubmitFailedAnalysisAction` server action), which re-checks
+>   `users.is_admin` before it reads a job or builds the service-role client.
+>   It is the manual path with two differences: the upload contract's
+>   session-bound roster read is skipped (logged, with the admin's id), and
+>   `reserveForChild()` prices through `resolveAutoRetryWorkspace()` for the
+>   job's creator instead of a workspace handed in. It refuses a cancelled
+>   parent (an athlete's cancel is not undone) and never rides with `auto` or
+>   `reprocess`.
+>
+> Unchanged: what is sent to the vendor, the failed-state check,
+> `classifyFailure()`, the attempt ceiling, the duplicate, blob and metadata
+> checks, `reserveQuota()` as the only authority, and the athlete's route.
+> A match Verified by Advantage is refused with the athlete route's sentence.
+> Not covered: a job the admin console created (`created_by` is the
+> administrator) is priced as its automatic retry is — a team one is refused
+> unless that administrator is a member of the program, a personal one bills
+> the administrator, uncapped. `tests/admin-resubmit.spec.ts` pins all of it.
+
 **Never invent vendor behaviour.** If the API docs do not say it, ask. The
 payload carries a live credential to an athlete's video; a guess is not free.
 
