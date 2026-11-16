@@ -18,9 +18,14 @@ import {
   type Workspace,
 } from "@/lib/workspace/types";
 import {
+  errorStripCls,
   noteIconCls,
   noteStripCls,
 } from "@/components/dashboard/matches/new-match-wizard/styles";
+import {
+  resumesPastSource,
+  stepBusyLabel,
+} from "@/components/dashboard/matches/new-match-wizard/wizard-view";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 
 /**
@@ -74,6 +79,8 @@ interface StepProps {
     choose: (subject: unknown) => void;
   };
   addSelf?: { roleLabel: string; onOpen: () => void } | null;
+  discipline?: "singles" | "doubles";
+  onDisciplineSelect?: (discipline: "singles" | "doubles") => void;
 }
 
 interface WorkspaceContext {
@@ -262,7 +269,8 @@ const stepModule = (() => {
       if (id === "@/lib/services/upload") return { providerKindOrNull };
       if (id === "@/lib/workspace/types")
         return { canUploadForProgram, explainVideoRefusal };
-      if (id === "./styles") return { noteStripCls };
+      if (id === "./styles")
+        return { noteStripCls, noteIconCls, errorStripCls };
       // The pending-team note is rendered for real: its copy and email link
       // are part of what the Source step says.
       if (id === "./PendingTeamNote") {
@@ -480,6 +488,8 @@ function render(
     React.createElement(Step, {
       selectedProvider: "splitstep",
       onProviderSelect: () => {},
+      discipline: "singles",
+      onDisciplineSelect: () => {},
       whoPlayed: {
         required: false,
         roster: null,
@@ -836,4 +846,120 @@ test("without the offer the menu opens on Someone new, as it always did", () => 
   const rows = menu(html, FOR_MENU);
   expect(rows[0].text).toContain("Someone new");
   expect(strip(html)).not.toContain("Add yourself as a player");
+});
+
+// ─── 5. Format: singles or doubles ─────────────────────────────────────────
+
+const FORMAT_MENU = "Players on court";
+
+test("Format opens on Singles, and says doubles can't be analysed while closed", () => {
+  const html = render();
+  const rows = menu(html, FORMAT_MENU);
+  expect(rows.map((r) => r.text.split(" ")[0])).toEqual(["Singles", "Doubles"]);
+  expectSharedTreatment(rows, 0);
+  // The closed row carries the limit, for the many who never open the menu.
+  expect(strip(html)).toContain(
+    "One player each side · Doubles can't be analysed yet",
+  );
+  expect(html).not.toContain(errorStripCls);
+});
+
+test("Doubles is an ordinary, pickable row: no lock, no Coming soon", () => {
+  const doubles = menu(render(), FORMAT_MENU)[1];
+  expect(doubles.html).toContain('role="option"');
+  expect(doubles.html).not.toContain("disabled");
+  expect(doubles.html).not.toContain('data-icon="Lock"');
+  expect(doubles.text).toContain("Two players each side · Not analysed yet");
+  expect(doubles.text).not.toMatch(/coming soon/i);
+});
+
+test("Doubles chosen brings the red refusal strip, in the video words", () => {
+  const html = render({ discipline: "doubles" });
+  expect(html).toContain(errorStripCls);
+  expect(html).toContain('role="alert"');
+  expect(strip(html)).toContain(
+    "We can't analyse doubles yet. With two players each side, shots get credited to the wrong player. Choose a singles match to continue. No hours have been used.",
+  );
+  expectSharedTreatment(menu(html, FORMAT_MENU), 1);
+});
+
+test("an export source refuses doubles in its own words", () => {
+  const closed = strip(render({ selectedProvider: "swing-vision" }));
+  expect(closed).toContain("Doubles exports can't be read yet");
+  const refused = strip(
+    render({ selectedProvider: "swing-vision", discipline: "doubles" }),
+  );
+  expect(refused).toContain(
+    "We can't read doubles exports yet. Choose a singles session export to continue.",
+  );
+});
+
+test("Doubles holds Continue on step 1, and Singles releases it", () => {
+  const base = {
+    step: "provider",
+    selectedProvider: "splitstep",
+    whoPlayed: { required: false, subject: null },
+    uploadedFile: null,
+    isProbing: false,
+    isUploading: false,
+    isCreating: false,
+    parsingState: { isParsing: false },
+    formData: {},
+    minTrimSeconds: 0,
+  };
+  type Wizard = Parameters<typeof stepBusyLabel>[0];
+  expect(
+    stepBusyLabel({ ...base, discipline: "singles" } as unknown as Wizard, 0),
+  ).toBeNull();
+  expect(
+    stepBusyLabel({ ...base, discipline: "doubles" } as unknown as Wizard, 0),
+  ).toBe("");
+});
+
+test("a reload resumes past step 1 only once Format was answered Singles", () => {
+  const facts = { resumedProvider: true, askWhoPlayed: false };
+  expect(resumesPastSource({ ...facts, formatAnswered: "singles" })).toBe(true);
+  // A source picked but step 1 never continued past, or Doubles left chosen,
+  // or a visit stored before Format existed: step 1 opens, Format on screen.
+  expect(resumesPastSource({ ...facts, formatAnswered: null })).toBe(false);
+  expect(resumesPastSource({ ...facts, formatAnswered: "doubles" })).toBe(
+    false,
+  );
+  // The older rules still hold.
+  expect(
+    resumesPastSource({
+      ...facts,
+      askWhoPlayed: true,
+      formatAnswered: "singles",
+    }),
+  ).toBe(false);
+  expect(
+    resumesPastSource({
+      ...facts,
+      resumedProvider: false,
+      formatAnswered: "singles",
+    }),
+  ).toBe(false);
+});
+
+test("the wizard's resume branch asks resumesPastSource, and step 1 writes the answer", () => {
+  const hook = readFileSync(
+    resolve(`${WIZARD}/useUploadMatchWizard.ts`),
+    "utf8",
+  );
+  expect(hook).toContain("resumesPastSource({");
+  expect(hook).toContain("formatAnswered: storedFormat,");
+  // A Doubles answer is kept and restored, so a reload stays refused.
+  expect(hook).toContain(
+    'localStorage.setItem(STORAGE_KEYS.FORMAT_ANSWERED, "doubles")',
+  );
+  expect(hook).toContain(
+    'setDiscipline(storedFormat === "doubles" ? "doubles" : "singles")',
+  );
+  expect(hook).toContain(
+    "localStorage.setItem(STORAGE_KEYS.FORMAT_ANSWERED, discipline)",
+  );
+  expect(hook).toContain(
+    "localStorage.removeItem(STORAGE_KEYS.FORMAT_ANSWERED)",
+  );
 });

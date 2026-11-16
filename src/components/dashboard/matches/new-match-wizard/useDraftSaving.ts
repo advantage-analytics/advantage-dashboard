@@ -60,9 +60,10 @@ export function useDraftSaving(
    * Leave with the draft intact.
    *
    * The wizard was already saving; this writes the draft row the Matches
-   * table lists with Resume, pins the chosen source so the next visit resumes
-   * past step 1, and sets the flag that stops `DashboardShell` clearing
-   * storage on the way out. Then it goes where Cancel would.
+   * table lists with Resume, pins the chosen source (the next visit resumes
+   * past step 1 only once Format was answered there — `resumesPastSource`),
+   * and sets the flag that stops `DashboardShell` clearing storage on the way
+   * out. Then it goes where Cancel would.
    */
   const handleSaveDraft = useCallback(async () => {
     saveFormDataToStorage(formData, storageWorkspaceKey);

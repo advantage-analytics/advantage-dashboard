@@ -23,7 +23,7 @@ import { PinnedLinePending } from "./score-flow-pending";
  *     `team/upload` carries `?entry=`, so this is the shape to mirror; the
  *     bare staff queue list briefly shows it too, which is accepted.
  *   - **unpinned → the provider step.** A fresh wizard opens on
- *     Workspace · For · Source. A personal visitor with a stored source can
+ *     Workspace · For · Source · Format. A personal visitor with a stored source can
  *     resume onto the file step after mount, but that is decided from
  *     `localStorage` in an effect, which the server cannot see.
  *
@@ -122,9 +122,9 @@ function CaptionBar({ className }: { className: string }) {
 }
 
 /**
- * `SourceStepContent`: Workspace · For · Source, 36px apart. Each `Field` is
+ * `SourceStepContent`: Workspace · For · Source · Format, 36px apart. Each `Field` is
  * its `FieldCaption` over a 40px row on a hairline — the lead mark, the 20px value
- * and 16px subline, Source's mono file types and chevron. Every rule is the
+ * and 16px subline, Source's mono file types and chevron, Format's chevron. Every rule is the
  * resting hairline: which field carries the blue one depends on the
  * workspace kind, and a skeleton does not claim a field is being worked.
  */
@@ -143,6 +143,14 @@ function ProviderStepBody() {
       value: "w-44",
       sub: "w-80",
       source: true,
+      chevron: true,
+    },
+    {
+      caption: "w-[38px]",
+      lead: "rounded-[var(--radius-button)]",
+      value: "w-16",
+      sub: "w-64",
+      chevron: true,
     },
   ];
   return (
@@ -160,14 +168,12 @@ function ProviderStepBody() {
                 <PendingBar className={cn("h-2.5", field.sub)} />
               </span>
             </span>
-            {field.source && (
-              <>
-                <PendingBar className="h-2.5 w-16" />
-                <ChevronDown
-                  className="size-[13px] shrink-0 text-[var(--ink-400)]"
-                  strokeWidth={1.5}
-                />
-              </>
+            {field.source && <PendingBar className="h-2.5 w-16" />}
+            {field.chevron && (
+              <ChevronDown
+                className="size-[13px] shrink-0 text-[var(--ink-400)]"
+                strokeWidth={1.5}
+              />
             )}
           </div>
         </div>

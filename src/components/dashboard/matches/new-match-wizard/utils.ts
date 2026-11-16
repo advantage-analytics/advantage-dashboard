@@ -580,6 +580,15 @@ export const STORAGE_KEYS = {
   UPLOADED_FILE: "uploadedFile",
   SELECTED_PROVIDER: "selectedProvider",
   /**
+   * Step 1's Format answer: "singles" once step 1 was continued past, and
+   * "doubles" the moment Doubles is chosen (so a reload reopens step 1 still
+   * refused). A stored source alone used to be enough to resume on the file
+   * step, which skipped the Format question entirely: pick Doubles, reload,
+   * and the wizard opened past the refusal with Singles assumed. Resume now
+   * needs "singles" here too (`resumesPastSource`).
+   */
+  FORMAT_ANSWERED: "uploadFormatAnswered",
+  /**
    * Set by the footer's "Save draft", read by `DashboardShell`. The shell
    * clears the three keys above the moment the path leaves the wizard, which
    * is right for a Cancel and wrong for a draft the person asked to keep. The
@@ -597,6 +606,7 @@ export function clearStorageData(): void {
   localStorage.removeItem(STORAGE_KEYS.FORM_DATA_WORKSPACE);
   localStorage.removeItem(STORAGE_KEYS.UPLOADED_FILE);
   localStorage.removeItem(STORAGE_KEYS.SELECTED_PROVIDER);
+  localStorage.removeItem(STORAGE_KEYS.FORMAT_ANSWERED);
   localStorage.removeItem(STORAGE_KEYS.DRAFT_KEPT);
 }
 

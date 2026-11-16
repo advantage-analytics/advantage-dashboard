@@ -444,7 +444,7 @@ export const STEP_CONFIG: Record<Step, { title: string; description: string }> =
     provider: {
       title: "Where this match lives, and what it's made from.",
       description:
-        "Three facts before the file. Once we know whose match it is, the schedule fills the rest.",
+        "Four facts before the file. Once we know whose match it is, the schedule fills the rest.",
     },
     // The import copy; the video copy is the processing override below.
     file: {
