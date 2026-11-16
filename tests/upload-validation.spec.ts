@@ -388,6 +388,8 @@ test.describe("upload hook identity and submission", () => {
           provider: "swing-vision",
           formData: {},
           attachedLine: null,
+          // Saved past step 1, so Format was answered Singles there.
+          discipline: "singles",
         } as never,
       },
     });
