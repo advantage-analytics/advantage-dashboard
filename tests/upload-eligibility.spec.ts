@@ -1181,6 +1181,11 @@ test.describe("wizard: stale subjects return to selection, never to the uploader
     expect(draftResumeStep(false)).toBe("file");
     // A seeded subject answers the question, so the draft resumes on the file.
     expect(draftResumeStep(true, true)).toBe("file");
+    // A draft that never recorded Format (saved before it existed, or a
+    // connector draft that was not told) resumes on step 1, which asks it.
+    expect(draftResumeStep(false, false, false)).toBe("provider");
+    expect(draftResumeStep(true, true, false)).toBe("provider");
+    expect(draftResumeStep(false, false, true)).toBe("file");
     // And with nothing chosen, nothing passes.
     const result = refused(
       wizardUploadEligibility({
@@ -1750,6 +1755,7 @@ test.describe("wizard handlers: drafts and confirmations", () => {
       fileName: "old.csv",
       preset: null,
       attachedLine: null,
+      discipline: "singles" as const,
       updatedAt: "2026-09-10T00:00:00.000Z",
     };
     const teamDraft = uploadWizardHarness({ team: true, props: { draft } });
@@ -1782,6 +1788,7 @@ test.describe("wizard handlers: drafts and confirmations", () => {
       preset: null,
       attachedLine: null,
       subject,
+      discipline: "singles" as const,
       updatedAt: "2026-09-10T00:00:00.000Z",
     };
     // The page seeds `initialSubject` only after the roster lookup confirms it.

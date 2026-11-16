@@ -1247,7 +1247,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     {
       title: "Prepare a video upload",
       description:
-        "Start a new match from what the player tells you, and hand them the link to finish it: this saves an upload-wizard draft with the opponent, date, score and event filled in, and returns a URL to /dashboard/matches/new that resumes it. The player opens the link, picks the video file (or the SwingVision export), and answers the questions only they can — which player was at the top of the frame, ad scoring, a fixed camera — before the match is created and analysis is spent. Nothing is created or charged by this call. The score is a hint the wizard shows for confirmation, not a result.",
+        "Start a new match from what the player tells you, and hand them the link to finish it: this saves an upload-wizard draft with the opponent, date, score and event filled in, and returns a URL to /dashboard/matches/new that resumes it. The player opens the link, picks the video file (or the SwingVision export), and answers the questions only they can — which player was at the top of the frame, ad scoring, a fixed camera — before the match is created and analysis is spent. Nothing is created or charged by this call. The score is a hint the wizard shows for confirmation, not a result. Singles only: ask whether it was singles or doubles and pass format — a doubles match is refused, since it cannot be analysed or read.",
       inputSchema: {
         program_id: PROGRAM_ID,
         provider: z
@@ -1284,6 +1284,12 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           .max(120)
           .optional()
           .describe("In a program scope, the roster player's name."),
+        format: z
+          .enum(["singles", "doubles"])
+          .optional()
+          .describe(
+            "singles or doubles, if the player said. Only singles can be analysed or read: doubles is refused. Left out, the wizard asks it before the file.",
+          ),
       },
       annotations: {
         readOnlyHint: false,
@@ -1305,7 +1311,16 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
         match_type,
         court_type,
         player_name,
+        format,
       }) => {
+        // The wizard refuses doubles on step 1 (neither source can analyse or
+        // read it); a draft would only carry the player to that refusal.
+        if (format === "doubles") {
+          throw refusal(
+            "doubles_unsupported",
+            "Advantage can't analyse doubles yet, so there is no upload to prepare. Singles matches only for now.",
+          );
+        }
         const scope = await resolveScope(program_id);
         const team = scope.kind === "team";
         const day = new Date(`${date}T12:00:00Z`);
@@ -1332,6 +1347,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
             matchType: match_type ?? null,
             courtType: court_type ?? null,
             playerName: team ? (player_name ?? null) : null,
+            discipline: format === "singles" ? "singles" : null,
           },
           sets,
         );

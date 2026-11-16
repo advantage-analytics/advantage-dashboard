@@ -303,6 +303,8 @@ function draftOf(overrides: Partial<MatchDraft> = {}): MatchDraft {
     fileName: "match.csv",
     preset: null,
     attachedLine: null,
+    // Saved past step 1, so Format was answered Singles there.
+    discipline: "singles",
     updatedAt: "2026-09-20T00:00:00.000Z",
     ...overrides,
   };
@@ -817,6 +819,25 @@ function courtVideo() {
 }
 
 test.describe("a structurally equal draft does not re-seed", () => {
+  test("a draft with no Format answer (older row, or a connector draft not told) resumes on step 1", async () => {
+    const draft = draftOf({ provider: "splitstep", discipline: undefined });
+    const h = uploadWizardHarness({
+      props: { draft, initialProvider: "splitstep" },
+    });
+    await h.flush();
+    expect(h.current.step).toBe("provider");
+    expect(h.current.discipline).toBe("singles");
+  });
+
+  test("Save draft records Format only once step 1 was continued past", async () => {
+    const h = uploadWizardHarness({ draftSave: "saved" });
+    await h.flush();
+    expect(h.current.step).toBe("provider");
+    await h.current.saveDraft();
+    const onStepOne = h.draftSaves.at(-1) as { discipline?: string };
+    expect(onStepOne.discipline).toBeUndefined();
+  });
+
   test("a personal draft keeps the live answers and the step", async () => {
     const draft = draftOf({
       provider: "splitstep",
