@@ -76,7 +76,7 @@ test("an older version counts as no acceptance", () => {
 test("the terms screen promises nothing the product does not do", () => {
   for (const guardian of [false, true]) {
     const copy = legalUpdateCopy({ returning: true, guardian });
-    const text = copy.rows.map((row) => row.text).join("\n");
+    const text = copy.rows.join("\n");
     // Personal matches are never shared with a team.
     expect(text).toContain("personal matches are never visible to a team");
     expect(text).not.toMatch(

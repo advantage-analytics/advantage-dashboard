@@ -85,17 +85,16 @@ export const LEGAL_LINKS: Record<
 // links in the confirmation box are the documents. Change a version above and
 // re-read these rows against the new pages.
 
-export interface LegalUpdateRow {
-  /** Blue: what the account gets or keeps. Ink: what we do with its data. */
-  tone: "blue" | "ink";
-  text: string;
-}
-
 export interface LegalUpdateCopy {
   eyebrow: string;
   title: string;
   intro: string;
-  rows: readonly LegalUpdateRow[];
+  /**
+   * What changed, one sentence group per row. Every row wears the same blue
+   * mark: the screen is a list of changes to read, not a split between what
+   * the account gains and what it gives, so one colour reads as one list.
+   */
+  rows: readonly string[];
   button: string;
   pendingButton: string;
   signOut: string;
@@ -118,33 +117,17 @@ export function legalUpdateCopy({
   returning: boolean;
   guardian: boolean;
 }): LegalUpdateCopy {
-  const rows: LegalUpdateRow[] = [
-    {
-      tone: "blue",
-      text: "Matches filed to a team are visible to everyone on it: coaches, staff and teammates. Your personal matches are never visible to a team. You can share any match by public link.",
-    },
-    {
-      tone: "blue",
-      text: "Players under 13 can't hold an account. Players 13 to 17 can hold their own only to join a high school, club or academy team through its invitation; otherwise a parent or legal guardian manages one for them.",
-    },
-    {
-      tone: "ink",
-      text: "Our video analysis provider uses match video it receives, including video of players under 18 and of high school and junior teams, to improve its analysis models. People on its team may check a match against its video. Neither of us uses facial recognition or tries to identify players.",
-    },
-    {
-      tone: "ink",
-      text: "Analysis hours are final sales, except where required by law. Hours a match used aren't returned if it is deleted.",
-    },
-    {
-      tone: "ink",
-      text: "An AI app you connect can read your statistics and your teams', edit a match's details (never the score) and start upload drafts.",
-    },
+  const rows: string[] = [
+    "Matches filed to a team are visible to everyone on it: coaches, staff and teammates. Your personal matches are never visible to a team. You can share any match by public link.",
+    "Players under 13 can't hold an account. Players 13 to 17 can hold their own only to join a high school, club or academy team through its invitation; otherwise a parent or legal guardian manages one for them.",
+    "Our video analysis provider uses match video it receives, including video of players under 18 and of high school and junior teams, to improve its analysis models. People on its team may check a match against its video. Neither of us uses facial recognition or tries to identify players.",
+    "Analysis hours are final sales, except where required by law. Hours a match used aren't returned if it is deleted.",
+    "An AI app you connect can read your statistics and your teams', edit a match's details (never the score) and start upload drafts.",
   ];
   if (guardian) {
-    rows.push({
-      tone: "ink",
-      text: "As the guardian, you manage the account until it's handed over. Handing it over isn't in the app yet: when the player is ready, or turns 18, contact us and we'll arrange it with you.",
-    });
+    rows.push(
+      "As the guardian, you manage the account until it's handed over. Handing it over isn't in the app yet: when the player is ready, or turns 18, contact us and we'll arrange it with you.",
+    );
   }
 
   return {

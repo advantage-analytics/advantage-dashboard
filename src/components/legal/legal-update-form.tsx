@@ -25,9 +25,11 @@ import {
  * The one-time "Our terms have changed" screen's body.
  *
  * Built from the pilot terms form's pieces (`pilot-terms-form.tsx`): an
- * eyebrow and `text-title-lg` heading, `TermMark` rows for what changed, and
- * the one statement the account makes as a checkbox in a `--surface-subtle`
- * well below the list — never blue marks stacked over a blue checkbox. Every
+ * eyebrow and `text-title-lg` heading, blue `TermMark` rows for what changed,
+ * and the one statement the account makes as a checkbox in a
+ * `--surface-subtle` well below the list. The well is what keeps the blue
+ * marks from reading as more boxes to tick: it sets the checkbox apart from
+ * the list rather than stacking it in the marks' column. Every
  * word comes in on `copy`, built by `legalUpdateCopy()` beside the versions,
  * so this file holds layout and behaviour only.
  *
@@ -91,8 +93,8 @@ export function LegalUpdateForm({
       <ul className="flex flex-col gap-3 border-t border-[var(--border-hairline)] pt-5">
         {copy.rows.map((row, index) => (
           <li key={index} className="flex gap-2.5">
-            <TermMark tone={row.tone} />
-            <span className="text-body-sm">{row.text}</span>
+            <TermMark tone="blue" />
+            <span className="text-body-sm">{row}</span>
           </li>
         ))}
       </ul>
