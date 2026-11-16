@@ -62,6 +62,12 @@ export interface AnalyticsEvents {
 
   // Upload flow (/dashboard/matches/new)
   upload_started: { provider: string | null };
+  // Step 1's Format field, sent on a change only. Doubles is refused there,
+  // so the doubles count is how many people tried to upload one.
+  upload_format_selected: {
+    format: "singles" | "doubles";
+    provider: string | null;
+  };
   // One per step a visitor lands on, and one more when they change the source
   // on step 1. The last one before the visit ends is where they left from.
   upload_step_viewed: {

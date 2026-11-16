@@ -78,6 +78,25 @@ export function continueLabelFor(step: Step, isCreating: boolean): string {
 }
 
 /**
+ * May a returning visit open on the file step instead of step 1? Only when
+ * the stored source is the one resumed, nobody has to be chosen in the For
+ * field (a team's who-played answer lives in memory only), and step 1 was
+ * continued past with Format answered Singles. Without that last fact the
+ * resume would skip the Format question — the doubles refusal — entirely.
+ */
+export function resumesPastSource(facts: {
+  resumedProvider: boolean;
+  askWhoPlayed: boolean;
+  formatAnswered: string | null;
+}): boolean {
+  return (
+    facts.resumedProvider &&
+    !facts.askWhoPlayed &&
+    facts.formatAnswered === "singles"
+  );
+}
+
+/**
  * Work in progress, per step: `null` when the step is free to continue, `""`
  * when it is waiting silently, a sentence when the footer should say why.
  * Separate from the missing-fields list because these are states to wait out
@@ -88,6 +107,7 @@ export function stepBusyLabel(
     UseUploadMatchWizardReturn,
     | "step"
     | "selectedProvider"
+    | "discipline"
     | "whoPlayed"
     | "uploadedFile"
     | "isProbing"
@@ -109,12 +129,13 @@ export function stepBusyLabel(
   } = wizard;
   switch (wizard.step) {
     // Step 1 says nothing in the footer: Continue sleeps at 40% until a source
-    // and — in a team workspace — a player are chosen, and the fields
-    // themselves are the sentence. The hook refuses Continue on the same two
-    // conditions.
+    // and — in a team workspace — a player are chosen, and while Format says
+    // Doubles. The fields themselves are the sentence (Doubles brings its own
+    // refusal strip). The hook refuses Continue on the same three conditions.
     case "provider":
       return !wizard.selectedProvider ||
-        (wizard.whoPlayed.required && !wizard.whoPlayed.subject)
+        (wizard.whoPlayed.required && !wizard.whoPlayed.subject) ||
+        wizard.discipline === "doubles"
         ? ""
         : null;
     // Steps 2 and 3 say nothing either: the zone, the row and the two

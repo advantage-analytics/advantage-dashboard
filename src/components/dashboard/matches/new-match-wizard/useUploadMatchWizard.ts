@@ -10,7 +10,13 @@
  * - Match creation
  */
 
-import { trackVideoRejected, trackVideoSelected } from "./upload-analytics";
+import {
+  trackFormatSelected,
+  trackVideoRejected,
+  trackVideoSelected,
+} from "./upload-analytics";
+import type { Discipline } from "@/lib/schedule/types";
+import { resumesPastSource } from "./wizard-view";
 import { useAdminWizardMode } from "./admin-mode";
 import {
   canSaveRosterStyle,
@@ -553,6 +559,12 @@ export interface UseUploadMatchWizardReturn {
   // State
   step: Step;
   selectedProvider: ProviderId | null;
+  /**
+   * Step 1's Format answer. Singles by default; Doubles holds Continue, since
+   * neither source can analyse or read a doubles match. Not stored on the
+   * match or the draft: a doubles answer never leaves step 1.
+   */
+  discipline: Discipline;
   uploadedFile: UploadedFile | null;
   isOver: boolean;
   isCreating: boolean;
@@ -653,6 +665,7 @@ export interface UseUploadMatchWizardReturn {
 
   // Step navigation
   handleProviderSelect: (providerId: string | null) => void;
+  handleDisciplineSelect: (discipline: Discipline) => void;
   handleProviderContinue: () => void;
   /** Leaves the file step for whatever follows it in the kind's order. */
   handleFileContinue: () => void;
@@ -925,6 +938,7 @@ export function useUploadMatchWizard({
   const [selectedProvider, setSelectedProvider] = useState<ProviderId | null>(
     null,
   );
+  const [discipline, setDiscipline] = useState<Discipline>("singles");
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [isOver, setIsOver] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -1527,6 +1541,11 @@ export function useUploadMatchWizard({
 
   const saveDraft = useCallback(async (): Promise<boolean> => {
     if (admin) return false;
+    // A doubles answer is refused on step 1, and a draft row does not record
+    // the format: resumed from the Matches table it would open past step 1 as
+    // Singles. So there is no doubles draft to keep — the footer's Save draft
+    // sleeps on Doubles too, and this is the same fact for any other caller.
+    if (discipline === "doubles") return false;
     const id = draftId ?? crypto.randomUUID();
     const order = STEP_ORDER_BY_KIND[progressKind];
     setDraftSaving(true);
@@ -1564,6 +1583,7 @@ export function useUploadMatchWizard({
     }
   }, [
     admin,
+    discipline,
     draftId,
     progressKind,
     step,
@@ -1829,6 +1849,10 @@ export function useUploadMatchWizard({
     const existingProvider = localStorage.getItem(
       STORAGE_KEYS.SELECTED_PROVIDER,
     );
+    const storedFormat = localStorage.getItem(STORAGE_KEYS.FORMAT_ANSWERED);
+    // A Doubles answer survives a reload, refusal and all; anything else opens
+    // on the Singles default.
+    setDiscipline(storedFormat === "doubles" ? "doubles" : "singles");
     // `resolveStartingProvider` ranks link > stored > onboarding preference >
     // default. The link outranks the stored one — that is a stale choice, this
     // is the one just made — and the step still opens, because it carries two
@@ -1900,7 +1924,18 @@ export function useUploadMatchWizard({
     // nobody chosen — or silently fall back to the uploader, which is exactly
     // the attribution bug this question exists to prevent. The provider choice
     // itself still resumes; only the step does not jump.
-    if (resumedProvider && existingProvider && !askWhoPlayed) {
+    //
+    // And only once step 1 was continued past with Format answered: a stored
+    // source is written the moment one is picked, so without this a reload on
+    // step 1 with Doubles chosen reopened on the file step as Singles.
+    if (
+      existingProvider &&
+      resumesPastSource({
+        resumedProvider,
+        askWhoPlayed,
+        formatAnswered: storedFormat,
+      })
+    ) {
       const resumedKind = getProviderKind(existingProvider as ProviderId);
       setProgressKind(resumedKind);
       setStep(STEP_ORDER_BY_KIND[resumedKind][1]);
@@ -2435,8 +2470,29 @@ export function useUploadMatchWizard({
     [resetFileGeneration, admin],
   );
 
+  const handleDisciplineSelect = useCallback(
+    (next: Discipline) => {
+      setDiscipline(next);
+      // The console is staff checking a player's upload, not demand for
+      // doubles, and it never writes the wizard's storage.
+      if (admin) return;
+      // Doubles is kept, so a reload reopens step 1 still refused rather than
+      // back on the Singles default. Singles is unanswered again until step 1
+      // is continued past (`handleProviderContinue` writes it then).
+      if (next === "doubles")
+        localStorage.setItem(STORAGE_KEYS.FORMAT_ANSWERED, "doubles");
+      else localStorage.removeItem(STORAGE_KEYS.FORMAT_ANSWERED);
+      trackFormatSelected(next, selectedProvider);
+    },
+    [selectedProvider, admin],
+  );
+
   const handleProviderContinue = useCallback(() => {
     if (!selectedProvider) return;
+    // Doubles is refused on step 1 itself: the Format field's strip says why,
+    // and Continue is already asleep (`stepBusyLabel`). This is the same fact
+    // re-read for anything that reaches the handler past the button.
+    if (discipline === "doubles") return;
     // May this match be recorded here, and for whom — the pending program,
     // the restricted role, the missing or off-roster athlete, and a doubles
     // line (score-only, `doubles-unsupported`) all stop here, with the
@@ -2455,11 +2511,16 @@ export function useUploadMatchWizard({
       return;
     }
     setError(null);
+    // Format is answered (Singles — Doubles returned above), so a reload from
+    // here on may resume past step 1 (`resumesPastSource`).
+    if (!admin) localStorage.setItem(STORAGE_KEYS.FORMAT_ANSWERED, discipline);
     // Both kinds drop their file next; the order decides what follows it.
     setProgressKind(providerKind);
     setStep(stepOrder[1]);
   }, [
     selectedProvider,
+    discipline,
+    admin,
     stepOrder,
     providerKind,
     eligibility,
@@ -4193,6 +4254,7 @@ export function useUploadMatchWizard({
     adminFileResult,
     step,
     selectedProvider,
+    discipline,
     uploadedFile,
     isOver,
     isCreating,
@@ -4221,6 +4283,7 @@ export function useUploadMatchWizard({
 
     // Step navigation
     handleProviderSelect,
+    handleDisciplineSelect,
     handleProviderContinue,
     handleFileContinue,
     handleTrimContinue,

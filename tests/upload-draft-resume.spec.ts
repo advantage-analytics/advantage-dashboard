@@ -44,6 +44,26 @@ function source(path: string): string {
 
 // ─── Bug 1: a failed save must not read as a successful one ────────────────
 
+test("a Doubles answer writes no draft row, so Resume cannot skip its refusal", async () => {
+  const h = uploadWizardHarness({ draftSave: "saved" });
+  await h.flush();
+  h.current.handleDisciplineSelect("doubles");
+  h.render();
+  expect(h.current.discipline).toBe("doubles");
+  expect(await h.current.saveDraft()).toBe(false);
+  expect(h.draftSaves).toHaveLength(0);
+  // Back to Singles, and the draft saves as before.
+  h.current.handleDisciplineSelect("singles");
+  h.render();
+  expect(await h.current.saveDraft()).toBe(true);
+  expect(h.draftSaves).toHaveLength(1);
+});
+
+test("the footer's Save draft sleeps while Format says Doubles", () => {
+  const footer = source(`${WIZARD}/UploadWizardFooter.tsx`);
+  expect(footer).toContain("disabled={draftSaving || doubles}");
+});
+
 test.describe("save draft failure", () => {
   test("a refused write answers false and says why", async () => {
     const h = uploadWizardHarness({ draftSave: "refused" });

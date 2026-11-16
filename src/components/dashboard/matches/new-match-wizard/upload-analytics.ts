@@ -5,6 +5,7 @@ import {
   track,
   type VideoFacts,
 } from "@/lib/analytics";
+import type { Discipline } from "@/lib/schedule/types";
 import type { VideoProbe } from "@/lib/video/probe";
 
 /**
@@ -36,6 +37,17 @@ export function trackUploadStarted(provider: string | null): void {
   // source the last run ended on.
   lastStepView = null;
   track("upload_started", { provider });
+}
+
+/**
+ * Step 1's Format answer changed. Doubles cannot be analysed or read, so the
+ * doubles count is the demand for it; the step refuses it on the spot.
+ */
+export function trackFormatSelected(
+  format: Discipline,
+  provider: string | null,
+): void {
+  track("upload_format_selected", { format, provider });
 }
 
 /**

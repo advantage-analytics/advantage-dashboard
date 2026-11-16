@@ -3,13 +3,19 @@
 /**
  * SourceStepContent — Step 1, "Where this match lives, and what it's made from."
  *
- * Three facts before the file, as underline fields at the 40px register:
+ * Four facts before the file, as underline fields at the 40px register:
  *
  *   Workspace · which workspace the match is filed under and billed against
  *   For       · whose match it is — the uploader in a personal workspace, a
  *               roster pick in a team one
  *   Source    · what the match is made from — video for Advantage
  *               Intelligence, an export for SwingVision
+ *   Format    · singles or doubles. Only singles can be analysed or read,
+ *               so Doubles is a refusal: a red strip, and Continue sleeps
+ *               (`stepBusyLabel`). Doubles stays a pickable row, not a locked
+ *               or greyed one — someone holding a doubles video leaves a
+ *               disabled row alone and uploads under Singles, which is how a
+ *               doubles match got in before this field existed.
  *
  * Each field is a 40px lead (workspace square, avatar circle, engine mark), a
  * 14px value with one text-micro subline, and a hairline rule that goes 2px
@@ -44,6 +50,7 @@ import {
   Loader2,
   Plus,
   User,
+  Users,
   XCircle,
 } from "lucide-react";
 import {
@@ -71,6 +78,7 @@ import { FieldCaption } from "./FieldCaption";
 import { RosterMenuList, rosterMeta, workspaceLabel } from "./RosterMenu";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { WorkspaceMark } from "@/components/dashboard/workspace-mark";
+import type { Discipline } from "@/lib/schedule/types";
 
 export interface SourceStepContentProps {
   selectedProvider: ProviderId | null;
@@ -97,6 +105,9 @@ export interface SourceStepContentProps {
    * a component: this module's imports are pinned by `upload-source.spec.ts`.
    */
   addSelf?: { roleLabel: string; onOpen: () => void } | null;
+  /** Singles or doubles. Singles is the default; Doubles refuses the step. */
+  discipline: Discipline;
+  onDisciplineSelect: (discipline: Discipline) => void;
   /**
    * The admin console's step 1 (board UploadFor): its own Workspace row —
    * any team, or any player's personal workspace — and, for a player, the
@@ -112,7 +123,27 @@ export interface SourceStepContentProps {
   } | null;
 }
 
-type FieldName = "workspace" | "for" | "source";
+type FieldName = "workspace" | "for" | "source" | "format";
+
+/**
+ * The Format field's words, by what the source does with a match: a video is
+ * analysed, an export is read. Doubles is refused on both — the vendor tracks
+ * one player each side, and the SwingVision parser reads a singles session.
+ */
+const FORMAT_COPY = {
+  processing: {
+    closed: "Doubles can't be analysed yet",
+    notYet: "Not analysed yet",
+    refusal:
+      "We can't analyse doubles yet. With two players each side, shots get credited to the wrong player. Choose a singles match to continue. No hours have been used.",
+  },
+  import: {
+    closed: "Doubles exports can't be read yet",
+    notYet: "Not read yet",
+    refusal:
+      "We can't read doubles exports yet. Choose a singles session export to continue.",
+  },
+} as const;
 
 /**
  * How each source is described, in the design's words rather than the provider
@@ -223,6 +254,35 @@ function SourceMark({ provider, size }: { provider: Provider; size: 40 | 26 }) {
 }
 
 /**
+ * The Format field's lead: an entity square, not a circle — singles or doubles
+ * is a kind of match, not a person (`chrome.md`: entities are squares, people
+ * are circles). Neutral for Doubles too; the refusal strip is the one red.
+ */
+function DisciplineMark({
+  discipline,
+  size,
+}: {
+  discipline: Discipline;
+  size: 40 | 26;
+}) {
+  const Glyph = discipline === "doubles" ? Users : User;
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        size === 40 ? "size-10" : "size-[26px]",
+        "inline-flex shrink-0 items-center justify-center rounded-[var(--radius-button)] bg-[var(--surface-muted)] text-[var(--ink-700)]",
+      )}
+    >
+      <Glyph
+        className={size === 40 ? "size-4" : "size-[13px]"}
+        strokeWidth={1.5}
+      />
+    </span>
+  );
+}
+
+/**
  * One underline field: its `FieldCaption`, then the 40px row on a hairline that turns 2px
  * Signal Blue while the field is the one being worked. The rule is an inset
  * shadow rather than a border so the 1px→2px change moves nothing.
@@ -304,6 +364,8 @@ function SourceStepContentImpl({
   quotaRefusal = null,
   addSelf = null,
   admin = null,
+  discipline,
+  onDisciplineSelect,
 }: SourceStepContentProps) {
   const { active, available, viewer } = useWorkspace();
   const isTeam = active.kind === "team";
@@ -477,6 +539,12 @@ function SourceStepContentImpl({
     currentKind === "processing" ? explainVideoRefusal(active) : null;
   const teamHours =
     isTeam && currentKind === "processing" ? " · Team hours" : "";
+  // Before a source is chosen the video words stand: it is the default source.
+  const formatCopy =
+    FORMAT_COPY[currentKind === "import" ? "import" : "processing"];
+  const isDoubles = discipline === "doubles";
+  const disciplineLabel = isDoubles ? "Doubles" : "Singles";
+  const doublesSubline = `Two players each side · ${formatCopy.notYet}`;
 
   const sourceNote =
     currentKind === "import" ? (
@@ -841,6 +909,94 @@ function SourceStepContentImpl({
                       {copy.types}
                     </span>
                   )}
+                  <ChosenCheck chosen={isCurrent} />
+                </button>
+              );
+            })}
+          </PopoverContent>
+        </Popover>
+      </Field>
+
+      {/* Format */}
+      <Field
+        label="Format"
+        active={activeField === "format"}
+        below={
+          isDoubles ? (
+            <div className={errorStripCls} role="alert">
+              <XCircle
+                className={noteIconCls}
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+              <span>{formatCopy.refusal}</span>
+            </div>
+          ) : undefined
+        }
+      >
+        <Popover {...menuFor("format")}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label={`Format: ${disciplineLabel}. Change format`}
+              className={ROW_TRIGGER_CLS}
+            >
+              <DisciplineMark discipline={discipline} size={40} />
+              <FieldText
+                value={disciplineLabel}
+                subline={
+                  isDoubles
+                    ? doublesSubline
+                    : `One player each side · ${formatCopy.closed}`
+                }
+              />
+              <ChevronDown
+                className={cn(
+                  "size-[13px] shrink-0 text-[var(--ink-400)] transition-transform duration-200 ease-[var(--ease-primary)]",
+                  openMenu === "format" && "rotate-180",
+                )}
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            align="start"
+            sideOffset={6}
+            className={cn(MENU_CLS, "gap-0.5")}
+            role="listbox"
+            aria-label="Players on court"
+          >
+            <span className={MENU_LABEL_CLS}>Players on court</span>
+            {(["singles", "doubles"] as const).map((option) => {
+              const isCurrent = option === discipline;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  role="option"
+                  aria-selected={isCurrent}
+                  onClick={() => {
+                    if (!isCurrent) onDisciplineSelect(option);
+                    setOpenMenu(null);
+                  }}
+                  className={cn(
+                    "flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-element)] px-2.5 py-[9px] text-left transition-colors duration-150 focus-visible:outline-none",
+                    "focus-visible:bg-[var(--surface-subtle)]",
+                    !isCurrent && "hover:bg-[var(--surface-subtle)]",
+                  )}
+                >
+                  <DisciplineMark discipline={option} size={26} />
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
+                      {option === "doubles" ? "Doubles" : "Singles"}
+                    </span>
+                    <span className="truncate text-[11px] text-[var(--ink-500)]">
+                      {option === "doubles"
+                        ? doublesSubline
+                        : "One player each side"}
+                    </span>
+                  </span>
                   <ChosenCheck chosen={isCurrent} />
                 </button>
               );

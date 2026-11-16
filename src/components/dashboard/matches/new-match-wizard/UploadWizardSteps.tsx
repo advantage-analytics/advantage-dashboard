@@ -95,6 +95,8 @@ export function ProviderStep() {
     wizard: {
       selectedProvider,
       handleProviderSelect,
+      discipline,
+      handleDisciplineSelect,
       whoPlayed,
       providerQuotaRefusal,
     },
@@ -133,6 +135,8 @@ export function ProviderStep() {
       <SourceStepContent
         selectedProvider={selectedProvider}
         onProviderSelect={handleProviderSelect}
+        discipline={discipline}
+        onDisciplineSelect={handleDisciplineSelect}
         whoPlayed={whoPlayed}
         addSelf={addSelf.offer}
         admin={adminSlots}
