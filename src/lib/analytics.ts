@@ -1,5 +1,6 @@
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
+import type { VideoRejectionReason } from "@/lib/services/upload/types";
 
 /**
  * The typed registry of product-analytics events captured from the browser.
@@ -87,6 +88,14 @@ export interface AnalyticsEvents {
   } & VideoFacts;
   upload_failed: {
     step: string;
+    /**
+     * Why the picker refused the video, as a stable slug to break down by —
+     * `error_message` is the sentence and moves with every copy edit (for an
+     * unreadable file, the probe's own error instead of the fixed one). Null
+     * for a failure after the picker (transfer, submit, save), where `step`
+     * already says what failed.
+     */
+    failure_reason: VideoRejectionReason | null;
     error_message: string;
     file_size_mb: number | null;
   } & VideoFacts;

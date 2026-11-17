@@ -2704,7 +2704,9 @@ export function useUploadMatchWizard({
           setUploadError(result.error || "This video can't be analyzed.");
           trackVideoRejected(
             "video_validation",
-            result.error || "refused",
+            result.reason ?? null,
+            // The cause where the sentence hides it (an unreadable file).
+            result.cause || result.error || "refused",
             file,
             result.details?.video,
           );
@@ -2771,14 +2773,13 @@ export function useUploadMatchWizard({
         });
       } catch (err) {
         if (generation !== fileGenerationRef.current) return;
-        trackVideoRejected("video_read", err, file);
-        // Lead-first, like the validator's refusals: the strip sets the first
-        // sentence as its lead, and a bare exception message ("The operation
-        // was aborted.") would otherwise be the whole notice.
+        trackVideoRejected("video_read", "unreadable", err, file);
+        // Keep in sync with `UNREADABLE_VIDEO_MESSAGE` (splitstep-validator):
+        // duplicated because this hook is provider-agnostic and must not
+        // import a vendor's validator. The exception text only goes to
+        // `upload_failed`.
         setUploadError(
-          err instanceof Error && err.message
-            ? `Couldn't read this video. ${err.message}`
-            : "Couldn't read this video.",
+          "We couldn't open this video. It may be damaged or still downloading. Download it again and add the new copy.",
         );
       } finally {
         if (generation === fileGenerationRef.current) setIsProbing(false);
