@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Add the approach classifier
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) new `src/components/dashboard/matches/match-detail/match-filters/approach.ts`; new `tests/approach.spec.ts`; reads `match-filters/net-game.ts` and `shots/viz-model.ts` (`rallyLandingMetrics`) without changing them
 - **done when:**
