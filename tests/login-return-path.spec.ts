@@ -26,7 +26,7 @@ function sources(dir: string): string[] {
 
 test("no dashboard or team-setup gate sends people to a bare /login", () => {
   const bare = AREAS.flatMap(sources).filter((file) =>
-    /redirect\(\s*["']\/login["']\s*\)/.test(readFileSync(file, "utf8")),
+    /redirect\(\s*["'`]\/login["'`]\s*\)/.test(readFileSync(file, "utf8")),
   );
   expect(bare).toEqual([]);
 });
