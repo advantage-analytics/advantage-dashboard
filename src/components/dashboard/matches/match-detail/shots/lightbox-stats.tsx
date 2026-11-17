@@ -229,9 +229,6 @@ export function LightboxStats({
           tip.anchor.host,
         )}
       <GroupSpacer edge="top" />
-      {/* Under the top spacer, not over it: the column has no padding of its
-          own, so above it the strip sat flush on the tab row's hairline. */}
-      {hint}
       {figures.length > 0 && (
         <>
           <div
@@ -250,6 +247,11 @@ export function LightboxStats({
           <GroupSpacer edge="between" />
         </>
       )}
+      {/* The hint speaks about the rows, so it sits on them: after the
+          summary figures (which keep the panel's lead) and the spacer that
+          parts them from the rows, held to the first group by its own
+          tight bottom margin. */}
+      {hint}
       {groups.map((group, i) => {
         // Every row at the group's top rate: tied rows read alike, so none
         // looks better than its equal.

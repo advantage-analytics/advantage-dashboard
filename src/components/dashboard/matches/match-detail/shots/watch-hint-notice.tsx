@@ -51,7 +51,7 @@ export function WatchHintNotice() {
   // Dismissed for good: nothing to say, and nothing of the rows depends on it.
   if (seen) return null;
   return (
-    <div role="note" className={`${noteStripCls} mb-5`}>
+    <div role="note" className={`${noteStripCls} mb-4`}>
       <Info
         aria-hidden
         className={`${noteIconCls} text-[var(--ink-400)]`}
