@@ -517,7 +517,16 @@ export type PublishResult =
        */
       errorsJudged: boolean;
     }
-  | { ok: false; error: string };
+  | {
+      ok: false;
+      error: string;
+      /**
+       * The new points are in although the publish failed (the statistics
+       * could not be rebuilt). Mark complete takes Verified by Advantage off,
+       * since nobody verified them. Absent: the match is as it was.
+       */
+      pointsWritten?: true;
+    };
 
 /**
  * Publish an already-loaded and planned session. The backup is stored before
@@ -652,6 +661,7 @@ export async function publishPlanned(params: {
   } catch (err) {
     return {
       ok: false,
+      pointsWritten: true,
       error: `The labelled points are published, but the statistics could not be rebuilt (${err instanceof Error ? err.message : String(err)}). Publish again to retry; the previous version is backed up at ${backupKey}.`,
     };
   }
