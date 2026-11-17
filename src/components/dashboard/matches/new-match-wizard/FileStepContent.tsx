@@ -52,7 +52,7 @@ import { NoticeText } from "./NoticeText";
 import { FieldCaption } from "./FieldCaption";
 import { noteSuggestion } from "./validation";
 import { formatResolution, formatTimecode, getNumberOfSets } from "./utils";
-import { VideoRequirements } from "./VideoRequirements";
+import { VideoRequirements, VideoRequirementsFacts } from "./VideoRequirements";
 import { controlName } from "@/lib/ui/control-name";
 import { formatProbeFps } from "@/lib/services/upload/validators/splitstep-validator";
 
@@ -69,7 +69,7 @@ export interface FileStepContentProps {
   probe: VideoProbeSummary | null;
   /** Probe warnings — the file passed, with a caution. Drawn yellow. */
   warnings: string[];
-  /** Facts about the file that are not cautions. They join row 1's line. */
+  /** Facts about the file that are not cautions. They join the resolution row's line. */
   notes?: string[];
   /**
    * What this tab will do to the file before it uploads. Grey, under the file,
@@ -322,7 +322,7 @@ function FileStepContentImpl({
 
   const videoFacts = videoFileFacts(probe, uploadedFile?.size, "checked");
 
-  // What row 1 of the requirements reports once a video has passed the check.
+  // What the requirements' resolution row reports once a video has passed the check.
   // Nothing for a refused file: the wizard holds no probe for one, and the red
   // strip under the drop zone already says what was wrong.
   //
@@ -362,6 +362,10 @@ function FileStepContentImpl({
 
   return (
     <div className="flex flex-col gap-9">
+      {/* Read before the file is picked: the wrong download (a cut export, a
+          720p stream) is decided in another app before this page sees it. */}
+      {isVideo && <VideoRequirements result={videoResult} />}
+
       {!hasFile ? (
         <div className="flex flex-col gap-3.5">
           {/* The column's width on the page tone with a 1px dashed hairline —
@@ -599,13 +603,13 @@ function FileStepContentImpl({
         </div>
       )}
 
-      {/* The requirements stay under a checked video — the trim still has to
-          honour them. Under a read export they have been met, and the block
-          beneath says what was found instead. */}
+      {/* A video's requirements sit above; only their facts line is here.
+          Under a read export they have been met, and the block beneath says
+          what was found instead. */}
       {hasFile && !isVideo && parsingState.parseSuccess ? (
         <FoundInExport formData={formData} />
       ) : isVideo ? (
-        <VideoRequirements result={videoResult} />
+        <VideoRequirementsFacts />
       ) : (
         <div className="flex flex-col gap-3.5">
           <span className="eyebrow">What the export needs</span>

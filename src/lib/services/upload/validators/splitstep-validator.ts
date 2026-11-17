@@ -60,7 +60,6 @@
 import {
   probeVideo,
   snapToStandardFps,
-  VideoReadError,
   type VideoProbe,
 } from "@/lib/video/probe";
 import {
@@ -127,6 +126,7 @@ export function checkVideoFileBasics(
   if (!hasAcceptedExtension(file.name)) {
     return {
       success: false,
+      reason: "unsupported_format",
       error: `Unsupported format. Use ${formatExtensionList(ACCEPTED_VIDEO_EXTENSIONS)}. MP4 (H.264) works best.`,
     };
   }
@@ -134,6 +134,7 @@ export function checkVideoFileBasics(
   if (!allowOversize && file.size > MAX_VIDEO_SIZE_BYTES) {
     return {
       success: false,
+      reason: "too_large",
       error: `File too large. This video is ${formatGigabytes(file.size)} and the maximum is ${formatGigabytes(MAX_VIDEO_SIZE_BYTES)}.`,
     };
   }
@@ -187,6 +188,44 @@ export function formatProbeFps(probe: VideoProbe): string | null {
 }
 
 /**
+ * How a refused resolution is named, and the bar it is held to. A height
+ * people know by name reads "720p" against "1080p". Anything else — 1440×1080,
+ * a portrait 1080×1920, 1919×1080 — quotes its dimensions against the full
+ * 1920×1080, because "1080p" beside a video that is 1080 tall reads as a pass.
+ * Deliberately not the wizard's `formatResolution`, which would call a
+ * 1080×1920 portrait "1080p".
+ *
+ * A portrait recording gets its own fix: its numbers look like the bar with
+ * the axes swapped, and "record at 1080p" is what it already did — what it
+ * needs is the camera turned sideways. The PlaySight/CIZR clause is left off
+ * there: those cameras don't film upright.
+ */
+const NAMED_HEIGHTS = new Set([360, 480, 540, 720]);
+function resolutionRefusal(width: number, height: number): string {
+  if (height > width) {
+    return `This video is ${width}×${height}, filmed upright. We need ${MIN_VIDEO_WIDTH}×${MIN_VIDEO_HEIGHT} or higher, filmed sideways. Turn the camera sideways and record at 1080p.`;
+  }
+  const named = NAMED_HEIGHTS.has(height);
+  const label = named ? `${height}p` : `${width}×${height}`;
+  const need = named ? "1080p" : `${MIN_VIDEO_WIDTH}×${MIN_VIDEO_HEIGHT}`;
+  // The PlaySight/CIZR clause is here because their streams are where 720p
+  // files come from; the original download is 1080p.
+  return `This video is ${label}. We need ${need} or higher. Record or export at 1080p. From PlaySight or CIZR, download the original file, not the stream.`;
+}
+
+/**
+ * A probe failure as text for `upload_failed`. A media element rejects with an
+ * `Event`, not an `Error`, and `String(event)` is "[object Event]" — the very
+ * loss `cause` exists to prevent — so an event is named by its type.
+ */
+function describeCause(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof Event !== "undefined" && err instanceof Event)
+    return `${err.type} event`;
+  return String(err);
+}
+
+/**
  * The checks that need decoded metadata.
  *
  * The frame-rate comparison snaps first, so the 30 floor sees 30 for NTSC
@@ -202,7 +241,8 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   if (probe.width < MIN_VIDEO_WIDTH || probe.height < MIN_VIDEO_HEIGHT) {
     return {
       success: false,
-      error: `Resolution too low. This video is ${probe.width}×${probe.height} and analysis needs ${MIN_VIDEO_WIDTH}×${MIN_VIDEO_HEIGHT} (1080p) or higher.`,
+      reason: "resolution",
+      error: resolutionRefusal(probe.width, probe.height),
       details,
     };
   }
@@ -222,7 +262,10 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   ) {
     return {
       success: false,
-      error: `Frame rate too low. This video runs at ${probe.fps} fps and analysis needs ${MIN_VIDEO_FPS} or higher. Export at ${MIN_VIDEO_FPS} fps and add it again.`,
+      reason: "frame_rate",
+      // "Export at 30" can't fix a 25 fps event stream — re-encoding doesn't
+      // add frames — so the fix named is the original recording.
+      error: `This video is ${probe.fps} fps. We need ${MIN_VIDEO_FPS} fps or higher. Record at ${MIN_VIDEO_FPS} or ${RECOMMENDED_VIDEO_FPS} fps. Event and broadcast streams are often 25 fps, so ask for the original recording.`,
       details,
     };
   }
@@ -233,6 +276,7 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   if (averageBelow(probe, MIN_CONTAINER_AVERAGE_FPS)) {
     return {
       success: false,
+      reason: "frame_rate_variable",
       error: `Frame rate too low. This video averages ${formatAverage(probe.averageFps)}, and analysis needs at least ${MIN_CONTAINER_AVERAGE_FPS} fps. Export at a constant 30 fps and add it again.`,
       details,
     };
@@ -246,7 +290,10 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   ) {
     return {
       success: false,
-      error: `Video too short. It is only ${Math.round(probe.durationSeconds)}s long, which can't contain a match.`,
+      reason: "too_short",
+      // A cut or highlight export is the usual way a "match" ends up this
+      // short, so that is the fix named.
+      error: `This video is ${Math.round(probe.durationSeconds)} seconds long. We need the full match. If you downloaded a highlight or cut version, download the full recording instead.`,
       details,
     };
   }
@@ -267,7 +314,7 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
     // subsumes the 60 fps nudge below, which would only repeat "faster is
     // better" under a warning that already says so.
     warnings.push(
-      `Averages ${formatAverage(probe.averageFps)}. We'll still analyze it, but ball tracking may be less accurate. Export at a constant 30 fps for the best result.`,
+      `Averages ${formatAverage(probe.averageFps)}. We'll still analyze it, but some stats may be less accurate. Export at a constant 30 fps for the best result.`,
     );
   } else if (fps < RECOMMENDED_VIDEO_FPS) {
     // A fact, not a caution: the file meets the floor and nothing is at risk.
@@ -275,7 +322,7 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
     // own line — as a warning it turned nearly every 30 fps upload yellow,
     // which is how a colour stops meaning anything.
     notes.push(
-      `Recorded at ${fps} fps. ${RECOMMENDED_VIDEO_FPS} fps gives noticeably better ball tracking.`,
+      `Recorded at ${fps} fps. ${RECOMMENDED_VIDEO_FPS} fps gives more accurate stats.`,
     );
   }
 
@@ -285,6 +332,7 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
     if (probe.canConvert !== true) {
       return {
         success: false,
+        reason: "too_large",
         error: oversizeVideoMessage(
           probe.sizeBytes,
           probe.canConvert === false ? "no-encoder" : null,
@@ -343,6 +391,11 @@ export function conversionNotice(probe: VideoProbe): string | null {
   return `${what}, so it will be converted to 1080p H.264 in this tab before it uploads. Keep the tab open: a full match can take a while.`;
 }
 
+/** The refusal for a file this browser should have opened and could not. */
+// Duplicated in `useUploadMatchWizard` (provider-agnostic): keep in sync.
+export const UNREADABLE_VIDEO_MESSAGE =
+  "We couldn't open this video. It may be damaged or still downloading. Download it again and add the new copy.";
+
 /**
  * Validate a video file for analysis.
  *
@@ -375,7 +428,11 @@ export async function validateSplitStepVideo(
     // party that actually knows.
     if (exceedsUploadLimit(file.size)) {
       // Unread here means unread by the worker too: nothing could shrink it.
-      return { success: false, error: oversizeVideoMessage(file.size, null) };
+      return {
+        success: false,
+        reason: "too_large",
+        error: oversizeVideoMessage(file.size, null),
+      };
     }
     if (browserCannotDecode(file)) {
       return {
@@ -387,15 +444,16 @@ export async function validateSplitStepVideo(
         ],
       };
     }
+    // The probe's own messages ("may be corrupt or use a codec…") explain
+    // the browser, not the next step. A half-finished download is the usual
+    // cause for a file people just pulled off PlaySight or CIZR.
     return {
       success: false,
-      // The probe's own refusals are lead-first already. Anything else gets a
-      // lead of ours: the notice strip shows its first sentence in session
-      // replays, and an exception's message is not ours to show there.
-      error:
-        err instanceof VideoReadError
-          ? err.message
-          : `Couldn't read this video. ${err instanceof Error ? err.message : ""}`.trim(),
+      reason: "unreadable",
+      error: UNREADABLE_VIDEO_MESSAGE,
+      // The sentence above is the same for every unreadable file; the probe's
+      // own message is what tells a bad codec from a half-finished download.
+      cause: describeCause(err),
     };
   }
 

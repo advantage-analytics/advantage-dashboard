@@ -214,8 +214,8 @@ export function quotaRefusal(input: {
  * The clause of a validator note that is worth a place in the requirement
  * row: everything after its first sentence, without the closing full stop.
  *
- * Notes are written lead-first ("Recorded at 30 fps. 60 fps gives noticeably
- * better ball tracking."), and the lead only restates the measured value the
+ * Notes are written lead-first ("Recorded at 30 fps. 60 fps gives more
+ * accurate stats."), and the lead only restates the measured value the
  * row already shows. A note of ONE sentence has no lead to drop, so the whole
  * of it is the clause — never a slice from wherever a missing separator's
  * `indexOf` happens to land.

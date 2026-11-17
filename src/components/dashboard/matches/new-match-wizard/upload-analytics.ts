@@ -6,6 +6,7 @@ import {
   type VideoFacts,
 } from "@/lib/analytics";
 import type { Discipline } from "@/lib/schedule/types";
+import type { VideoRejectionReason } from "@/lib/services/upload/types";
 import type { VideoProbe } from "@/lib/video/probe";
 
 /**
@@ -155,6 +156,7 @@ export function trackUploadFailed(
   const bytes = transfer ? transfer.bytes : selectedVideoBytes;
   track("upload_failed", {
     step,
+    failure_reason: null,
     error_message: safeErrorMessage(error),
     file_size_mb: bytes == null ? null : toMb(bytes),
     ...videoFacts(null),
@@ -163,17 +165,20 @@ export function trackUploadFailed(
 
 /**
  * A picked video the wizard refused or could not read — before any upload.
- * `probe` is what the validator measured before refusing; absent when the file
- * could not be read at all.
+ * `reason` is the validator's slug for the refusal (`failure_reason`);
+ * `probe` is what it measured before refusing, absent when the file could
+ * not be read at all.
  */
 export function trackVideoRejected(
   step: string,
+  reason: VideoRejectionReason | null,
   error: unknown,
   file: File,
   probe?: VideoProbe | null,
 ) {
   track("upload_failed", {
     step,
+    failure_reason: reason,
     error_message: safeErrorMessage(error),
     file_size_mb: toMb(file.size),
     ...videoFacts(probe),

@@ -21,10 +21,37 @@ export type ProviderId = "swing-vision" | "atp-tour" | "splitstep";
  */
 export type ProviderKind = "import" | "processing";
 
+/**
+ * Why a video was refused before upload, as a stable slug.
+ *
+ * `error` is the sentence the person reads and changes whenever the copy does;
+ * this is what `upload_failed` reports as `failure_reason`, so a PostHog
+ * breakdown keeps working across copy edits. `frame_rate` is the browser's
+ * sample under the floor (no container average to judge by);
+ * `frame_rate_variable` is a whole-track average under
+ * `MIN_CONTAINER_AVERAGE_FPS` — a file that opens at 30 and drifts.
+ */
+export type VideoRejectionReason =
+  | "resolution"
+  | "frame_rate"
+  | "frame_rate_variable"
+  | "too_short"
+  | "unsupported_format"
+  | "too_large"
+  | "unreadable";
+
 /** File validation result */
 export interface ValidationResult {
   success: boolean;
   error?: string;
+  /** Set on every video refusal (`success: false`); absent otherwise. */
+  reason?: VideoRejectionReason;
+  /**
+   * What actually went wrong, when `error` is a fixed sentence that hides it
+   * (an unreadable file: codec, no video track, timeout). For `upload_failed`
+   * only — never shown to the person.
+   */
+  cause?: string;
   /**
    * Non-fatal findings the user should see but which do not block submission —
    * e.g. a frame rate the browser could not determine, or one that meets the
