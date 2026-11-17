@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { crestUrl, listTeamsForViewer } from "@/lib/data/teams-server";
 import { TeamsList } from "@/components/dashboard/settings/teams/teams-list";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Teams" };
 
@@ -15,7 +16,7 @@ export const metadata = { title: "Teams" };
  */
 export default async function TeamsPage() {
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   const rows = await listTeamsForViewer(workspace.available);
   if (rows.length === 0) redirect("/dashboard/settings/profile");

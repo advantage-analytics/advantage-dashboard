@@ -68,6 +68,7 @@ import { getBandSettings } from "@/lib/data/viz-bands-server";
 import { getPreferences } from "@/lib/data/preferences-server";
 import { askEntryHref } from "@/lib/services/ask/entry";
 import { otherPlayer } from "@/components/dashboard/matches/match-detail/match-filters/panel-draft";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 /** `getPreferences` once per request, so the early start above and the
  *  Visualizations body share one read. */
@@ -178,7 +179,7 @@ export default async function PlayerProfilePage({
   const [{ playerId }, query] = await Promise.all([params, searchParams]);
 
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");

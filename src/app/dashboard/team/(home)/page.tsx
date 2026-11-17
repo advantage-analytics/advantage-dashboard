@@ -52,6 +52,7 @@ import {
   CourtBodyPending,
   HistoryBodyPending,
 } from "@/components/dashboard/loading/team-home-skeleton";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Team home" };
 type Resources = ReturnType<typeof getTeamHomeResources>;
@@ -59,7 +60,7 @@ type Resources = ReturnType<typeof getTeamHomeResources>;
 /** Known card frames render immediately; each resource fills its own region. */
 export default async function TeamHomePage() {
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
   // Both start together: on a client navigation the layout does not re-run,

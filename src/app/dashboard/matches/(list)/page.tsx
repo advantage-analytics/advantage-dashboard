@@ -27,6 +27,7 @@ import { MatchesSkeleton } from "@/components/dashboard/matches/matches-skeleton
 import { matchesListShape } from "@/components/dashboard/matches/match-list-layout";
 import { MatchDrawerSlot } from "@/components/dashboard/matches/match-drawer-slot";
 import { listMatchDrafts } from "@/lib/wizard/actions";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Matches" };
 
@@ -64,7 +65,7 @@ export const metadata = { title: "Matches" };
  */
 export default async function MatchesPage(): Promise<React.JSX.Element> {
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
   const user = workspace.viewer;
   const supabase = await createClient();
   const isTeam = workspace.active.kind === "team";

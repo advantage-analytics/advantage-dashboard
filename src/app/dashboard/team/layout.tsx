@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 /**
  * Team routes belong to a team workspace.
@@ -20,7 +21,7 @@ export default async function TeamLayout({
   children: React.ReactNode;
 }) {
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
   if (workspace.active.kind !== "team") redirect("/dashboard");
 
   return <>{children}</>;

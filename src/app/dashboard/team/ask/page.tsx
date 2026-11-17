@@ -16,6 +16,7 @@ import type { AskScope } from "@/lib/services/ask/scope";
 import { askStarters } from "@/lib/services/ask/starters";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { explainVideoRefusal } from "@/lib/workspace/types";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Ask" };
 
@@ -57,7 +58,7 @@ export default function TeamAskRoute(props: TeamAskRouteProps) {
 async function TeamAskContent({ searchParams }: TeamAskRouteProps) {
   // `cache()`d: the same read the dashboard and team layouts already made.
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
   const { active } = workspace;
   // The team layout redirects first; this narrows the type and holds the
   // line if this page is ever rendered without it.

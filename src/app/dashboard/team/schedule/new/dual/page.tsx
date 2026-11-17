@@ -10,6 +10,7 @@ import { getProgramSchedule } from "@/lib/data/schedule-server";
 import { opponentDualHistory } from "@/lib/schedule/opponent-history";
 import { NewDualDataProvider } from "@/components/dashboard/schedule/static/dual-school-step";
 import { NewDualFlow } from "@/components/dashboard/schedule/static/new-dual-flow";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "New dual" };
 
@@ -97,7 +98,7 @@ async function directoryTotal(): Promise<number | null> {
  */
 export default async function NewDualPage() {
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");
