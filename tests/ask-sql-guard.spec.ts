@@ -438,3 +438,123 @@ test.describe("the planner's errors guidance (ASK_PLAN_ERRORS_RULE)", () => {
     expect(got).toMatchObject({ ok: true });
   });
 });
+
+test.describe("shot speed is never read (single-camera speed is not accurate)", () => {
+  const FROM = "from ask.shots sh join scope on scope.match_id = sh.match_id";
+
+  test("naming speed_mph is refused, anywhere in either string", () => {
+    expectRefused(
+      check(`select avg(sh.speed_mph) ${FROM}`),
+      /Shot speed is not available/,
+    );
+    expectRefused(
+      check(`select sh.shot_type ${FROM} where sh.speed_mph > 100`),
+      /Shot speed is not available/,
+    );
+    expectRefused(
+      check(
+        `select sh.shot_type ${FROM}`,
+        "select match_id from ask.shots where speed_mph > 0",
+      ),
+      /Shot speed is not available/,
+    );
+  });
+
+  test("a whole ask.shots row is refused, aliased or bare; its columns pass", () => {
+    expectRefused(check(`select sh ${FROM}`), /whole ask\.shots row/);
+    expectRefused(
+      check(`select array_agg(sh) ${FROM}`),
+      /whole ask\.shots row/,
+    );
+    expectRefused(
+      check(
+        "select count(shots) from ask.shots join scope on scope.match_id = shots.match_id",
+      ),
+      /whole ask\.shots row/,
+    );
+    expect(
+      check(`select sh.shot_type, count(*) as n ${FROM} group by sh.shot_type`),
+    ).toMatchObject({
+      ok: true,
+    });
+  });
+
+  test("a column-alias list is refused: a positional rename reaches speed_mph", () => {
+    expectRefused(
+      check(
+        "select g from ask.shots x(a,b,c,d,e,f,g) join scope on scope.match_id = x.a",
+      ),
+      /column-alias list/,
+    );
+    expectRefused(
+      check(
+        "select t.a from (select sh.shot_type from ask.shots sh) t(a) join scope on true",
+      ),
+      /column-alias list/,
+    );
+  });
+
+  test("alias.* anywhere is the whole row and is refused; bare count(*) passes", () => {
+    for (const sql of [
+      `select array_agg(sh.*) ${FROM}`,
+      `select string_agg(sh.*::text, ',') ${FROM}`,
+      `select coalesce(sh.*, null) ${FROM}`,
+      `select count(distinct sh.*) ${FROM}`,
+      `select 1 ${FROM} group by sh.*`,
+      `select 1 ${FROM} order by sh.*`,
+      `select row_number() over (order by sh.*) ${FROM}`,
+      `select count(*) ${FROM} where sh.* = sh.*`,
+    ]) {
+      expectRefused(check(sql), /with \* or alias\.\*/);
+    }
+    expectRefused(
+      check(
+        FROM.replace("from", "select match_id from") +
+          " where sh.* is not null",
+      ),
+      /with \* or alias\.\*/,
+    );
+    expect(check(`select count(*) as shots ${FROM}`)).toMatchObject({
+      ok: true,
+    });
+  });
+
+  test('a U&"..." escaped identifier is refused in either string', () => {
+    expectRefused(check(`select sh.U&"speed\\005fmph" ${FROM}`), /U&/);
+    expectRefused(check(`select U&"s\\0068" ${FROM}`), /U&/);
+    expectRefused(
+      check(
+        `select sh.shot_type ${FROM}`,
+        'select sh.U&"speed\\005fmph" as spd from ask.shots sh',
+      ),
+      /U&/,
+    );
+  });
+
+  test("speed_mph in a join's USING list is refused", () => {
+    expectRefused(
+      check(
+        "select count(*) from ask.shots a join ask.shots b using (speed_mph) join scope on scope.match_id = a.match_id",
+      ),
+      /Shot speed is not available/,
+    );
+    expect(
+      check(
+        "select count(*) from ask.shots a join ask.shots b using (match_id, point_number) join scope on scope.match_id = a.match_id",
+      ),
+    ).toMatchObject({ ok: true });
+  });
+
+  test("a * over ask.shots is refused; count(*) and * over other views pass", () => {
+    expectRefused(check(`select * ${FROM}`), /Name the columns you need/);
+    expectRefused(check(`select sh.* ${FROM}`), /Name the columns you need/);
+    expect(check(`select count(*) as shots ${FROM}`)).toMatchObject({
+      ok: true,
+    });
+    expect(
+      check(
+        "select * from ask.matches m join scope on scope.match_id = m.match_id",
+      ),
+    ).toMatchObject({ ok: true });
+  });
+});

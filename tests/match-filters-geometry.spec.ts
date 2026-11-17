@@ -29,7 +29,6 @@ function shot(overrides: Partial<MatchShot>): MatchShot {
     isPlayer1: true,
     shotType: "Forehand",
     spinType: null,
-    speedMph: null,
     zone: null,
     result: "In",
     videoTime: null,

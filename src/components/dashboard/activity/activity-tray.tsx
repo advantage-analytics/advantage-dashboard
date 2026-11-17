@@ -16,6 +16,7 @@ import { StepMark } from "@/components/dashboard/shared/vertical-steps";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { HintRunner } from "@/components/dashboard/onboarding/hint-runner";
 import { activityHintDue } from "@/lib/onboarding/hints";
+import { TEXT_ACTION_CLASS } from "@/lib/ui/text-action";
 import {
   useLiveMatchAnalysis,
   withLiveAnalysis,
@@ -109,10 +110,6 @@ const ROW_CLASS = "flex gap-3 rounded-[9px] px-2.5 py-3";
 /** The interactive rows' hover and focus, on top of `ROW_CLASS`. */
 const ROW_INTERACTIVE_CLASS =
   "transition-colors duration-150 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none";
-
-/** Blue text action — the row it sits in already carries the emphasis. */
-const TEXT_ACTION_CLASS =
-  "text-[12px] font-medium text-[var(--blue)] transition-colors duration-150 hover:text-[var(--blue-hover)] focus-visible:outline-none focus-visible:underline disabled:opacity-60 cursor-pointer";
 
 /** Grey text link beside a blue action. */
 const TEXT_LINK_CLASS =

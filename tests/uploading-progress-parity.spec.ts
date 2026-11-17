@@ -118,7 +118,7 @@ test("uploading: the wizard's title, its three steps in order, the percentage an
   expect(cost).toBeGreaterThan(keep);
   expect(reassure).toBeGreaterThan(cost);
   expect(html).toContain(
-    `<b class="font-medium">${UPLOADING_COPY.notes.keepTabOpen}</b>`,
+    `<b class="font-medium" data-ph-unmask="">${UPLOADING_COPY.notes.keepTabOpen}</b>`,
   );
   expect(reassure).toBeLessThan(out.lastIndexOf(UPLOADING_COPY.steps.analysis));
 });

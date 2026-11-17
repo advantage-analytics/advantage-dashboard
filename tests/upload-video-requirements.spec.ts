@@ -15,6 +15,8 @@
  * work/upload-flow-refinements/01_brief/output/brief.md §"Also consulted".
  */
 
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 import {
@@ -22,6 +24,8 @@ import {
   effectiveFps,
   evaluateVideoProbe,
   formatProbeFps,
+  UNREADABLE_VIDEO_MESSAGE,
+  validateSplitStepVideo,
 } from "@/lib/services/upload/validators/splitstep-validator";
 import { videoExtensionFor } from "@/lib/services/splitstep/object-keys";
 import {
@@ -202,9 +206,30 @@ test.describe("resolution boundary — the guide's 1080p minimum", () => {
     }
   });
 
-  test("a 720p phone clip is refused with its own dimensions quoted", () => {
+  test("a 720p clip is refused by the name people know it by, with the fix", () => {
     const result = evaluateVideoProbe(probe({ width: 1280, height: 720 }));
-    expect(result.error).toContain("1280×720");
+    expect(result.reason).toBe("resolution");
+    expect(result.error?.startsWith("This video is 720p. ")).toBe(true);
+    expect(result.error).toContain(
+      "download the original file, not the stream",
+    );
+    expect(result.error).not.toMatch(/splitstep|swingvision|computer vision/i);
+  });
+
+  test("an odd size quotes its dimensions against the full 1920×1080", () => {
+    // 1080 tall but too narrow: "We need 1080p" would read as a pass.
+    for (const [width, height] of [
+      [MIN_VIDEO_WIDTH - 1, MIN_VIDEO_HEIGHT],
+      [1440, 1080],
+    ]) {
+      const result = evaluateVideoProbe(probe({ width, height }));
+      expect(result.reason).toBe("resolution");
+      expect(result.error).toContain(`This video is ${width}×${height}.`);
+      expect(result.error).toContain(
+        `We need ${MIN_VIDEO_WIDTH}×${MIN_VIDEO_HEIGHT} or higher.`,
+      );
+      expect(result.error).not.toContain("We need 1080p");
+    }
   });
 });
 
@@ -221,8 +246,11 @@ test.describe("frame-rate boundary", () => {
   test("a rate genuinely under the floor is fatal and quotes the file's own rate", () => {
     const result = evaluateVideoProbe(probe({ fps: 24 }));
     expect(result.success).toBe(false);
+    expect(result.reason).toBe("frame_rate");
     expect(result.error).toContain("24 fps");
     expect(result.error).toContain(`${MIN_VIDEO_FPS} fps`);
+    // Re-exporting a stream can't add frames: the fix is the original.
+    expect(result.error).toContain("ask for the original recording");
   });
 
   test("meeting the floor but not the preference is a note, not a warning", () => {
@@ -249,6 +277,7 @@ test.describe("frame-rate boundary", () => {
     expect(error).toContain("29.2 fps");
     // Lead-first: the strip sets the first sentence as the lead.
     expect(error.startsWith("Frame rate too low. ")).toBe(true);
+    expect(result.reason).toBe("frame_rate_variable");
     expect(error).toContain(`${MIN_CONTAINER_AVERAGE_FPS} fps`);
     expect(error).toContain("constant 30 fps");
     expect(error).not.toMatch(/splitstep|swingvision/i);
@@ -432,6 +461,48 @@ test.describe("unknown metadata stays distinct from a known violation", () => {
   });
 });
 
+test.describe("a portrait recording", () => {
+  test("is told to turn the camera, not to record at 1080p again", () => {
+    const result = evaluateVideoProbe(probe({ width: 1080, height: 1920 }));
+    expect(result.reason).toBe("resolution");
+    expect(
+      result.error?.startsWith("This video is 1080×1920, filmed upright. "),
+    ).toBe(true);
+    expect(result.error).toContain("Turn the camera sideways");
+    // PlaySight and CIZR don't film upright: their clause would mislead here.
+    expect(result.error).not.toContain("PlaySight");
+  });
+});
+
+test.describe("an unreadable file", () => {
+  test("shows one plain sentence but keeps the probe's error for analytics", async () => {
+    // Outside a browser the probe cannot open anything and the decode
+    // deferral answers "no", so a labelled MP4 reaches the refusal.
+    const file = new File([new Uint8Array(16)], "match.mp4", {
+      type: "video/mp4",
+    });
+    const result = await validateSplitStepVideo(file);
+    expect(result.success).toBe(false);
+    expect(result.reason).toBe("unreadable");
+    expect(result.error).toBe(UNREADABLE_VIDEO_MESSAGE);
+    // What upload_failed reports: the real failure, not the fixed sentence.
+    expect(result.cause).toBeTruthy();
+    expect(result.cause).not.toBe(UNREADABLE_VIDEO_MESSAGE);
+    expect(result.cause).not.toMatch(/\[object /);
+  });
+
+  test("the wizard's own read failure says the same sentence", () => {
+    // The hook can't import the validator (its harness allowlists
+    // dependencies, and it is written against provider kind), so it carries
+    // a copy. This keeps the copy honest.
+    const hook = readFileSync(
+      "src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts",
+      "utf8",
+    );
+    expect(hook).toContain(JSON.stringify(UNREADABLE_VIDEO_MESSAGE));
+  });
+});
+
 test.describe("duration boundary", () => {
   test("accepts the shortest permitted clip and refuses one second under", () => {
     expect(
@@ -443,7 +514,11 @@ test.describe("duration boundary", () => {
       probe({ durationSeconds: MIN_TRIM_DURATION_SECONDS - 1 }),
     );
     expect(short.success).toBe(false);
-    expect(short.error).toContain("too short");
+    expect(short.reason).toBe("too_short");
+    expect(short.error).toContain(
+      `${MIN_TRIM_DURATION_SECONDS - 1} seconds long`,
+    );
+    expect(short.error).toContain("download the full recording");
   });
 });
 

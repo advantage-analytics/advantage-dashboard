@@ -120,7 +120,7 @@ test("the before-save note is the upload screens' strip: monitor, medium lead, n
     React.createElement(UploadNoteStrip, null, UPLOADING_COPY.beforeSave),
   );
   expect(html).toContain(
-    '<b class="font-medium">Uploading starts when you save.</b>',
+    '<b class="font-medium" data-ph-unmask="">Uploading starts when you save.</b>',
   );
   expect(html).toContain("lucide-monitor");
   expect(html).toContain("bg-[var(--surface-subtle)]");

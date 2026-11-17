@@ -15,7 +15,6 @@ export function rallyShot(
     shotNumber: 1,
     shotType: "Forehand",
     spinType: null,
-    speedMph: null,
     zone: null,
     result: "In",
     videoTime: null,

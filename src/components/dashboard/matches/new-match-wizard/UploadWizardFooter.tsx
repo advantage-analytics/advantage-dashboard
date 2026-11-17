@@ -5,10 +5,11 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { extraHoursWord } from "@/lib/data/usage-format";
 import { cn } from "@/lib/utils";
 import { FooterMeter, SplitReadout } from "./FooterMeter";
-import { jumpToMissingField, MissingFieldsPill } from "./MissingFieldsPill";
+import { MissingFieldsPill } from "./MissingFieldsPill";
 import { useUploadWizard } from "./UploadWizardProvider";
 import { focusRingCls } from "./styles";
 import { controlName } from "@/lib/ui/control-name";
+import { replayUnmask } from "@/lib/ui/replay-unmask";
 
 /**
  * The wizard footer's three slots, each reading the wizard context — composed
@@ -98,7 +99,7 @@ export function WizardFooterStatus() {
   const {
     wizard: { step },
     view: { stepBusy, gatedByMissing, missing },
-    meta: { contentRef },
+    actions: { showMissing },
   } = useUploadWizard();
   const workspaces = useWorkspace();
 
@@ -111,12 +112,7 @@ export function WizardFooterStatus() {
   }
 
   if (gatedByMissing) {
-    return (
-      <MissingFieldsPill
-        labels={missing.labels}
-        onJump={() => jumpToMissingField(contentRef.current, missing.labels)}
-      />
-    );
+    return <MissingFieldsPill labels={missing.labels} onJump={showMissing} />;
   }
 
   // Only when there is a choice to get wrong. `program_id` on the row follows
@@ -168,6 +164,7 @@ export function SaveDraftButton() {
       onClick={() => void saveDraft()}
       disabled={draftSaving || doubles}
       {...controlName("wizard_save_draft")}
+      {...replayUnmask()}
       className="shrink-0 cursor-pointer text-[11px] whitespace-nowrap text-[var(--ink-500)] transition-colors duration-150 hover:text-[var(--ink-900)] disabled:cursor-default disabled:opacity-50 disabled:hover:text-[var(--ink-500)]"
     >
       {draftSaving ? "Saving…" : "Save draft"}

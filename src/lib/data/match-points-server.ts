@@ -11,7 +11,8 @@ export interface MatchShot {
   isPlayer1: boolean;
   shotType: string | null;
   spinType: string | null;
-  speedMph: number | null;
+  // No speed: single-camera speed is not accurate, so it is never loaded
+  // into a page (UGA coaches call, 2026-11-16). `shots.speed_mph` keeps it.
   zone: string | null;
   result: string | null;
   /** Same clock as `MatchPoint.videoTime`; null when the source never timed it. */
@@ -133,7 +134,6 @@ interface DbShot {
   is_player1: boolean;
   shot_type: string | null;
   spin_type: string | null;
-  speed_mph: number | null;
   video_time: number | null;
   bounce_video_time: number | null;
   zone: string | null;
@@ -343,7 +343,7 @@ export async function getMatchPointsFromSupabase(
     const { data, error } = await supabase
       .from("shots")
       .select(
-        "id, point_id, shot_number, is_player1, shot_type, spin_type, speed_mph, video_time, bounce_video_time, zone, result, contact_x, contact_y, landing_x, landing_y",
+        "id, point_id, shot_number, is_player1, shot_type, spin_type, video_time, bounce_video_time, zone, result, contact_x, contact_y, landing_x, landing_y",
       )
       .eq("match_id", matchId)
       .order("point_id", { ascending: true })
@@ -457,7 +457,6 @@ export async function getMatchPointsFromSupabase(
         isPlayer1: shot.is_player1,
         shotType: shot.shot_type,
         spinType: shot.spin_type,
-        speedMph: shot.speed_mph,
         zone: shot.zone,
         result: shot.result,
         videoTime: shot.video_time,

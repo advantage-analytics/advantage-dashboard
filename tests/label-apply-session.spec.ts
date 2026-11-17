@@ -7,6 +7,7 @@ import {
   labelFold,
   planApply,
   publishPlanned,
+  restoreVerificationStamp,
   recompute,
   restoredErrorsJudgedAt,
   restoreErrorsJudged,
@@ -191,7 +192,12 @@ function fakeDatabase(
     errorsJudgedAt?: string;
     failMarker?: boolean;
     failVerify?: boolean;
+    failUnverify?: boolean;
     failInsights?: boolean;
+    /** The match is Verified by Advantage before the publish. */
+    verified?: boolean;
+    /** The first insert of points fails (the write is rolled back). */
+    failFirstInsert?: boolean;
   } = {},
 ) {
   const calls: Recorded[] = [];
@@ -201,6 +207,20 @@ function fakeDatabase(
     stats: null as { forced_errors: number | null } | null,
     /** What the stat function saw of the marker, each time it ran. */
     statsRuns: [] as boolean[],
+    stamp: options.verified
+      ? {
+          verified: true as boolean,
+          verified_at: "2026-11-13T19:08:51+00:00" as string | null,
+          verified_by: "55555555-5555-4555-8555-555555555555" as string | null,
+          verified_review_id: null as string | null,
+        }
+      : {
+          verified: false as boolean,
+          verified_at: null as string | null,
+          verified_by: null as string | null,
+          verified_review_id: null as string | null,
+        },
+    insertsFailed: 0,
   };
   const calculateMatchStats = () => {
     const judged = state.errorsJudgedAt !== null;
@@ -224,6 +244,17 @@ function fakeDatabase(
           return { data: true, error: null };
         case "calculate_match_stats":
           calculateMatchStats();
+          return { data: null, error: null };
+        case "unverify_match":
+          if (options.failUnverify) {
+            return { data: null, error: { message: "unverify refused" } };
+          }
+          state.stamp = {
+            verified: false,
+            verified_at: null,
+            verified_by: null,
+            verified_review_id: null,
+          };
           return { data: null, error: null };
         case "verify_match":
           if (options.failVerify) {
@@ -262,6 +293,10 @@ function fakeDatabase(
           };
         }
         if (call.op === "insert" && table === "points") {
+          if (options.failFirstInsert && state.insertsFailed === 0) {
+            state.insertsFailed += 1;
+            return { data: null, error: { message: "insert refused" } };
+          }
           const rows = call.values as Record<string, unknown>[];
           state.points.push(...rows);
           return {
@@ -274,9 +309,17 @@ function fakeDatabase(
         }
         if (call.op === "select" && table === "matches") {
           return {
-            data: { errors_judged_at: state.errorsJudgedAt },
+            data: { errors_judged_at: state.errorsJudgedAt, ...state.stamp },
             error: null,
           };
+        }
+        if (
+          call.op === "update" &&
+          table === "matches" &&
+          "verified" in (call.values as object)
+        ) {
+          state.stamp = call.values as typeof state.stamp;
+          return { data: null, error: null };
         }
         if (call.op === "update" && table === "matches") {
           if (options.failMarker) {
@@ -339,6 +382,140 @@ async function markComplete(
   });
   return { ...fake, result };
 }
+
+const MATCH = "33333333-3333-4333-8333-333333333333";
+
+// Verified by Advantage comes off just before the old points go and only
+// verify_match puts it back, so a publish that stops part-way — a failed
+// rebuild, a failed verify, a crash — never leaves it on unchecked points.
+test("Mark complete's publish takes the badge off before the delete; verify puts it back after", async () => {
+  const { calls, result } = await markComplete("forced");
+  expect(result).toMatchObject({ ok: true, status: "complete" });
+  const unverify = calls.findIndex((c) => c.table === "unverify_match");
+  const firstDelete = calls.findIndex((c) => c.op === "delete");
+  expect(unverify).toBeGreaterThan(-1);
+  expect(firstDelete).toBeGreaterThan(unverify);
+  expect(calls.findIndex((c) => c.table === "verify_match")).toBeGreaterThan(
+    firstDelete,
+  );
+  expect(calls[unverify].values).toEqual({
+    p_match_id: "33333333-3333-4333-8333-333333333333",
+  });
+});
+
+test("a failed rebuild after the write leaves the badge off: no verify", async () => {
+  const { calls, result } = await markComplete("forced", { failMarker: true });
+  expect(result).toMatchObject({
+    error: expect.stringContaining("statistics could not be rebuilt"),
+  });
+  expect(calls.some((c) => c.table === "unverify_match")).toBe(true);
+  expect(calls.some((c) => c.table === "verify_match")).toBe(false);
+});
+
+test("a badge that will not come off stops the publish before anything is written", async () => {
+  const { calls, state, result } = await markComplete("forced", {
+    failUnverify: true,
+  });
+  expect(result).toEqual({
+    error:
+      "Not published — Verified by Advantage could not be taken off the match first, so nothing was written: unverify refused",
+  });
+  expect(calls.some((c) => c.op === "delete" || c.op === "insert")).toBe(false);
+  expect(state.points).toEqual([]);
+  expect(calls.some((c) => c.table === "verify_match")).toBe(false);
+});
+
+test("a write that is rolled back puts the earlier stamp back with the points", async () => {
+  const { state, result } = await markComplete("forced", {
+    verified: true,
+    failFirstInsert: true,
+  });
+  expect(result).toMatchObject({
+    error: expect.stringContaining(
+      "the previous version was put back, Verified by Advantage with it",
+    ),
+  });
+  // The same stamp as before, not a new one: the old points are the ones it verified.
+  expect(state.stamp).toEqual({
+    verified: true,
+    verified_at: "2026-11-13T19:08:51+00:00",
+    verified_by: "55555555-5555-4555-8555-555555555555",
+    verified_review_id: null,
+  });
+});
+
+test("a rolled-back write on a match that was never verified leaves it unverified", async () => {
+  const { state, result } = await markComplete("forced", {
+    failFirstInsert: true,
+  });
+  expect(result).toMatchObject({
+    error: expect.stringContaining(
+      "Not published — the write failed and the previous version was put back: ",
+    ),
+  });
+  expect(state.stamp.verified).toBe(false);
+});
+
+test("a verified match republished: badge off during the write, re-granted by verify_match", async () => {
+  const { calls, state, result } = await markComplete("forced", {
+    verified: true,
+  });
+  expect(result).toMatchObject({ ok: true, status: "complete" });
+  expect(calls.some((c) => c.table === "unverify_match")).toBe(true);
+  // The fake's verify_match does not write the stamp; the unverify did run.
+  expect(state.stamp.verified).toBe(false);
+  expect(calls.some((c) => c.table === "verify_match")).toBe(true);
+});
+
+test("a published result says whether the badge came off", async () => {
+  for (const verified of [true, false]) {
+    const fake = fakeDatabase({ verified });
+    const context = sessionContext("forced");
+    const result = await publishPlanned({
+      db: fake.db,
+      context,
+      plan: planApply(context),
+      acceptScore: true,
+      deferInsights: true,
+    });
+    expect(result).toMatchObject({ ok: true, badgeRemoved: verified });
+  }
+});
+
+test("restoreVerificationStamp: puts a verified stamp back, and says when it cannot", async () => {
+  const stamp = {
+    verified: true,
+    verified_at: "2026-11-13T19:08:51+00:00",
+    verified_by: "55555555-5555-4555-8555-555555555555",
+    verified_review_id: null,
+  };
+  const fake = fakeDatabase({});
+  expect(await restoreVerificationStamp(fake.db, MATCH, stamp)).toBe(
+    "restored",
+  );
+  expect(fake.state.stamp).toEqual(stamp);
+  expect(await restoreVerificationStamp(fake.db, MATCH, undefined)).toBe(
+    "unknown",
+  );
+  expect(
+    await restoreVerificationStamp(fake.db, MATCH, {
+      verified: false,
+      verified_at: null,
+      verified_by: null,
+      verified_review_id: null,
+    }),
+  ).toBe("none");
+});
+
+test("a refusal before the write never touches the badge", async () => {
+  const context = sessionContext("forced");
+  context.session.points = [];
+  const { calls, result } = await markComplete(context);
+  expect(result).toMatchObject({
+    error: expect.stringContaining("there are no points to write"),
+  });
+  expect(calls.some((c) => c.table === "unverify_match")).toBe(false);
+});
 
 test("publish with every error marked: points, stats, then verify with p_errors_judged — forced_errors counted", async () => {
   const { calls, state, result } = await markComplete("forced");
@@ -616,6 +793,18 @@ test("--restore sets the marker after the rows and before the stats", () => {
   expect(rows).toBeGreaterThan(-1);
   expect(marker).toBeGreaterThan(rows);
   expect(stats).toBeGreaterThan(marker);
+});
+
+test("a --restore takes the current badge off before the rows and puts only the backup's stamp back", () => {
+  const source = readFileSync("scripts/label-apply.ts", "utf8");
+  const body = source.slice(source.indexOf("async function runRestore"));
+  const unverify = body.indexOf('db.rpc("unverify_match"');
+  const rows = body.indexOf("await restoreRows(db, backup)");
+  const restamp = body.indexOf("await restoreVerificationStamp(");
+  expect(unverify).toBeGreaterThan(-1);
+  expect(rows).toBeGreaterThan(unverify);
+  expect(restamp).toBeGreaterThan(rows);
+  expect(body.slice(restamp, restamp + 120)).toContain("backup.verification");
 });
 
 test("restoring forced strings onto a cleared marker counts them: the undercount", async () => {

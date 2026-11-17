@@ -52,24 +52,6 @@ export function formatDistanceValue(unit: DistanceUnit, ft: number): string {
   return trimmed(toUnit(unit, ft));
 }
 
-const KMH_PER_MPH = 1.609344;
-
-/** "118" | "190" — the bare number, for a column whose header names the
- *  unit (`speedUnitLabel`). Same rounding as `formatSpeed`. */
-export function formatSpeedValue(unit: DistanceUnit, mph: number): string {
-  return String(Math.round(unit === "ft" ? mph : mph * KMH_PER_MPH));
-}
-
-/** "mph" | "km/h". */
-export function speedUnitLabel(unit: DistanceUnit): string {
-  return unit === "ft" ? "mph" : "km/h";
-}
-
-/** "118 mph" | "190 km/h" — rounded to the nearest integer. */
-export function formatSpeed(unit: DistanceUnit, mph: number): string {
-  return `${formatSpeedValue(unit, mph)} ${speedUnitLabel(unit)}`;
-}
-
 /**
  * Snap to the nearest half-foot, or — in metres — the nearest half-metre
  * expressed back in feet (so a metric drag still lands on a "clean" metric

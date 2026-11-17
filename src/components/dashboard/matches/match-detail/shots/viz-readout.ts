@@ -1,7 +1,6 @@
 import type { ZoneKey, ZoneStats } from "@/lib/data/serve-zones";
 import type { Cut, StatRow, VizDotMeta } from "./viz-model";
 import { marksAreShots } from "./cut-kinds";
-import { formatSpeed, type DistanceUnit } from "@/lib/format/distance";
 import { pointScoreLabel } from "@/lib/ui/score-format";
 
 /**
@@ -11,10 +10,10 @@ import { pointScoreLabel } from "@/lib/ui/score-format";
  * **only what the data says**.
  *
  * Every part is omitted when its field is missing or unmeasured; nothing is
- * invented and nothing falls back to a zero. A serve with no recorded speed
- * shows no speed (Global Constraints: "no fabricated serve speed"); a point
- * with no stored score shows no score; a shot the tracker only called "In"
- * contributes no shot line at all, because "in" is not a fact the dot's own
+ * invented and nothing falls back to a zero. No shot speed is ever shown (a
+ * single camera cannot measure it accurately); a point with no stored score
+ * shows no score; a shot the tracker only called "In" contributes no shot line
+ * at all, because "in" is not a fact the dot's own
  * position doesn't already carry.
  *
  * Attribution (guardrails §4): the title reads off `meta.wonBySubject`, which
@@ -32,9 +31,8 @@ export interface Readout {
   /** 0–2 lines: the shot line, then the fact line. Empty lines never appear. */
   lines: string[];
   /**
-   * Index into `lines` of the mono/tabular fact line ("Set 3 · 40-15 · 118
-   * mph"), or `-1` when nothing measurable existed. The render site needs
-   * this because the shot line above it may itself be absent, so "the mono
+   * Index into `lines` of the mono/tabular fact line ("Set 3 · 40-15"), or
+   * `-1` when nothing measurable existed. The render site needs this because the shot line above it may itself be absent, so "the mono
    * one is line 2" is not something a caller can assume.
    */
   monoLine: number;
@@ -99,7 +97,6 @@ export function buildReadout(
   meta: VizDotMeta,
   names: ReadoutNames,
   cut: Cut,
-  unit: DistanceUnit,
 ): Readout {
   const title = `${names.subject} ${meta.wonBySubject ? "won" : "lost"} the point`;
 
@@ -123,15 +120,8 @@ export function buildReadout(
   }
   const score = (meta.pointScore ?? "").trim();
   if (score !== "") facts.push(pointScoreLabel(score));
-  // Unmeasured speed arrives as `null` from `computeViz`, but a stored 0 is
-  // equally "not a reading" — never "0 mph"/"0 km/h".
-  if (
-    meta.speedMph !== null &&
-    Number.isFinite(meta.speedMph) &&
-    meta.speedMph > 0
-  ) {
-    facts.push(formatSpeed(unit, meta.speedMph));
-  }
+  // No shot speed: a single camera cannot read it accurately, so it is never
+  // loaded and never printed (UGA coaches call, 2026-11-16).
 
   const lines: string[] = [];
   if (shotLine !== null && shotLine !== "") lines.push(shotLine);
@@ -153,7 +143,7 @@ export interface MarkReadout {
   title: string;
   /** The point score ("30-15"), or `null` when none was stored. */
   score: string | null;
-  /** The shot, its call and its speed when measured; `null` when none. */
+  /** The shot and its call (never its speed); `null` when none. */
   shot: string | null;
   /** "Set 2 · Game 5 · You serving", or `null`. */
   where: string | null;
@@ -183,7 +173,6 @@ export function buildMarkReadout(
   meta: VizDotMeta,
   outcome: "won" | "lost" | "miss",
   cut: Cut,
-  unit: DistanceUnit,
   where: string | null,
   extra: { match?: string | null; hint?: string | null } = {},
 ): MarkReadout {
@@ -203,20 +192,12 @@ export function buildMarkReadout(
     : shot !== null && call !== null
       ? `${shot}, ${lowerFirst(call)}`
       : (shot ?? call);
-  const speed =
-    meta.speedMph !== null &&
-    Number.isFinite(meta.speedMph) &&
-    meta.speedMph > 0
-      ? formatSpeed(unit, meta.speedMph)
-      : null;
   const score = (meta.pointScore ?? "").trim();
   return {
     title,
     score: score === "" ? null : pointScoreLabel(score),
-    shot:
-      [shotLine, speed]
-        .filter((part) => part !== null && part !== "")
-        .join(" · ") || null,
+    // No speed beside the shot — see `buildReadout`.
+    shot: shotLine === null || shotLine === "" ? null : shotLine,
     where,
     match: extra.match ?? null,
     hint: extra.hint ?? null,

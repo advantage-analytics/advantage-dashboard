@@ -111,7 +111,6 @@ const STOPS: ShotStop[] = Array.from({ length: 10 }, (_, index) => {
     isPlayer1: index % 2 === 0,
     shotType: index === 0 ? "Serve" : "Forehand",
     spinType: "Flat",
-    speedMph: 78,
     zone: "Deuce",
     result: "In",
     videoTime: index * 2,

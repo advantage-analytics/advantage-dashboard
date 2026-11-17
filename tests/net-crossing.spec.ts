@@ -70,7 +70,6 @@ function shot(over: Partial<MatchShot>): MatchShot {
     isPlayer1: true,
     shotType: "First Serve",
     spinType: null,
-    speedMph: null,
     zone: null,
     result: "Net",
     videoTime: null,

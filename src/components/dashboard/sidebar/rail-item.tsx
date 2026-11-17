@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { replayUnmask } from "@/lib/ui/replay-unmask";
 import { cn } from "@/lib/utils";
 import { RailTooltip } from "./rail-tooltip";
 
@@ -41,6 +42,8 @@ export function RailItem({
   comingSoon,
 }: {
   href?: string;
+  /** Reads through in session replays (`replayUnmask()`), so it must be
+   *  written in the source — never a workspace, program or person's name. */
   label: string;
   icon: React.ComponentType<
     React.SVGProps<SVGSVGElement> & { strokeWidth?: number }
@@ -66,8 +69,11 @@ export function RailItem({
       <span className="flex size-10 shrink-0 items-center justify-center">
         <Icon className="size-4" strokeWidth={1.5} aria-hidden="true" />
       </span>
+      {/* Readable in session replays: the only caller passes the
+          `nav.ts` destinations and the toggle's two words. */}
       <span
         aria-hidden={!expanded}
+        {...replayUnmask()}
         className={cn(
           "min-w-0 flex-1 truncate text-left text-[13px] transition-opacity ease-[var(--ease-primary)]",
           fade,

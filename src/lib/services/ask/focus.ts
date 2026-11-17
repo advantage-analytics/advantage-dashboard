@@ -53,7 +53,7 @@ export const ASK_VIEW_ONE_LINERS: Record<AskViewName, string> = {
     "two rows per match (side = 'me' and 'opponent'): the counters and _pct columns",
   points:
     "one row per point: set, game, who served, who won, the pressure flags, how it ended",
-  shots: "one row per shot: stroke, spin, speed, zone, direction, result",
+  shots: "one row per shot: stroke, spin, zone, direction, result",
   point_plays:
     "one row per point with its serve, return, +1 shot and last shot as columns",
 };

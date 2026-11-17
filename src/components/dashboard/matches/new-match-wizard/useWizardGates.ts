@@ -146,9 +146,12 @@ export function useWizardGates(
   const continueDisabled = wizardContinueBlocked({
     step,
     busy: stepBusy !== null,
-    // The early-end question, once on screen, is one more unanswered field.
-    missingMatchAnswers:
-      missing.labels.length > 0 || (!admin?.attachment && scoreCheckUnanswered),
+    // Blank required fields no longer put Continue to sleep: pressed, it
+    // points at them (`actions.showMissing`) — a parent on 2026-11-15 pressed
+    // a dead Continue seven times past a "1 required left" they never read.
+    // The early-end question stays a gate: it is a question on screen with
+    // its own two answers, not a blank to be pointed at.
+    missingMatchAnswers: !admin?.attachment && scoreCheckUnanswered,
     importIdentityBlocked: identityNoticeVisible && importIdentity.blocked,
     // `|| rosterStillLoading` is the one deliberate exception to T7's
     // "the visible notice decides the gate": there is nothing to explain

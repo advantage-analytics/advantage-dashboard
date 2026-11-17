@@ -240,7 +240,6 @@ export interface ShotRowCells {
   stroke: string;
   type: string;
   placement: string;
-  mph: string;
   result: string;
 }
 
@@ -395,10 +394,11 @@ export function shotTypeLabel(
 }
 
 /**
- * A shot's eight cells (handoff H1 §B, frame `E-route-P1-P2.html`).
+ * A shot's seven cells (handoff H1 §B, frame `E-route-P1-P2.html`).
  *
- * `MatchShot` carries only `shotType`, `spinType`, `speedMph`, `zone` and
- * `result`, so three columns are derived rather than read: Stroke reads
+ * `MatchShot` carries only `shotType`, `spinType`, `zone` and `result` for
+ * a row to print (no speed: single-camera speed is not accurate, so it is
+ * never loaded), so three columns are derived rather than read: Stroke reads
  * "Serve" for either serve row, "Type" is {@link shotTypeLabel} — the shot's
  * job in the rally, keyed on `shotType` plus the point's return
  * ({@link pointReturnShotId}), never on `order` — and Placement is
@@ -410,7 +410,7 @@ export function shotTypeLabel(
  * zone prints as it is; Middle and a serve's zone still print as stored.
  *
  * Nothing unmeasured is ever rendered as `0` or as an empty cell — a null
- * speed, spin, placement, stroke or result is {@link UNMEASURED}, because a
+ * spin, placement, stroke or result is {@link UNMEASURED}, because a
  * missing reading and a reading of zero are different claims about the match.
  * `playerName` is passed in: attribution comes from `useMatchSides()`
  * upstream (guardrails §4), never from player1/player2 order down here.
@@ -439,7 +439,6 @@ export function shotRowCells(
     stroke: isServe ? "Serve" : shotType ? sentenceCase(shotType) : UNMEASURED,
     type: shotTypeLabel(shot, returnShotId),
     placement: direction ?? (shot.zone || UNMEASURED),
-    mph: shot.speedMph == null ? UNMEASURED : String(Math.round(shot.speedMph)),
     result: shot.result ? shot.result : UNMEASURED,
   };
 }

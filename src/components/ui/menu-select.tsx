@@ -63,6 +63,7 @@ export function MenuSelect<T extends string>({
   tone = "light",
   open: openProp,
   onOpenChange,
+  invalid = false,
 }: {
   /** Accessible name — the visible caption or row label sits beside it. */
   label: string;
@@ -113,6 +114,12 @@ export function MenuSelect<T extends string>({
    */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /**
+   * A required answer someone tried to move past: the trigger's rule turns
+   * form red (`--error`) until the menu opens, when focus blue takes over as
+   * it does for any field. The caller prints the sentence under it.
+   */
+  invalid?: boolean;
 }) {
   const [ownOpen, setOwnOpen] = useState(false);
   const open = openProp ?? ownOpen;
@@ -170,7 +177,9 @@ export function MenuSelect<T extends string>({
             ? variant === "underline"
               ? "border-b-2 border-[var(--blue)]"
               : "border-[var(--blue)]"
-            : "border-[var(--border-field)]"),
+            : invalid
+              ? "border-[var(--error)]"
+              : "border-[var(--border-field)]"),
         className,
       )}
     >

@@ -14,8 +14,11 @@ import {
 } from "@/components/dashboard/matches/match-detail/head-to-head-card";
 import { applyFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import {
+  applyMatchFilters,
+  EMPTY_MATCH_FILTERS,
   type MatchFilterContext,
   NET_ZONE_DEPTH_M,
+  shotMatchesNet,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import {
   DRAWN_IN_DEPTH_M,
@@ -30,7 +33,9 @@ import {
   lobShotKeys,
   netEndingOf,
   netEntryOf,
+  netApproachShotOf,
   netGameTally,
+  netRallyShotOf,
 } from "@/components/dashboard/matches/match-detail/match-filters/net-game";
 import {
   cameInByLine,
@@ -68,7 +73,6 @@ function s(
     isPlayer1,
     shotType,
     spinType: o.spin ?? null,
-    speedMph: null,
     zone: null,
     result: o.result ?? "In",
     videoTime: o.t === undefined ? shotNumber * 1.3 : o.t,
@@ -508,6 +512,86 @@ test.describe("the Net game card's tally", () => {
     expect(
       cameInByLine({ approach: 14, "serve-volley": 0, "drawn-in": 7 }),
     ).toBe("Came in by · Approach 14 · Drawn in 7");
+  });
+});
+
+test.describe("the Net filter (Visualizations › Approaches)", () => {
+  const net = (o: Partial<typeof EMPTY_MATCH_FILTERS>) => ({
+    ...EMPTY_MATCH_FILTERS,
+    ...o,
+  });
+
+  test("keeps exactly the points the Net game card counts for each entry", () => {
+    const tally = netGameTally(MATCH, true, null);
+    for (const how of ["approach", "serve-volley", "drawn-in"] as const) {
+      const kept = applyMatchFilters(
+        MATCH,
+        net({ netCameIn: "you", netHow: [how] }),
+        CTX,
+      );
+      expect(kept.length, how).toBe(tally.entries[how]);
+      for (const point of kept) expect(netEntryOf(point, true)).toBe(how);
+    }
+  });
+
+  test("Came in alone keeps every net point of that side; nobody's are none", () => {
+    expect(
+      applyMatchFilters(MATCH, net({ netCameIn: "you" }), CTX).length,
+    ).toBe(netGameTally(MATCH, true, null).total);
+    expect(
+      applyMatchFilters(MATCH, net({ netCameIn: "opponent" }), CTX),
+    ).toEqual([]);
+  });
+
+  test("How alone reads either side", () => {
+    expect(
+      applyMatchFilters(MATCH, net({ netHow: ["drawn-in"] }), CTX).map(
+        (pt) => pt.id,
+      ),
+    ).toEqual(["drawn-in"]);
+  });
+
+  test("the drawn shot is the one that took the side in", () => {
+    // Approach: the side's own shot before its first net shot.
+    expect(netApproachShotOf(PASSED, true)?.shotNumber).toBe(4);
+    // Serve and volley: the serve.
+    expect(netApproachShotOf(SERVE_VOLLEY, true)?.shotNumber).toBe(1);
+    // Drawn in: the short ball it ran onto.
+    expect(netApproachShotOf(DRAWN_IN, true)?.shotNumber).toBe(4);
+    // Never came in: nothing.
+    expect(netApproachShotOf(YOU_LOB, true)).toBeUndefined();
+
+    // A rally cut never plots the serve or the return, so it draws the
+    // first net shot instead when the approach shot was one of them.
+    expect(netRallyShotOf(PASSED, true)?.shotNumber).toBe(4);
+    expect(netRallyShotOf(SERVE_VOLLEY, true)?.shotNumber).toBe(3);
+    const chipAndCharge = p("chip-charge", {
+      server: 2,
+      winner: 1,
+      resultType: "Volley Winner",
+      shots: [
+        s(1, false, "First Serve", { cy: 23.5, ly: 7 }),
+        s(2, true, "Backhand", { cy: 0.5, ly: 20 }),
+        s(3, false, "Forehand", { cy: 22, ly: 4 }),
+        s(4, true, "Forehand Volley", { cy: 9 }),
+      ],
+    });
+    expect(netEntryOf(chipAndCharge, true)).toBe("approach");
+    expect(netApproachShotOf(chipAndCharge, true)?.shotNumber).toBe(2);
+    expect(netRallyShotOf(chipAndCharge, true)?.shotNumber).toBe(4);
+
+    const sv = net({ netCameIn: "you", netHow: ["serve-volley"] });
+    expect(
+      (SERVE_VOLLEY.shots ?? [])
+        .filter((shot) => shotMatchesNet(shot, SERVE_VOLLEY, sv, CTX))
+        .map((shot) => shot.shotNumber),
+    ).toEqual([3]);
+
+    const f = net({ netCameIn: "you", netHow: ["approach"] });
+    const kept = (PASSED.shots ?? []).filter((shot) =>
+      shotMatchesNet(shot, PASSED, f, CTX),
+    );
+    expect(kept.map((shot) => shot.shotNumber)).toEqual([4]);
   });
 });
 

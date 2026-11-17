@@ -7,6 +7,9 @@ import {
 import type { Match } from "@/lib/data/types";
 
 import { playerHands } from "../../player-hands";
+// A cycle (`net-game.ts` reads `cameToNet` / `isNetShot` from here), safe
+// because neither module calls the other at load time.
+import { netEntryOf, netRallyShotOf, type NetEntry } from "./net-game";
 import { NET_Y_M } from "../film/film-court";
 import {
   courtSidesOf,
@@ -144,6 +147,11 @@ export interface MatchFilters {
   /** The last shot's miss, hit by the Result player when one is set. */
   readonly resultMissed: readonly ResultMissed[];
   readonly resultRallyLength: readonly RallyLengthBand[];
+  /* Net — the Net game card's own predicates (`net-game.ts`) */
+  /** Who came to the net. `null` with How chosen: either side, that way. */
+  readonly netCameIn: PlayerSide | null;
+  /** How they came in (`netEntryOf`): Approach, Serve and volley, Drawn in. */
+  readonly netHow: readonly NetEntry[];
   /* Custom — every chosen group must hold on ONE shot */
   readonly customPlayer: PlayerSide | null;
   readonly customSide: readonly CourtHalf[];
@@ -180,6 +188,7 @@ const SINGLE_KEYS = [
   "server",
   "court",
   "resultPlayer",
+  "netCameIn",
   "customPlayer",
   "thenPlayer",
 ] as const satisfies readonly MatchFilterKey[];
@@ -212,6 +221,8 @@ export const MATCH_FILTER_KEYS: readonly MatchFilterKey[] = [
   "resultEnding",
   "resultMissed",
   "resultRallyLength",
+  "netCameIn",
+  "netHow",
   "customPlayer",
   "customSide",
   "customStroke",
@@ -250,6 +261,8 @@ export const EMPTY_MATCH_FILTERS: MatchFilters = Object.freeze({
   resultEnding: [],
   resultMissed: [],
   resultRallyLength: [],
+  netCameIn: null,
+  netHow: [],
   customPlayer: null,
   customSide: [],
   customStroke: [],
@@ -398,6 +411,13 @@ export const MATCH_FILTER_OPTIONS: {
     { value: "medium", label: "Medium 5–8" },
     { value: "long", label: "Long 9+" },
   ],
+  netCameIn: PLAYER_OPTIONS,
+  // The Net game card's words and order (`net-game-body.tsx`).
+  netHow: [
+    { value: "approach", label: "Approach" },
+    { value: "serve-volley", label: "Serve and volley" },
+    { value: "drawn-in", label: "Drawn in" },
+  ],
   customPlayer: PLAYER_OPTIONS,
   customSide: SIDE_OPTIONS,
   customStroke: STROKE_OPTIONS,
@@ -459,7 +479,7 @@ export function bandOptionLabel(
 }
 
 export type MatchFilterSectionId =
-  "score" | "serve" | "return" | "result" | "custom" | "then";
+  "score" | "serve" | "return" | "result" | "net" | "custom" | "then";
 
 export interface MatchFilterGroup {
   key: MatchFilterKey;
@@ -530,6 +550,17 @@ export const MATCH_FILTER_SECTIONS: readonly {
       { key: "resultEnding", label: "Ending" },
       { key: "resultMissed", label: "Missed" },
       { key: "resultRallyLength", label: "Rally length" },
+    ],
+  },
+  {
+    // The Net game card's breakdown as a filter (UGA coaches call,
+    // 2026-11-16). On the rally cuts the drawn shot is the one that took the
+    // side in (`netRallyShotOf`).
+    id: "net",
+    label: "Net",
+    groups: [
+      { key: "netCameIn", label: "Came in", note: "estimated from movement" },
+      { key: "netHow", label: "How" },
     ],
   },
   {
@@ -1111,6 +1142,62 @@ function stepIsSet(step: ShotStep): boolean {
   );
 }
 
+/** Whether the Net section narrows anything. */
+export function hasNet(f: MatchFilters): boolean {
+  return f.netCameIn !== null || f.netHow.length > 0;
+}
+
+/**
+ * The seats the Net section asks about: the chosen player's, or both when
+ * only How is chosen ("either side came in that way").
+ */
+function netSeats(f: MatchFilters, ctx: MatchFilterContext): boolean[] {
+  return f.netCameIn === null ? [true, false] : [seatOf(f.netCameIn, ctx)];
+}
+
+/**
+ * The asked-about seats that came in on `point` the chosen way: each one's
+ * `netEntryOf` (the Net game card's own classifier, so a count here is the
+ * card's count) is non-null and — with How chosen — one of `netHow`.
+ */
+function netSeatsThatCameIn(
+  point: MatchPoint,
+  f: MatchFilters,
+  ctx: MatchFilterContext,
+): boolean[] {
+  return netSeats(f, ctx).filter((isPlayer1) => {
+    const entry = netEntryOf(point, isPlayer1);
+    return (
+      entry !== null && (f.netHow.length === 0 || f.netHow.includes(entry))
+    );
+  });
+}
+
+/** Net › Came in / How on a point: some asked-about side came in that way. */
+function matchesNet(
+  point: MatchPoint,
+  f: MatchFilters,
+  ctx: MatchFilterContext,
+): boolean {
+  return !hasNet(f) || netSeatsThatCameIn(point, f, ctx).length > 0;
+}
+
+/**
+ * On a rally cut, whether `shot` is the one a Net filter names: the shot
+ * that took an asked-about side in, as a rally cut can draw it
+ * (`netRallyShotOf`), on a point it came in on the chosen way.
+ */
+export function shotMatchesNet(
+  shot: MatchShot,
+  point: MatchPoint,
+  f: MatchFilters,
+  ctx: MatchFilterContext,
+): boolean {
+  return netSeatsThatCameIn(point, f, ctx).some(
+    (isPlayer1) => netRallyShotOf(point, isPlayer1)?.id === shot.id,
+  );
+}
+
 export function hasCustom(f: MatchFilters): boolean {
   return stepIsSet(customStepOf(f));
 }
@@ -1376,6 +1463,9 @@ export function matchesPoint(
   ) {
     return false;
   }
+
+  /* Net */
+  if (!matchesNet(point, f, ctx)) return false;
 
   /* Custom → Then */
   if (!matchesShotSequence(point, f, ctx)) return false;
@@ -1689,6 +1779,15 @@ const URL_CODEC: {
       ["short", "s"],
       ["medium", "m"],
       ["long", "l"],
+    ],
+  },
+  netCameIn: { key: "np", codes: PLAYER_CODES },
+  netHow: {
+    key: "ne",
+    codes: [
+      ["approach", "a"],
+      ["serve-volley", "sv"],
+      ["drawn-in", "d"],
     ],
   },
   customPlayer: { key: "cp", codes: PLAYER_CODES },

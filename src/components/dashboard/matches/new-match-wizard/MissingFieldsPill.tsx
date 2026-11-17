@@ -1,4 +1,5 @@
 import { TriangleAlert } from "lucide-react";
+import { replayUnmask } from "@/lib/ui/replay-unmask";
 
 /**
  * The last step's "still to fill" — a red pill in the footer: warning glyph,
@@ -22,6 +23,7 @@ export function MissingFieldsPill({
     <button
       type="button"
       onClick={onJump}
+      {...replayUnmask()}
       aria-label={`${count} required ${count === 1 ? "field" : "fields"} left: ${labels.join(", ")}. Go to the next one.`}
       className="inline-flex h-[22px] shrink-0 cursor-pointer items-center gap-1.5 rounded-full border border-[var(--danger)]/20 bg-[var(--danger)]/[0.08] pr-2.5 pl-2 text-[11px] leading-none font-medium whitespace-nowrap text-[var(--danger)] tabular-nums transition-colors duration-150 hover:bg-[var(--danger)]/[0.12]"
     >
@@ -59,16 +61,20 @@ const TARGETS: Record<string, (root: HTMLElement) => HTMLElement | null> = {
   scoring: (root) => root.querySelector('[data-field="Scoring"]'),
 };
 
-/** Scroll to and focus the first missing field in page order. */
+/**
+ * Scroll to and focus the first missing field in page order. Returns whether
+ * there was one on this page — a blank that belongs to an earlier step (the
+ * camera answers) has no field here to go to.
+ */
 export function jumpToMissingField(
   root: HTMLElement | null,
   labels: readonly string[],
-) {
-  if (!root) return;
+): boolean {
+  if (!root) return false;
   const targets = labels
     .map((label) => TARGETS[label]?.(root) ?? null)
     .filter((el): el is HTMLElement => el !== null);
-  if (targets.length === 0) return;
+  if (targets.length === 0) return false;
   targets.sort((a, b) =>
     a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
   );
@@ -79,4 +85,5 @@ export function jumpToMissingField(
     behavior: reduce ? "auto" : "smooth",
   });
   first.focus({ preventScroll: true });
+  return true;
 }

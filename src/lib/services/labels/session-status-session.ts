@@ -37,26 +37,35 @@
  * is verified by the admin who pressed it (`verify_match`, service role
  * only — the one door `zz_matches_guard_verification` leaves). A failed
  * verify is a failed Complete: the lease is released and Complete again
- * publishes and verifies again. `scripts/label-apply.ts` publishes by hand
+ * publishes and verifies again. The publish itself takes an earlier Verified
+ * by Advantage off (a Reopen keeps it) just before it deletes the old points
+ * (`publishPlanned`, apply-session.ts), so whatever stops it after that — a
+ * failed rebuild, a failed verify, a crash or a timeout — leaves the match
+ * unverified, never verified over points nobody checked; only `verify_match`
+ * puts the badge back. `scripts/label-apply.ts` publishes by hand
  * and never verifies. The AI summary is asked for after that verify, failed or
  * not: generate-insights reads whether errors were judged off `verified`, so
  * asked any sooner it could save an "errors" summary on a judged match.
  *
- * Reopen leaves the published points as they are but removes Verified by
- * Advantage (`unverify_match`), after the status flips; a failed unverify
- * puts the session back to complete, so the console and the badge never
- * disagree. The admin's check (`checked_at`, `checked_by`) is cleared with the
- * status, since a CHECK allows it on a complete session only, and put back
- * with it when the unverify fails. Completing again publishes and verifies again. Reopen reads the
- * status and writes the reverse, matched on `status = 'complete'`; the partial unique index that allows one open
+ * Reopen leaves the match alone: the published points stay, and so does
+ * Verified by Advantage (the owner's rule, 2026-11-16 — as Send back in
+ * check-session.ts). Edits in the reopened session reach the athlete only
+ * when Complete publishes them, so until then the badge still describes
+ * exactly what the athlete reads; taking it off would also show "Verification
+ * pending … from the automatic analysis", which is false of hand labels, and
+ * lift the lock that refuses a re-analysis of a verified match. Completing
+ * again publishes and re-stamps `verified_at` (`verify_match`). The admin's
+ * check (`checked_at`, `checked_by`) is cleared with the status, since a
+ * CHECK allows it on a complete session only. Reopen is one update matched on
+ * `status = 'complete'`; the partial unique index that allows one open
  * session per job (`label_sessions_one_open_per_job`) refuses it while
  * another session of the match is open.
  *
  * Reopen from `submitted` is the smaller move: back to `labelling` with
  * `submitted_at` cleared, matched on `status = 'submitted'`, so the assigned
- * labeller may edit again. Nothing was published, so `unverify_match` is not
- * called and the unique index cannot refuse it (the session already held the
- * job). The submission row stays, for the diff a later review draws.
+ * labeller may edit again. The unique index cannot refuse it (the session
+ * already held the job). The submission row stays, for the diff a later
+ * review draws.
  */
 
 import { requestMatchInsights } from "@/lib/services/splitstep/request-insights";
@@ -244,14 +253,11 @@ export async function writeLabelSessionComplete(params: {
         .eq("publishing_since", claimedAt)
         .select("id");
       if (closeError) {
-        // Verified by Advantage comes back off, so the match never shows it
-        // beside a session that is still open. A race (below) is left
-        // alone: the Complete that took the lease verifies for itself.
-        const { error: unverifyError } = await supabase.rpc("unverify_match", {
-          p_match_id: verified.matchId,
-        });
+        // Verified by Advantage stays: the labels are published and verified,
+        // and a session left open beside them is what a Reopen leaves too.
+        // Complete again (once the lease lapses) publishes and closes it.
         return {
-          error: `The labels are published, but the session could not be marked complete: ${closeError.message}${unverifyError ? ` Verified by Advantage could not be removed either (${unverifyError.message}).` : ""}`,
+          error: `The labels are published, but the session could not be marked complete: ${closeError.message}`,
         };
       }
       if (!closed || closed.length === 0) return { error: RACED };
@@ -287,8 +293,8 @@ export async function writeLabelSessionComplete(params: {
 
 /**
  * Open a complete or submitted session for labelling again. Never throws.
- * From `complete` the published points stay and Verified by Advantage comes
- * off; from `submitted` only the status moves.
+ * Only the session moves: the match keeps its published points and Verified
+ * by Advantage until Complete publishes again.
  */
 export async function writeLabelSessionReopen(params: {
   supabase: AdminClient;
@@ -300,22 +306,15 @@ export async function writeLabelSessionReopen(params: {
 
   const { data: session, error: readError } = await supabase
     .from("label_sessions")
-    .select("status, match_id, completed_at, checked_at, checked_by")
+    .select("status")
     .eq("id", sessionId)
-    .maybeSingle<{
-      status: string;
-      match_id: string;
-      completed_at: string | null;
-      checked_at?: string | null;
-      checked_by?: string | null;
-    }>();
+    .maybeSingle<{ status: string }>();
   if (readError) {
     return { error: `Could not read the session: ${readError.message}` };
   }
   if (!session) return { error: "Session not found." };
   if (session.status === "submitted") {
-    // Nothing was published, so there is no Verified by Advantage to remove
-    // and no second open session to collide with: one UPDATE, matched on the
+    // No second open session to collide with: one UPDATE, matched on the
     // status it was read in.
     const { data, error } = await supabase
       .from("label_sessions")
@@ -350,28 +349,6 @@ export async function writeLabelSessionReopen(params: {
   }
   if (!data || data.length === 0) return { error: RACED };
 
-  const { error: unverifyError } = await supabase.rpc("unverify_match", {
-    p_match_id: session.match_id,
-  });
-  if (unverifyError) {
-    // Back to complete, matched on the reopen this call made, so the match
-    // never shows Verified by Advantage beside an open session.
-    const { error: undoError } = await supabase
-      .from("label_sessions")
-      .update({
-        status: "complete",
-        completed_at: session.completed_at,
-        checked_at: session.checked_at ?? null,
-        checked_by: session.checked_by ?? null,
-      })
-      .eq("id", sessionId)
-      .eq("status", "labelling");
-    return {
-      error: undoError
-        ? `The session is open again, but Verified by Advantage could not be removed (${unverifyError.message}), and the session could not be put back (${undoError.message}).`
-        : `Could not remove Verified by Advantage, so the session stays complete: ${unverifyError.message}`,
-    };
-  }
   return { ok: true, status: "labelling" };
 }
 

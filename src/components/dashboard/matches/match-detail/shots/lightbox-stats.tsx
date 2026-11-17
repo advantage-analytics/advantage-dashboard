@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { ChartTooltip } from "../chart-tooltip";
@@ -133,12 +133,15 @@ export function LightboxStats({
   pick,
   onPick,
   onHover,
+  hint = null,
 }: {
   stats: VizStats;
   cut: Cut;
   pick: StatPick | null;
   onPick: (pick: StatPick | null) => void;
   onHover: (pick: StatPick | null) => void;
+  /** Drawn above the rows (`WatchHintNotice`): how to watch what a row picks. */
+  hint?: ReactNode;
 }) {
   // The readout's content outlives the hover by its fade: `open` goes, the
   // last row's words stay until the next row replaces them.
@@ -176,6 +179,7 @@ export function LightboxStats({
       : null;
   return (
     <div className="flex min-h-full flex-col">
+      {hint}
       {tip !== null &&
         tipContent !== null &&
         createPortal(

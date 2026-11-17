@@ -298,7 +298,22 @@ test.describe("writeLabelSessionComplete", () => {
     ]);
   });
 
-  test("a close that fails after the verify takes Verified by Advantage back off", async () => {
+  test("the writer never unverifies: the publish took the badge off before its write", async () => {
+    for (const fake of [
+      fakeClient({}),
+      fakeClient({ failRpc: ["verify_match"] }),
+    ]) {
+      await writeLabelSessionComplete({
+        actorId: ACTOR,
+        supabase: fake.supabase,
+        sessionId: SESSION_ID,
+        publish: PUBLISHED,
+      });
+      expect(fake.calls.some((c) => c.table === "unverify_match")).toBe(false);
+    }
+  });
+
+  test("a close that fails after the verify keeps Verified by Advantage", async () => {
     const fake = fakeClient({ failFromUpdate: 0 });
     const result = await writeLabelSessionComplete({
       actorId: ACTOR,
@@ -312,8 +327,7 @@ test.describe("writeLabelSessionComplete", () => {
     });
     expect(
       fake.calls.filter((c) => c.op === "rpc").map((c) => c.table),
-    ).toEqual(["claim_label_publish_lease", "verify_match", "unverify_match"]);
-    expect(fake.calls.at(-1)?.values).toEqual({ p_match_id: MATCH_ID });
+    ).toEqual(["claim_label_publish_lease", "verify_match"]);
   });
 
   test("a refused publish never verifies", async () => {
@@ -325,6 +339,22 @@ test.describe("writeLabelSessionComplete", () => {
       publish: async () => ({ ok: false, error: "Not published: no." }),
     });
     expect(fake.calls.some((c) => c.table === "verify_match")).toBe(false);
+  });
+
+  test("a publish the snapshot refused never touches the badge", async () => {
+    const fake = fakeClient({});
+    await writeLabelSessionComplete({
+      actorId: ACTOR,
+      supabase: fake.supabase,
+      sessionId: SESSION_ID,
+      publish: PUBLISHED,
+      beforePublish: async () => "Could not submit the session: no.",
+    });
+    expect(
+      fake.calls.some(
+        (c) => c.op === "rpc" && c.table !== "claim_label_publish_lease",
+      ),
+    ).toBe(false);
   });
 
   test("a refused or failed publish releases only its own lease; the session stays open", async () => {
@@ -520,48 +550,8 @@ test.describe("writeLabelSessionReopen", () => {
         filters: { id: SESSION_ID, status: "complete" },
       },
     ]);
-    // Then Verified by Advantage comes off the match.
-    expect(fake.calls.at(-1)).toEqual({
-      table: "unverify_match",
-      op: "rpc",
-      values: { p_match_id: MATCH_ID },
-      filters: {},
-    });
-  });
-
-  test("a failed unverify puts the session back to complete", async () => {
-    const completedAt = "2026-10-20T10:00:00.000Z";
-    const fake = fakeClient({
-      session: {
-        status: "complete",
-        match_id: MATCH_ID,
-        completed_at: completedAt,
-        checked_at: completedAt,
-        checked_by: ACTOR,
-      },
-      failRpc: ["unverify_match"],
-    });
-    expect(
-      await writeLabelSessionReopen({
-        supabase: fake.supabase,
-        sessionId: SESSION_ID,
-      }),
-    ).toEqual({
-      error:
-        "Could not remove Verified by Advantage, so the session stays complete: unverify_match refused",
-    });
-    expect(updates(fake).at(-1)).toEqual({
-      table: "label_sessions",
-      op: "update",
-      // The check the reopen cleared goes back with the status.
-      values: {
-        status: "complete",
-        completed_at: completedAt,
-        checked_at: completedAt,
-        checked_by: ACTOR,
-      },
-      filters: { id: SESSION_ID, status: "labelling" },
-    });
+    // The match keeps Verified by Advantage: no RPC, no match write.
+    expect(fake.calls.some((c) => c.op === "rpc")).toBe(false);
   });
 
   test("a refused reopen never touches Verified by Advantage", async () => {
@@ -986,13 +976,14 @@ test.describe("completeWarnings", () => {
     expect(copy.description).not.toMatch(/publish/i);
   });
 
-  test("Reopen asks first, and says Verified by Advantage comes off", () => {
+  test("Reopen asks first, and says Verified by Advantage stays", () => {
     expect(labelConfirmCopy({ kind: "reopen-session" }, NAMES)).toMatchObject({
-      title: "Reopen and remove Verified by Advantage?",
+      title: "Reopen for editing?",
       confirmLabel: "Reopen",
     });
     const { description } = labelConfirmCopy({ kind: "reopen-session" }, NAMES);
-    expect(description).toContain("Publish again");
+    expect(description).toContain("still Verified by Advantage");
+    expect(description).toContain("publish again");
     expect(description).not.toContain("Mark complete");
   });
 });

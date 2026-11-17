@@ -87,7 +87,6 @@ function point(over: Partial<MatchPoint>): MatchPoint {
         isPlayer1: merged.serverIsPlayer1,
         shotType: merged.firstShotType ?? "First Serve",
         spinType: null,
-        speedMph: null,
         zone: null,
         result: merged.firstShotResult ?? "In",
         videoTime: null,
@@ -115,7 +114,6 @@ function shot(over: Partial<MatchShot>): MatchShot {
     isPlayer1: true,
     shotType: "Forehand",
     spinType: null,
-    speedMph: null,
     zone: null,
     result: "In",
     videoTime: null,
@@ -2490,7 +2488,6 @@ test.describe("VizDot.meta — serve cut", () => {
           isPlayer1: true,
           shotType: "First Serve",
           spinType: null,
-          speedMph: 118,
           zone: null,
           result: "In",
           videoTime: null,
@@ -2511,7 +2508,7 @@ test.describe("VizDot.meta — serve cut", () => {
     expect(meta.wonBySubject).toBe(true);
     expect(meta.shotType).toBe("First Serve");
     expect(meta.result).toBe("In");
-    expect(meta.speedMph).toBe(118);
+    expect(meta).not.toHaveProperty("speedMph");
     expect(meta.isAce).toBe(false);
   });
 
@@ -2559,10 +2556,10 @@ test.describe("VizDot.meta — serve cut", () => {
     expect(asOpponent.dots).toHaveLength(0); // player 2 didn't serve this point
   });
 
-  test("speedMph is null, never fabricated, when the shot row carries no speed", () => {
+  test("a dot carries no speed: single-camera speed is never loaded", () => {
     const p = point({ serverIsPlayer1: true, wonByPlayer1: true });
     const r = computeViz([p], "serve", EMPTY_VIZ_FILTERS, true);
-    expect(r.dots[0].meta!.speedMph).toBeNull();
+    expect(r.dots[0].meta).not.toHaveProperty("speedMph");
   });
 
   /**
@@ -2587,7 +2584,7 @@ test.describe("VizDot.meta — serve cut", () => {
     const meta = r.dots[0].meta!;
     expect(meta.shotType).toBe("First Serve");
     expect(meta.result).toBe("In");
-    expect(meta.speedMph).toBeNull();
+    expect(meta).not.toHaveProperty("speedMph");
   });
 });
 
@@ -2612,7 +2609,6 @@ test.describe("VizDot.meta — return cuts", () => {
         isPlayer1: false,
         shotType: "First Serve",
         spinType: null,
-        speedMph: null,
         zone: null,
         result: "In",
         videoTime: null,
@@ -2628,7 +2624,6 @@ test.describe("VizDot.meta — return cuts", () => {
         isPlayer1: true,
         shotType: "Forehand",
         spinType: null,
-        speedMph: 72,
         zone: null,
         result: "In",
         videoTime: null,
@@ -2654,7 +2649,7 @@ test.describe("VizDot.meta — return cuts", () => {
     expect(meta.wonBySubject).toBe(true);
     expect(meta.shotType).toBe("Forehand");
     expect(meta.result).toBe("In");
-    expect(meta.speedMph).toBe(72);
+    expect(meta).not.toHaveProperty("speedMph");
   });
 
   test("returnContact meta reads the SAME resolved return shot as returnPlacement", () => {
@@ -2666,10 +2661,10 @@ test.describe("VizDot.meta — return cuts", () => {
     );
     const meta = r.dots[0].meta!;
     expect(meta.shotType).toBe("Forehand");
-    expect(meta.speedMph).toBe(72);
+    expect(meta).not.toHaveProperty("speedMph");
   });
 
-  test("falls back to the flattened secondShotType/secondShotResult when the point has no resolvable return `shots` row, with speedMph null (no flattened speed field exists to read)", () => {
+  test("falls back to the flattened secondShotType/secondShotResult when the point has no resolvable return `shots` row", () => {
     const noShotsRow = point({
       serverIsPlayer1: false,
       wonByPlayer1: true,
@@ -2689,7 +2684,7 @@ test.describe("VizDot.meta — return cuts", () => {
     const meta = r.dots[0].meta!;
     expect(meta.shotType).toBe("Backhand Slice");
     expect(meta.result).toBe("In");
-    expect(meta.speedMph).toBeNull();
+    expect(meta).not.toHaveProperty("speedMph");
   });
 });
 
@@ -2709,7 +2704,6 @@ test.describe("VizDot.meta — rallyPosition cut", () => {
           id: "s1",
           shotType: "Backhand",
           result: "Winner",
-          speedMph: 61,
         }),
       ],
     });
@@ -2729,7 +2723,7 @@ test.describe("VizDot.meta — rallyPosition cut", () => {
     expect(meta.wonBySubject).toBe(false); // subject=player1, wonByPlayer1=false -> lost
     expect(meta.shotType).toBe("Backhand");
     expect(meta.result).toBe("Winner");
-    expect(meta.speedMph).toBe(61);
+    expect(meta).not.toHaveProperty("speedMph");
   });
 });
 
