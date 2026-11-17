@@ -457,19 +457,14 @@ function MonthYearSelects({ label }: { label: string }) {
       month: "long",
       timeZone: "UTC",
     });
+    // Months counted from year zero, so "before min / after max" is one
+    // comparison each. Only months with a pickable day are offered.
+    const first = minValue ? minValue.year * 12 + minValue.month : -Infinity;
+    const last = maxValue ? maxValue.year * 12 + maxValue.month : Infinity;
     const options: { value: string; label: string }[] = [];
     for (let m = 1; m <= 12; m += 1) {
-      // Only months with a pickable day in the focused year.
-      if (
-        minValue &&
-        (year < minValue.year || (year === minValue.year && m < minValue.month))
-      )
-        continue;
-      if (
-        maxValue &&
-        (year > maxValue.year || (year === maxValue.year && m > maxValue.month))
-      )
-        continue;
+      const at = year * 12 + m;
+      if (at < first || at > last) continue;
       options.push({
         value: String(m),
         label: name.format(new Date(Date.UTC(2000, m - 1, 1))),
@@ -487,12 +482,17 @@ function MonthYearSelects({ label }: { label: string }) {
       // Escape inside an open menu closes that menu only. Radix closes it
       // from a document listener; the key then bubbles on to the calendar
       // popover, which would close too and drop the person out of the
-      // picker they were in the middle of.
+      // picker they were in the middle of. Matched on Radix's popper
+      // wrapper rather than `role="menu"`, so it holds wherever focus sits
+      // inside the open surface.
       onKeyDown={(event) => {
-        if (
-          event.key === "Escape" &&
-          (event.target as Element).closest('[role="menu"]')
-        )
+        if (event.key !== "Escape") return;
+        const surface = (event.target as Element).closest(
+          "[data-radix-popper-content-wrapper]",
+        );
+        // Only a menu portalled into this header, never a Radix surface the
+        // whole field happens to sit inside.
+        if (surface && event.currentTarget.contains(surface))
           event.stopPropagation();
       }}
     >
