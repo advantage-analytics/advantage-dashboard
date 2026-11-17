@@ -795,6 +795,18 @@ test("--restore sets the marker after the rows and before the stats", () => {
   expect(stats).toBeGreaterThan(marker);
 });
 
+test("a --restore takes the current badge off before the rows and puts only the backup's stamp back", () => {
+  const source = readFileSync("scripts/label-apply.ts", "utf8");
+  const body = source.slice(source.indexOf("async function runRestore"));
+  const unverify = body.indexOf('db.rpc("unverify_match"');
+  const rows = body.indexOf("await restoreRows(db, backup)");
+  const restamp = body.indexOf("await restoreVerificationStamp(");
+  expect(unverify).toBeGreaterThan(-1);
+  expect(rows).toBeGreaterThan(unverify);
+  expect(restamp).toBeGreaterThan(rows);
+  expect(body.slice(restamp, restamp + 120)).toContain("backup.verification");
+});
+
 test("restoring forced strings onto a cleared marker counts them: the undercount", async () => {
   const fake = await restore(backupOf([FORCED_POINT, UNFORCED_POINT]));
   expect(fake.state.errorsJudgedAt).not.toBeNull();

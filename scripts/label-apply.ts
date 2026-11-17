@@ -202,6 +202,18 @@ async function runRestore(
     `=== RESTORE match ${backup.matchId} from ${source} (${backup.points.length} points, ${backup.shots.length} shots, ${backup.bookmarks.length} bookmarks) ===`,
   );
   const before = await readMatchStats(db, backup.matchId);
+  // Whatever badge the match carries now was granted over the rows about to
+  // be replaced; it comes off first, and only the backup's own stamp (below)
+  // goes back on with the rows it verified.
+  const { error: unverifyError } = await db.rpc("unverify_match", {
+    p_match_id: backup.matchId,
+  });
+  if (unverifyError) {
+    console.error(
+      `REFUSED: Verified by Advantage could not be taken off first, so nothing was restored: ${unverifyError.message}`,
+    );
+    process.exit(1);
+  }
   await restoreRows(db, backup);
   console.log("rows restored");
   console.log(
@@ -222,8 +234,9 @@ async function runRestore(
   console.log(
     {
       restored: "Verified by Advantage put back as it was",
-      none: "the match was not verified before; it stays unverified",
-      unknown: "Verified by Advantage left as it is (the backup kept no stamp)",
+      none: "the match was not verified at the backup; it stays unverified",
+      unknown:
+        "Verified by Advantage stays off (the backup kept no stamp); Mark complete in the console to verify these rows",
       failed: "Verified by Advantage could NOT be put back; it stays off",
     }[restamped],
   );
