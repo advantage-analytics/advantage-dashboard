@@ -684,6 +684,7 @@ interface Write {
 
 function fakeClient({
   openSessionId = null as string | null,
+  publishedSessionId = null as string | null,
   raceSessionId = null as string | null,
   failShots = false,
   match = MATCH as typeof MATCH,
@@ -712,6 +713,15 @@ function fakeClient({
           if (table === "label_sessions" && state.filters.match_id) {
             return {
               data: corrected === null ? null : { ad_scoring: corrected },
+              error: null,
+            };
+          }
+          if (
+            table === "label_sessions" &&
+            state.filters.status === "complete"
+          ) {
+            return {
+              data: publishedSessionId ? { id: publishedSessionId } : null,
               error: null,
             };
           }
@@ -905,6 +915,28 @@ test.describe("seedLabelSessionForJob", () => {
     expect(lookup?.status).toEqual(["labelling", "submitted"]);
     // Practice copies hold the job too, many at once; the lookup skips them.
     expect(lookup?.["not.kind"]).toBe("practice");
+  });
+
+  test("a published job is opened, never seeded again", async () => {
+    // A fresh seed beside a published session would hold the match's one
+    // open session (Send back refused) and could replace the labeller's
+    // published work with the vendor's.
+    const fake = fakeClient({ publishedSessionId: "published-session" });
+    const result = await seedWith(fake);
+    expect(result).toEqual({ sessionId: "published-session", existing: true });
+    expect(fake.writes).toEqual([]);
+    expect(fake.downloads()).toBe(0);
+  });
+
+  test("an open session wins over a published one", async () => {
+    const fake = fakeClient({
+      openSessionId: "open-session",
+      publishedSessionId: "published-session",
+    });
+    expect(await seedWith(fake)).toEqual({
+      sessionId: "open-session",
+      existing: true,
+    });
   });
 
   test("losing the insert race returns the winner's session", async () => {
