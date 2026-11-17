@@ -41,6 +41,7 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   serves_from_both_sides: "Serves from both sides",
   serve_by_receiver: "Serve by the receiver",
   placement_missing: "No placement",
+  groundstroke_at_net: "Volley?",
   pick_winner: "Pick the winner",
   last_call_overruled: "Was the last ball in?",
   last_shot_untracked: "Was the last shot real?",
@@ -218,6 +219,7 @@ export const REVIEW_ITEM_QUESTION = {
   5: "Who won?",
   6: "Game & serve order",
   7: "Shot placement",
+  8: "Volley?",
 } as const;
 
 /**
@@ -237,6 +239,7 @@ export const HINT_ACTION_LABEL = {
   shot_after_point_end: "Split here",
   serve_after_serve_in: "Split here",
   serves_from_both_sides: "Split here",
+  groundstroke_at_net: "Make it a volley",
 } as const;
 
 /** "Was the last ball in?"'s answer: the vendor's own call on that ball. */
@@ -442,6 +445,8 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
           return `This shot has no ${gap}, so how the point opened or ended can’t be read in full. ${fix}`;
       }
     }
+    case "groundstroke_at_net":
+      return `Typed as a ${mark.params.stroke}, but hit from inside the service line. Check the clip: if the ball didn’t bounce first, make it a volley; if it did, dismiss this.`;
     case "phantom_strokes_dropped": {
       const count = mark.params.eventIds.length;
       if (count > 1) {
