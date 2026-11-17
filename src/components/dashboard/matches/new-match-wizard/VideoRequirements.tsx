@@ -108,7 +108,8 @@ function ResultReadout({ result }: { result: VideoRequirementResult }) {
 const QUALITY_DETAIL = {
   none: "Checked when you add the file · 60 fps is better",
   pass: "This video meets it",
-  warn: "Accepted · See the note above",
+  // The caution strip sits under the file row, below this block.
+  warn: "Accepted · See the note below",
 } as const;
 
 export function VideoRequirements({

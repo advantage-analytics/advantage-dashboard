@@ -150,7 +150,9 @@ test("a video that passes turns row 2 into the answer", () => {
 test("a video accepted with a caution reads as one, in the warning ink", () => {
   const html = renderPanel({ status: "warn", label: "1080p · 29.95 fps" });
   const out = text(html);
-  expect(out).toContain("Accepted · See the note above");
+  // The block sits above the picker, so the caution strip is below it.
+  expect(out).toContain("Accepted · See the note below");
+  expect(out).not.toContain("note above");
   expect(out).toContain("1080p · 29.95 fps");
   expect(html).toContain("var(--warning-text)");
 });
