@@ -371,6 +371,7 @@ function ProfileField({
           value={value}
           onChange={onChange}
           max={maxDate}
+          yearSelect
         />
       ) : (
         <SettingsUnderlineInput
