@@ -115,7 +115,7 @@ export function NotInTodoList({ rows }: { rows: readonly TodoCandidate[] }) {
         <div>
           <h2
             id="admin-labels-not-in-todo"
-            className="text-[18px] font-semibold tracking-[-0.01em] text-[var(--ink-900)]"
+            className="m-0 text-[13px] font-semibold text-[var(--ink-900)]"
           >
             Not in To do
           </h2>
