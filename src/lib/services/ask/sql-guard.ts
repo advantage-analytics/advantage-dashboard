@@ -240,7 +240,9 @@ interface WalkState {
   sideReferenced: boolean;
   /** Whether `ask.shots` was read anywhere in the statement. */
   shotsReferenced: boolean;
-  /** Whether a `*` / `alias.*` column list appears anywhere in the statement. */
+  /** Whether a whole-row star appears: a bare `*` as a select-list column,
+   *  or a table-qualified `alias.*` ANYWHERE (an argument, GROUP BY, ORDER BY,
+   *  a comparison) — each is the whole row. A bare `count(*)` is neither. */
   starReferenced: boolean;
   /** The names `ask.shots` is read under: its alias, or `shots` bare. */
   readonly shotsNames: Set<string>;
@@ -260,7 +262,7 @@ export const ASK_SPEED_HIDDEN_REASON =
 const SPEED_COLUMN = "speed_mph";
 const SHOTS_VIEW = "shots";
 export const ASK_SHOTS_STAR_REASON =
-  "sql reads ask.shots with *. Name the columns you need instead: speed_mph may not be read.";
+  "sql reads ask.shots with * or alias.*. Name the columns you need instead: speed_mph may not be read.";
 /**
  * `ask.shots x(a, b, …)` renames a view's columns by position, so a later
  * letter IS `speed_mph` under another name. No Ask answer needs a column-
@@ -407,6 +409,12 @@ function walk(value: unknown, state: WalkState): void {
   }
   // `join … using (speed_mph)` names the column outside any `ref` node, and
   // an equi-join on it counts and groups shots by speed.
+  // A natural join matches on every same-named column: a derived table with
+  // a `speed_mph` alias would filter shots by speed with no `ref` to see.
+  // The parser refuses it today; refuse it here too in case that changes.
+  if (isNode(value.join) && /natural/i.test(str(value.join.type) ?? "")) {
+    refuse("A NATURAL join is not allowed. Join with ON or USING.");
+  }
   if (isNode(value.join) && Array.isArray(value.join.using)) {
     for (const column of value.join.using) {
       if (isNode(column) && str(column.name)?.toLowerCase() === SPEED_COLUMN) {
@@ -469,6 +477,9 @@ function walk(value: unknown, state: WalkState): void {
         if (column !== undefined && !table) state.bareRefs.add(column);
         if (column === SIDE_COLUMN) state.sideReferenced = true;
         if (column === SPEED_COLUMN) refuse(ASK_SPEED_HIDDEN_REASON);
+        // `sh.*` outside the select list (`array_agg(sh.*)`, `group by sh.*`,
+        // `sh.* is null`) is the whole row as a value, speed and all.
+        if (column === "*" && table) state.starReferenced = true;
         break;
       }
       default:

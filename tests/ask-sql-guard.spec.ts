@@ -494,6 +494,31 @@ test.describe("shot speed is never read (single-camera speed is not accurate)", 
     );
   });
 
+  test("alias.* anywhere is the whole row and is refused; bare count(*) passes", () => {
+    for (const sql of [
+      `select array_agg(sh.*) ${FROM}`,
+      `select string_agg(sh.*::text, ',') ${FROM}`,
+      `select coalesce(sh.*, null) ${FROM}`,
+      `select count(distinct sh.*) ${FROM}`,
+      `select 1 ${FROM} group by sh.*`,
+      `select 1 ${FROM} order by sh.*`,
+      `select row_number() over (order by sh.*) ${FROM}`,
+      `select count(*) ${FROM} where sh.* = sh.*`,
+    ]) {
+      expectRefused(check(sql), /with \* or alias\.\*/);
+    }
+    expectRefused(
+      check(
+        FROM.replace("from", "select match_id from") +
+          " where sh.* is not null",
+      ),
+      /with \* or alias\.\*/,
+    );
+    expect(check(`select count(*) as shots ${FROM}`)).toMatchObject({
+      ok: true,
+    });
+  });
+
   test("speed_mph in a join's USING list is refused", () => {
     expectRefused(
       check(
