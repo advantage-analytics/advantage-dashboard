@@ -24,6 +24,7 @@ import {
   MatchReportTitleRow,
 } from "@/components/dashboard/matches/match-detail/report-title-row";
 import { MatchReportFacts } from "@/components/dashboard/matches/match-detail/report-facts";
+import { VerificationWatch } from "@/components/dashboard/matches/match-detail/verification-watch";
 import { StatisticsView } from "@/components/dashboard/matches/match-detail/statistics-view";
 import { SharedByFooter } from "@/components/public/shared-by-footer";
 import {
@@ -227,6 +228,7 @@ export default async function SharedMatchPage({
             unit="ft"
             defaultView="statistics"
             readOnly
+            verificationEndpoint={`/api/share/${encodeURIComponent(token)}/verification`}
           >
             <MatchReportFrame>
               <MatchReportRail>
@@ -245,6 +247,9 @@ export default async function SharedMatchPage({
                   <div className="min-w-0">
                     <MatchReportTitle />
                     <MatchReportFacts />
+                    {/* Redraws the report from the reviewed data if Advantage
+                        verifies the match while it is open. Renders nothing. */}
+                    <VerificationWatch />
                   </div>
                 </MatchReportTitleRow>
 

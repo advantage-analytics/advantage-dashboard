@@ -56,6 +56,24 @@ test("a birth year two decades back is two picks, and the day lands in the field
     calendar.getByRole("button", { name: "Date of birth year" }),
   ).toHaveText("2005");
 
+  // Reopened, the year menu starts on the year already chosen — twenty rows
+  // down a newest-first list — not scrolled to the top. Wait for the picked
+  // menu to finish closing first: reopened mid-exit-animation, Radix keeps
+  // the old surface and runs no open focus at all.
+  await expect(page.getByRole("menuitemradio")).toHaveCount(0);
+  await calendar.getByRole("button", { name: "Date of birth year" }).click();
+  const chosenYear = page.getByRole("menuitemradio", {
+    name: "2005",
+    exact: true,
+  });
+  await expect(chosenYear).toBeFocused();
+  await expect(chosenYear).toBeInViewport({ ratio: 1 });
+  await expect(
+    page.getByRole("menuitemradio", { name: String(thisYear), exact: true }),
+  ).not.toBeInViewport();
+  await page.keyboard.press("Escape");
+  await expect(calendar).toBeVisible();
+
   await calendar.getByRole("button", { name: "Date of birth month" }).click();
   await page.getByRole("menuitemradio", { name: "March", exact: true }).click();
   await expect(

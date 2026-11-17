@@ -441,7 +441,9 @@ function MonthYearSelects({ label }: { label: string }) {
 
   const years = useMemo(() => {
     if (year === undefined) return [];
-    const last = maxValue?.year ?? Math.max(year, new Date().getFullYear());
+    // UTC, like `todayUtc()` — the date-of-birth bounds are calendar days,
+    // and a local year would differ for a few hours either side of New Year.
+    const last = maxValue?.year ?? Math.max(year, new Date().getUTCFullYear());
     const first = minValue?.year ?? last - UNBOUNDED_YEARS;
     const options: { value: string; label: string }[] = [];
     // Newest first: the menu opens where a date of birth is nearest.

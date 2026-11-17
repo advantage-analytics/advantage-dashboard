@@ -89,6 +89,43 @@ export const VERIFICATION_PENDING_SCOPE =
 export const VERIFICATION_PENDING_UNTIL =
   "Until then, your statistics come from the automatic analysis and may change.";
 
+/**
+ * The note above an unverified video match's statistics (`StatisticsView`,
+ * the dashboard report and the share link alike). The pending popover's
+ * "may change", lifted onto the page beside the numbers a coach would show —
+ * a badge in the facts line is easy to miss (a UGA coach showed a player
+ * figures before review, 2026-11). Said in the third person: the share
+ * link's reader is not the player.
+ */
+export const UNVERIFIED_STATS_NOTE =
+  "These numbers come from automatic analysis and may change after Advantage reviews the match.";
+
+/**
+ * What the same note says in the tab that watched the review land
+ * (`VerificationWatch` refreshed the report under the reader), so numbers
+ * that changed on screen never change silently.
+ */
+export const VERIFIED_UPDATE_NOTE = `${VERIFIED_BY_ADVANTAGE}. These numbers were updated after review.`;
+
+/**
+ * Whether a report draws `UNVERIFIED_STATS_NOTE`: exactly when it says
+ * "Verification pending" (`showsVerificationPending`, set by the dashboard's
+ * and the share link's loaders). "May change after Advantage reviews the
+ * match" is a promise, so it goes only where a review is coming — never on a
+ * SwingVision import or hand-scored match, which never enter review, nor on a
+ * video match analysed before the queue opened (`LABEL_QUEUE_FROM`) that no
+ * labeller holds. The sample's loader never sets pending.
+ */
+export function showsUnverifiedStatsNote({
+  verification,
+  verificationPending,
+}: {
+  verification: MatchVerification | null | undefined;
+  verificationPending: boolean | undefined;
+}): boolean {
+  return !verification && verificationPending === true;
+}
+
 export interface MatchVerification {
   /** When Advantage verified it, ISO (`matches.verified_at`) — a moment. */
   verifiedAt: string;

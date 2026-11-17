@@ -48,6 +48,77 @@ import {
   type BandSettingsDbRow,
 } from "@/lib/data/viz-bands";
 import { BAND_COLUMNS } from "@/lib/data/viz-bands-write";
+import {
+  showsVerificationPending,
+  verificationFor,
+  verificationPendingFor,
+} from "@/lib/data/match-verification";
+import { jobVideoSeconds } from "@/lib/services/labels/video-seconds";
+
+/**
+ * Whether the label queue holds this match — `match_label_states()`'s answer,
+ * read for a reader with no account. That function answers only for
+ * `visible_match_ids()`, which is empty on the service role, so the share
+ * link reads the same two facts itself: the latest completed job (when its
+ * results landed, and whether it covers any video) and whether a labeller
+ * holds the match. Only the boolean leaves this loader; never a labeller,
+ * a session id or a due time. A failed read is "not pending", as on the
+ * dashboard (`loadVerificationPending`).
+ */
+async function resolveSharedLabelPending(
+  admin: SupabaseClient,
+  dbRow: DbMatch,
+): Promise<boolean> {
+  // Only a video match ever enters the label queue.
+  if (verificationFor(dbRow) || dbRow.source_provider !== "splitstep") {
+    return false;
+  }
+  try {
+    return await readSharedLabelPending(admin, dbRow);
+  } catch (error) {
+    console.error("[match-share] could not read the label state", {
+      matchId: dbRow.id,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
+async function readSharedLabelPending(
+  admin: SupabaseClient,
+  dbRow: DbMatch,
+): Promise<boolean> {
+  const [job, session] = await Promise.all([
+    admin
+      .from("processing_jobs")
+      .select(
+        "completed_at, start_time_seconds, end_time_seconds, billable_seconds",
+      )
+      .eq("match_id", dbRow.id)
+      .eq("status", "completed")
+      .not("completed_at", "is", null)
+      .order("completed_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("label_sessions")
+      .select("id")
+      .eq("match_id", dbRow.id)
+      .eq("kind", "analyst")
+      .in("status", ["labelling", "submitted"])
+      .not("assigned_to", "is", null)
+      .limit(1),
+  ]);
+  // Thrown so `resolveSharedLabelPending` logs it once and reads "not pending".
+  if (job.error || session.error) throw job.error ?? session.error;
+  if (!job.data) return false;
+  return verificationPendingFor({
+    results_at: job.data.completed_at as string | null,
+    has_video: jobVideoSeconds(job.data) > 0,
+    labelling: (session.data ?? []).length > 0,
+  });
+}
 
 /**
  * Public read-only match links (`/m/[token]`).
@@ -610,6 +681,43 @@ export async function sharedVideoMatchId(
 }
 
 /**
+ * When the match behind a share token was Verified by Advantage — the one
+ * fact `GET /api/share/[token]/verification` answers, so an open share page
+ * can tell that a review has landed since it rendered (`VerificationWatch`).
+ * `undefined` for a token that names no live link (the route's single 404);
+ * `null` for a match nobody has verified, or one mid-republish.
+ */
+export async function sharedMatchVerifiedAt(
+  token: string,
+): Promise<string | null | undefined> {
+  if (!token || token.length > 128) return undefined;
+  const admin = lazyAdminClient();
+  const { data: link, error } = await admin
+    .from("match_share_links")
+    .select("match_id")
+    .eq("token", token)
+    .maybeSingle();
+  if (error) {
+    logShareError("resolve a share token for verification", error, {});
+    return undefined;
+  }
+  if (!link) return undefined;
+  const matchId = link.match_id as string;
+  const { data: match, error: matchError } = await admin
+    .from("matches")
+    .select("verified, verified_at")
+    .eq("id", matchId)
+    .maybeSingle();
+  if (matchError || !match) {
+    logShareError("read the shared match's verification", matchError, {
+      matchId,
+    });
+    return undefined;
+  }
+  return verificationFor(match)?.verifiedAt ?? null;
+}
+
+/**
  * The match behind a share token, or null. `cache()`d so `page.tsx`,
  * `generateMetadata` and `opengraph-image.tsx` share one read per request.
  */
@@ -666,6 +774,7 @@ export const getSharedMatchData = cache(
       videoAllowed,
       jobs,
       opponentPlayerOnRoster,
+      labelPending,
     ] = await Promise.all([
       getMatchStatisticsFromSupabase(matchId, admin),
       getMatchPointsFromSupabase(matchId, admin, { includeBookmarks: false }),
@@ -698,6 +807,9 @@ export const getSharedMatchData = cache(
       // on the match's own roster, spent only when `opponent_player_id` is not
       // already a seat. Only the boolean leaves this loader.
       resolveOpponentPlayerOnRoster(admin, dbRow),
+      // "Verification pending" for a reader with no account (a coach's
+      // forwarded link is exactly where a badge must not go missing).
+      resolveSharedLabelPending(admin, dbRow),
     ]);
 
     // A failed points read is unknown, not zero points: same as every other
@@ -778,6 +890,13 @@ export const getSharedMatchData = cache(
         ...jobAnalysis,
         status: withStatsPublished(jobAnalysis.status, statsPublished),
       }) !== "steps";
+    // The dashboard's rule (`resolveVerificationPending`): never while a
+    // reprocess is in flight, never on a match whose statistics were refused.
+    match.verificationPending = showsVerificationPending({
+      verification: match.verification,
+      pending: labelPending,
+      analysis: jobAnalysis,
+    });
     const showsVisualizations = includesVisualizations && settled;
     const videoShared = videoAllowed && settled;
 

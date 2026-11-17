@@ -82,6 +82,7 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   serves_from_both_sides: { shotId: "s1" },
   serve_by_receiver: { shotId: "s1", hitter: "p1", server: "p2" },
   placement_missing: { shotId: "s1", stroke: "serve", missing: "landing" },
+  groundstroke_at_net: { shotId: "s-5", stroke: "forehand" },
   pick_winner: {},
   net_hit_contradicts_height: {},
   phantom_strokes_dropped: { eventIds: [41], hitter: "p2" },
@@ -164,6 +165,75 @@ const codes = (flag: ReviewFlag | null, id: number) =>
     ?.members.map((member) => member.mark.code);
 
 const CHECKED_AT = "2026-10-15T12:00:00.000Z";
+
+test.describe("a Volley? question beside an amber question", () => {
+  // p1's forehand from 4 m off the net, still as the vendor typed it.
+  const atNet = wonOnForehand({
+    shots: [
+      forehand({
+        id: "a",
+        eventId: 8,
+        videoTime: 1,
+        contactY: 11.885 - 4,
+        landingX: 1,
+        landingY: 18,
+      }),
+      forehand({
+        id: "b",
+        eventId: 9,
+        videoTime: 2,
+        landingX: 2,
+        landingY: 20,
+      }),
+    ],
+  });
+  const amber = marksOf({ [POINT]: [sample("pick_winner")] });
+  const names = { p1: "Ann", p2: "Bea" };
+
+  test("item 8 is grey, off the amber chip, and in the grey list", () => {
+    const flag = reviewFlag(atNet, amber, [atNet])!;
+    expect(ids(flag)).toEqual([5, 8]);
+    expect(flag.items.find((item) => item.id === 8)!.tone).toBe("data");
+    expect(reviewChip(flag)!.open.map((item) => item.id)).toEqual([5]);
+    expect(
+      openFlags([atNet], amber).map((f) => [
+        f.data,
+        f.items.map((item) => item.id),
+      ]),
+    ).toEqual([
+      [false, [5]],
+      [true, [8]],
+    ]);
+  });
+
+  test("a grey jump asks it first, at its stroke, with a one-click volley", () => {
+    expect(greyJumpFirstItem(atNet, amber, [atNet])).toBe(8);
+    const asked = reviewStep(atNet, amber, [atNet], names, true, undefined, 8)!;
+    expect(asked.item.id).toBe(8);
+    expect(asked.target.shotId).toBe("a");
+    const volley = asked.answers.find((a) => a.id === "volley")!;
+    expect(volley.label).toBe("Make it a volley");
+    // The stroke made a volley, and the question stored as answered.
+    expect(volley.writes).toEqual([
+      { write: "shot", shotId: "a", patch: { stroke: "forehand_volley" } },
+      { write: "dismiss", keys: ["volley:a"] },
+    ]);
+  });
+
+  test("answered or retyped, it is not asked", () => {
+    const dismissed = { ...atNet, dismissed: ["volley:a"] };
+    expect(ids(reviewFlag(dismissed, amber, [dismissed]))).toEqual([5]);
+    const retyped = {
+      ...atNet,
+      shots: atNet.shots.map((shot) =>
+        shot.id === "a"
+          ? { ...shot, stroke: "forehand_volley" as const }
+          : shot,
+      ),
+    };
+    expect(ids(reviewFlag(retyped, amber, [retyped]))).toEqual([5]);
+  });
+});
 
 test.describe("a placement gap beside an amber question", () => {
   const gapped = wonOnForehand({
@@ -322,8 +392,10 @@ test.describe("a placement gap beside an amber question", () => {
 });
 
 test.describe("the item table", () => {
-  test("seven items in id order, each with its question and its codes", () => {
-    expect(REVIEW_ITEMS.map((item) => item.id)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  test("eight items in id order, each with its question and its codes", () => {
+    expect(REVIEW_ITEMS.map((item) => item.id)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8,
+    ]);
     for (const item of REVIEW_ITEMS) {
       expect(item.question).toBe(REVIEW_ITEM_QUESTION[item.id]);
     }
@@ -360,6 +432,7 @@ test.describe("the item table", () => {
         "segment_proposal_differs",
       ],
       ["placement_missing"],
+      ["groundstroke_at_net"],
     ]);
   });
 
