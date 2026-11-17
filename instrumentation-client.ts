@@ -44,6 +44,11 @@ if (isPostHogOffInDev) {
     // Autocapture records that a roster row was clicked, not whose name it held.
     mask_all_text: true,
     mask_all_element_attributes: true,
+    // A click that changes nothing on screen — no navigation, no DOM change,
+    // no scroll within a beat — as `$dead_click`. The daily UX report needs
+    // it to find buttons that look pressable but are not; rage clicks only
+    // catch the ones somebody hammered. Rides the same masking as autocapture.
+    capture_dead_clicks: true,
     // Console output is attached to replays unmasked, and the app logs ids and
     // Supabase errors there.
     enable_recording_console_log: false,
