@@ -519,6 +519,18 @@ test.describe("shot speed is never read (single-camera speed is not accurate)", 
     });
   });
 
+  test('a U&"..." escaped identifier is refused in either string', () => {
+    expectRefused(check(`select sh.U&"speed\\005fmph" ${FROM}`), /U&/);
+    expectRefused(check(`select U&"s\\0068" ${FROM}`), /U&/);
+    expectRefused(
+      check(
+        `select sh.shot_type ${FROM}`,
+        'select sh.U&"speed\\005fmph" as spd from ask.shots sh',
+      ),
+      /U&/,
+    );
+  });
+
   test("speed_mph in a join's USING list is refused", () => {
     expectRefused(
       check(

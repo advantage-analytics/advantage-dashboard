@@ -253,10 +253,14 @@ interface WalkState {
 
 /**
  * Shot speed is never shown: a single camera cannot measure it accurately
- * (UGA coaches call, 2026-11-16). The column stays in `ask.shots` and in the
- * data; a query may not read it, by name or through `*`, so neither Ask nor
- * the Claude connector can print it. Exported so the prompts can quote it.
+ * (UGA coaches call, 2026-11-16). The real boundary is the database:
+ * `ask.shots.speed_mph` is null on every row (20261117060402), so no query
+ * can read a speed whatever it spells. These refusals are the early, clear
+ * stop in front of that — the model is told why instead of getting nulls.
+ * `public.shots` keeps the recorded values. Exported so prompts can quote it.
  */
+export const ASK_UNICODE_IDENTIFIER_REASON =
+  'A U&"..." escaped identifier or string is not allowed. Write names plainly.';
 export const ASK_SPEED_HIDDEN_REASON =
   "Shot speed is not available: a single camera cannot measure it accurately, so speed_mph may not be read. Answer without speed.";
 const SPEED_COLUMN = "speed_mph";
@@ -495,6 +499,10 @@ function walk(value: unknown, state: WalkState): void {
 
 function checkOne(text: string, mode: WalkState["mode"]): WalkState {
   if (text.trim() === "") refuse(`${mode} is empty.`);
+  // `U&"speed\005fmph"` is Postgres's escaped spelling of `speed_mph`, and
+  // the parser reads it as `u & "speed\005fmph"`: every name check here
+  // would compare the escaped text. No answer needs an escaped identifier.
+  if (/u\s*&\s*["']/i.test(text)) refuse(ASK_UNICODE_IDENTIFIER_REASON);
 
   let statements: unknown[];
   try {
