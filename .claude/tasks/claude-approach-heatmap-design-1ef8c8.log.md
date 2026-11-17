@@ -50,3 +50,12 @@ is the runner's. Newest entries at the bottom.
 1. `bandKindFor("approaches")` now returns `"depth"` (it follows `isPlacementCut`); decide whether a scatter-only cut should return `null` so the chart menu offers no bands.
 2. "Middle" labels both an Approach to value and a Direction value; T10's sentence should tell them apart ("To the middle" / "Middle").
 3. `activeFilterEntries` lists the baseline `entry: ["approach"]` like any filter; T10 must treat it as the card's baseline.
+
+## T6 · Add the full vertical court frame and pair projection — done
+
+**gate:** mechanical pass · completion pass
+**changed:** `court-geometry.ts` (append only) exports `fullVerticalToScreen`, `FULL_COURT_VERTICAL` (opened `viewBox` 118 −142 244 482, wall `cardViewBox` 130 −104 220 418, `groupTransform` rotate(-90 240 104.5), baselines, lane spans and label points on the apron), `FullVerticalLane` and `projectApproachPair` (placement in the far half, contact in the near half, hitter's right is screen right, clamped to the opened viewBox). New court-geometry specs pin the frame, the halves, the lane-to-label mapping and the apex-up triangle.
+**follow-ups:**
+
+1. Points clamp to the opened viewBox only; on the tighter wall card a serve contact far behind the baseline would be clipped. T7 may clamp to `cardViewBox` there.
+2. `subjectBaselineX` is `RETURN_COURT.farBaselineX` (40): the names read reversed from `RETURN_COURT`'s near/far.

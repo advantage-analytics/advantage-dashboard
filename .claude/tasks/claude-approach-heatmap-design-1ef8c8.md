@@ -85,7 +85,7 @@ ready).
 
 ## T6 · Add the full vertical court frame and pair projection
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/court-geometry.ts`; `tests/court-geometry.spec.ts`
