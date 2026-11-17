@@ -12,7 +12,6 @@ import {
 } from "@/lib/data/match-verification-server";
 import { transformDbMatch, type DbMatch } from "@/lib/data/matches-list-types";
 import { groupMatchesIntoEvents } from "@/lib/data/home-recent-data";
-import { LABEL_QUEUE_FROM } from "@/lib/services/labels/queue";
 
 /**
  * "Verification pending" (T41): the pure rule, the never-fatal loader over
@@ -20,81 +19,59 @@ import { LABEL_QUEUE_FROM } from "@/lib/services/labels/queue";
  * database — the loader is driven through a stub client.
  */
 
-const CUTOFF = Date.parse(LABEL_QUEUE_FROM);
-const iso = (ms: number) => new Date(ms).toISOString();
+const RESULTS = "2026-11-10T09:00:00Z";
 
 test.describe("verificationPendingFor", () => {
-  test("before the cut-off is not pending", () => {
+  test("waiting on a labeller (held, or in To do) is pending", () => {
     expect(
       verificationPendingFor({
-        results_at: iso(CUTOFF - 1000),
+        results_at: RESULTS,
+        has_video: true,
+        labelling: true,
+      }),
+    ).toBe(true);
+    // Age plays no part: an old match an admin added is pending too.
+    expect(
+      verificationPendingFor({
+        results_at: "2026-09-01T09:00:00Z",
+        has_video: true,
+        labelling: true,
+      }),
+    ).toBe(true);
+  });
+
+  test("a match nobody chose is not pending, however new", () => {
+    expect(
+      verificationPendingFor({
+        results_at: RESULTS,
         has_video: true,
         labelling: false,
       }),
     ).toBe(false);
-  });
-
-  test("at the cut-off is pending", () => {
-    expect(
-      verificationPendingFor({
-        results_at: LABEL_QUEUE_FROM,
-        has_video: true,
-        labelling: false,
-      }),
-    ).toBe(true);
-    expect(
-      verificationPendingFor({
-        results_at: iso(CUTOFF + 86_400_000),
-        has_video: true,
-        labelling: false,
-      }),
-    ).toBe(true);
   });
 
   test("no video is never pending, labelling or not", () => {
-    expect(
-      verificationPendingFor({
-        results_at: iso(CUTOFF + 1000),
-        has_video: false,
-        labelling: false,
-      }),
-    ).toBe(false);
-    expect(
-      verificationPendingFor({
-        results_at: iso(CUTOFF + 1000),
-        has_video: false,
-        labelling: true,
-      }),
-    ).toBe(false);
+    for (const labelling of [true, false]) {
+      expect(
+        verificationPendingFor({
+          results_at: RESULTS,
+          has_video: false,
+          labelling,
+        }),
+      ).toBe(false);
+    }
   });
 
-  test("labelling before the cut-off is pending", () => {
-    expect(
-      verificationPendingFor({
-        results_at: iso(CUTOFF - 30 * 86_400_000),
-        has_video: true,
-        labelling: true,
-      }),
-    ).toBe(true);
-  });
-
-  test("no state, or no results yet, is not pending", () => {
+  test("no state is not pending", () => {
     expect(verificationPendingFor(null)).toBe(false);
-    expect(
-      verificationPendingFor({
-        results_at: null,
-        has_video: true,
-        labelling: false,
-      }),
-    ).toBe(false);
+    expect(verificationPendingFor(undefined)).toBe(false);
   });
 
-  test("the cut-off is imported, not a second literal", () => {
+  test("no date rule is left in the source", () => {
     const source = readFileSync("src/lib/data/match-verification.ts", "utf8");
-    expect(source).toContain(
-      'import { LABEL_QUEUE_FROM } from "@/lib/services/labels/queue"',
-    );
+    expect(source).not.toContain("LABEL_QUEUE_FROM");
     expect(source).not.toContain("2026-10-29");
+    expect(source).not.toContain("2026-11-17");
   });
 });
 
@@ -158,13 +135,13 @@ test.describe("loadVerificationPending", () => {
         data: [
           {
             match_id: "a",
-            results_at: iso(CUTOFF + 1000),
+            results_at: RESULTS,
             has_video: true,
-            labelling: false,
+            labelling: true,
           },
           {
             match_id: "b",
-            results_at: iso(CUTOFF - 1000),
+            results_at: RESULTS,
             has_video: true,
             labelling: false,
           },

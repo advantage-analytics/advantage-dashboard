@@ -16,7 +16,6 @@
  */
 
 import { pointScoreLabel } from "@/lib/ui/score-format";
-import { LABEL_QUEUE_FROM } from "@/lib/services/labels/queue";
 import {
   isInFlight,
   isStatsUnavailable,
@@ -114,8 +113,8 @@ export const VERIFIED_UPDATE_NOTE = `${VERIFIED_BY_ADVANTAGE}. These numbers wer
  * and the share link's loaders). "May change after Advantage reviews the
  * match" is a promise, so it goes only where a review is coming — never on a
  * SwingVision import or hand-scored match, which never enter review, nor on a
- * video match analysed before the queue opened (`LABEL_QUEUE_FROM`) that no
- * labeller holds. The sample's loader never sets pending.
+ * video match no labeller holds and no admin put in the labellers' To do.
+ * The sample's loader never sets pending.
  */
 export function showsUnverifiedStatsNote({
   verification,
@@ -176,18 +175,21 @@ export interface MatchLabelState {
   results_at: string | null;
   /** Whether that job covers any video (`jobVideoSeconds() > 0`). */
   has_video: boolean;
-  /** Whether a labeller holds the match right now. */
+  /**
+   * Whether the match is waiting on a labeller: one holds it, or an admin
+   * put it in the labellers' To do (`label_todo`, migration
+   * `20261117182112`).
+   */
   labelling: boolean;
 }
 
 /**
  * "Verification pending": an unverified match that is waiting on a labeller.
  *
- * True only for a match with video whose results landed on or after the
- * queue's cut-off (`LABEL_QUEUE_FROM` — the same moment the labeller queue
- * starts from, so the customer is never promised a check the queue will not
- * do), or one a labeller already holds whatever its age. A missing state —
- * the RPC returned no row, or could not be read — is never pending.
+ * True only for a match with video that a labeller holds or an admin put in
+ * the labellers' To do — the queue's own rule, so the customer is never
+ * promised a check nobody chose to do. A missing state — the RPC returned no
+ * row, or could not be read — is never pending.
  */
 export function verificationPendingFor(
   state:
@@ -196,10 +198,7 @@ export function verificationPendingFor(
     | undefined,
 ): boolean {
   if (!state || !state.has_video) return false;
-  if (state.labelling) return true;
-  if (!state.results_at) return false;
-  const landed = Date.parse(state.results_at);
-  return Number.isFinite(landed) && landed >= Date.parse(LABEL_QUEUE_FROM);
+  return state.labelling;
 }
 
 /**

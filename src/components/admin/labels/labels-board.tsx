@@ -32,7 +32,6 @@ import type {
 import type { LabelJobRow } from "@/lib/data/labels-server";
 import type { Labeller } from "@/lib/services/labels/assign-session";
 import { jobState, type FlagCounts } from "@/lib/services/labels/job-groups";
-import { LABEL_QUEUE_FROM } from "@/lib/services/labels/queue";
 import { cn } from "@/lib/utils";
 
 /**
@@ -40,9 +39,9 @@ import { cn } from "@/lib/utils";
  * In progress, Published, to check, and Submitted only while it has rows (the
  * sessions handed in before submit published) — each a quiet well of white
  * rows with its "N matches · H.HH h" count. The lanes
- * are `loadAdminLabelBoard()`'s, so they hold only the queue: matches
- * analysed on or after `LABEL_QUEUE_FROM`. Older ones are labelled from
- * Admin › Matches, and the line under the lanes says so.
+ * are `loadAdminLabelBoard()`'s, so they hold only the queue: what an admin
+ * added to To do (`label_todo`) and work already past it. Everything else
+ * waits in Not in To do under the lanes (`not-in-todo.tsx`).
  *
  * Every row opens its match for the admin (`AdminLaneRow`); a row with a
  * session keeps the Assign menu. `RequestedReviews`, above the lanes on the
@@ -52,14 +51,6 @@ import { cn } from "@/lib/utils";
  * The page owns the heading, the lede and the Pay report link
  * (`app/admin/labels/page.tsx`).
  */
-
-/** "October 29, 2026" — the queue's first day, for the line under the lanes. */
-const QUEUE_FROM_TEXT = new Date(LABEL_QUEUE_FROM).toLocaleDateString("en-US", {
-  month: "long",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "UTC",
-});
 
 const LANES: readonly {
   lane: AdminLane;
@@ -169,23 +160,6 @@ export function LabelsHeading({ lede }: { lede: React.ReactNode }) {
   );
 }
 
-/** The line under the lanes: where the queue starts, and where older ones are. */
-function QueueFromLine() {
-  return (
-    <p className="text-[12px] text-[var(--ink-500)]">
-      The board shows matches analysed from {QUEUE_FROM_TEXT}. Label older ones
-      from{" "}
-      <Link
-        href="/admin/matches"
-        className="font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)]"
-      >
-        Matches
-      </Link>
-      .
-    </p>
-  );
-}
-
 export function LabelsBoard({
   board,
   now,
@@ -224,7 +198,6 @@ export function LabelsBoard({
           );
         })}
       </div>
-      <QueueFromLine />
     </div>
   );
 }
@@ -289,7 +262,6 @@ export function LabelsPageSkeleton() {
             ),
           )}
         </PendingRegion>
-        <QueueFromLine />
       </div>
     </AdminPage>
   );

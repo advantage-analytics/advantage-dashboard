@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import {
   assignLabelSessionAction,
   checkLabelSessionAction,
+  removeFromLabelTodoAction,
   sendBackLabelSessionAction,
 } from "@/app/admin/labels/actions";
 import {
@@ -664,7 +665,12 @@ export function AdminLaneRow({
         disabled={isPending}
         onClick={() => {
           onOpen?.();
-          start();
+          // A row to check opens the published session itself. Starting one
+          // would seed a fresh session from the vendor's results beside it,
+          // which then blocks Send back (one open session per match) and,
+          // if published, would replace the labeller's work.
+          if (toCheck) router.push(`/admin/labels/${toCheck}`);
+          else start();
         }}
         className="flex w-full cursor-pointer flex-col rounded-[var(--radius-element)] px-3 pb-2 text-left transition-colors duration-100 outline-none hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] active:scale-[0.998] disabled:cursor-progress"
       >
@@ -776,6 +782,8 @@ export function AdminLaneRow({
         </div>
       ) : null}
 
+      {row.removable ? <RemoveFromTodo row={row} /> : null}
+
       {toCheck ? (
         <div className="flex flex-col gap-2 px-3 pt-0.5 pb-3">
           <p className="min-w-0 truncate text-[12px] text-[var(--ink-500)] tabular-nums">
@@ -797,6 +805,50 @@ export function AdminLaneRow({
           role="alert"
           className="px-3 pb-2.5 text-[12px] text-[var(--danger)]"
         >
+          {error}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * A To do row's Remove: takes the match back out of the labellers' To do and
+ * into Not in To do. Only on a row an admin added that nobody holds
+ * (`row.removable`); quiet until the row is hovered or focused, like every
+ * row action.
+ */
+function RemoveFromTodo({ row }: { row: AdminLabelBoardRow }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const players = `${row.player1Name} vs ${row.player2Name}`;
+  return (
+    <div className="flex flex-col items-end gap-1 px-3 pb-2">
+      <button
+        type="button"
+        data-labels-remove={row.jobId}
+        disabled={pending}
+        aria-label={`Remove ${players} from To do`}
+        onClick={() => {
+          setError(null);
+          startTransition(async () => {
+            const result = await removeFromLabelTodoAction(row.jobId).catch(
+              actionRejected,
+            );
+            if ("error" in result) {
+              setError(result.error);
+              return;
+            }
+            router.refresh();
+          });
+        }}
+        className="h-7 rounded-[var(--radius-button)] px-2.5 text-[12px] font-medium text-[var(--ink-700)] opacity-0 transition-[opacity,color,background-color] duration-200 outline-none group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:opacity-100 focus-visible:shadow-[var(--focus-ring)] disabled:cursor-progress"
+      >
+        {pending ? "Removing…" : "Remove from To do"}
+      </button>
+      {error ? (
+        <p role="alert" className="text-[12px] text-[var(--danger)]">
           {error}
         </p>
       ) : null}

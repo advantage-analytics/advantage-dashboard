@@ -488,32 +488,31 @@ test.describe("analysisVerifiedEmail copy", () => {
  * readyVerificationPending — the report's rule, fed from the finished job
  * ---------------------------------------------------------------------- */
 
-test("readyVerificationPending: a job with video after the queue's start is pending; one with no video is not", () => {
+test("readyVerificationPending: a just-analysed match is never promised a check", () => {
+  // To do is chosen by an admin after analysis (label_todo), so at the moment
+  // results land nobody has chosen to check the match, video or not, new or
+  // old: the ready mail never says "Verification pending".
   const { readyVerificationPending } = loadNotifyAnalysisVerified();
-  const after = "2026-11-17T06:46:00Z";
+  for (const completed_at of [
+    "2026-11-17T06:46:00Z",
+    "2026-10-01T00:00:00Z",
+    null,
+  ]) {
+    expect(
+      readyVerificationPending({
+        completed_at,
+        start_time_seconds: 0,
+        end_time_seconds: 5400,
+        billable_seconds: 5400,
+      }),
+    ).toBe(false);
+  }
   expect(
     readyVerificationPending({
-      completed_at: after,
-      start_time_seconds: 0,
-      end_time_seconds: 5400,
-      billable_seconds: 5400,
-    }),
-  ).toBe(true);
-  expect(
-    readyVerificationPending({
-      completed_at: after,
+      completed_at: "2026-11-17T06:46:00Z",
       start_time_seconds: null,
       end_time_seconds: null,
       billable_seconds: null,
-    }),
-  ).toBe(false);
-  // Before the queue's start: never promised a check the queue will not do.
-  expect(
-    readyVerificationPending({
-      completed_at: "2026-10-01T00:00:00Z",
-      start_time_seconds: 0,
-      end_time_seconds: 5400,
-      billable_seconds: 5400,
     }),
   ).toBe(false);
 });

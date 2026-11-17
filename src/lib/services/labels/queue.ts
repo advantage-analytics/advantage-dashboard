@@ -20,9 +20,6 @@ import {
 /** Hours from results landing to the label being due, for every priority. */
 export const LABEL_DUE_WINDOW_HOURS = 36;
 
-/** Jobs completed before this moment never enter the queue. */
-export const LABEL_QUEUE_FROM = "2026-10-29T00:00:00Z";
-
 /** How many of the earliest-due open matches a labeller may choose among. */
 export const LABEL_CLAIM_CHOICES = 3;
 
@@ -40,12 +37,14 @@ function toMs(moment: Moment): number {
 }
 
 /**
- * When a job's label is due: `completedAt` plus `LABEL_DUE_WINDOW_HOURS`.
- * One window for every priority — the Express / Priority / Standard tiers
- * come later, and nothing sets `processing_jobs.priority` today.
+ * When a job's label is due: `from` plus `LABEL_DUE_WINDOW_HOURS`. `from` is
+ * when an admin added it to To do, or, for work started before To do was
+ * chosen by hand, when its results landed. One window for every priority —
+ * the Express / Priority / Standard tiers come later, and nothing sets
+ * `processing_jobs.priority` today.
  */
-export function labelDueAt(completedAt: Moment): Date {
-  return new Date(toMs(completedAt) + LABEL_DUE_WINDOW_HOURS * HOUR_MS);
+export function labelDueAt(from: Moment): Date {
+  return new Date(toMs(from) + LABEL_DUE_WINDOW_HOURS * HOUR_MS);
 }
 
 /** True from the due moment on — the boolean the boards style on. */
@@ -97,6 +96,8 @@ export interface LabelQueueJob extends JobVideoSpan {
   completedAt: string | null;
   /** The match owner's login email. */
   ownerEmail: string | null;
+  /** When an admin added it to To do (`label_todo.added_at`); null if not. */
+  addedAt?: string | null;
   session: QueueSession | null;
 }
 
@@ -111,21 +112,37 @@ export function isTestOwner(job: Pick<LabelQueueJob, "ownerEmail">): boolean {
 }
 
 /**
- * Whether a job enters the queue: completed on or after `LABEL_QUEUE_FROM`,
- * some video to label, and not a test workspace's. A published (`complete`)
- * session stays while it waits for the admin's check, and leaves once
- * `checkedAt` is set.
+ * Whether a job is on the boards. An admin chooses To do: a job enters it
+ * only once added (`addedAt`). A job past To do — held, sent back, handed in,
+ * or published and waiting for the admin's check — stays whether or not it
+ * was added, so no labeller's work drops off. Either way it needs some video
+ * to label and must not be a test workspace's. A published (`complete`)
+ * session leaves once `checkedAt` is set.
  */
 export function enterLabelQueue(job: LabelQueueJob): boolean {
-  if (!job.completedAt) return false;
-  const completed = toMs(job.completedAt);
-  if (!Number.isFinite(completed) || completed < toMs(LABEL_QUEUE_FROM)) {
+  if (!job.completedAt || !Number.isFinite(toMs(job.completedAt))) {
     return false;
   }
   if (!(jobVideoSeconds(job) > 0)) return false;
   if (isTestOwner(job)) return false;
   if (job.session?.status === "complete") return !job.session.checkedAt;
-  return true;
+  return Boolean(job.addedAt) || !isOpenToClaim(job.session);
+}
+
+/**
+ * Whether an admin may add a job to To do: the same video and workspace
+ * rules as the queue, not added yet, and nobody past To do on it — no
+ * session, or an open one nobody holds. A published match is not offered
+ * again; it is reopened from its own page.
+ */
+export function canAddToTodo(job: LabelQueueJob): boolean {
+  if (!job.completedAt || !Number.isFinite(toMs(job.completedAt))) {
+    return false;
+  }
+  if (!(jobVideoSeconds(job) > 0)) return false;
+  if (isTestOwner(job)) return false;
+  if (job.addedAt) return false;
+  return isOpenToClaim(job.session);
 }
 
 /** Earliest due first; ties by job id. Returns a new array. */
@@ -144,7 +161,7 @@ export function sortByDue<T extends { id: string; dueAt: Moment }>(
  * session is addressed to its labeller, so it is never open to anyone else
  * even with nobody assigned; a published one has nothing left to claim.
  */
-function isOpenToClaim(session: QueueSession | null): boolean {
+export function isOpenToClaim(session: QueueSession | null): boolean {
   return (
     session === null ||
     (session.status === "labelling" &&

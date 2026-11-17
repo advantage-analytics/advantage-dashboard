@@ -165,8 +165,9 @@ export interface LabelJobCandidate {
  * The job "Label this match" seeds a session on: the match's newest
  * completed Advantage Intelligence job with a results file, else null. The
  * same three filters the Labels list and the queue read jobs by — but
- * deliberately not the queue's cut-off (`LABEL_QUEUE_FROM`): this is the way
- * into labelling for a match the queue leaves out, older ones included.
+ * deliberately not the queue's rule (an admin's add, `label_todo`): this is
+ * the way into labelling for a match the queue leaves out, older ones
+ * included.
  * Newest by `completed_at` (a job without one ranks last), ties by id.
  */
 export function labelJobIdFor(

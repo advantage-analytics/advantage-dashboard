@@ -33,8 +33,8 @@ export default async function LabelHomePage() {
   ]);
   const practice = sessions.filter((session) => session.practice);
   // A non-practice session the board does not show: one assigned before the
-  // queue, or on a match outside it (no job, analysed before
-  // `LABEL_QUEUE_FROM`). It still counts as the one the viewer holds, so it
+  // queue, or on a match outside it (no job, or an admin never added it to
+  // To do). It still counts as the one the viewer holds, so it
   // must stay reachable here or the board would refuse every claim with
   // nothing to finish.
   const onBoard = new Set(
