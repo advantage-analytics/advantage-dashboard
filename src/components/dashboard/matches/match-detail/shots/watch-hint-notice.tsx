@@ -19,8 +19,9 @@ import {
  *
  * Shown once per browser, over the Statistics rows of a court whose points
  * can be played — the grey note strip (`primitives.md` › Notice strips: a
- * fact, nothing wrong), lead sentence in ink-900, and a blue Got it that
- * closes it for good. Remembered in localStorage beside the film room's own
+ * fact, nothing wrong), one line with the footer button's name in ink-900,
+ * and a blue Got it pushed right that closes it for good — the shape of
+ * primitives.md's settled one-line strip with its action at the end. Remembered in localStorage beside the film room's own
  * preferences, as `film-skip-dead-hint.tsx` remembers its card: a viewer
  * preference, not an account flag, so no `users` column and no write path.
  */
@@ -57,20 +58,16 @@ export function WatchHintNotice() {
         className={`${noteIconCls} text-[var(--ink-400)]`}
         strokeWidth={1.5}
       />
-      {/* Text takes the width; Got it is the strip's trailing action,
-          centred on the whole text block rather than pinned to its first
-          line, so the note is two lines of reading, not three stacked rows
-          with a dangling action under them. */}
+      {/* One line in the 340px column, so the glyph, the text and Got it
+          share the first line's axis — the glyph's `mt-0.5` nudge and Got
+          it's matching line height line them up without centring either. */}
       <p className="m-0 min-w-0 flex-1">
-        <span className="font-medium text-[var(--ink-900)]">
-          Pick a row to watch only its points.
-        </span>{" "}
-        Then press{" "}
+        Pick a row, then{" "}
         {/* The footer button's own name, set apart so it reads as a label. */}
         <span className="font-medium text-[var(--ink-900)]">
           Watch these points
-        </span>{" "}
-        below.
+        </span>
+        .
       </p>
       <button
         type="button"
@@ -78,8 +75,9 @@ export function WatchHintNotice() {
           writeHintSeen();
           setSeen(true);
         }}
+        // 17.6px = the strip's 11px × 1.6 line, so the 12px word sits on it.
         // The negative margin grows the hit area without moving the word.
-        className={`${TEXT_ACTION_CLASS} -my-1 ml-2 shrink-0 self-center py-1 whitespace-nowrap`}
+        className={`${TEXT_ACTION_CLASS} -my-1 ml-2 shrink-0 py-1 leading-[17.6px] whitespace-nowrap`}
       >
         Got it
       </button>
