@@ -51,7 +51,7 @@ export function WatchHintNotice() {
   // Dismissed for good: nothing to say, and nothing of the rows depends on it.
   if (seen) return null;
   return (
-    <div role="note" className={`${noteStripCls} mb-3`}>
+    <div role="note" className={`${noteStripCls} mb-5`}>
       <Info
         aria-hidden
         className={`${noteIconCls} text-[var(--ink-400)]`}
@@ -62,14 +62,14 @@ export function WatchHintNotice() {
           stacked rows with a dangling action under them. */}
       <p className="m-0 min-w-0 flex-1">
         <span className="font-medium text-[var(--ink-900)]">
-          Watch any of these in Video.
+          Pick a row to watch only its points.
         </span>{" "}
-        Pick a row to narrow the court, then{" "}
-        {/* The footer button's own name, set apart so the sentence parses. */}
+        Then press{" "}
+        {/* The footer button's own name, set apart so it reads as a label. */}
         <span className="font-medium text-[var(--ink-900)]">
           Watch these points
         </span>{" "}
-        plays just those.
+        below.
       </p>
       <button
         type="button"

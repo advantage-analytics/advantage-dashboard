@@ -179,7 +179,6 @@ export function LightboxStats({
       : null;
   return (
     <div className="flex min-h-full flex-col">
-      {hint}
       {tip !== null &&
         tipContent !== null &&
         createPortal(
@@ -230,6 +229,9 @@ export function LightboxStats({
           tip.anchor.host,
         )}
       <GroupSpacer edge="top" />
+      {/* Under the top spacer, not over it: the column has no padding of its
+          own, so above it the strip sat flush on the tab row's hairline. */}
+      {hint}
       {figures.length > 0 && (
         <>
           <div
