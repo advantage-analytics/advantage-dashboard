@@ -21,6 +21,13 @@ import { UnpublishedStatsNotice } from "@/components/dashboard/matches/match-det
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { surnameLabels } from "@/lib/data/match-utils";
+import {
+  showsUnverifiedStatsNote,
+  UNVERIFIED_STATS_NOTE,
+  VERIFIED_UPDATE_NOTE,
+} from "@/lib/data/match-verification";
+import { VerifiedMark } from "@/components/dashboard/matches/verified-mark";
+import { useJustVerified } from "@/components/dashboard/matches/match-detail/verification-watch";
 import { cn } from "@/lib/utils";
 
 /**
@@ -93,6 +100,10 @@ export function StatisticsView() {
   const { meta } = useMatchReport();
   const { points, match } = useMatchData();
   const hasPoints = points.length > 0;
+  const justVerified = useJustVerified(
+    match.id,
+    match.verification?.verifiedAt ?? null,
+  );
 
   if (meta.statsUnavailable) {
     return (
@@ -104,6 +115,38 @@ export function StatisticsView() {
 
   return (
     <>
+      {/* The one note above the numbers about who checked them: "may change"
+          while nobody has, "updated" in the tab that watched the check land
+          (`VerificationWatch`), so numbers that moved under a reader never
+          move silently. */}
+      {hasPoints && match.verification && justVerified ? (
+        <div
+          className={cn(noteStripCls, "shrink-0")}
+          data-testid="verified-update-note"
+          role="status"
+        >
+          <span className={cn(noteIconCls, "inline-flex")}>
+            <VerifiedMark />
+          </span>
+          <span>{VERIFIED_UPDATE_NOTE}</span>
+        </div>
+      ) : hasPoints &&
+        showsUnverifiedStatsNote({
+          verification: match.verification,
+          verificationPending: match.verificationPending,
+        }) ? (
+        <div
+          className={cn(noteStripCls, "shrink-0")}
+          data-testid="unverified-stats-note"
+        >
+          <Info
+            aria-hidden
+            className={`${noteIconCls} text-[var(--ink-400)]`}
+          />
+          <span>{UNVERIFIED_STATS_NOTE}</span>
+        </div>
+      ) : null}
+
       {meta.foldUnreconciled && (
         <div className={cn(noteStripCls, "shrink-0")}>
           <Info
