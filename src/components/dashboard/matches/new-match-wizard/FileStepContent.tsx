@@ -69,7 +69,7 @@ export interface FileStepContentProps {
   probe: VideoProbeSummary | null;
   /** Probe warnings — the file passed, with a caution. Drawn yellow. */
   warnings: string[];
-  /** Facts about the file that are not cautions. They join row 2's line. */
+  /** Facts about the file that are not cautions. They join the resolution row's line. */
   notes?: string[];
   /**
    * What this tab will do to the file before it uploads. Grey, under the file,
@@ -322,7 +322,7 @@ function FileStepContentImpl({
 
   const videoFacts = videoFileFacts(probe, uploadedFile?.size, "checked");
 
-  // What row 2 of the requirements reports once a video has passed the check.
+  // What the requirements' resolution row reports once a video has passed the check.
   // Nothing for a refused file: the wizard holds no probe for one, and the red
   // strip under the drop zone already says what was wrong.
   //
@@ -603,8 +603,7 @@ function FileStepContentImpl({
         </div>
       )}
 
-      {/* A video's requirements sit above (they stay over a checked video —
-          the trim still has to honour them); only their facts line is here.
+      {/* A video's requirements sit above; only their facts line is here.
           Under a read export they have been met, and the block beneath says
           what was found instead. */}
       {hasFile && !isVideo && parsingState.parseSuccess ? (

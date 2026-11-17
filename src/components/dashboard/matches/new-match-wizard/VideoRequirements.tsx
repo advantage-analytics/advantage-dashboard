@@ -4,37 +4,26 @@
  * `VideoRequirementsFacts` is its tail — the middot facts and the dialog
  * link — which stays under the drop zone.
  *
- * Above the picker since 2026-11-16: a coach's uploads failed 4 times in 7
- * on things this block names (a cut CIZR export, a 720p stream), and under
- * the drop zone it was read after the file was already chosen. The first row
- * — the full, unedited match — and the PlaySight/CIZR note came with the
- * move. The note is a native `<details>`, so the block stays stateless.
+ * It sits above the picker because the wrong download (a cut export, a 720p
+ * stream) is decided before the file is chosen. It stays visible after, since
+ * the trim step still has to honour the same framing.
  *
- * Deliberately NOT `"use client"`. The block itself holds no state, no
- * effects and no handlers — three rows and a native disclosure; the facts
- * line and its link are `VideoRequirementsFacts`. The link
- * opens a dialog, and that is the one client boundary: it lives in
- * `VideoRequirementsDialog`, so this panel can still be rendered from a Server
- * Component if the guidance is ever wanted somewhere outside the wizard.
+ * Deliberately NOT `"use client"`. The block holds no state, no effects and
+ * no handlers — three rows and a native `<details>` disclosure. The dialog
+ * link is the one client boundary and lives in `VideoRequirementsDialog`
+ * (rendered by `VideoRequirementsFacts`), so this panel can still be rendered
+ * from a Server Component.
  *
  * The shape: the requirements people get wrong lead as wizard field rows
  * (40px mark, 14px title, one micro line) — the whole match, unedited;
  * resolution and frame rate, which the probe checks; and the camera's view,
- * which nothing on this page can check, so the row shows the frame instead
- * (`CourtFrame`). Everything else is
- * one middot line of facts, and the full list sits behind "View all
- * requirements" with a frame that works beside one that does not. It was a
- * spec line and four equal rows; the two that decide whether a video can be
- * analysed read no louder than the file-size limit.
+ * which nothing on this page can check, so that row shows the frame instead
+ * (`CourtFrame`). Everything else is one middot line of facts, and the full
+ * list sits behind "View all requirements".
  *
- * Once a video has passed the check, `result` turns row 2 from the rule into
- * the answer: the measured value at the row's end and one line saying how it
- * did. The panel still takes only props — no state came with it.
- *
- * It renders before a file is chosen and stays visible after, since the trim
- * step still has to honour the same framing — see `FileStepContent`'s render
- * order: this block, then the drop zone or checked file with its strips, then
- * `VideoRequirementsFacts`.
+ * Once a video has passed the check, `result` turns the resolution row from
+ * the rule into the answer: the measured value at the row's end and one line
+ * saying how it did. The panel still takes only props.
  *
  * Every number and claim is the provider's own, checked against
  * https://splitstep.ai/api-docs.html (Video Guidelines / error codes) on
@@ -84,7 +73,7 @@ function RowText({ title, detail }: { title: string; detail: string }) {
 }
 
 /**
- * How the attached video did against row 1, once it has passed the check.
+ * How the attached video did against the resolution row, once it has passed the check.
  * `label` is what the probe measured ("1080p · 29.95 fps"). There is no
  * "fail": a refused file is not attached, and the strip under the drop zone
  * says why.
@@ -96,7 +85,7 @@ export interface VideoRequirementResult {
   suggestion?: string;
 }
 
-/** The measured value at the end of row 2, marked by how it did. */
+/** The measured value at the end of the resolution row, marked by how it did. */
 function ResultReadout({ result }: { result: VideoRequirementResult }) {
   const warn = result.status === "warn";
   const Mark = warn ? TriangleAlert : Check;
@@ -170,7 +159,7 @@ export function VideoRequirements({
           download, not which menu to open: neither app's menus are ours to
           keep current. */}
       <details className="group">
-        <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[12px] leading-4 text-[var(--blue)] transition-colors duration-150 hover:text-[var(--blue-hover)] [&::-webkit-details-marker]:hidden">
+        <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-[var(--radius-button)] text-[12px] leading-4 text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] [&::-webkit-details-marker]:hidden">
           <ChevronRight
             className="size-3 transition-transform duration-200 ease-[var(--ease-out-expo)] group-open:rotate-90"
             strokeWidth={1.5}

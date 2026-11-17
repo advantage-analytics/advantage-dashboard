@@ -192,18 +192,37 @@ export function formatProbeFps(probe: VideoProbe): string | null {
  * people know by name reads "720p" against "1080p". Anything else — 1440×1080,
  * a portrait 1080×1920, 1919×1080 — quotes its dimensions against the full
  * 1920×1080, because "1080p" beside a video that is 1080 tall reads as a pass.
+ * Deliberately not the wizard's `formatResolution`, which would call a
+ * 1080×1920 portrait "1080p".
+ *
+ * A portrait recording gets its own fix: its numbers look like the bar with
+ * the axes swapped, and "record at 1080p" is what it already did — what it
+ * needs is the camera turned sideways. The PlaySight/CIZR clause is left off
+ * there: those cameras don't film upright.
  */
 const NAMED_HEIGHTS = new Set([360, 480, 540, 720]);
-function resolutionShortfall(
-  width: number,
-  height: number,
-): { label: string; need: string } {
-  return NAMED_HEIGHTS.has(height) && width > height
-    ? { label: `${height}p`, need: "1080p" }
-    : {
-        label: `${width}×${height}`,
-        need: `${MIN_VIDEO_WIDTH}×${MIN_VIDEO_HEIGHT}`,
-      };
+function resolutionRefusal(width: number, height: number): string {
+  if (height > width) {
+    return `This video is ${width}×${height}, filmed upright. We need ${MIN_VIDEO_WIDTH}×${MIN_VIDEO_HEIGHT} or higher, filmed sideways. Turn the camera sideways and record at 1080p.`;
+  }
+  const named = NAMED_HEIGHTS.has(height);
+  const label = named ? `${height}p` : `${width}×${height}`;
+  const need = named ? "1080p" : `${MIN_VIDEO_WIDTH}×${MIN_VIDEO_HEIGHT}`;
+  // The PlaySight/CIZR clause is here because their streams are where 720p
+  // files come from; the original download is 1080p.
+  return `This video is ${label}. We need ${need} or higher. Record or export at 1080p. From PlaySight or CIZR, download the original file, not the stream.`;
+}
+
+/**
+ * A probe failure as text for `upload_failed`. A media element rejects with an
+ * `Event`, not an `Error`, and `String(event)` is "[object Event]" — the very
+ * loss `cause` exists to prevent — so an event is named by its type.
+ */
+function describeCause(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof Event !== "undefined" && err instanceof Event)
+    return `${err.type} event`;
+  return String(err);
 }
 
 /**
@@ -220,13 +239,10 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   const details: ValidationResult["details"] = { video: probe };
 
   if (probe.width < MIN_VIDEO_WIDTH || probe.height < MIN_VIDEO_HEIGHT) {
-    const { label, need } = resolutionShortfall(probe.width, probe.height);
     return {
       success: false,
       reason: "resolution",
-      // The PlaySight/CIZR clause is here because their streams are where
-      // 720p files come from; the original download is 1080p.
-      error: `This video is ${label}. We need ${need} or higher. Record or export at 1080p. From PlaySight or CIZR, download the original file, not the stream.`,
+      error: resolutionRefusal(probe.width, probe.height),
       details,
     };
   }
@@ -376,6 +392,7 @@ export function conversionNotice(probe: VideoProbe): string | null {
 }
 
 /** The refusal for a file this browser should have opened and could not. */
+// Duplicated in `useUploadMatchWizard` (provider-agnostic): keep in sync.
 export const UNREADABLE_VIDEO_MESSAGE =
   "We couldn't open this video. It may be damaged or still downloading. Download it again and add the new copy.";
 
@@ -436,7 +453,7 @@ export async function validateSplitStepVideo(
       error: UNREADABLE_VIDEO_MESSAGE,
       // The sentence above is the same for every unreadable file; the probe's
       // own message is what tells a bad codec from a half-finished download.
-      cause: err instanceof Error ? err.message : String(err),
+      cause: describeCause(err),
     };
   }
 

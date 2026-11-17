@@ -2774,11 +2774,10 @@ export function useUploadMatchWizard({
       } catch (err) {
         if (generation !== fileGenerationRef.current) return;
         trackVideoRejected("video_read", "unreadable", err, file);
-        // The exception ("The operation was aborted.") names nothing the
-        // person can do; it still reaches `upload_failed` as `error_message`
-        // above. Worded like the SplitStep validator's own unreadable refusal,
-        // but kept here: this hook is written against provider kind, so it
-        // does not import a vendor's validator.
+        // Keep in sync with `UNREADABLE_VIDEO_MESSAGE` (splitstep-validator):
+        // duplicated because this hook is provider-agnostic and must not
+        // import a vendor's validator. The exception text only goes to
+        // `upload_failed`.
         setUploadError(
           "We couldn't open this video. It may be damaged or still downloading. Download it again and add the new copy.",
         );

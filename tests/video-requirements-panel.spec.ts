@@ -97,6 +97,22 @@ test("keeps the rest as one line of facts above the dialog link", () => {
   expect(renderPanel()).not.toContain("VideoRequirementsDialog");
 });
 
+test("the file step reads the requirements before the picker and the facts after", () => {
+  // Source order, like upload-details-video-section.spec.ts: a static render
+  // of the whole step costs more than the wiring it would show. The block
+  // above the drop zone is the point of this change — guidance read after
+  // the file is chosen is guidance read too late.
+  const src = readFileSync(`${DIR}/FileStepContent.tsx`, "utf8");
+  const requirements = src.indexOf("<VideoRequirements result=");
+  const dropZone = src.indexOf('controlName("wizard_choose_file")');
+  const facts = src.indexOf("<VideoRequirementsFacts />");
+  expect(requirements).toBeGreaterThan(-1);
+  expect(dropZone).toBeGreaterThan(requirements);
+  expect(facts).toBeGreaterThan(dropZone);
+  // Drawn once: it stays over a checked file rather than moving under it.
+  expect(src.split("<VideoRequirements result=").length - 1).toBe(1);
+});
+
 test("the panel stays server-renderable", () => {
   // The dialog is the client boundary; a directive here would move it.
   const source = readFileSync(`${DIR}/VideoRequirements.tsx`, "utf8");

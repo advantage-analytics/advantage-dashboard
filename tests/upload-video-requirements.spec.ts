@@ -15,6 +15,8 @@
  * work/upload-flow-refinements/01_brief/output/brief.md §"Also consulted".
  */
 
+import { readFileSync } from "node:fs";
+
 import { expect, test } from "@playwright/test";
 
 import {
@@ -219,7 +221,6 @@ test.describe("resolution boundary — the guide's 1080p minimum", () => {
     for (const [width, height] of [
       [MIN_VIDEO_WIDTH - 1, MIN_VIDEO_HEIGHT],
       [1440, 1080],
-      [1080, 1920],
     ]) {
       const result = evaluateVideoProbe(probe({ width, height }));
       expect(result.reason).toBe("resolution");
@@ -460,6 +461,19 @@ test.describe("unknown metadata stays distinct from a known violation", () => {
   });
 });
 
+test.describe("a portrait recording", () => {
+  test("is told to turn the camera, not to record at 1080p again", () => {
+    const result = evaluateVideoProbe(probe({ width: 1080, height: 1920 }));
+    expect(result.reason).toBe("resolution");
+    expect(
+      result.error?.startsWith("This video is 1080×1920, filmed upright. "),
+    ).toBe(true);
+    expect(result.error).toContain("Turn the camera sideways");
+    // PlaySight and CIZR don't film upright: their clause would mislead here.
+    expect(result.error).not.toContain("PlaySight");
+  });
+});
+
 test.describe("an unreadable file", () => {
   test("shows one plain sentence but keeps the probe's error for analytics", async () => {
     // Outside a browser the probe cannot open anything and the decode
@@ -474,6 +488,18 @@ test.describe("an unreadable file", () => {
     // What upload_failed reports: the real failure, not the fixed sentence.
     expect(result.cause).toBeTruthy();
     expect(result.cause).not.toBe(UNREADABLE_VIDEO_MESSAGE);
+    expect(result.cause).not.toMatch(/\[object /);
+  });
+
+  test("the wizard's own read failure says the same sentence", () => {
+    // The hook can't import the validator (its harness allowlists
+    // dependencies, and it is written against provider kind), so it carries
+    // a copy. This keeps the copy honest.
+    const hook = readFileSync(
+      "src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts",
+      "utf8",
+    );
+    expect(hook).toContain(JSON.stringify(UNREADABLE_VIDEO_MESSAGE));
   });
 });
 
