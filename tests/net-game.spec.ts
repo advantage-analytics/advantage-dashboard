@@ -35,6 +35,7 @@ import {
   netEntryOf,
   netApproachShotOf,
   netGameTally,
+  netRallyShotOf,
 } from "@/components/dashboard/matches/match-detail/match-filters/net-game";
 import {
   cameInByLine,
@@ -560,6 +561,32 @@ test.describe("the Net filter (Visualizations › Approaches)", () => {
     expect(netApproachShotOf(DRAWN_IN, true)?.shotNumber).toBe(4);
     // Never came in: nothing.
     expect(netApproachShotOf(YOU_LOB, true)).toBeUndefined();
+
+    // A rally cut never plots the serve or the return, so it draws the
+    // first net shot instead when the approach shot was one of them.
+    expect(netRallyShotOf(PASSED, true)?.shotNumber).toBe(4);
+    expect(netRallyShotOf(SERVE_VOLLEY, true)?.shotNumber).toBe(3);
+    const chipAndCharge = p("chip-charge", {
+      server: 2,
+      winner: 1,
+      resultType: "Volley Winner",
+      shots: [
+        s(1, false, "First Serve", { cy: 23.5, ly: 7 }),
+        s(2, true, "Backhand", { cy: 0.5, ly: 20 }),
+        s(3, false, "Forehand", { cy: 22, ly: 4 }),
+        s(4, true, "Forehand Volley", { cy: 9 }),
+      ],
+    });
+    expect(netEntryOf(chipAndCharge, true)).toBe("approach");
+    expect(netApproachShotOf(chipAndCharge, true)?.shotNumber).toBe(2);
+    expect(netRallyShotOf(chipAndCharge, true)?.shotNumber).toBe(4);
+
+    const sv = net({ netCameIn: "you", netHow: ["serve-volley"] });
+    expect(
+      (SERVE_VOLLEY.shots ?? [])
+        .filter((shot) => shotMatchesNet(shot, SERVE_VOLLEY, sv, CTX))
+        .map((shot) => shot.shotNumber),
+    ).toEqual([3]);
 
     const f = net({ netCameIn: "you", netHow: ["approach"] });
     const kept = (PASSED.shots ?? []).filter((shot) =>

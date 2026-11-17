@@ -35,7 +35,7 @@ export interface Preferences {
   /** The match report's own views (`REPORT_VIEWS`), stored as their `?tab=` values. */
   matchReportOpensAt: ReportView;
   statDefinitionsOnHover: boolean;
-  /** Court distances, ball speed and contact depth across every chart. */
+  /** Court distances and contact depth across every chart (speed is never shown). */
   unit: DistanceUnit;
 }
 

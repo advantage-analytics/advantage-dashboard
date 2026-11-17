@@ -221,7 +221,7 @@ export function PreferencesForm({
         />
         <SettingsCardRow
           label="Units"
-          description="Court distances, ball speed and contact depth"
+          description="Court distances and contact depth"
           control={
             <MenuSelect
               label="Units"

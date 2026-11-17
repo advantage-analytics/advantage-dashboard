@@ -9,7 +9,7 @@ import type { Match } from "@/lib/data/types";
 import { playerHands } from "../../player-hands";
 // A cycle (`net-game.ts` reads `cameToNet` / `isNetShot` from here), safe
 // because neither module calls the other at load time.
-import { netApproachShotOf, netEntryOf, type NetEntry } from "./net-game";
+import { netEntryOf, netRallyShotOf, type NetEntry } from "./net-game";
 import { NET_Y_M } from "../film/film-court";
 import {
   courtSidesOf,
@@ -555,7 +555,7 @@ export const MATCH_FILTER_SECTIONS: readonly {
   {
     // The Net game card's breakdown as a filter (UGA coaches call,
     // 2026-11-16). On the rally cuts the drawn shot is the one that took the
-    // side in (`netApproachShotOf`).
+    // side in (`netRallyShotOf`).
     id: "net",
     label: "Net",
     groups: [
@@ -1156,28 +1156,36 @@ function netSeats(f: MatchFilters, ctx: MatchFilterContext): boolean[] {
 }
 
 /**
- * Net › Came in / How on a point: some asked-about side came to the net
- * (`cameToNet`), and — with How chosen — came in one of those ways
- * (`netEntryOf`, the Net game card's own classifier, so a count here is the
- * card's count).
+ * The asked-about seats that came in on `point` the chosen way: each one's
+ * `netEntryOf` (the Net game card's own classifier, so a count here is the
+ * card's count) is non-null and — with How chosen — one of `netHow`.
  */
+function netSeatsThatCameIn(
+  point: MatchPoint,
+  f: MatchFilters,
+  ctx: MatchFilterContext,
+): boolean[] {
+  return netSeats(f, ctx).filter((isPlayer1) => {
+    const entry = netEntryOf(point, isPlayer1);
+    return (
+      entry !== null && (f.netHow.length === 0 || f.netHow.includes(entry))
+    );
+  });
+}
+
+/** Net › Came in / How on a point: some asked-about side came in that way. */
 function matchesNet(
   point: MatchPoint,
   f: MatchFilters,
   ctx: MatchFilterContext,
 ): boolean {
-  if (!hasNet(f)) return true;
-  return netSeats(f, ctx).some((isPlayer1) => {
-    const entry = netEntryOf(point, isPlayer1);
-    if (entry === null) return false;
-    return f.netHow.length === 0 || f.netHow.includes(entry);
-  });
+  return !hasNet(f) || netSeatsThatCameIn(point, f, ctx).length > 0;
 }
 
 /**
  * On a rally cut, whether `shot` is the one a Net filter names: the shot
- * that took an asked-about side in (`netApproachShotOf`) on a point it came
- * in on the chosen way.
+ * that took an asked-about side in, as a rally cut can draw it
+ * (`netRallyShotOf`), on a point it came in on the chosen way.
  */
 export function shotMatchesNet(
   shot: MatchShot,
@@ -1185,12 +1193,9 @@ export function shotMatchesNet(
   f: MatchFilters,
   ctx: MatchFilterContext,
 ): boolean {
-  return netSeats(f, ctx).some((isPlayer1) => {
-    const entry = netEntryOf(point, isPlayer1);
-    if (entry === null) return false;
-    if (f.netHow.length > 0 && !f.netHow.includes(entry)) return false;
-    return netApproachShotOf(point, isPlayer1)?.id === shot.id;
-  });
+  return netSeatsThatCameIn(point, f, ctx).some(
+    (isPlayer1) => netRallyShotOf(point, isPlayer1)?.id === shot.id,
+  );
 }
 
 export function hasCustom(f: MatchFilters): boolean {

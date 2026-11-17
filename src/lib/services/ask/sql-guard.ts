@@ -242,6 +242,11 @@ interface WalkState {
   shotsReferenced: boolean;
   /** Whether a `*` / `alias.*` column list appears anywhere in the statement. */
   starReferenced: boolean;
+  /** The names `ask.shots` is read under: its alias, or `shots` bare. */
+  readonly shotsNames: Set<string>;
+  /** Every column reference with no table qualifier, lowercased. A bare
+   *  reference to a relation's own name is the whole row (`select sh`). */
+  readonly bareRefs: Set<string>;
 }
 
 /**
@@ -256,6 +261,9 @@ const SPEED_COLUMN = "speed_mph";
 const SHOTS_VIEW = "shots";
 export const ASK_SHOTS_STAR_REASON =
   "sql reads ask.shots with *. Name the columns you need instead: speed_mph may not be read.";
+/** `select sh from ask.shots sh` / `array_agg(sh)`: the whole row, speed and all. */
+export const ASK_SHOTS_ROW_REASON =
+  "sql reads a whole ask.shots row. Name the columns you need instead: speed_mph may not be read.";
 
 /** The view with two rows per match, and the column that tells them apart. */
 const TWO_SIDED_VIEW = "match_stats";
@@ -328,7 +336,10 @@ function checkRelation(name: Node, state: WalkState): void {
   }
   if ((ASK_VIEWS as readonly string[]).includes(relation)) {
     if (relation === TWO_SIDED_VIEW) state.matchStatsReferenced = true;
-    if (relation === SHOTS_VIEW) state.shotsReferenced = true;
+    if (relation === SHOTS_VIEW) {
+      state.shotsReferenced = true;
+      state.shotsNames.add(str(name.alias)?.toLowerCase() ?? SHOTS_VIEW);
+    }
     return;
   }
   if (schema === "ask") {
@@ -433,9 +444,9 @@ function walk(value: unknown, state: WalkState): void {
           );
         }
         const column = str(value.name)?.toLowerCase();
+        if (column !== undefined && !table) state.bareRefs.add(column);
         if (column === SIDE_COLUMN) state.sideReferenced = true;
         if (column === SPEED_COLUMN) refuse(ASK_SPEED_HIDDEN_REASON);
-
         break;
       }
       default:
@@ -477,6 +488,8 @@ function checkOne(text: string, mode: WalkState["mode"]): WalkState {
     sideReferenced: false,
     shotsReferenced: false,
     starReferenced: false,
+    shotsNames: new Set(),
+    bareRefs: new Set(),
   };
   collectCteNames(statement, state.cteNames);
   walk(statement, state);
@@ -485,6 +498,11 @@ function checkOne(text: string, mode: WalkState["mode"]): WalkState {
   }
   if (state.shotsReferenced && state.starReferenced) {
     refuse(ASK_SHOTS_STAR_REASON);
+  }
+  // Checked after the walk: the select list is visited before the FROM that
+  // names the alias.
+  for (const name of state.shotsNames) {
+    if (state.bareRefs.has(name)) refuse(ASK_SHOTS_ROW_REASON);
   }
   return state;
 }
@@ -505,8 +523,9 @@ function checkOne(text: string, mode: WalkState["mode"]): WalkState {
  *   the view's two rows make a query without one wrong by construction, and
  *   one with it is the planner's to get right;
  * - every function is on {@link ASK_SQL_FUNCTION_ALLOWLIST};
- * - nothing reads `ask.shots.speed_mph`, by name or through a `*` over
- *   `ask.shots` ({@link ASK_SPEED_HIDDEN_REASON}).
+ * - nothing reads `ask.shots.speed_mph`, by name, through a `*` over
+ *   `ask.shots`, or as a whole row (`select sh`, `array_agg(sh)`)
+ *   ({@link ASK_SPEED_HIDDEN_REASON}).
  *
  * The first problem found is the reason; the route feeds it back to the model.
  */

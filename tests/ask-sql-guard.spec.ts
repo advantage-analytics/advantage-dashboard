@@ -460,6 +460,25 @@ test.describe("shot speed is never read (single-camera speed is not accurate)", 
     );
   });
 
+  test("a whole ask.shots row is refused, aliased or bare; its columns pass", () => {
+    expectRefused(check(`select sh ${FROM}`), /whole ask\.shots row/);
+    expectRefused(
+      check(`select array_agg(sh) ${FROM}`),
+      /whole ask\.shots row/,
+    );
+    expectRefused(
+      check(
+        "select count(shots) from ask.shots join scope on scope.match_id = shots.match_id",
+      ),
+      /whole ask\.shots row/,
+    );
+    expect(
+      check(`select sh.shot_type, count(*) as n ${FROM} group by sh.shot_type`),
+    ).toMatchObject({
+      ok: true,
+    });
+  });
+
   test("a * over ask.shots is refused; count(*) and * over other views pass", () => {
     expectRefused(check(`select * ${FROM}`), /Name the columns you need/);
     expectRefused(check(`select sh.* ${FROM}`), /Name the columns you need/);

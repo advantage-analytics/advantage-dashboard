@@ -10,10 +10,10 @@ import { pointScoreLabel } from "@/lib/ui/score-format";
  * **only what the data says**.
  *
  * Every part is omitted when its field is missing or unmeasured; nothing is
- * invented and nothing falls back to a zero. No shot speed is ever shown (a single
- * camera cannot measure it accurately); a point
- * with no stored score shows no score; a shot the tracker only called "In"
- * contributes no shot line at all, because "in" is not a fact the dot's own
+ * invented and nothing falls back to a zero. No shot speed is ever shown (a
+ * single camera cannot measure it accurately); a point with no stored score
+ * shows no score; a shot the tracker only called "In" contributes no shot line
+ * at all, because "in" is not a fact the dot's own
  * position doesn't already carry.
  *
  * Attribution (guardrails §4): the title reads off `meta.wonBySubject`, which
@@ -31,8 +31,8 @@ export interface Readout {
   /** 0–2 lines: the shot line, then the fact line. Empty lines never appear. */
   lines: string[];
   /**
-   * Index into `lines` of the mono/tabular fact line ("Set 3 · 40-15"), or `-1` when nothing measurable existed. The render site needs
-   * this because the shot line above it may itself be absent, so "the mono
+   * Index into `lines` of the mono/tabular fact line ("Set 3 · 40-15"), or
+   * `-1` when nothing measurable existed. The render site needs this because the shot line above it may itself be absent, so "the mono
    * one is line 2" is not something a caller can assume.
    */
   monoLine: number;

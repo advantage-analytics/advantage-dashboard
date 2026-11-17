@@ -1310,7 +1310,7 @@ export function VizLightboxShell({
                             );
                           }}
                           onHover={setStatHover}
-                          hint={statHint ?? null}
+                          hint={statHint}
                         />
                       </div>
                     ))}

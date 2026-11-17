@@ -1,5 +1,9 @@
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
-import { isFeedShotType, isServeShotType } from "@/lib/data/serve-return-shots";
+import {
+  isFeedShotType,
+  isServeShotType,
+  pickRallyShots,
+} from "@/lib/data/serve-return-shots";
 import type { BallPathsFile } from "@/lib/services/splitstep/derivation/ball-paths";
 
 import { NET_Y_M } from "../film/film-court";
@@ -152,6 +156,33 @@ export function netApproachShotOf(
   return (
     shots.slice(0, n).findLast((s) => s.isPlayer1 === isPlayer1) ?? shots[n]
   );
+}
+
+/**
+ * The shot a rally cut draws for the Net filter: {@link netApproachShotOf}
+ * when a rally cut can plot it, else the side's first net shot N.
+ *
+ * A rally cut plots only rally shots (`pickRallyShots`: no serve, no feed,
+ * and not the return), so the approach shot of a serve and volley (the
+ * serve) or of a returner's chip-and-charge (the return) is never on it.
+ * Without this, Serve and volley drew an empty court on Rally shots while
+ * the Net game card counted its points. N is always a rally shot there — the
+ * server's first ball after the return, or the returner's next ball.
+ */
+export function netRallyShotOf(
+  point: MatchPoint,
+  isPlayer1: boolean,
+): MatchShot | undefined {
+  const approach = netApproachShotOf(point, isPlayer1);
+  if (approach === undefined) return undefined;
+  const rally = pickRallyShots(
+    point.shots ?? [],
+    (s) => s.shotType,
+    (s) => s.shotNumber,
+  );
+  if (rally.some((s) => s.id === approach.id)) return approach;
+  const shots = point.shots ?? [];
+  return shots.find((s) => s.isPlayer1 === isPlayer1 && isNetShot(s));
 }
 
 /**
