@@ -141,25 +141,32 @@ export function MenuSelect<T extends string>({
   // scrolled out of sight. Short lists keep the default: the chosen row is
   // on screen anyway.
   //
-  // The scroll waits two frames: the surface's height cap reads
-  // `--radix-popover-content-available-height`, which Radix sets only once it
-  // has positioned the surface, so scrolled at mount the list has no cap yet,
-  // nothing to scroll, and stays at the top. Only the list scrolls — never
-  // the page behind it.
+  // The scroll waits for the list to overflow, checked once a frame: the
+  // surface's height cap reads `--radix-popover-content-available-height`,
+  // which Radix sets only once it has positioned the surface — asynchronously,
+  // a frame or several later — so scrolled at mount the list has no cap yet,
+  // nothing to scroll, and stays at the top. Waiting on the overflow itself
+  // rather than a frame count holds on a slow device. It gives up after about
+  // a second (a list that never overflows has nothing to scroll) or as soon
+  // as the menu closes. Only the list scrolls — never the page behind it.
   const openOnChosen = useCallback((event: Event) => {
     const list = event.target as HTMLElement | null;
     const chosen = list?.querySelector<HTMLElement>('[aria-checked="true"]');
     if (!list || !chosen) return;
     event.preventDefault();
     chosen.focus({ preventScroll: true });
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => {
-        const offset =
-          chosen.getBoundingClientRect().top - list.getBoundingClientRect().top;
-        list.scrollTop +=
-          offset - (list.clientHeight - chosen.offsetHeight) / 2;
-      }),
-    );
+    let frames = 0;
+    const centreWhenCapped = () => {
+      if (!list.isConnected) return;
+      if (list.scrollHeight <= list.clientHeight) {
+        if (++frames < 60) requestAnimationFrame(centreWhenCapped);
+        return;
+      }
+      const offset =
+        chosen.getBoundingClientRect().top - list.getBoundingClientRect().top;
+      list.scrollTop += offset - (list.clientHeight - chosen.offsetHeight) / 2;
+    };
+    requestAnimationFrame(centreWhenCapped);
   }, []);
 
   // One handler for every row rather than a closure per option per render;
