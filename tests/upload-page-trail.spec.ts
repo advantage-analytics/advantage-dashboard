@@ -68,6 +68,10 @@ function loadPage() {
     "react/jsx-runtime": jsxRuntime,
     "next/link": { default: () => null },
     "lucide-react": { ChevronRight: () => null },
+    "@/lib/auth/request-path": {
+      loginRedirectPath: async (fallback: string) =>
+        `/login?next=${encodeURIComponent(fallback)}`,
+    },
     "next/navigation": {
       redirect: (path: string) => {
         throw new Error(`redirect:${path}`);
