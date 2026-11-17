@@ -244,9 +244,13 @@ export async function notifyAnalysisOutcome(params: {
 /**
  * Whether the ready mail may say "Verification pending": the report's own
  * rule (`verificationPendingFor`), fed from the job that just completed. No
- * labeller holds a match whose results landed seconds ago, so `labelling` is
- * false; `results_at` is the job's `completed_at`, or now when the row has not
- * been stamped yet (`deriveAndPublish` writes `completed` just before this).
+ * labeller holds a match whose results landed seconds ago, and an admin adds
+ * a match to the labellers' To do only after it is analysed, so `labelling`
+ * is false and the mail never promises a check nobody has chosen to do. Kept
+ * on the shared rule so the mail and the report cannot disagree if that ever
+ * changes. `results_at` is the job's `completed_at`, or now when the row has
+ * not been stamped yet (`deriveAndPublish` writes `completed` just before
+ * this).
  */
 export function readyVerificationPending(
   job: JobVideoSpan & { completed_at: string | null },

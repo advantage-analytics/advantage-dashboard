@@ -113,8 +113,8 @@ export const VERIFIED_UPDATE_NOTE = `${VERIFIED_BY_ADVANTAGE}. These numbers wer
  * and the share link's loaders). "May change after Advantage reviews the
  * match" is a promise, so it goes only where a review is coming — never on a
  * SwingVision import or hand-scored match, which never enter review, nor on a
- * video match analysed before the queue opened (`LABEL_QUEUE_FROM`) that no
- * labeller holds. The sample's loader never sets pending.
+ * video match no labeller holds and no admin put in the labellers' To do.
+ * The sample's loader never sets pending.
  */
 export function showsUnverifiedStatsNote({
   verification,
