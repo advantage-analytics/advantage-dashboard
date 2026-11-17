@@ -1,10 +1,50 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { runInNewContext } from "node:vm";
+
 import { expect, test } from "@playwright/test";
+import { createElement, type FunctionComponent } from "react";
+import * as jsx from "react/jsx-runtime";
+import { renderToStaticMarkup } from "react-dom/server";
+import ts from "typescript";
+
 import {
   maskReplayText,
   replayMask,
   replayUnmask,
   type ReplayTextElement,
 } from "@/lib/ui/replay-unmask";
+import { cn } from "@/lib/utils";
+
+const WIZARD = "src/components/dashboard/matches/new-match-wizard";
+
+/** The real FieldCaption, compiled here: Playwright rewrites JSX it imports. */
+function loadFieldCaption(): FunctionComponent<Record<string, unknown>> {
+  const exports: Record<string, unknown> = {};
+  runInNewContext(
+    ts.transpileModule(
+      readFileSync(resolve(`${WIZARD}/FieldCaption.tsx`), "utf8"),
+      {
+        compilerOptions: {
+          module: ts.ModuleKind.CommonJS,
+          jsx: ts.JsxEmit.ReactJSX,
+          target: ts.ScriptTarget.ES2022,
+        },
+      },
+    ).outputText,
+    {
+      exports,
+      require: (dep: string) => {
+        if (dep === "react/jsx-runtime") return jsx;
+        if (dep === "@/lib/utils") return { cn };
+        if (dep === "@/lib/ui/replay-unmask")
+          return { replayMask, replayUnmask };
+        throw new Error(`unexpected import in the field caption: ${dep}`);
+      },
+    },
+  );
+  return exports.FieldCaption as FunctionComponent<Record<string, unknown>>;
+}
 
 /**
  * Session replays mask every text node, and only text under a
@@ -77,4 +117,43 @@ test("an unmask region nested inside a mask region reads through", () => {
 test("the marks are bare data attributes", () => {
   expect(replayUnmask()).toEqual({ "data-ph-unmask": "" });
   expect(replayMask()).toEqual({ "data-ph-mask": "" });
+});
+
+/**
+ * Where the marks sit in the components that carry them. The rule above only
+ * holds if a value never lands under `data-ph-unmask` without a
+ * `data-ph-mask` between them.
+ */
+test.describe("marked components", () => {
+  test("a field caption reads its label, never its subject or its tag", () => {
+    const html = renderToStaticMarkup(
+      createElement(loadFieldCaption(), {
+        subject: "Sam",
+        label: "at the start",
+        tag: "· S1",
+        required: true,
+      }),
+    );
+    // The label span is the unmasked region, and the name inside it is
+    // re-masked; the tag sits beside it, outside.
+    expect(html).toMatch(
+      /<span data-ph-unmask="" [^>]*><span data-ph-mask="">Sam <\/span>at the start/,
+    );
+    // Nothing above the tag is unmasked: not the root, not the tag's span.
+    expect(html.slice(0, html.indexOf(">"))).not.toContain("data-ph-unmask");
+    const tagSpan = html.slice(0, html.indexOf("· S1"));
+    expect(tagSpan.slice(tagSpan.lastIndexOf("<span"))).not.toContain(
+      "data-ph-unmask",
+    );
+  });
+
+  test("the wizard shell never unmasks its description", () => {
+    const source = readFileSync(resolve(`${WIZARD}/WizardShell.tsx`), "utf8");
+    const description = source.slice(
+      source.lastIndexOf("<p", source.indexOf("{description}")),
+      source.indexOf("{description}"),
+    );
+    expect(description).toContain("<p");
+    expect(description).not.toContain("replayUnmask");
+  });
 });

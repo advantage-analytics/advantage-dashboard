@@ -37,7 +37,10 @@ export interface WizardShellProps {
   /** Zero-based. */
   stepIndex: number;
   stepCount: number;
+  /** Reads through in session replays (`replayUnmask()`), so it must be
+      written in the source — never a name or any other value. */
   title: ReactNode;
+  /** May name a player or an event: stays masked in session replays. */
   description: ReactNode;
   /** Full-bleed bar between the step indicator and the column. */
   pinned?: ReactNode;
@@ -58,6 +61,7 @@ export interface WizardShellProps {
   status?: ReactNode;
   /** Footer, right of the spacer, before the primary. */
   secondary?: ReactNode;
+  /** Reads through in session replays, like `title`: source copy only. */
   continueLabel: ReactNode;
   onContinue: () => void;
   continueDisabled: boolean;

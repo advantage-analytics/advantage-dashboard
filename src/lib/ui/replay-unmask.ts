@@ -53,10 +53,9 @@ export function maskReplayText(
 ): string {
   const masked = text.replace(/\S/g, "*");
   const unmasked = element?.closest("[data-ph-unmask]");
-  if (!unmasked) return masked;
+  if (!element || !unmasked) return masked;
   // The nearer mark wins: a re-mask inside the unmasked region masks, and an
   // unmask region nested inside a re-mask reads through.
-  const remasked = element?.closest("[data-ph-mask]") ?? null;
-  if (remasked && unmasked.contains(remasked)) return masked;
-  return text;
+  const remasked = element.closest("[data-ph-mask]");
+  return remasked && unmasked.contains(remasked) ? masked : text;
 }

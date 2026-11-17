@@ -42,6 +42,8 @@ export function RailItem({
   comingSoon,
 }: {
   href?: string;
+  /** Reads through in session replays (`replayUnmask()`), so it must be
+   *  written in the source — never a workspace, program or person's name. */
   label: string;
   icon: React.ComponentType<
     React.SVGProps<SVGSVGElement> & { strokeWidth?: number }

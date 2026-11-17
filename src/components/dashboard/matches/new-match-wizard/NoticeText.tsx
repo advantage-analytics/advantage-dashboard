@@ -20,18 +20,16 @@ import { replayUnmask } from "@/lib/ui/replay-unmask";
  * its own ("Couldn't read this video. <message>").
  */
 export function NoticeText({ children }: { children: string }) {
+  const lead = (text: string) => (
+    <b className="font-medium" {...replayUnmask()}>
+      {text}
+    </b>
+  );
   const cut = children.indexOf(". ");
-  if (cut === -1)
-    return (
-      <b className="font-medium" {...replayUnmask()}>
-        {children}
-      </b>
-    );
+  if (cut === -1) return lead(children);
   return (
     <span>
-      <b className="font-medium" {...replayUnmask()}>
-        {children.slice(0, cut + 1)}
-      </b>
+      {lead(children.slice(0, cut + 1))}
       {children.slice(cut + 1)}
     </span>
   );

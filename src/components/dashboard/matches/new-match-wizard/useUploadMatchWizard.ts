@@ -3024,13 +3024,17 @@ export function useUploadMatchWizard({
         }
       } catch (err) {
         if (!isCurrent()) return;
-        // Lead-first, like the probe's refusal: the notice strip shows its
-        // first sentence in session replays, and an exception's message is
-        // not ours to show there.
+        const message = err instanceof Error ? err.message : "";
+        // A video's refusal leads with a sentence of our own, like the probe's:
+        // its notice strip shows the first sentence in session replays, and an
+        // exception's message is not ours to show there. An export's strip
+        // already has its fixed lead ("This export couldn't be read —").
         setUploadError(
-          err instanceof Error && err.message
-            ? `Couldn't check this file. ${err.message}`
-            : "Couldn't check this file.",
+          getProviderKind(selectedProvider) === "processing"
+            ? message
+              ? `Couldn't check this file. ${message}`
+              : "Couldn't check this file."
+            : message || "Validation error",
         );
         return;
       }
