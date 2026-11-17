@@ -17,7 +17,8 @@
  * |--------------------------|------------------------------------------------|
  * | Program invite           | `inviteMember()` — WIRED                        |
  * | Vendor deletion request  | `/api/cron/vendor-deletion-requests` (daily) — matches users deleted, to `SPLITSTEP_DELETION_EMAIL` (cc alerts inbox), or to `INTERNAL_ALERTS_ADDRESS` until it is set — WIRED |
- * | Analysis ready           | `deriveAndPublish()` sets `completed` · pref `notifyAnalysisReady` — WIRED |
+ * | Analysis ready           | `deriveAndPublish()` sets `completed` · pref `notifyAnalysisReady`, `claimSend("analysis_ready:<job_id>")`; says "Verification pending" only when `verificationPendingFor()` holds — WIRED |
+ * | Analysis verified        | a label session's FIRST publish (`writeLabelSessionComplete()`) verifies a match that was NOT verified before it and on which no other session ever published, to the uploader of the match's job that had `analysis_ready:<job_id>` sent (none sent → no mail) · pref `notifyAnalysisReady`, `claimSend("analysis_verified:<job_id>")` — WIRED |
  * | Analysis failed          | final `failed` (webhook, poll) / `derivation_failed` · pref `notifyAnalysisFailed` — WIRED |
  * | Analysis failed (internal) | `notifyAnalysisOutcome({ outcome: "failed" })`, same final failures as above, to `INTERNAL_ALERTS_ADDRESS` only — no pref, `claimSend("analysis_failed_internal:<job_id>")` — WIRED |
  * | Webhook unreadable (internal) | the SplitStep webhook route, a SIGNED delivery whose body is not JSON or names no job id or status (`unreadableWebhookReason()`), to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("webhook_unreadable:<reason>:<utc day>")` — WIRED |
@@ -127,11 +128,13 @@ export {
 
 export {
   analysisReadyEmail,
+  analysisVerifiedEmail,
   analysisFailedEmail,
   analysisFailedInternalEmail,
   webhookUnreadableInternalEmail,
   uploadPausedEmail,
   type AnalysisReadyInput,
+  type AnalysisVerifiedInput,
   type AnalysisFailedInput,
   type AnalysisFailedInternalInput,
   type WebhookUnreadableInternalInput,

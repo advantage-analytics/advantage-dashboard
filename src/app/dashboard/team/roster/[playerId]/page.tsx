@@ -68,6 +68,7 @@ import { getBandSettings } from "@/lib/data/viz-bands-server";
 import { getPreferences } from "@/lib/data/preferences-server";
 import { askEntryHref } from "@/lib/services/ask/entry";
 import { otherPlayer } from "@/components/dashboard/matches/match-detail/match-filters/panel-draft";
+import { VerifiedMark } from "@/components/dashboard/matches/verified-mark";
 import { loginRedirectPath } from "@/lib/auth/request-path";
 
 /** `getPreferences` once per request, so the early start above and the
@@ -419,7 +420,19 @@ async function AnalyzedCount({
       : getPlayerSeason(programId, playerId)
   ).catch(() => null);
   if (!season) return null;
-  return <span>· {season.analyzed} analyzed</span>;
+  return (
+    <>
+      <span>· {season.analyzed} analyzed</span>
+      {/* How much of the season behind these figures a person checked.
+          None is left out rather than printed as "0 verified". */}
+      {season.verified > 0 ? (
+        <span className="inline-flex items-center gap-1">
+          · <VerifiedMark />
+          {season.verified} verified
+        </span>
+      ) : null}
+    </>
+  );
 }
 
 /**

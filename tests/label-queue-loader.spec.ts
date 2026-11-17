@@ -34,7 +34,7 @@ const PROGRAM = "Ravenmoor Institute";
 function job(over: Partial<QueueJobRow> & { id: string }): QueueJobRow {
   return {
     match_id: `match-${over.id}`,
-    completed_at: "2026-11-10T10:00:00Z",
+    completed_at: "2026-12-10T10:00:00Z",
     priority: null,
     start_time_seconds: 0,
     end_time_seconds: 3600,
@@ -58,7 +58,7 @@ function session(
 ): QueueSessionRow {
   return {
     status: "labelling",
-    started_at: "2026-11-10T12:00:00Z",
+    started_at: "2026-12-10T12:00:00Z",
     open_counts: null,
     start_open_counts: null,
     assigned_to: null,
@@ -93,6 +93,14 @@ function source(over: Partial<LabelQueueSource>): LabelQueueSource {
       [TEST_OWNER, "suite@example.com"],
     ]),
     photoUrl: (path) => (path ? `https://cdn.test/${path}` : null),
+    // Every job added to To do the moment its results landed, so each due
+    // time reads as completion plus 36 h; a test that needs a job left out
+    // passes its own map.
+    todo: new Map(
+      jobs.flatMap((row) =>
+        row.completed_at ? [[row.id, row.completed_at]] : [],
+      ),
+    ),
     ...over,
   };
 }
@@ -133,12 +141,12 @@ test.describe("newest completed job per match", () => {
     const older = job({
       id: "job-old",
       match_id: "m1",
-      completed_at: "2026-11-01T10:00:00Z",
+      completed_at: "2026-12-01T10:00:00Z",
     });
     const newer = job({
       id: "job-new",
       match_id: "m1",
-      completed_at: "2026-11-05T10:00:00Z",
+      completed_at: "2026-12-05T10:00:00Z",
     });
     const lone = job({ id: "job-lone", match_id: "m2" });
     for (const rows of [
@@ -160,12 +168,12 @@ test.describe("newest completed job per match", () => {
           job({
             id: "job-old",
             match_id: "m1",
-            completed_at: "2026-11-01T10:00:00Z",
+            completed_at: "2026-12-01T10:00:00Z",
           }),
           job({
             id: "job-new",
             match_id: "m1",
-            completed_at: "2026-11-05T10:00:00Z",
+            completed_at: "2026-12-05T10:00:00Z",
           }),
         ],
         // The superseded run was published; the re-run has not been.
@@ -185,12 +193,12 @@ test.describe("newest completed job per match", () => {
           job({
             id: "job-old",
             match_id: "m1",
-            completed_at: "2026-11-01T10:00:00Z",
+            completed_at: "2026-12-01T10:00:00Z",
           }),
           job({
             id: "job-new",
             match_id: "m1",
-            completed_at: "2026-11-05T10:00:00Z",
+            completed_at: "2026-12-05T10:00:00Z",
           }),
         ],
         sessions: [
@@ -198,13 +206,13 @@ test.describe("newest completed job per match", () => {
             id: "s-done",
             job_id: "job-new",
             status: "complete",
-            checked_at: "2026-11-06T10:00:00Z",
+            checked_at: "2026-12-06T10:00:00Z",
           }),
           // A later open session beside it does not bring the match back.
           session({
             id: "s-open",
             job_id: "job-new",
-            started_at: "2026-11-12T12:00:00Z",
+            started_at: "2026-12-12T12:00:00Z",
           }),
         ],
       }),
@@ -212,12 +220,12 @@ test.describe("newest completed job per match", () => {
     expect(entries).toEqual([]);
   });
 
-  test("queue.ts decides entry and order: no test owners, earliest due first", () => {
+  test("queue.ts decides entry and order: added only, no test owners, earliest due first", () => {
     const entries = buildLabelQueue(
       source({
         jobs: [
-          job({ id: "job-late", completed_at: "2026-11-11T10:00:00Z" }),
-          job({ id: "job-early", completed_at: "2026-11-09T10:00:00Z" }),
+          job({ id: "job-late", completed_at: "2026-12-11T10:00:00Z" }),
+          job({ id: "job-early", completed_at: "2026-12-09T10:00:00Z" }),
           job({ id: "job-test", match_id: "m-test" }),
           job({ id: "job-before", completed_at: "2026-10-20T10:00:00Z" }),
           job({
@@ -231,10 +239,19 @@ test.describe("newest completed job per match", () => {
           match({ id: "match-job-early", programs: null }),
           match({ id: "m-test", created_by: TEST_OWNER }),
         ],
+        // job-before was never added to To do; job-early was added a day
+        // after its results landed, so it is due 36 h from the add.
+        todo: new Map([
+          ["job-late", "2026-12-11T10:00:00Z"],
+          ["job-early", "2026-12-10T10:00:00Z"],
+          ["job-test", "2026-12-10T10:00:00Z"],
+          ["job-empty", "2026-12-10T10:00:00Z"],
+        ]),
       }),
     );
     expect(entries.map((entry) => entry.id)).toEqual(["job-early", "job-late"]);
-    expect(entries[0].dueAt).toBe("2026-11-10T22:00:00.000Z");
+    expect(entries[0].dueAt).toBe("2026-12-11T22:00:00.000Z");
+    expect(entries[0].addedAt).toBe("2026-12-10T10:00:00Z");
     expect(entries[0].programName).toBe("Personal");
     expect(entries[1].programName).toBe(PROGRAM);
   });
@@ -247,7 +264,7 @@ function fixture() {
   const jobs = ["a", "b", "c", "d", "e"].map((letter, index) =>
     job({
       id: `job-${letter}`,
-      completed_at: `2026-11-0${index + 2}T10:00:00Z`,
+      completed_at: `2026-12-0${index + 2}T10:00:00Z`,
       priority: letter === "a" ? "express" : "standard",
     }),
   );
@@ -265,8 +282,8 @@ function fixture() {
           id: "s-c",
           job_id: "job-c",
           assigned_to: VIEWER,
-          assigned_at: "2026-11-05T09:00:00Z",
-          claimed_at: "2026-11-05T09:00:00Z",
+          assigned_at: "2026-12-05T09:00:00Z",
+          claimed_at: "2026-12-05T09:00:00Z",
           open_counts: { amber: 3, grey: 0 },
           start_open_counts: { amber: 8, grey: 2 },
           assignee: assignee(VIEWER, "Ines", "Okafor"),
@@ -275,7 +292,7 @@ function fixture() {
           id: "s-d",
           job_id: "job-d",
           assigned_to: OTHER,
-          assigned_at: "2026-11-06T09:00:00Z",
+          assigned_at: "2026-12-06T09:00:00Z",
           assignee: assignee(OTHER, "Tariq", "Lindqvist"),
         }),
         session({
@@ -283,7 +300,7 @@ function fixture() {
           job_id: "job-e",
           status: "submitted",
           assigned_to: OTHER,
-          submitted_at: "2026-11-07T09:00:00Z",
+          submitted_at: "2026-12-07T09:00:00Z",
           open_counts: { amber: 0, grey: 0 },
           assignee: assignee(OTHER, "Tariq", "Lindqvist"),
         }),
@@ -291,7 +308,7 @@ function fixture() {
     }),
   );
   entries.find((entry) => entry.id === "job-d")!.session!.lastBeatAt =
-    "2026-11-06T11:30:00Z";
+    "2026-12-06T11:30:00Z";
   return entries;
 }
 
@@ -318,7 +335,7 @@ test.describe("the labeller's board", () => {
         jobId: "job-a",
         videoSeconds: 3600,
         urgency: "express",
-        dueAt: "2026-11-03T22:00:00.000Z",
+        dueAt: "2026-12-03T22:00:00.000Z",
         claimable: true,
         flags: null,
       },
@@ -326,7 +343,7 @@ test.describe("the labeller's board", () => {
         jobId: "job-b",
         videoSeconds: 3600,
         urgency: "standard",
-        dueAt: "2026-11-04T22:00:00.000Z",
+        dueAt: "2026-12-04T22:00:00.000Z",
         claimable: true,
         flags: { left: 5 },
       },
@@ -345,7 +362,7 @@ test.describe("the labeller's board", () => {
         flags: { resolved: 7, total: 10 },
         videoSeconds: 3600,
         urgency: "standard",
-        dueAt: "2026-11-05T22:00:00.000Z",
+        dueAt: "2026-12-05T22:00:00.000Z",
         submittedAt: null,
         publishedAt: null,
         sentBack: null,
@@ -357,7 +374,7 @@ test.describe("the labeller's board", () => {
         flags: null,
         videoSeconds: 3600,
         urgency: "standard",
-        dueAt: "2026-11-06T22:00:00.000Z",
+        dueAt: "2026-12-06T22:00:00.000Z",
         submittedAt: null,
         publishedAt: null,
         sentBack: null,
@@ -368,7 +385,7 @@ test.describe("the labeller's board", () => {
       mine: false,
       labellerFirstName: "Tariq",
       flags: { left: 0 },
-      submittedAt: "2026-11-07T09:00:00Z",
+      submittedAt: "2026-12-07T09:00:00Z",
     });
     expect("sessionId" in board.submitted[0]).toBe(false);
     expect(JSON.stringify(board)).not.toContain("Lindqvist");
@@ -461,7 +478,7 @@ test.describe("the admin's board", () => {
       programName: PROGRAM,
       sessionId: "s-c",
       labellerName: "Ines Okafor",
-      claimedAt: "2026-11-05T09:00:00Z",
+      claimedAt: "2026-12-05T09:00:00Z",
       lastBeatAt: null,
       flags: { resolved: 7, total: 10 },
     });
@@ -469,7 +486,7 @@ test.describe("the admin's board", () => {
     expect(board.inProgress[1]).toMatchObject({
       labellerName: "Tariq Lindqvist",
       claimedAt: null,
-      lastBeatAt: "2026-11-06T11:30:00Z",
+      lastBeatAt: "2026-12-06T11:30:00Z",
     });
     expect(board.todo[0]).toMatchObject({
       sessionId: null,
@@ -513,7 +530,7 @@ function publishFixture() {
   const jobs = ["p", "q", "r", "s", "t", "u"].map((letter, index) =>
     job({
       id: `job-${letter}`,
-      completed_at: `2026-11-0${index + 2}T10:00:00Z`,
+      completed_at: `2026-12-0${index + 2}T10:00:00Z`,
     }),
   );
   const checkColumns = {
@@ -531,7 +548,7 @@ function publishFixture() {
           job_id: "job-p",
           status: "complete",
           assigned_to: OTHER,
-          completed_at: "2026-11-09T08:00:00Z",
+          completed_at: "2026-12-09T08:00:00Z",
           assignee: assignee(OTHER, "Tariq", "Lindqvist"),
         }),
         session({
@@ -540,7 +557,7 @@ function publishFixture() {
           job_id: "job-q",
           status: "complete",
           assigned_to: VIEWER,
-          completed_at: "2026-11-08T08:00:00Z",
+          completed_at: "2026-12-08T08:00:00Z",
           assignee: assignee(VIEWER, "Ines", "Okafor"),
         }),
         session({
@@ -549,8 +566,8 @@ function publishFixture() {
           job_id: "job-r",
           status: "complete",
           assigned_to: OTHER,
-          completed_at: "2026-11-07T08:00:00Z",
-          checked_at: "2026-11-07T12:00:00Z",
+          completed_at: "2026-12-07T08:00:00Z",
+          checked_at: "2026-12-07T12:00:00Z",
           assignee: assignee(OTHER, "Tariq", "Lindqvist"),
         }),
         session({
@@ -558,7 +575,7 @@ function publishFixture() {
           id: "s-s",
           job_id: "job-s",
           assigned_to: VIEWER,
-          sent_back_at: "2026-11-10T09:00:00Z",
+          sent_back_at: "2026-12-10T09:00:00Z",
           sent_back_note: SENT_BACK_NOTE,
           assignee: assignee(VIEWER, "Ines", "Okafor"),
         }),
@@ -567,7 +584,7 @@ function publishFixture() {
           id: "s-t",
           job_id: "job-t",
           assigned_to: OTHER,
-          sent_back_at: "2026-11-10T10:00:00Z",
+          sent_back_at: "2026-12-10T10:00:00Z",
           sent_back_note: OTHER_NOTE,
           assignee: assignee(OTHER, "Tariq", "Lindqvist"),
         }),
@@ -577,7 +594,7 @@ function publishFixture() {
           job_id: "job-u",
           status: "submitted",
           assigned_to: OTHER,
-          submitted_at: "2026-11-08T09:00:00Z",
+          submitted_at: "2026-12-08T09:00:00Z",
           assignee: assignee(OTHER, "Tariq", "Lindqvist"),
         }),
       ],
@@ -591,13 +608,13 @@ test.describe("published, checked and sent back", () => {
     expect(board.toCheck.map((row) => row.jobId)).toEqual(["job-q", "job-p"]);
     expect(board.toCheck[0]).toMatchObject({
       sessionId: "s-q",
-      publishedAt: "2026-11-08T08:00:00Z",
+      publishedAt: "2026-12-08T08:00:00Z",
       labellerName: "Ines Okafor",
       claimable: false,
       sentBack: null,
     });
     expect(board.toCheck[1]).toMatchObject({
-      publishedAt: "2026-11-09T08:00:00Z",
+      publishedAt: "2026-12-09T08:00:00Z",
       labellerName: "Tariq Lindqvist",
     });
     const all = [
@@ -617,11 +634,11 @@ test.describe("published, checked and sent back", () => {
       "job-t",
     ]);
     expect(board.inProgress[0].sentBack).toEqual({
-      at: "2026-11-10T09:00:00Z",
+      at: "2026-12-10T09:00:00Z",
       note: SENT_BACK_NOTE,
     });
     expect(board.inProgress[1].sentBack).toEqual({
-      at: "2026-11-10T10:00:00Z",
+      at: "2026-12-10T10:00:00Z",
       note: OTHER_NOTE,
     });
     expect(board.todo).toEqual([]);
@@ -630,8 +647,8 @@ test.describe("published, checked and sent back", () => {
   test("the labeller sees the published lane, and only their own note", () => {
     const board = toLabellerBoard(publishFixture(), VIEWER, true);
     expect(board.published.map((row) => [row.mine, row.publishedAt])).toEqual([
-      [true, "2026-11-08T08:00:00Z"],
-      [false, "2026-11-09T08:00:00Z"],
+      [true, "2026-12-08T08:00:00Z"],
+      [false, "2026-12-09T08:00:00Z"],
     ]);
     expect(board.published[0].sessionId).toBe("s-q");
     expect("sessionId" in board.published[1]).toBe(false);
@@ -641,7 +658,7 @@ test.describe("published, checked and sent back", () => {
     expect(mine).toMatchObject({
       mine: true,
       sessionId: "s-s",
-      sentBack: { at: "2026-11-10T09:00:00Z", note: SENT_BACK_NOTE },
+      sentBack: { at: "2026-12-10T09:00:00Z", note: SENT_BACK_NOTE },
     });
     expect(theirs.mine).toBe(false);
     expect(theirs.sentBack).toBeNull();
@@ -681,7 +698,7 @@ test.describe("published, checked and sent back", () => {
             id: "s-v",
             job_id: "job-v",
             checked_at: null,
-            sent_back_at: "2026-11-10T09:00:00Z",
+            sent_back_at: "2026-12-10T09:00:00Z",
             sent_back_note: SENT_BACK_NOTE,
           }),
         ],

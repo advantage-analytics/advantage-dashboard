@@ -16,6 +16,7 @@
 
 import type { LabelPointPatch } from "./edit";
 import { SIDE_DEAD_ZONE_M } from "../splitstep/derivation/flags";
+import { BASELINE_M, SERVICE_LINE_M } from "../splitstep/derivation/court";
 import { landingTakesContact } from "./volley-link";
 import {
   deriveEnding,
@@ -65,6 +66,7 @@ import {
   hintDismissKey,
   placementKey,
   pointEndedKey,
+  volleyKey,
   suggestionState,
   type SuggestionNeighbour,
 } from "./suggestions";
@@ -730,6 +732,49 @@ export function placementMissing(
   return null;
 }
 
+/**
+ * "Volley?": a vendor groundstroke hit from inside the service line — within
+ * `SERVICE_LINE_M` of the net by its contact, which is where the hitter stood.
+ * The vendor most often misses a volley this way round: on the 37 complete
+ * analyst sessions (2026-11-17) labellers turned 195 vendor groundstrokes
+ * into volleys or overheads and only 11 the other way. One hit from inside
+ * the service line was made a volley 112 times in 378 (30%), against under 1%
+ * of the rest, and those 112 are 57% of every such fix. About 10 a match.
+ *
+ * Asked only while the stroke is still the vendor's: a stroke the labeller
+ * added or retyped is their call. Not a return, which can't be volleyed, nor a
+ * stroke the labeller dismissed: the next one is asked instead, like "Shot
+ * placement". Gating it on the ball before having no bounce was measured and
+ * left out: the November 2026 vendor files give every ball a bounce, fitted
+ * where none was seen, so it only ever fires on older files.
+ */
+export function groundstrokeAtNet(
+  point: Pick<LabelPoint, "shots"> &
+    Partial<Pick<LabelPoint, "ending" | "dismissed">>,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "groundstroke_at_net" }> | null {
+  if (isNonPointEnding(point.ending ?? null)) return null;
+  const live = liveShotsInOrder(point, ghosts).filter((s) => !isLetServe(s));
+  const serveAt = live.findLastIndex((shot) => isServeStroke(shot.stroke));
+  for (const [i, shot] of live.entries()) {
+    const stroke = shot.stroke;
+    if (stroke !== "forehand" && stroke !== "backhand") continue;
+    // The return: the ball it meets has to bounce in the box first.
+    if (serveAt !== -1 && i === serveAt + 1) continue;
+    if (shot.eventId === null || shot.seed?.stroke !== stroke) continue;
+    if (shot.contactY === null) continue;
+    if (Math.abs(shot.contactY - BASELINE_M) > SERVICE_LINE_M) continue;
+    if (point.dismissed?.includes(volleyKey(shot.id))) continue;
+    return {
+      code: "groundstroke_at_net",
+      tier: "hint",
+      scope: "shot",
+      params: { shotId: shot.id, stroke },
+    };
+  }
+  return null;
+}
+
 /** The share of seeded serves in play with no landing that reads as thin. */
 export const THIN_TRACKING_SHARE = 0.2;
 
@@ -1130,6 +1175,7 @@ export function openHintMarks(
     servesFromBothSides(point, ghosts),
     serveLandingHint(point, ghosts),
     placementMissing(point, ghosts),
+    groundstrokeAtNet(point, ghosts),
     // Not twice: the derivation's own "Into the net?" already asks.
     own.some((mark) => mark.code === "net_by_trajectory") ||
     count.some((mark) => mark.code === "net_by_trajectory")
@@ -1144,7 +1190,8 @@ export function openHintMarks(
       : own),
     ...live.filter((mark): mark is LabelMark => mark !== null),
   ].filter((mark) => {
-    // `placementMissing` has already passed over a dismissed stroke.
+    // `placementMissing` and `groundstrokeAtNet` have already passed over a
+    // dismissed stroke.
     const key = strokeHintKey(mark) ?? hintDismissKey(mark.code);
     return !point.dismissed.includes(key);
   });
@@ -1312,11 +1359,24 @@ export function mostOpen(states: readonly MarkState[]): MarkState {
 
 // ── The review flag ─────────────────────────────────────────────────────────
 
-/** The seven questions a point's review flag can ask, by id (`REVIEW_ITEMS`). */
-export type ReviewItemId = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+/** The eight questions a point's review flag can ask, by id (`REVIEW_ITEMS`). */
+export type ReviewItemId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 
 /** "Shot placement": never the score, so never the amber list's or chip's. */
 export const PLACEMENT_ITEM: ReviewItemId = 7;
+
+/** "Volley?": a stroke's type, never the score, like "Shot placement". */
+const VOLLEY_ITEM: ReviewItemId = 8;
+
+/**
+ * The items about one stroke's data alone: grey always, and beside an open
+ * amber question they split off into the grey list (`openFlags`) rather than
+ * ride on the amber chip (`reviewChip`).
+ */
+export const STROKE_DATA_ITEMS: ReadonlySet<ReviewItemId> = new Set([
+  PLACEMENT_ITEM,
+  VOLLEY_ITEM,
+]);
 
 /** One row of `REVIEW_ITEMS`: an item, its question and the codes it absorbs. */
 export interface ReviewItemDef {
@@ -1400,7 +1460,22 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
     question: REVIEW_ITEM_QUESTION[7],
     codes: ["placement_missing"],
   },
+  {
+    id: 8,
+    question: REVIEW_ITEM_QUESTION[8],
+    codes: ["groundstroke_at_net"],
+  },
 ];
+
+/**
+ * Whether `code` belongs to a `STROKE_DATA_ITEMS` item: a hint about one
+ * stroke's data, which the well draws grey like the flag list does.
+ */
+export function isStrokeDataCode(code: LabelMarkCode): boolean {
+  return REVIEW_ITEMS.some(
+    (item) => STROKE_DATA_ITEMS.has(item.id) && item.codes.includes(code),
+  );
+}
 
 /**
  * One mark under an item, with where it is in its life and the `dismissed`
@@ -1454,6 +1529,8 @@ export function strokeHintKey(mark: LabelMark): string | undefined {
       return pointEndedKey(mark.params.shotId);
     case "placement_missing":
       return placementKey(mark.params.shotId);
+    case "groundstroke_at_net":
+      return volleyKey(mark.params.shotId);
     default:
       return undefined;
   }
@@ -1512,7 +1589,7 @@ function isDemoted(tone: MarkTone, items: readonly ReviewItem[]): boolean {
  * player its strokes say lost; item 5 is always the score; item 6 only for "Game cut
  * differs" (unless it is on most of the match, `systemic`) or "Tiebreak
  * score, not 6–6" (the serve-side marks under it are data,
- * `DATA_MARK_CODES`); item 7 never. Like the
+ * `DATA_MARK_CODES`); items 7 and 8 never. Like the
  * flag (`foldReviewItems`), an item speaks for its open members while any is
  * open, and for all of them once none is: a settled "Check the ending" does
  * not keep the grey hints still open beside it amber.
@@ -1568,6 +1645,7 @@ function reviewItemTone(
         ? "score"
         : "data";
     case 7:
+    case 8:
       return "data";
   }
 }
@@ -1742,15 +1820,15 @@ export interface ReviewChip {
  * finished match is not strewn with outlines. Every demoted signature is
  * hints alone, so a flag that would be demoted once checked draws nothing
  * either. Tone and state are the flag's. An amber chip does not speak for
- * "Shot placement" (`PLACEMENT_ITEM`): a gap beside a question that can move
- * the score stays the grey list's (`openFlags`).
+ * "Shot placement" or "Volley?" (`STROKE_DATA_ITEMS`): either beside a
+ * question that can move the score stays the grey list's (`openFlags`).
  */
 export function reviewChip(flag: ReviewFlag): ReviewChip | null {
   if (flag.demoted) return null;
   const open = flag.items.filter(
     (item) =>
       item.state === "open" &&
-      (flag.tone !== "score" || item.id !== PLACEMENT_ITEM),
+      (flag.tone !== "score" || !STROKE_DATA_ITEMS.has(item.id)),
   );
   if (
     open.length === 0 &&

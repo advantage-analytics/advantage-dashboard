@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   LABEL_CLAIM_CHOICES,
   LABEL_DUE_WINDOW_HOURS,
-  LABEL_QUEUE_FROM,
+  canAddToTodo,
   claimableJobIds,
   enterLabelQueue,
   isOverdue,
@@ -24,11 +24,12 @@ const at = (offsetMs: number) => new Date(NOW.getTime() + offsetMs);
 function job(over: Partial<LabelQueueJob> = {}): LabelQueueJob {
   return {
     id: "job-a",
-    completedAt: "2026-11-01T10:00:00Z",
+    completedAt: "2026-11-20T10:00:00Z",
     start_time_seconds: 0,
     end_time_seconds: 3600,
     billable_seconds: 3600,
     ownerEmail: "maya@stanford.edu",
+    addedAt: "2026-11-20T12:00:00Z",
     session: null,
     ...over,
   };
@@ -37,7 +38,6 @@ function job(over: Partial<LabelQueueJob> = {}): LabelQueueJob {
 test.describe("label queue: due time", () => {
   test("constants are the settled launch rules", () => {
     expect(LABEL_DUE_WINDOW_HOURS).toBe(36);
-    expect(LABEL_QUEUE_FROM).toBe("2026-10-29T00:00:00Z");
     expect(LABEL_CLAIM_CHOICES).toBe(3);
   });
 
@@ -81,21 +81,80 @@ test.describe("label queue: due time", () => {
 });
 
 test.describe("label queue: who enters", () => {
-  test("a real, analysed, unpublished job enters", () => {
+  test("an added job enters To do, however old", () => {
     expect(enterLabelQueue(job())).toBe(true);
-    expect(enterLabelQueue(job({ completedAt: LABEL_QUEUE_FROM }))).toBe(true);
-    expect(
-      enterLabelQueue(
-        job({ session: { status: "labelling", assignedTo: "u1" } }),
-      ),
-    ).toBe(true);
-  });
-
-  test("a job completed 2026-10-28T23:59Z is left out", () => {
-    expect(enterLabelQueue(job({ completedAt: "2026-10-28T23:59:00Z" }))).toBe(
-      false,
+    expect(enterLabelQueue(job({ completedAt: "2026-09-01T10:00:00Z" }))).toBe(
+      true,
     );
     expect(enterLabelQueue(job({ completedAt: null }))).toBe(false);
+  });
+
+  test("a job nobody added and nobody started stays out", () => {
+    expect(enterLabelQueue(job({ addedAt: null }))).toBe(false);
+    expect(
+      enterLabelQueue(
+        job({
+          addedAt: null,
+          session: { status: "labelling", assignedTo: null },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  test("work past To do stays without an add", () => {
+    const at = "2026-11-06T10:00:00Z";
+    for (const session of [
+      { status: "labelling", assignedTo: "u1" },
+      { status: "labelling", assignedTo: null, sentBackAt: at },
+      { status: "submitted", assignedTo: "u1" },
+      { status: "complete", assignedTo: "u1" },
+    ]) {
+      expect(enterLabelQueue(job({ addedAt: null, session }))).toBe(true);
+    }
+    expect(
+      enterLabelQueue(
+        job({
+          addedAt: null,
+          session: { status: "complete", assignedTo: "u1", checkedAt: at },
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  test("an admin may add only what nobody holds and nobody added", () => {
+    const fresh = job({ addedAt: null });
+    expect(canAddToTodo(fresh)).toBe(true);
+    expect(
+      canAddToTodo(
+        job({
+          addedAt: null,
+          session: { status: "labelling", assignedTo: null },
+        }),
+      ),
+    ).toBe(true);
+    expect(canAddToTodo(job())).toBe(false);
+    for (const session of [
+      { status: "labelling", assignedTo: "u1" },
+      {
+        status: "labelling",
+        assignedTo: null,
+        sentBackAt: "2026-11-06T10:00:00Z",
+      },
+      { status: "submitted", assignedTo: "u1" },
+      { status: "complete", assignedTo: "u1" },
+    ]) {
+      expect(canAddToTodo(job({ addedAt: null, session }))).toBe(false);
+    }
+    expect(
+      canAddToTodo(
+        job({ addedAt: null, billable_seconds: 0, end_time_seconds: null }),
+      ),
+    ).toBe(false);
+    expect(
+      canAddToTodo(
+        job({ addedAt: null, ownerEmail: "run42-coach@example.com" }),
+      ),
+    ).toBe(false);
   });
 
   test("a zero-length video is left out", () => {

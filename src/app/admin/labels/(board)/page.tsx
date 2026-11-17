@@ -12,7 +12,8 @@ import {
   type LabelJobOwner,
   type LabelReviewRequest,
 } from "@/lib/data/label-overview-server";
-import { loadAdminLabelBoard } from "@/lib/data/label-queue-server";
+import { loadAdminLabels } from "@/lib/data/label-queue-server";
+import { NotInTodoList } from "@/components/admin/labels/not-in-todo";
 import { listLabelJobs, type LabelJobRow } from "@/lib/data/labels-server";
 import { listLabellers } from "@/lib/services/labels/assign-session";
 import type { FlagCounts } from "@/lib/services/labels/job-groups";
@@ -21,10 +22,11 @@ import { isFresh, lookAtSurface } from "@/lib/admin/seen-server";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 
 /**
- * Admin › Labels — the labeller queue as the admin sees it
- * (`loadAdminLabelBoard`): To do, In progress, Published, to check and (while
- * it has rows) Submitted, every row named
- * and every row openable by the admin. Above the lanes, the matches a player
+ * Admin › Labels — the labeller queue as the admin sees it, and under it
+ * "Not in To do" (`loadAdminLabels`), where the admin chooses what goes in
+ * the labellers' To do. The queue (`loadAdminLabelBoard`): To do, In
+ * progress, Published, to check and (while it has rows) Submitted, every row
+ * named and every row openable by the admin. Above the lanes, the matches a player
  * has asked us to look at again ("Requested reviews"), which are usually
  * published and so off the queue.
  *
@@ -97,8 +99,9 @@ async function readReviewJobs(
 
 export default async function AdminLabelsPage() {
   const admin = await requireAdminOrNotFound();
-  const [board, seen, reviews, labellers] = await Promise.all([
-    loadAdminLabelBoard(),
+  const [{ board, candidates }, seen, reviews, labellers] = await Promise.all([
+    // The board and Not in To do, from one read of the queue.
+    loadAdminLabels(),
     // Records this look, which clears the nav's "Labels · N".
     lookAtSurface(admin.id, "labels"),
     getLabelReviewRequests().catch(() => new Map<string, LabelReviewRequest>()),
@@ -138,6 +141,13 @@ export default async function AdminLabelsPage() {
       />
 
       <LabelsBoard board={board} now={now} labellers={assignable} />
+
+      {/* Its own section, one step further from the lanes than they are
+          from each other: the lanes are the labellers' work, this is the
+          admin's choice of what feeds them. */}
+      <div className="mt-6">
+        <NotInTodoList rows={candidates} />
+      </div>
     </AdminPage>
   );
 }

@@ -56,8 +56,8 @@ export function openMissingShot(point: LabelPoint, marks: LabelMarks) {
  * The stroke an open member's inline suggestion row sits under in the well,
  * if it has one: "Missing shot?" at its first open slot, "Did the point end
  * here?" at the ball called out, "Second serve?", "Serve after a serve in play"
- * and "Serve in, landing outside the box" at their own serve, and placement at
- * its stroke. Null for every other member.
+ * and "Serve in, landing outside the box" at their own serve, and placement and
+ * "Volley?" at their stroke. Null for every other member.
  */
 export function memberShotId(
   member: ReviewMember,
@@ -75,6 +75,7 @@ export function memberShotId(
     case "serve_in_landing_out":
     case "serve_by_receiver":
     case "placement_missing":
+    case "groundstroke_at_net":
       return mark.params.shotId;
     default:
       return null;
@@ -121,6 +122,7 @@ export const BALL_BEFORE_WINNER: ReadonlySet<LabelMarkCode> = new Set([
  *   last stroke, no end.
  * - 5 at the last stroke, 6 at the first; no end.
  * - 7 at the stroke to place, on the landing.
+ * - 8 at the groundstroke asked about, no end.
  *
  * The first open member, in the item's order, that names a live stroke wins.
  * A stroke with no contact yet opens on the contact whatever the end: a
@@ -170,6 +172,7 @@ function memberTarget(
     case "serves_from_both_sides":
     case "second_serve_as_first":
     case "serve_by_receiver":
+    case "groundstroke_at_net":
       return [memberShotId(member, point, marks), null];
     case "reserve_after_in":
       return [first, null];

@@ -73,6 +73,7 @@ export function FloatMenu({
   listId,
   onOpenAutoFocus,
   onCloseAutoFocus,
+  container,
   className,
   children,
 }: {
@@ -109,6 +110,14 @@ export function FloatMenu({
    */
   onOpenAutoFocus?: (event: Event) => void;
   onCloseAutoFocus?: (event: Event) => void;
+  /**
+   * Where the surface mounts — `document.body` by default. A menu opened from
+   * inside another overlay that treats the rest of the page as outside (the
+   * date field's react-aria calendar, which closes on any press beyond its
+   * own element and hides everything else from assistive tech) passes an
+   * element inside that overlay.
+   */
+  container?: HTMLElement | null;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -121,6 +130,7 @@ export function FloatMenu({
         sideOffset={sideOffset}
         onOpenAutoFocus={onOpenAutoFocus}
         onCloseAutoFocus={onCloseAutoFocus}
+        container={container}
         className={cn(
           floatMenuToneClasses(tone),
           width === "trigger" &&

@@ -64,6 +64,7 @@ export function MenuSelect<T extends string>({
   open: openProp,
   onOpenChange,
   invalid = false,
+  container,
 }: {
   /** Accessible name — the visible caption or row label sits beside it. */
   label: string;
@@ -120,6 +121,8 @@ export function MenuSelect<T extends string>({
    * it does for any field. The caller prints the sentence under it.
    */
   invalid?: boolean;
+  /** Where the menu mounts; see `FloatMenu`'s `container`. */
+  container?: HTMLElement | null;
 }) {
   const [ownOpen, setOwnOpen] = useState(false);
   const open = openProp ?? ownOpen;
@@ -131,6 +134,40 @@ export function MenuSelect<T extends string>({
     [openProp, onOpenChange],
   );
   const current = options.find((option) => option.value === value);
+
+  // A scrolling list opens on its chosen row, not its first. Radix focuses
+  // the first row by default, which in a long list — a date of birth's
+  // hundred-odd years, newest first — leaves the answer already given
+  // scrolled out of sight. Short lists keep the default: the chosen row is
+  // on screen anyway.
+  //
+  // The scroll waits for the list to overflow, checked once a frame: the
+  // surface's height cap reads `--radix-popover-content-available-height`,
+  // which Radix sets only once it has positioned the surface — asynchronously,
+  // a frame or several later — so scrolled at mount the list has no cap yet,
+  // nothing to scroll, and stays at the top. Waiting on the overflow itself
+  // rather than a frame count holds on a slow device. It gives up after about
+  // a second (a list that never overflows has nothing to scroll) or as soon
+  // as the menu closes. Only the list scrolls — never the page behind it.
+  const openOnChosen = useCallback((event: Event) => {
+    const list = event.target as HTMLElement | null;
+    const chosen = list?.querySelector<HTMLElement>('[aria-checked="true"]');
+    if (!list || !chosen) return;
+    event.preventDefault();
+    chosen.focus({ preventScroll: true });
+    let frames = 0;
+    const centreWhenCapped = () => {
+      if (!list.isConnected) return;
+      if (list.scrollHeight <= list.clientHeight) {
+        if (++frames < 60) requestAnimationFrame(centreWhenCapped);
+        return;
+      }
+      const offset =
+        chosen.getBoundingClientRect().top - list.getBoundingClientRect().top;
+      list.scrollTop += offset - (list.clientHeight - chosen.offsetHeight) / 2;
+    };
+    requestAnimationFrame(centreWhenCapped);
+  }, []);
 
   // One handler for every row rather than a closure per option per render;
   // the row passes its own value back.
@@ -201,6 +238,8 @@ export function MenuSelect<T extends string>({
       trigger={trigger}
       label={label}
       tone={tone}
+      container={container}
+      onOpenAutoFocus={scroll ? openOnChosen : undefined}
       align={align ?? (variant === "underline" ? "start" : "end")}
       width={width ?? (variant === "underline" ? "trigger" : 232)}
       className={

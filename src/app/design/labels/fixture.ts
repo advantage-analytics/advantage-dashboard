@@ -467,6 +467,7 @@ const boardRow = (
   urgency: "standard",
   dueAt: at(12),
   claimable: false,
+  removable: false,
   sessionId: null,
   labellerId: null,
   labellerName: null,

@@ -22,7 +22,7 @@ import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
 import {
   drawsGhosts,
   lastCallAnswer,
-  PLACEMENT_ITEM,
+  STROKE_DATA_ITEMS,
   pointRowMarkList,
   reviewFlag,
   reviewItemQuestion,
@@ -51,7 +51,7 @@ import {
   landedOnOwnSide,
   shortOfNet,
 } from "./shot-derived";
-import { isSuggestionKey } from "./suggestions";
+import { isSuggestionKey, volleyKey } from "./suggestions";
 
 // ── Writes ──────────────────────────────────────────────────────────────────
 
@@ -140,6 +140,7 @@ export const ADD_SHOT_ANSWER = "Add the shot";
 export const ADD_SECOND_SERVE_ANSWER = "Add the second serve";
 export const SPLIT_ANSWER = "Split here";
 export const SECOND_SERVE_ANSWER = "Make it a second serve";
+export const VOLLEY_ANSWER = "Make it a volley";
 
 /** "Remove the 2 shots after" — the follow-up's other answer. */
 export function removeShotsAfterLabel(count: number): string {
@@ -206,6 +207,8 @@ export function reviewItemThenLabel(item: ReviewItem): string {
       return "check the game and serve order";
     case 7:
       return "place the shot";
+    case 8:
+      return "check whether it was a volley";
   }
 }
 
@@ -331,7 +334,8 @@ export function openReviewItems(
 }
 
 /**
- * What a jump from the grey list asks first: "Shot placement" where an amber
+ * What a jump from the grey list asks first: "Shot placement" or "Volley?"
+ * (`STROKE_DATA_ITEMS`, the first down the rally) where an amber
  * question on the same stroke would otherwise come before it, or the labeller
  * lands on that question from a list that said nothing about it. That is a
  * point in both lists (`openFlags`), or one whose settled amber question the
@@ -346,15 +350,15 @@ export function greyJumpFirstItem(
   keep?: readonly ReviewItemId[],
 ): ReviewItemId | undefined {
   const asked = openReviewItems(point, marks, points, keep);
-  const placement = asked.find((item) => item.id === PLACEMENT_ITEM);
-  if (!placement || !asked.some((item) => item.tone === "score")) {
+  const grey = asked.find((item) => STROKE_DATA_ITEMS.has(item.id));
+  if (!grey || !asked.some((item) => item.tone === "score")) {
     return undefined;
   }
   const at = rallyPosition(point, marks);
-  const gap = at(placement);
+  const gap = at(grey);
   return asked.some((item) => item.tone === "score" && at(item) < gap)
     ? undefined
-    : PLACEMENT_ITEM;
+    : grey.id;
 }
 
 // ── The step ────────────────────────────────────────────────────────────────
@@ -796,6 +800,13 @@ function stepAnswers(
         });
       }
       break;
+    case 8:
+      for (const { mark } of openMembers(item)) {
+        if (mark.code === "groundstroke_at_net") {
+          answers.push(volleyAnswer(mark.params));
+        }
+      }
+      break;
     case 6:
     case 7:
       break;
@@ -815,6 +826,29 @@ function stepAnswers(
     });
   }
   return answers;
+}
+
+/**
+ * "Volley?"'s yes: the stroke made a volley on its side, and the question
+ * stored as answered, so turning the stroke back into a groundstroke after
+ * watching the clip does not ask it again.
+ */
+export function volleyAnswer({
+  shotId,
+  stroke,
+}: {
+  shotId: string;
+  stroke: "forehand" | "backhand";
+}): ReviewAnswer {
+  return {
+    id: "volley",
+    label: VOLLEY_ANSWER,
+    kind: "plain",
+    writes: [
+      { write: "shot", shotId, patch: { stroke: `${stroke}_volley` } },
+      { write: "dismiss", keys: [volleyKey(shotId)] },
+    ],
+  };
 }
 
 /**

@@ -155,6 +155,12 @@ export interface PlayerSeason {
    */
   analyzed: number;
   /**
+   * How many of the `analyzed` matches are Verified by Advantage
+   * (`verificationFor`) — the title's "· N verified", so a coach can see how
+   * much of the season behind these figures a person has checked.
+   */
+  verified: number;
+  /**
    * Every match of theirs the program recorded, analyzed or not, practice
    * sessions left out — the title's and the rail's "N matches", the same
    * count as `PlayerProfile.matchesPlayed`.
@@ -442,6 +448,7 @@ async function readAnalyzedMatches(
       points,
       isPlayer1,
       isDerived: isDerived(match),
+      verified: verificationFor(match) != null,
       // The report's own reading (`transformDbMatchToMatch`): a SwingVision
       // export judges every error; a video match only once Advantage has
       // verified it AND judged its errors.
@@ -486,6 +493,7 @@ export async function loadPlayerSeason(
   );
   return {
     analyzed: perMatch.length,
+    verified: perMatch.filter((m) => m.verified).length,
     matchesPlayed: counted.length,
     opponentsCount: seasonOpponentCount(sides),
     groups: foldSeasonRows(perMatch),
@@ -502,6 +510,8 @@ export async function loadPlayerSeason(
 export interface PlayerSeasonCourts {
   /** As `PlayerSeason.analyzed`: matches the report would draw, with points. */
   analyzed: number;
+  /** As `PlayerSeason.verified`. */
+  verified: number;
   /** As `PlayerSeason.matchesPlayed`. */
   matchesPlayed: number;
   /**
@@ -526,6 +536,7 @@ export async function loadPlayerSeasonCourts(
   const perMatch = await readAnalyzedMatches(supabase, counted, null, caching);
   return {
     analyzed: perMatch.length,
+    verified: perMatch.filter((m) => m.verified).length,
     matchesPlayed: counted.length,
     // The day and the opponent ride along for the opened card's readout
     // ("vs Lee · Nov 3"); a match's video is read as Advantage

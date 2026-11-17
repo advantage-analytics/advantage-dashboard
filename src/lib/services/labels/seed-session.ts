@@ -40,7 +40,8 @@ export type SeedLabelSessionResult =
   { sessionId: string; existing: boolean } | { error: string };
 
 /**
- * Seed a session for `jobId` as `labellerId`, or return the job's open one.
+ * Seed a session for `jobId` as `labellerId`, or return the job's open one,
+ * else its published one.
  *
  * Never throws. On any failure after the session row exists, the row is
  * deleted (points and shots cascade) so a half-seeded session is never left
@@ -61,6 +62,17 @@ export async function seedLabelSessionForJob(params: {
     const open = await findOpenSession(supabase, jobId);
     if ("error" in open) return open;
     if (open.sessionId) return { sessionId: open.sessionId, existing: true };
+
+    // A job already published is opened, never seeded again. A fresh seed
+    // beside it would hold the match's one open session, so Send back on the
+    // published one is refused, and publishing the seed would replace the
+    // labeller's work with the vendor's. Relabelling a published match is
+    // the console's Reopen.
+    const published = await findPublishedSession(supabase, jobId);
+    if ("error" in published) return published;
+    if (published.sessionId) {
+      return { sessionId: published.sessionId, existing: true };
+    }
 
     const { transcript, reason, job, raw, match, correctedAdScoring } =
       await buildTranscriptForJob({
@@ -169,6 +181,26 @@ async function findOpenSession(
     .maybeSingle<{ id: string }>();
   if (error) {
     return { error: `Could not look up open sessions: ${error.message}` };
+  }
+  return { sessionId: data?.id ?? null };
+}
+
+/** The job's newest published (`complete`) analyst session, if any. */
+async function findPublishedSession(
+  supabase: AdminClient,
+  jobId: string,
+): Promise<{ sessionId: string | null } | { error: string }> {
+  const { data, error } = await supabase
+    .from("label_sessions")
+    .select("id")
+    .eq("job_id", jobId)
+    .eq("status", "complete")
+    .neq("kind", "practice")
+    .order("completed_at", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+  if (error) {
+    return { error: `Could not look up published sessions: ${error.message}` };
   }
   return { sessionId: data?.id ?? null };
 }

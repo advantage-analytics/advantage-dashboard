@@ -16,7 +16,6 @@
  */
 
 import { pointScoreLabel } from "@/lib/ui/score-format";
-import { LABEL_QUEUE_FROM } from "@/lib/services/labels/queue";
 import {
   isInFlight,
   isStatsUnavailable,
@@ -90,6 +89,43 @@ export const VERIFICATION_PENDING_SCOPE =
 export const VERIFICATION_PENDING_UNTIL =
   "Until then, your statistics come from the automatic analysis and may change.";
 
+/**
+ * The note above an unverified video match's statistics (`StatisticsView`,
+ * the dashboard report and the share link alike). The pending popover's
+ * "may change", lifted onto the page beside the numbers a coach would show —
+ * a badge in the facts line is easy to miss (a UGA coach showed a player
+ * figures before review, 2026-11). Said in the third person: the share
+ * link's reader is not the player.
+ */
+export const UNVERIFIED_STATS_NOTE =
+  "These numbers come from automatic analysis and may change after Advantage reviews the match.";
+
+/**
+ * What the same note says in the tab that watched the review land
+ * (`VerificationWatch` refreshed the report under the reader), so numbers
+ * that changed on screen never change silently.
+ */
+export const VERIFIED_UPDATE_NOTE = `${VERIFIED_BY_ADVANTAGE}. These numbers were updated after review.`;
+
+/**
+ * Whether a report draws `UNVERIFIED_STATS_NOTE`: exactly when it says
+ * "Verification pending" (`showsVerificationPending`, set by the dashboard's
+ * and the share link's loaders). "May change after Advantage reviews the
+ * match" is a promise, so it goes only where a review is coming — never on a
+ * SwingVision import or hand-scored match, which never enter review, nor on a
+ * video match no labeller holds and no admin put in the labellers' To do.
+ * The sample's loader never sets pending.
+ */
+export function showsUnverifiedStatsNote({
+  verification,
+  verificationPending,
+}: {
+  verification: MatchVerification | null | undefined;
+  verificationPending: boolean | undefined;
+}): boolean {
+  return !verification && verificationPending === true;
+}
+
 export interface MatchVerification {
   /** When Advantage verified it, ISO (`matches.verified_at`) — a moment. */
   verifiedAt: string;
@@ -139,18 +175,21 @@ export interface MatchLabelState {
   results_at: string | null;
   /** Whether that job covers any video (`jobVideoSeconds() > 0`). */
   has_video: boolean;
-  /** Whether a labeller holds the match right now. */
+  /**
+   * Whether the match is waiting on a labeller: one holds it, or an admin
+   * put it in the labellers' To do (`label_todo`, migration
+   * `20261117182112`).
+   */
   labelling: boolean;
 }
 
 /**
  * "Verification pending": an unverified match that is waiting on a labeller.
  *
- * True only for a match with video whose results landed on or after the
- * queue's cut-off (`LABEL_QUEUE_FROM` — the same moment the labeller queue
- * starts from, so the customer is never promised a check the queue will not
- * do), or one a labeller already holds whatever its age. A missing state —
- * the RPC returned no row, or could not be read — is never pending.
+ * True only for a match with video that a labeller holds or an admin put in
+ * the labellers' To do — the queue's own rule, so the customer is never
+ * promised a check nobody chose to do. A missing state — the RPC returned no
+ * row, or could not be read — is never pending.
  */
 export function verificationPendingFor(
   state:
@@ -159,10 +198,7 @@ export function verificationPendingFor(
     | undefined,
 ): boolean {
   if (!state || !state.has_video) return false;
-  if (state.labelling) return true;
-  if (!state.results_at) return false;
-  const landed = Date.parse(state.results_at);
-  return Number.isFinite(landed) && landed >= Date.parse(LABEL_QUEUE_FROM);
+  return state.labelling;
 }
 
 /**
