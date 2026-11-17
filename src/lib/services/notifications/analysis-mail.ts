@@ -389,13 +389,17 @@ async function readyMailJob(
     ...jobs.filter((job) => job.id === input.jobId),
     ...jobs.filter((job) => job.id !== input.jobId),
   ];
-  for (const job of ordered) {
-    if (await alreadySent(`analysis_ready:${job.id as string}`)) {
-      return {
-        id: job.id as string,
-        createdBy: (job.created_by as string | null) ?? null,
-      };
-    }
+  // One read per job, together: the order above still picks the winner.
+  const sent = await Promise.all(
+    ordered.map((job) => alreadySent(`analysis_ready:${job.id as string}`)),
+  );
+  const index = sent.indexOf(true);
+  if (index >= 0) {
+    const job = ordered[index];
+    return {
+      id: job.id as string,
+      createdBy: (job.created_by as string | null) ?? null,
+    };
   }
   return null;
 }

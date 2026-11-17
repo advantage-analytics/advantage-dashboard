@@ -177,9 +177,10 @@ export interface AnalysisVerifiedInput {
 /**
  * "Your match is Verified by Advantage" — the follow-up to the ready mail.
  *
- * Sent only to a player who already had `analysisReadyEmail` for the same
- * job (`notifyAnalysisVerified`): they may have read the automatic numbers,
- * and the check has now replaced them. One paragraph and the report's
+ * Sent only to the uploader who already had `analysisReadyEmail` for this
+ * match (`notifyAnalysisVerified` follows whichever of its jobs was
+ * announced): they may have read the automatic numbers, and the check has
+ * now replaced them. One paragraph and the report's
  * button, in the verified badge's own words.
  */
 export function analysisVerifiedEmail(
