@@ -71,7 +71,6 @@ function s(
     isPlayer1,
     shotType,
     spinType: null,
-    speedMph: null,
     zone: null,
     result: o.result ?? "In",
     videoTime: o.t ?? shotNumber * 1.3,

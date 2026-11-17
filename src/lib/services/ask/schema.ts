@@ -216,6 +216,16 @@ export interface AskViewSchema {
   columns: readonly AskColumn[];
 }
 
+/**
+ * Columns the views hold (and a migration comments on) that the model is
+ * never told about, as `view.column`. `shots.speed_mph`: single-camera speed
+ * is not accurate, so no answer may read it — the guard refuses it by name
+ * and through `*` (`ASK_SPEED_HIDDEN_REASON`).
+ */
+export const ASK_HIDDEN_COLUMNS: ReadonlySet<string> = new Set([
+  "shots.speed_mph",
+]);
+
 export const ASK_SCHEMA: readonly AskViewSchema[] = [
   {
     view: "matches",
@@ -985,12 +995,8 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         meaning:
           "The spin on the ball, as text: Topspin, Flat, Slice, Backspin, Sidespin or Kick; null when unknown.",
       },
-      {
-        name: "speed_mph",
-        type: "number",
-        meaning:
-          "Ball speed off the racket in miles per hour; null when not measured.",
-      },
+      // `speed_mph` is in the view but never described: single-camera speed
+      // is not accurate, so no answer may read it (`ASK_SPEED_HIDDEN_REASON`).
       {
         name: "zone",
         type: "text",
@@ -1279,7 +1285,7 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         name: "last_shot_number",
         type: "integer",
         meaning:
-          "The last shot's number within the point, as ask.shots.shot_number: join ask.shots on match_id, point_number and shot_number for anything else about that shot, such as its speed or spin; null when the point has no shots.",
+          "The last shot's number within the point, as ask.shots.shot_number: join ask.shots on match_id, point_number and shot_number for anything else about that shot, such as its spin or zone; null when the point has no shots.",
       },
     ],
   },

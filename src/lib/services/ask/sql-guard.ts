@@ -238,7 +238,45 @@ interface WalkState {
   matchStatsReferenced: boolean;
   /** Whether a column named `side` was referenced anywhere in the statement. */
   sideReferenced: boolean;
+  /** Whether `ask.shots` was read anywhere in the statement. */
+  shotsReferenced: boolean;
+  /** Whether a whole-row star appears: a bare `*` as a select-list column,
+   *  or a table-qualified `alias.*` ANYWHERE (an argument, GROUP BY, ORDER BY,
+   *  a comparison) — each is the whole row. A bare `count(*)` is neither. */
+  starReferenced: boolean;
+  /** The names `ask.shots` is read under: its alias, or `shots` bare. */
+  readonly shotsNames: Set<string>;
+  /** Every column reference with no table qualifier, lowercased. A bare
+   *  reference to a relation's own name is the whole row (`select sh`). */
+  readonly bareRefs: Set<string>;
 }
+
+/**
+ * Shot speed is never shown: a single camera cannot measure it accurately
+ * (UGA coaches call, 2026-11-16). The real boundary is the database:
+ * `ask.shots.speed_mph` is null on every row (20261117060402), so no query
+ * can read a speed whatever it spells. These refusals are the early, clear
+ * stop in front of that — the model is told why instead of getting nulls.
+ * `public.shots` keeps the recorded values. Exported so prompts can quote it.
+ */
+export const ASK_SPEED_HIDDEN_REASON =
+  "Shot speed is not available: a single camera cannot measure it accurately, so speed_mph may not be read. Answer without speed.";
+export const ASK_UNICODE_IDENTIFIER_REASON =
+  'A U&"..." escaped identifier or string is not allowed. Write names plainly.';
+const SPEED_COLUMN = "speed_mph";
+const SHOTS_VIEW = "shots";
+export const ASK_SHOTS_STAR_REASON =
+  "sql reads ask.shots with * or alias.*. Name the columns you need instead: speed_mph may not be read.";
+/**
+ * `ask.shots x(a, b, …)` renames a view's columns by position, so a later
+ * letter IS `speed_mph` under another name. No Ask answer needs a column-
+ * alias list (alias in the select list instead), so none is allowed.
+ */
+export const ASK_COLUMN_ALIAS_LIST_REASON =
+  "A column-alias list on a relation (`ask.shots x(a, b, …)`) is not allowed. Alias columns in the select list instead.";
+/** `select sh from ask.shots sh` / `array_agg(sh)`: the whole row, speed and all. */
+export const ASK_SHOTS_ROW_REASON =
+  "sql reads a whole ask.shots row. Name the columns you need instead: speed_mph may not be read.";
 
 /** The view with two rows per match, and the column that tells them apart. */
 const TWO_SIDED_VIEW = "match_stats";
@@ -311,6 +349,10 @@ function checkRelation(name: Node, state: WalkState): void {
   }
   if ((ASK_VIEWS as readonly string[]).includes(relation)) {
     if (relation === TWO_SIDED_VIEW) state.matchStatsReferenced = true;
+    if (relation === SHOTS_VIEW) {
+      state.shotsReferenced = true;
+      state.shotsNames.add(str(name.alias)?.toLowerCase() ?? SHOTS_VIEW);
+    }
     return;
   }
   if (schema === "ask") {
@@ -364,6 +406,47 @@ function walk(value: unknown, state: WalkState): void {
   }
   if (!isNode(value)) return;
 
+  // `ask.shots x(a, b, …)` / `(select …) t(a, b)`: a positional rename can
+  // reach any column under a new name (ASK_COLUMN_ALIAS_LIST_REASON).
+  if (Array.isArray(value.columnNames) && value.columnNames.length > 0) {
+    refuse(ASK_COLUMN_ALIAS_LIST_REASON);
+  }
+  if (isNode(value.join)) {
+    // A natural join matches on every same-named column: a derived table with
+    // a `speed_mph` alias would filter shots by speed with no `ref` to see.
+    // The parser refuses it today; refuse it here too in case that changes.
+    if (/natural/i.test(str(value.join.type) ?? "")) {
+      refuse("A NATURAL join is not allowed. Join with ON or USING.");
+    }
+    // `join … using (speed_mph)` names the column outside any `ref` node, and
+    // an equi-join on it counts and groups shots by speed.
+    if (Array.isArray(value.join.using)) {
+      for (const column of value.join.using) {
+        if (
+          isNode(column) &&
+          str(column.name)?.toLowerCase() === SPEED_COLUMN
+        ) {
+          refuse(ASK_SPEED_HIDDEN_REASON);
+        }
+      }
+    }
+  }
+
+  // A `*` in a SELECT's own column list (`select *`, `select s.*`) — not
+  // `count(*)`, whose star is a call argument and reads no column.
+  if (
+    Array.isArray(value.columns) &&
+    value.columns.some(
+      (c) =>
+        isNode(c) &&
+        isNode(c.expr) &&
+        str(c.expr.type) === "ref" &&
+        str(c.expr.name) === "*",
+    )
+  ) {
+    state.starReferenced = true;
+  }
+
   const type = str(value.type);
   if (type !== undefined) {
     if (!NODE_ALLOWLIST.has(type)) {
@@ -399,9 +482,13 @@ function walk(value: unknown, state: WalkState): void {
             `Column reference "${str(table.schema)}.${str(table.name)}.${str(value.name)}" may not name a schema.`,
           );
         }
-        if (str(value.name)?.toLowerCase() === SIDE_COLUMN) {
-          state.sideReferenced = true;
-        }
+        const column = str(value.name)?.toLowerCase();
+        if (column !== undefined && !table) state.bareRefs.add(column);
+        if (column === SIDE_COLUMN) state.sideReferenced = true;
+        if (column === SPEED_COLUMN) refuse(ASK_SPEED_HIDDEN_REASON);
+        // `sh.*` outside the select list (`array_agg(sh.*)`, `group by sh.*`,
+        // `sh.* is null`) is the whole row as a value, speed and all.
+        if (column === "*" && table) state.starReferenced = true;
         break;
       }
       default:
@@ -417,6 +504,10 @@ function walk(value: unknown, state: WalkState): void {
 
 function checkOne(text: string, mode: WalkState["mode"]): WalkState {
   if (text.trim() === "") refuse(`${mode} is empty.`);
+  // `U&"speed\005fmph"` is Postgres's escaped spelling of `speed_mph`, and
+  // the parser reads it as `u & "speed\005fmph"`: every name check here
+  // would compare the escaped text. No answer needs an escaped identifier.
+  if (/u\s*&\s*["']/i.test(text)) refuse(ASK_UNICODE_IDENTIFIER_REASON);
 
   let statements: unknown[];
   try {
@@ -441,11 +532,23 @@ function checkOne(text: string, mode: WalkState["mode"]): WalkState {
     scopeReferenced: false,
     matchStatsReferenced: false,
     sideReferenced: false,
+    shotsReferenced: false,
+    starReferenced: false,
+    shotsNames: new Set(),
+    bareRefs: new Set(),
   };
   collectCteNames(statement, state.cteNames);
   walk(statement, state);
   if (mode === "sql" && state.matchStatsReferenced && !state.sideReferenced) {
     refuse(ASK_SIDE_REQUIRED_REASON);
+  }
+  if (state.shotsReferenced && state.starReferenced) {
+    refuse(ASK_SHOTS_STAR_REASON);
+  }
+  // Checked after the walk: the select list is visited before the FROM that
+  // names the alias.
+  for (const name of state.shotsNames) {
+    if (state.bareRefs.has(name)) refuse(ASK_SHOTS_ROW_REASON);
   }
   return state;
 }
@@ -465,7 +568,12 @@ function checkOne(text: string, mode: WalkState["mode"]): WalkState {
  *   ({@link ASK_SIDE_REQUIRED_REASON}); a mention is all that is checked —
  *   the view's two rows make a query without one wrong by construction, and
  *   one with it is the planner's to get right;
- * - every function is on {@link ASK_SQL_FUNCTION_ALLOWLIST}.
+ * - every function is on {@link ASK_SQL_FUNCTION_ALLOWLIST};
+ * - nothing reads `ask.shots.speed_mph`: by name (a column reference or a
+ *   `join … using` list), through a `*` over `ask.shots`, as a whole row
+ *   (`select sh`, `array_agg(sh)`), or renamed by a column-alias list
+ *   (`ask.shots x(a, b, …)`, refused outright)
+ *   ({@link ASK_SPEED_HIDDEN_REASON}).
  *
  * The first problem found is the reason; the route feeds it back to the model.
  */

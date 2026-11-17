@@ -107,7 +107,6 @@ function shot(
     isPlayer1,
     shotType,
     spinType: null,
-    speedMph: null,
     zone: null,
     result: "In",
     videoTime: shotNumber * 1.3,

@@ -98,6 +98,7 @@ import {
 } from "@/lib/services/ask/facts";
 import {
   ASK_PERCENTAGE_DEFINITIONS,
+  ASK_HIDDEN_COLUMNS,
   ASK_SCHEMA,
 } from "@/lib/services/ask/schema";
 import type { AskScope } from "@/lib/services/ask/scope";
@@ -216,6 +217,11 @@ test.describe("ASK_SCHEMA", () => {
     }
     const fromMigrations = migrationColumnComments();
     expect(fromMigrations.size).toBeGreaterThan(100);
+    // A hidden column is commented in the database but never described.
+    for (const hidden of ASK_HIDDEN_COLUMNS) {
+      expect(fromMigrations.has(hidden), hidden).toBe(true);
+      fromMigrations.delete(hidden);
+    }
     expect([...fromSchema.keys()].sort()).toEqual(
       [...fromMigrations.keys()].sort(),
     );
@@ -612,7 +618,7 @@ test.describe("buildAnswerPrompt", () => {
 
   test("pins what a figure is: a number that carries the claim, never a match count, date or score", () => {
     expect(prompt).toContain(
-      'A figure is one of the one to three numbers that carry the headline\'s claim. Never the number of matches, a date, a score or a name. A number with a unit names it in the label ("First-serve speed (mph)").',
+      'A figure is one of the one to three numbers that carry the headline\'s claim. Never the number of matches, a date, a score or a name. A number with a unit names it in the label ("Average rally length (shots)").',
     );
     expect(prompt).toContain(
       "A number shown in the block is not repeated as a figure: with a block, the figures are the numbers the block does not hold, or there are none — before writing a figure line, check the block, and leave the figure out if its cell is in a ROW.",

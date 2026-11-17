@@ -172,7 +172,6 @@ export const SYNTHETIC_MATCH_DETAIL: MatchDetailData = {
           isPlayer1: true,
           shotType: "Serve",
           spinType: "Flat",
-          speedMph: 112,
           zone: "T",
           result: "In",
           videoTime: 12.5,

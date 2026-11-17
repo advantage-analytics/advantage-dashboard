@@ -38,12 +38,12 @@ const UNIT_OPTIONS: readonly {
   {
     value: "ft",
     label: "Feet",
-    description: "Distances read 12 ft, speeds in mph",
+    description: "Distances read 12 ft",
   },
   {
     value: "m",
     label: "Metres",
-    description: "Distances read 3.5 m, speeds in km/h",
+    description: "Distances read 3.5 m",
   },
 ];
 
@@ -221,7 +221,7 @@ export function PreferencesForm({
         />
         <SettingsCardRow
           label="Units"
-          description="Court distances, ball speed and contact depth"
+          description="Court distances and contact depth"
           control={
             <MenuSelect
               label="Units"

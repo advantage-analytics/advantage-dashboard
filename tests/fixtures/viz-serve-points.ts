@@ -60,7 +60,6 @@ export function servePoint({
         isPlayer1: player1,
         shotType,
         spinType: null,
-        speedMph: null,
         zone: "Body",
         result,
         videoTime: null,

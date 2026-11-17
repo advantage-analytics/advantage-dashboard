@@ -27,6 +27,7 @@ import { useVizBands } from "./viz-bands-context";
 import { CUT_LABEL } from "./viz-labels";
 import { useMatchPlayerChipLabels } from "./use-match-player-chip-labels";
 import { VizLightboxShell } from "./viz-lightbox-shell";
+import { WatchHintNotice } from "./watch-hint-notice";
 import {
   EMPTY_VIZ_FILTERS,
   collapseErrorFilter,
@@ -591,6 +592,11 @@ export function VizLightbox({
         total: allPointsBehind.length,
         render: (list) => <LightboxPointList {...list} allPoints={points} />,
       }}
+      statHint={
+        // Once, on a court whose points can be played: how to watch what a
+        // Statistics row picks (UGA coaches call, 2026-11-16).
+        canWatchFilm && !isDraft ? <WatchHintNotice /> : undefined
+      }
       footer={({ matched, phrases: sentence }) => {
         const canWatch = meta.hasPlayableVideo && onWatchPoints !== undefined;
         if (!canSaveViews && !canWatch) return null;

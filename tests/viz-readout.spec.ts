@@ -20,7 +20,6 @@ function meta(overrides: Partial<VizDotMeta> = {}): VizDotMeta {
     shotType: "First Serve",
     result: "In",
     isAce: false,
-    speedMph: 118,
     ...overrides,
   };
 }
@@ -28,12 +27,12 @@ function meta(overrides: Partial<VizDotMeta> = {}): VizDotMeta {
 /* ── Title: the SUBJECT's own won/lost, either side ──────────────────────── */
 
 test("title names the subject and reads 'won the point' when they won it", () => {
-  const r = buildReadout(meta({ wonBySubject: true }), NAMES, "serve", "ft");
+  const r = buildReadout(meta({ wonBySubject: true }), NAMES, "serve");
   expect(r.title).toBe("Reid won the point");
 });
 
 test("title reads 'lost the point' when the subject lost it", () => {
-  const r = buildReadout(meta({ wonBySubject: false }), NAMES, "serve", "ft");
+  const r = buildReadout(meta({ wonBySubject: false }), NAMES, "serve");
   expect(r.title).toBe("Reid lost the point");
 });
 
@@ -46,7 +45,6 @@ test("the subject's own name is used, not a fixed player-1 label", () => {
     meta({ wonBySubject: false }),
     { subject: "Okafor" },
     "serve",
-    "ft",
   );
   expect(r.title).toBe("Okafor lost the point");
 });
@@ -58,7 +56,6 @@ test("an ace reads as 'Ace' and does not repeat the serve description", () => {
     meta({ shotType: "First Serve", result: "Ace" }),
     NAMES,
     "serve",
-    "ft",
   );
   expect(r.lines[0]).toBe("Ace");
 });
@@ -71,7 +68,6 @@ test("an ace whose shot result is 'In' still reads 'Ace'", () => {
     meta({ shotType: "First Serve", result: "In", isAce: true }),
     NAMES,
     "serve",
-    "ft",
   );
   expect(r.lines[0]).toBe("Ace");
 });
@@ -81,7 +77,6 @@ test("isAce wins over the shot description, whatever the shot row says", () => {
     meta({ shotType: "Second Serve", result: null, isAce: true }),
     NAMES,
     "serve",
-    "ft",
   );
   expect(r.lines[0]).toBe("Ace");
 });
@@ -91,7 +86,6 @@ test("a non-ace serve called 'In' never reads 'Ace'", () => {
     meta({ shotType: "First Serve", result: "In", isAce: false }),
     NAMES,
     "serve",
-    "ft",
   );
   expect(r.lines[0]).toBe("First serve");
 });
@@ -101,7 +95,6 @@ test("an out serve names the serve and the call", () => {
     meta({ shotType: "Second Serve", result: "Out" }),
     NAMES,
     "serve",
-    "ft",
   );
   expect(r.lines[0]).toBe("Second serve, out");
 });
@@ -111,7 +104,6 @@ test("a netted ball reads 'into the net', never the raw 'Net'", () => {
     meta({ shotType: "Forehand", result: "Net" }),
     NAMES,
     "returnPlacement",
-    "ft",
   );
   expect(r.lines[0]).toBe("Forehand return, into the net");
 });
@@ -121,7 +113,6 @@ test("a return names the stroke and the cut", () => {
     meta({ shotType: "Backhand", result: "In" }),
     NAMES,
     "returnContact",
-    "ft",
   );
   expect(r.lines[0]).toBe("Backhand return");
 });
@@ -131,69 +122,42 @@ test("a rally shot names the stroke alone — the cut is not a return", () => {
     meta({ shotType: "Forehand Volley", result: "In" }),
     NAMES,
     "rallyPosition",
-    "ft",
   );
   expect(r.lines[0]).toBe("Forehand volley");
 });
 
 test("'In' alone says nothing a serve dot does not already say — no shot line", () => {
   const r = buildReadout(
-    meta({ shotType: null, result: "In", speedMph: null, pointScore: null }),
+    meta({ shotType: null, result: "In", pointScore: null }),
     NAMES,
     "serve",
-    "ft",
   );
   expect(r.lines).toEqual(["Set 3"]);
 });
 
 /* ── Line 2: omitted parts, never invented ones ──────────────────────────── */
 
-test("line 2 joins set, score and speed with the mid dot", () => {
-  const r = buildReadout(meta(), NAMES, "serve", "ft");
-  expect(r.lines[r.monoLine]).toBe("Set 3 · 40-15 · 118 mph");
-});
-
-test("a shot with no measured speed omits the speed part entirely", () => {
-  const r = buildReadout(meta({ speedMph: null }), NAMES, "serve", "ft");
+test("line 2 joins set and score with the mid dot — and never a speed", () => {
+  // Single-camera speed is not accurate, so it is never shown, measured or
+  // not (UGA coaches call, 2026-11-16). `meta()` carries 118 mph.
+  const r = buildReadout(meta(), NAMES, "serve");
   expect(r.lines[r.monoLine]).toBe("Set 3 · 40-15");
-});
-
-test("speed 0 is unmeasured, not a reading — never '0 mph'", () => {
-  const r = buildReadout(meta({ speedMph: 0 }), NAMES, "serve", "ft");
-  expect(r.lines[r.monoLine]).toBe("Set 3 · 40-15");
-});
-
-/* ── Stage 2C: the fact line's speed follows the Units preference ───────── */
-
-test("unit defaults to 'ft' when the caller omits it (no callers left that do, but the fallback must not read '0 km/h')", () => {
-  const r = buildReadout(meta(), NAMES, "serve", "ft");
-  expect(r.lines[r.monoLine]).toBe("Set 3 · 40-15 · 118 mph");
-});
-
-test("metres preference: the speed line reads km/h, not mph", () => {
-  const r = buildReadout(meta(), NAMES, "serve", "m");
-  // formatSpeed("m", 118) = round(118 * 1.609344) = 190
-  expect(r.lines[r.monoLine]).toBe("Set 3 · 40-15 · 190 km/h");
-});
-
-test("metres preference, speed 0 is still unmeasured — never '0 km/h'", () => {
-  const r = buildReadout(meta({ speedMph: 0 }), NAMES, "serve", "m");
-  expect(r.lines[r.monoLine]).toBe("Set 3 · 40-15");
+  expect([r.title, ...r.lines].join(" ")).not.toMatch(/mph|km\/h|118/);
 });
 
 test("no point score omits that part, keeping the rest", () => {
-  const r = buildReadout(meta({ pointScore: null }), NAMES, "serve", "ft");
-  expect(r.lines[r.monoLine]).toBe("Set 3 · 118 mph");
+  const r = buildReadout(meta({ pointScore: null }), NAMES, "serve");
+  expect(r.lines[r.monoLine]).toBe("Set 3");
 });
 
 test("a blank point score string is treated as missing", () => {
-  const r = buildReadout(meta({ pointScore: "   " }), NAMES, "serve", "ft");
-  expect(r.lines[r.monoLine]).toBe("Set 3 · 118 mph");
+  const r = buildReadout(meta({ pointScore: "   " }), NAMES, "serve");
+  expect(r.lines[r.monoLine]).toBe("Set 3");
 });
 
 test("set 0 (unnumbered) omits the set part", () => {
-  const r = buildReadout(meta({ setNumber: 0 }), NAMES, "serve", "ft");
-  expect(r.lines[r.monoLine]).toBe("40-15 · 118 mph");
+  const r = buildReadout(meta({ setNumber: 0 }), NAMES, "serve");
+  expect(r.lines[r.monoLine]).toBe("40-15");
 });
 
 test("nothing measured at all leaves the fact line out and monoLine at -1", () => {
@@ -201,13 +165,11 @@ test("nothing measured at all leaves the fact line out and monoLine at -1", () =
     meta({
       setNumber: 0,
       pointScore: null,
-      speedMph: null,
       shotType: null,
       result: null,
     }),
     NAMES,
     "serve",
-    "ft",
   );
   expect(r.lines).toEqual([]);
   expect(r.monoLine).toBe(-1);
@@ -220,9 +182,7 @@ const HOLES: Partial<VizDotMeta>[] = [
   { shotType: null, result: null },
   { shotType: "", result: "" },
   { pointScore: null },
-  { speedMph: null },
-  { speedMph: 0 },
-  { setNumber: 0, pointScore: null, speedMph: null, shotType: null },
+  { setNumber: 0, pointScore: null, shotType: null },
   { wonBySubject: false, result: "Net", shotType: null },
   { isAce: true, result: "In", shotType: "First Serve" },
 ];
@@ -235,12 +195,12 @@ for (const [i, hole] of HOLES.entries()) {
     "rallyPosition",
   ] as const) {
     test(`readout ${i} on ${cut} never prints undefined, null or a 0 reading`, () => {
-      const r = buildReadout(meta(hole), NAMES, cut, "ft");
+      const r = buildReadout(meta(hole), NAMES, cut);
       const text = [r.title, ...r.lines].join(" | ");
       expect(text).not.toContain("undefined");
       expect(text).not.toContain("null");
       expect(text).not.toContain("NaN");
-      expect(text).not.toContain("0 mph");
+      expect(text).not.toMatch(/mph|km\/h/);
       expect(text).not.toContain("Set 0");
       // No empty or dangling-separator line ever renders.
       for (const line of r.lines) {
@@ -315,17 +275,10 @@ test.describe("buildMarkReadout (the lightbox)", () => {
     shotType: "First Serve",
     result: "In",
     isAce: false,
-    speedMph: null,
   };
   test("legend word, score, shot and the caller's where", () => {
     expect(
-      buildMarkReadout(
-        meta,
-        "won",
-        "serve",
-        "ft",
-        "Set 2 · Game 5 · You serving",
-      ),
+      buildMarkReadout(meta, "won", "serve", "Set 2 · Game 5 · You serving"),
     ).toEqual({
       title: "Point won",
       score: "30-15",
@@ -335,17 +288,19 @@ test.describe("buildMarkReadout (the lightbox)", () => {
       hint: null,
     });
   });
+  test("a measured speed is never printed beside the shot", () => {
+    expect(buildMarkReadout({ ...meta }, "won", "serve", null).shot).toBe(
+      "First serve",
+    );
+  });
   test("an ace is Ace; a miss is Out; the errors cut says Error", () => {
     expect(
-      buildMarkReadout({ ...meta, isAce: true }, "won", "serve", "ft", null)
-        .title,
+      buildMarkReadout({ ...meta, isAce: true }, "won", "serve", null).title,
     ).toBe("Ace");
     expect(
-      buildMarkReadout({ ...meta, result: "Out" }, "miss", "serve", "ft", null),
+      buildMarkReadout({ ...meta, result: "Out" }, "miss", "serve", null),
     ).toMatchObject({ title: "Out", shot: "First serve, out" });
-    expect(buildMarkReadout(meta, "lost", "errors", "ft", null).title).toBe(
-      "Error",
-    );
+    expect(buildMarkReadout(meta, "lost", "errors", null).title).toBe("Error");
   });
   test("nothing is invented: no score, no shot, no speed when unrecorded", () => {
     expect(
@@ -353,7 +308,6 @@ test.describe("buildMarkReadout (the lightbox)", () => {
         { ...meta, pointScore: null, shotType: null, result: null },
         "lost",
         "serve",
-        "ft",
         null,
       ),
     ).toEqual({
@@ -367,7 +321,7 @@ test.describe("buildMarkReadout (the lightbox)", () => {
   });
   test("the season's match line and the hint ride along as handed", () => {
     expect(
-      buildMarkReadout(meta, "won", "serve", "ft", null, {
+      buildMarkReadout(meta, "won", "serve", null, {
         match: "vs Lee · Nov 3",
         hint: markClickHint(false, true),
       }),

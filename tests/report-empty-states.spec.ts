@@ -488,7 +488,6 @@ test.describe("card anatomy empties (points exist, the measure does not)", () =>
               isPlayer1: true,
               shotType: "Volley",
               spinType: null,
-              speedMph: null,
               zone: null,
               result: "In",
               videoTime: 1,

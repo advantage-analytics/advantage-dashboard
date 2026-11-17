@@ -25,7 +25,6 @@ const dot = (
     shotType,
     result: "Out",
     isAce: false,
-    speedMph: null,
   },
 });
 
