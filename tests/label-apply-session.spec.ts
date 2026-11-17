@@ -193,6 +193,10 @@ function fakeDatabase(
     failVerify?: boolean;
     failUnverify?: boolean;
     failInsights?: boolean;
+    /** The match is Verified by Advantage before the publish. */
+    verified?: boolean;
+    /** The first insert of points fails (the write is rolled back). */
+    failFirstInsert?: boolean;
   } = {},
 ) {
   const calls: Recorded[] = [];
@@ -202,6 +206,20 @@ function fakeDatabase(
     stats: null as { forced_errors: number | null } | null,
     /** What the stat function saw of the marker, each time it ran. */
     statsRuns: [] as boolean[],
+    stamp: options.verified
+      ? {
+          verified: true as boolean,
+          verified_at: "2026-11-13T19:08:51+00:00" as string | null,
+          verified_by: "55555555-5555-4555-8555-555555555555" as string | null,
+          verified_review_id: null as string | null,
+        }
+      : {
+          verified: false as boolean,
+          verified_at: null as string | null,
+          verified_by: null as string | null,
+          verified_review_id: null as string | null,
+        },
+    insertsFailed: 0,
   };
   const calculateMatchStats = () => {
     const judged = state.errorsJudgedAt !== null;
@@ -227,9 +245,16 @@ function fakeDatabase(
           calculateMatchStats();
           return { data: null, error: null };
         case "unverify_match":
-          return options.failUnverify
-            ? { data: null, error: { message: "unverify refused" } }
-            : { data: null, error: null };
+          if (options.failUnverify) {
+            return { data: null, error: { message: "unverify refused" } };
+          }
+          state.stamp = {
+            verified: false,
+            verified_at: null,
+            verified_by: null,
+            verified_review_id: null,
+          };
+          return { data: null, error: null };
         case "verify_match":
           if (options.failVerify) {
             return { data: null, error: { message: "verify refused" } };
@@ -267,6 +292,10 @@ function fakeDatabase(
           };
         }
         if (call.op === "insert" && table === "points") {
+          if (options.failFirstInsert && state.insertsFailed === 0) {
+            state.insertsFailed += 1;
+            return { data: null, error: { message: "insert refused" } };
+          }
           const rows = call.values as Record<string, unknown>[];
           state.points.push(...rows);
           return {
@@ -279,9 +308,17 @@ function fakeDatabase(
         }
         if (call.op === "select" && table === "matches") {
           return {
-            data: { errors_judged_at: state.errorsJudgedAt },
+            data: { errors_judged_at: state.errorsJudgedAt, ...state.stamp },
             error: null,
           };
+        }
+        if (
+          call.op === "update" &&
+          table === "matches" &&
+          "verified" in (call.values as object)
+        ) {
+          state.stamp = call.values as typeof state.stamp;
+          return { data: null, error: null };
         }
         if (call.op === "update" && table === "matches") {
           if (options.failMarker) {
@@ -340,7 +377,6 @@ async function markComplete(
         plan: planApply(context),
         acceptScore: true,
         deferInsights: true,
-        unverifyFirst: true,
       }),
   });
   return { ...fake, result };
@@ -386,6 +422,48 @@ test("a badge that will not come off stops the publish before anything is writte
   expect(calls.some((c) => c.table === "verify_match")).toBe(false);
 });
 
+test("a write that is rolled back puts the earlier stamp back with the points", async () => {
+  const { state, result } = await markComplete("forced", {
+    verified: true,
+    failFirstInsert: true,
+  });
+  expect(result).toMatchObject({
+    error: expect.stringContaining(
+      "the previous version was put back, Verified by Advantage with it",
+    ),
+  });
+  // The same stamp as before, not a new one: the old points are the ones it verified.
+  expect(state.stamp).toEqual({
+    verified: true,
+    verified_at: "2026-11-13T19:08:51+00:00",
+    verified_by: "55555555-5555-4555-8555-555555555555",
+    verified_review_id: null,
+  });
+});
+
+test("a rolled-back write on a match that was never verified leaves it unverified", async () => {
+  const { state, result } = await markComplete("forced", {
+    failFirstInsert: true,
+  });
+  expect(result).toMatchObject({
+    error: expect.stringContaining(
+      "Not published — the write failed and the previous version was put back: ",
+    ),
+  });
+  expect(state.stamp.verified).toBe(false);
+});
+
+test("a verified match republished: badge off during the write, re-granted by verify_match", async () => {
+  const { calls, state, result } = await markComplete("forced", {
+    verified: true,
+  });
+  expect(result).toMatchObject({ ok: true, status: "complete" });
+  expect(calls.some((c) => c.table === "unverify_match")).toBe(true);
+  // The fake's verify_match does not write the stamp; the unverify did run.
+  expect(state.stamp.verified).toBe(false);
+  expect(calls.some((c) => c.table === "verify_match")).toBe(true);
+});
+
 test("a refusal before the write never touches the badge", async () => {
   const context = sessionContext("forced");
   context.session.points = [];
@@ -394,17 +472,6 @@ test("a refusal before the write never touches the badge", async () => {
     error: expect.stringContaining("there are no points to write"),
   });
   expect(calls.some((c) => c.table === "unverify_match")).toBe(false);
-});
-
-test("Mark complete's own publish asks for unverifyFirst", () => {
-  const source = readFileSync(
-    "src/lib/services/labels/apply-session.ts",
-    "utf8",
-  );
-  const fn = source.slice(
-    source.indexOf("export async function publishLabelSession"),
-  );
-  expect(fn).toContain("unverifyFirst: true");
 });
 
 test("publish with every error marked: points, stats, then verify with p_errors_judged — forced_errors counted", async () => {

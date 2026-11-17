@@ -366,6 +366,11 @@ async function main() {
     `\nbackup: ${result.backupKey}${localFile ? ` (and ${localFile})` : ""}`,
   );
   console.log(`wrote ${result.points} points and ${result.shots} shots`);
+  // publishPlanned took the badge off before the write; only a publish from
+  // the console's Mark complete verifies these points again.
+  console.log(
+    "Verified by Advantage is off: Reopen and Mark complete in the console to verify these points.",
+  );
   console.log(
     `re-linked ${result.bookmarksRelinked} of ${published.bookmarks.length} bookmark(s)`,
   );

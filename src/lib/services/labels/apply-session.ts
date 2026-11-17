@@ -416,13 +416,61 @@ export async function recompute(
   return { insightsRequested: insights.ok };
 }
 
+/** The columns `verify_match` writes, as the match holds them now. */
+interface VerificationStamp {
+  verified: boolean | null;
+  verified_at: string | null;
+  verified_by: string | null;
+  verified_review_id: string | null;
+}
+
+/** The match's Verified by Advantage stamp, or null when it cannot be read. */
+async function readVerificationStamp(
+  db: AdminClient,
+  matchId: string,
+): Promise<VerificationStamp | null> {
+  const { data, error } = await db
+    .from("matches")
+    .select("verified, verified_at, verified_by, verified_review_id")
+    .eq("id", matchId)
+    .maybeSingle<VerificationStamp>();
+  return error ? null : (data ?? null);
+}
+
+/**
+ * Put an earlier stamp back after a rolled-back write: the points it
+ * verified are the ones on the match again. Service role, which
+ * `matches_guard_verification` lets through. What the refusal adds to its
+ * sentence: how the badge stands now, or nothing when there was none.
+ */
+async function restoreVerificationStamp(
+  db: AdminClient,
+  matchId: string,
+  stamp: VerificationStamp | null,
+): Promise<string> {
+  if (stamp && !stamp.verified) return "";
+  if (stamp?.verified && stamp.verified_at) {
+    const { error } = await db
+      .from("matches")
+      .update({
+        verified: true,
+        verified_at: stamp.verified_at,
+        verified_by: stamp.verified_by,
+        verified_review_id: stamp.verified_review_id,
+      })
+      .eq("id", matchId);
+    if (!error) return ", Verified by Advantage with it";
+  }
+  return ", but Verified by Advantage stays off until you publish again";
+}
+
 /**
  * `matches.errors_judged_at`, set before the stats run so `calculate_match_stats`
  * counts `forced_errors` whatever then happens to `verify_match`, and cleared
- * when a reopened match is republished with an unmarked error. Mark complete's
- * publish has already taken Verified by Advantage off (`unverifyFirst`), so
- * the marker changes nothing a player sees until `verify_match` puts the badge
- * back: `error-split.ts` needs `verified` and the marker together.
+ * when a reopened match is republished with an unmarked error. The publish has
+ * already taken Verified by Advantage off, so the marker changes nothing a
+ * player sees until `verify_match` puts the badge back: `error-split.ts` needs
+ * `verified` and the marker together.
  */
 async function setErrorsJudged(
   db: AdminClient,
@@ -538,15 +586,6 @@ export async function publishPlanned(params: {
    * only `verify_match` sets, and that runs after this returns.
    */
   deferInsights?: boolean;
-  /**
-   * Take Verified by Advantage off (`unverify_match`) just before the old
-   * points are deleted, and refuse to publish if that fails. Mark complete
-   * sets it and re-verifies after, so the badge is never on points nobody
-   * verified — whatever stops the publish part-way, a crash or a timeout
-   * included. A refusal before this point leaves the badge as it was.
-   * `scripts/label-apply.ts` leaves it unset: it never touched the badge.
-   */
-  unverifyFirst?: boolean;
 }): Promise<PublishResult> {
   const { db, context, plan, acceptScore } = params;
   const { session } = context;
@@ -621,16 +660,21 @@ export async function publishPlanned(params: {
   const backupKey = await storeBackup(db, backup);
   params.onBackup?.(backup);
 
-  if (params.unverifyFirst) {
-    const { error: unverifyError } = await db.rpc("unverify_match", {
-      p_match_id: matchId,
-    });
-    if (unverifyError) {
-      return {
-        ok: false,
-        error: `Not published — Verified by Advantage could not be taken off the match first, so nothing was written: ${unverifyError.message}`,
-      };
-    }
+  // Verified by Advantage comes off just before the old points go, and only
+  // `verify_match` (Mark complete, after this returns) puts it back, so the
+  // badge is never on points nobody verified — whatever stops the publish
+  // part-way, a crash or a timeout included. A refusal above leaves it as it
+  // was; a failed unverify refuses here, before anything is written. The
+  // stamp is read first so a write that is rolled back can put it back too.
+  const stamp = await readVerificationStamp(db, matchId);
+  const { error: unverifyError } = await db.rpc("unverify_match", {
+    p_match_id: matchId,
+  });
+  if (unverifyError) {
+    return {
+      ok: false,
+      error: `Not published — Verified by Advantage could not be taken off the match first, so nothing was written: ${unverifyError.message}`,
+    };
   }
 
   let written: { idByNumber: Map<number, string>; shots: number };
@@ -646,9 +690,11 @@ export async function publishPlanned(params: {
     );
   } catch (err) {
     await restoreRows(db, backup);
+    // The old points are back, so is the stamp that verified them.
+    const restamped = await restoreVerificationStamp(db, matchId, stamp);
     return {
       ok: false,
-      error: `Not published — the write failed and the previous version was put back: ${err instanceof Error ? err.message : String(err)}`,
+      error: `Not published — the write failed and the previous version was put back${restamped}: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
 
@@ -712,6 +758,5 @@ export async function publishLabelSession(params: {
     plan: planApply(context),
     acceptScore: params.acceptScore || !context.session.marksEnabled,
     deferInsights: true,
-    unverifyFirst: true,
   });
 }

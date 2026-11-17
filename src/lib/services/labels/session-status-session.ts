@@ -39,7 +39,7 @@
  * verify is a failed Complete: the lease is released and Complete again
  * publishes and verifies again. The publish itself takes an earlier Verified
  * by Advantage off (a Reopen keeps it) just before it deletes the old points
- * (`unverifyFirst`, apply-session.ts), so whatever stops it after that — a
+ * (`publishPlanned`, apply-session.ts), so whatever stops it after that — a
  * failed rebuild, a failed verify, a crash or a timeout — leaves the match
  * unverified, never verified over points nobody checked; only `verify_match`
  * puts the badge back. `scripts/label-apply.ts` publishes by hand
