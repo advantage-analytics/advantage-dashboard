@@ -404,7 +404,7 @@ export function MatchStep() {
       parsingState,
       error,
     },
-    view: { scoreCheckVisible, oneSetSettled, trimSelected },
+    view: { scoreCheckVisible, oneSetSettled, trimSelected, flaggedMissing },
     actions: { dismissScoreCheck, chooseOneSet, undoOneSet },
     meta: { workspaceKind, preset },
   } = useUploadWizard();
@@ -583,6 +583,7 @@ export function MatchStep() {
       onOneSet={chooseOneSet}
       onUndoOneSet={undoOneSet}
       video={video}
+      flaggedMissing={flaggedMissing}
     />
   );
 }

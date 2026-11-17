@@ -73,7 +73,6 @@ import { YouPill } from "@/components/ui/you-pill";
 import { Checkbox } from "@/components/ui/checkbox";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { advField } from "@/lib/ui/adv-field";
 import { normalizedPersonName } from "@/lib/data/person-name";
@@ -167,6 +166,12 @@ import {
   styleSaveOffer,
   type SavedStyle,
 } from "./style-save-offer";
+import {
+  asBackhand,
+  asHand,
+  opponentStyleOnNaming,
+  type OpponentStyle,
+} from "./opponent-style";
 
 export interface DetailsStepContentProps {
   formData: FormData;
@@ -249,6 +254,22 @@ export interface DetailsStepContentProps {
    * import has no video, and a restored draft has lost its File.
    */
   video?: DetailsVideo | null;
+  /**
+   * The required answers Continue was pressed without, joined by "|" (the
+   * labels of `collectMatchCompletionRequirements()`), or "" before it has
+   * been. A string rather than an array so this memo()'d step compares it by
+   * value. Each named field draws its own red underline and note.
+   */
+  flaggedMissing?: string;
+}
+
+/** A required field's "still missing" line, under the field, in form red. */
+function MissingNote({ children }: { children: string }) {
+  return (
+    <span className="text-[11px] leading-[1.4] text-[var(--error)]">
+      {children}
+    </span>
+  );
 }
 
 /** What the Video section draws: the picked file and what the probe read. */
@@ -998,7 +1019,12 @@ function DetailsStepContentImpl({
   onOneSet,
   onUndoOneSet,
   video = null,
+  flaggedMissing = "",
 }: DetailsStepContentProps) {
+  const flagged = useMemo(
+    () => new Set(flaggedMissing ? flaggedMissing.split("|") : []),
+    [flaggedMissing],
+  );
   const scoreRef = useRef<HTMLDivElement>(null);
   // A preset IS the line it came from; the name is what reads at the use
   // sites, several of which pair it with `attachedLine`.
@@ -1269,6 +1295,8 @@ function DetailsStepContentImpl({
   const [namingOpponent, setNamingOpponent] = useState(
     !formData.opponentName.trim(),
   );
+  const playersRef = useRef<HTMLDivElement>(null);
+  const opponentMenuRef = useRef<HTMLDivElement>(null);
 
   const opponentHand = formData.opponentHand as Hand | undefined;
   const opponentBackhand = formData.opponentBackhand as Backhand | undefined;
@@ -1322,28 +1350,59 @@ function DetailsStepContentImpl({
   const teamFromLine =
     opponentTeamIsEmpty(currentTeam) && lineTeamSchool !== null;
 
+  // Hand and Backhand are open before a name exists, so answers given then
+  // belong to the person about to be named (`opponent-style.ts`). A form that
+  // already names someone holds that person's answers, which never carry over.
+  const enteredBeforeName =
+    !formData.opponentName.trim() && formData.opponentStyleSource === undefined;
+  const applyOpponentStyle = useCallback(
+    (remembered?: { hand?: unknown; backhand?: unknown }) => {
+      const style = opponentStyleOnNaming({
+        current: { hand: opponentHand, backhand: opponentBackhand },
+        enteredBeforeName,
+        remembered,
+      });
+      onInputChange("opponentHand", style.hand);
+      onInputChange("opponentBackhand", style.backhand);
+      onInputChange("opponentStyleSource", style.source);
+      return style;
+    },
+    [opponentHand, opponentBackhand, enteredBeforeName, onInputChange],
+  );
+
+  // After a name is settled from the keyboard or the menu, the next blank
+  // answer on that row takes the focus — a keyboard user fills the opponent
+  // without reaching for the mouse. Leaving the field by clicking elsewhere
+  // does not call this: the focus is already where they put it.
+  const focusNextOpponentAnswer = useCallback(
+    (style: Pick<OpponentStyle, "hand" | "backhand">) => {
+      const target = !style.hand
+        ? "Opponent hand"
+        : !style.backhand
+          ? "Opponent backhand"
+          : null;
+      if (!target) return;
+      requestAnimationFrame(() => {
+        playersRef.current
+          ?.querySelector<HTMLElement>(`[aria-label="${target}"]`)
+          ?.focus();
+      });
+    },
+    [],
+  );
+
   const pickPlayed = useCallback(
     (row: OpponentPlayed) => {
       onInputChange("opponentName", row.name);
       onInputChange("opponentSource", "history");
       onInputChange("opponentPlayerId", row.playerId);
       rememberTeam(row);
-      const hand =
-        row.hand === "right" || row.hand === "left" ? row.hand : undefined;
-      const backhand =
-        row.backhand === "one-handed" || row.backhand === "two-handed"
-          ? row.backhand
-          : undefined;
-      onInputChange("opponentHand", hand);
-      onInputChange("opponentBackhand", backhand);
-      onInputChange(
-        "opponentStyleSource",
-        hand || backhand ? "history" : undefined,
-      );
+      const style = applyOpponentStyle(row);
       setNamingOpponent(false);
       setNameOpen(false);
+      return style;
     },
-    [onInputChange, rememberTeam],
+    [onInputChange, rememberTeam, applyOpponentStyle],
   );
 
   const pickRoster = useCallback(
@@ -1356,38 +1415,34 @@ function DetailsStepContentImpl({
         (p) => normalizedPersonName(p.name) === normalizedPersonName(row.name),
       );
       rememberTeam(seen);
-      const hand =
-        seen?.hand === "right" || seen?.hand === "left" ? seen.hand : undefined;
-      const backhand =
-        seen?.backhand === "one-handed" || seen?.backhand === "two-handed"
-          ? seen.backhand
-          : undefined;
-      onInputChange("opponentHand", hand);
-      onInputChange("opponentBackhand", backhand);
-      onInputChange(
-        "opponentStyleSource",
-        hand || backhand ? "history" : undefined,
-      );
+      const style = applyOpponentStyle(seen);
       setNamingOpponent(false);
       setNameOpen(false);
+      return style;
     },
-    [onInputChange, played, rememberTeam],
+    [onInputChange, played, rememberTeam, applyOpponentStyle],
   );
 
   // A teammate: their roster profile is the record, style included, and their
   // team is this program — the "their team" field is not asked (`teammates.ts`).
   const pickTeammate = useCallback(
     (row: RosterMenuPlayer) => {
-      for (const [field, value] of Object.entries(teammatePick(row)))
+      const fields = teammatePick(row);
+      for (const [field, value] of Object.entries(fields))
         onInputChange(field as keyof FormData, value);
       setNamingOpponent(false);
       setNameOpen(false);
+      return {
+        hand: asHand(fields.opponentHand),
+        backhand: asBackhand(fields.opponentBackhand),
+      };
     },
     [onInputChange],
   );
 
+  // Returns the style it settled on at once; the dual pool save runs behind.
   const createOpponent = useCallback(
-    async (name: string) => {
+    (name: string) => {
       onInputChange("opponentName", name);
       onInputChange("opponentSource", "new");
       onInputChange("opponentPlayerId", null);
@@ -1399,23 +1454,22 @@ function DetailsStepContentImpl({
           ? played.find((p) => normalizedPersonName(p.name) === typedKey)
           : undefined,
       );
-      onInputChange("opponentHand", undefined);
-      onInputChange("opponentBackhand", undefined);
-      onInputChange("opponentStyleSource", undefined);
+      const style = applyOpponentStyle();
       setNamingOpponent(false);
       setNameOpen(false);
       setSavedSchool(null);
-      if (inDual && lineProgramKey) {
-        // A program-scoped player, saved to their roster — best-effort: the
-        // pool refuses where that program manages its own roster, and the
-        // typed name stands either way.
-        if (admin) return;
-        const result = await saveOpponentPlayer({
+      // A program-scoped player, saved to their roster — best-effort: the
+      // pool refuses where that program manages its own roster, and the
+      // typed name stands either way.
+      if (inDual && lineProgramKey && !admin) {
+        void saveOpponentPlayer({
           opponentProgramKey: lineProgramKey,
           name,
+        }).then((result) => {
+          if (result.saved) setSavedSchool(lineSchool);
         });
-        if (result.saved) setSavedSchool(lineSchool);
       }
+      return style;
     },
     [
       inDual,
@@ -1425,6 +1479,7 @@ function DetailsStepContentImpl({
       admin,
       played,
       rememberTeam,
+      applyOpponentStyle,
     ],
   );
 
@@ -1468,6 +1523,55 @@ function DetailsStepContentImpl({
     rosterShown.some((p) => normalizedPersonName(p.name) === needle) ||
     teammatesShown.some((p) => normalizedPersonName(p.name) === needle);
   const isTeammate = opponentIsTeammate(formData);
+
+  /**
+   * Settles whatever is typed in the opponent field, the same way Enter
+   * always has: an exact roster, teammate or played name is that person;
+   * anything else is someone new. Leaving the field does this too — a typed
+   * name used to sit unsaved until Enter, with Hand and Backhand locked
+   * beside it. Returns the style it settled on, or null when nothing was
+   * typed.
+   */
+  const commitTypedOpponent = useCallback((): Pick<
+    OpponentStyle,
+    "hand" | "backhand"
+  > | null => {
+    const term = nameTerm.trim();
+    if (!term) return null;
+    const key = normalizedPersonName(term);
+    // "Change", then away without changing it: the same person, kept as is —
+    // settling them again would clear the answers already given for them.
+    if (key === normalizedPersonName(formData.opponentName)) {
+      setNamingOpponent(false);
+      setNameOpen(false);
+      return { hand: opponentHand, backhand: opponentBackhand };
+    }
+    const hitRoster = rosterShown.find(
+      (p) => normalizedPersonName(p.name) === key,
+    );
+    if (hitRoster) return pickRoster(hitRoster);
+    const hitTeammate = teammatesShown.find(
+      (p) => normalizedPersonName(p.name) === key,
+    );
+    if (hitTeammate) return pickTeammate(hitTeammate);
+    const hitPlayed = playedShown.find(
+      (p) => normalizedPersonName(p.name) === key,
+    );
+    if (hitPlayed) return pickPlayed(hitPlayed);
+    return createOpponent(term);
+  }, [
+    nameTerm,
+    formData.opponentName,
+    opponentHand,
+    opponentBackhand,
+    rosterShown,
+    teammatesShown,
+    playedShown,
+    pickRoster,
+    pickTeammate,
+    pickPlayed,
+    createOpponent,
+  ]);
 
   // The name is read-only here: in a team flow with no line pinned it was
   // picked on step 1, and SubjectBar's "Not <name>?" is where it changes. Say
@@ -1688,7 +1792,10 @@ function DetailsStepContentImpl({
             once; a narrow column stacks each row and brings its labels back.
             Anything a row says beyond its three answers lives under the name,
             never in a fourth column that would knock the grid out of line. */}
-        <div className="flex flex-col gap-6 sm:grid sm:grid-cols-[260px_minmax(0,1fr)_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-4">
+        <div
+          ref={playersRef}
+          className="flex flex-col gap-6 sm:grid sm:grid-cols-[260px_minmax(0,1fr)_minmax(0,1fr)] sm:gap-x-5 sm:gap-y-4"
+        >
           <div aria-hidden="true" className="hidden sm:contents">
             <span />
             <FieldCaption label="Hand" required />
@@ -1721,6 +1828,7 @@ function DetailsStepContentImpl({
                   variant="underline"
                   value={playerHand}
                   placeholder="Hand"
+                  invalid={flagged.has("player hand")}
                   options={HAND_OPTIONS}
                   onChange={(v) => {
                     onInputChange("playerHand", v);
@@ -1728,6 +1836,9 @@ function DetailsStepContentImpl({
                     setSavingProfile("idle");
                   }}
                 />
+                {flagged.has("player hand") && (
+                  <MissingNote>Pick a hand to continue</MissingNote>
+                )}
               </Cell>
               <Cell
                 label="Backhand"
@@ -1740,6 +1851,7 @@ function DetailsStepContentImpl({
                   variant="underline"
                   value={playerBackhand}
                   placeholder="Backhand"
+                  invalid={flagged.has("player backhand")}
                   options={BACKHAND_OPTIONS}
                   onChange={(v) => {
                     onInputChange("playerBackhand", v);
@@ -1747,6 +1859,9 @@ function DetailsStepContentImpl({
                     setSavingProfile("idle");
                   }}
                 />
+                {flagged.has("player backhand") && (
+                  <MissingNote>Pick a backhand to continue</MissingNote>
+                )}
               </Cell>
             </div>
             {/* Directly under the two answers it saves, in the one quiet blue a
@@ -1831,32 +1946,36 @@ function DetailsStepContentImpl({
                       onKeyDown={(e) => {
                         if (e.key !== "Enter") return;
                         e.preventDefault();
-                        const term = nameTerm.trim();
-                        if (!term) return;
-                        const hitRoster = rosterShown.find(
-                          (p) => normalizedPersonName(p.name) === needle,
-                        );
-                        const hitTeammate = teammatesShown.find(
-                          (p) => normalizedPersonName(p.name) === needle,
-                        );
-                        const hitPlayed = playedShown.find(
-                          (p) => normalizedPersonName(p.name) === needle,
-                        );
-                        if (hitRoster) pickRoster(hitRoster);
-                        else if (hitTeammate) pickTeammate(hitTeammate);
-                        else if (hitPlayed) pickPlayed(hitPlayed);
-                        else void createOpponent(term);
+                        const style = commitTypedOpponent();
+                        if (style) focusNextOpponentAnswer(style);
                       }}
+                      // Leaving the field settles what was typed — unless the
+                      // focus went into the menu, where a row is being picked.
+                      onBlur={(e) => {
+                        if (
+                          e.relatedTarget instanceof Node &&
+                          opponentMenuRef.current?.contains(e.relatedTarget)
+                        )
+                          return;
+                        commitTypedOpponent();
+                      }}
+                      aria-invalid={flagged.has("opponent") || undefined}
                       className={cn(
                         advField("underline"),
                         "w-full outline-none",
+                        flagged.has("opponent") && "border-[var(--error)]",
                       )}
                     />
                   </PopoverAnchor>
                   <PopoverContent
+                    ref={opponentMenuRef}
                     align="start"
                     sideOffset={6}
                     onOpenAutoFocus={(e) => e.preventDefault()}
+                    // A press on a row keeps the focus in the field, so the
+                    // field's blur never settles the typed text first and
+                    // swallows the pick.
+                    onMouseDown={(e) => e.preventDefault()}
                     className={cn(floatMenuCls, OPPONENT_MENU_WIDTH_CLS)}
                   >
                     <OpponentMenuBody
@@ -1879,18 +1998,31 @@ function DetailsStepContentImpl({
                       }
                       nameTerm={nameTerm.trim()}
                       exactKnown={exactKnown}
-                      onPickRoster={pickRoster}
-                      onPickPlayed={pickPlayed}
-                      onPickTeammate={pickTeammate}
-                      onCreate={(name) => void createOpponent(name)}
+                      onPickRoster={(row) =>
+                        focusNextOpponentAnswer(pickRoster(row))
+                      }
+                      onPickPlayed={(row) =>
+                        focusNextOpponentAnswer(pickPlayed(row))
+                      }
+                      onPickTeammate={(row) =>
+                        focusNextOpponentAnswer(pickTeammate(row))
+                      }
+                      onCreate={(name) =>
+                        focusNextOpponentAnswer(createOpponent(name))
+                      }
                     />
                   </PopoverContent>
                 </Popover>
-                {/* The selects beside it wait on the name; say so where the
-                  eye already is, not in a column of its own. */}
-                <span className="inline-flex items-center gap-1.5 text-[11px] text-[var(--ink-600)]">
-                  <Kbd size="sm">enter</Kbd> to add them
-                </span>
+                {/* Under the field, where the eye already is: a typed name
+                    does not wait for Enter any more, so neither does this. */}
+                {flagged.has("opponent") ? (
+                  <MissingNote>Name the opponent to continue</MissingNote>
+                ) : (
+                  <span className="text-[11px] text-[var(--ink-600)]">
+                    Pick from the list, or type a new name. It saves when you
+                    move on.
+                  </span>
+                )}
               </span>
             ) : (
               <OpponentReadBack
@@ -1948,13 +2080,19 @@ function DetailsStepContentImpl({
                   variant="underline"
                   value={opponentHand}
                   placeholder="Hand"
-                  disabled={namingOpponent}
+                  invalid={flagged.has("opponent hand")}
                   options={HAND_OPTIONS}
                   onChange={(v) => {
+                    // A name still in the field is theirs: settle it first,
+                    // so this answer lands on the person it was given for.
+                    if (namingOpponent) commitTypedOpponent();
                     onInputChange("opponentHand", v);
                     onInputChange("opponentStyleSource", undefined);
                   }}
                 />
+                {flagged.has("opponent hand") && (
+                  <MissingNote>Pick their hand to continue</MissingNote>
+                )}
               </Cell>
               <Cell
                 label="Backhand"
@@ -1967,20 +2105,19 @@ function DetailsStepContentImpl({
                   variant="underline"
                   value={opponentBackhand}
                   placeholder="Backhand"
-                  disabled={namingOpponent}
+                  invalid={flagged.has("opponent backhand")}
                   options={BACKHAND_OPTIONS}
                   onChange={(v) => {
+                    if (namingOpponent) commitTypedOpponent();
                     onInputChange("opponentBackhand", v);
                     onInputChange("opponentStyleSource", undefined);
                   }}
                 />
+                {flagged.has("opponent backhand") && (
+                  <MissingNote>Pick their backhand to continue</MissingNote>
+                )}
               </Cell>
             </div>
-            {namingOpponent && (
-              <span className="text-[11px] text-[var(--ink-600)] sm:col-span-2 sm:col-start-2">
-                Hand and backhand open once the opponent is added.
-              </span>
-            )}
           </div>
         </div>
 

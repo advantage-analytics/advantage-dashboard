@@ -5,7 +5,7 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { extraHoursWord } from "@/lib/data/usage-format";
 import { cn } from "@/lib/utils";
 import { FooterMeter, SplitReadout } from "./FooterMeter";
-import { jumpToMissingField, MissingFieldsPill } from "./MissingFieldsPill";
+import { MissingFieldsPill } from "./MissingFieldsPill";
 import { useUploadWizard } from "./UploadWizardProvider";
 import { focusRingCls } from "./styles";
 import { controlName } from "@/lib/ui/control-name";
@@ -98,7 +98,7 @@ export function WizardFooterStatus() {
   const {
     wizard: { step },
     view: { stepBusy, gatedByMissing, missing },
-    meta: { contentRef },
+    actions: { showMissing },
   } = useUploadWizard();
   const workspaces = useWorkspace();
 
@@ -111,12 +111,7 @@ export function WizardFooterStatus() {
   }
 
   if (gatedByMissing) {
-    return (
-      <MissingFieldsPill
-        labels={missing.labels}
-        onJump={() => jumpToMissingField(contentRef.current, missing.labels)}
-      />
-    );
+    return <MissingFieldsPill labels={missing.labels} onJump={showMissing} />;
   }
 
   // Only when there is a choice to get wrong. `program_id` on the row follows
