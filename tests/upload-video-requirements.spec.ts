@@ -22,6 +22,8 @@ import {
   effectiveFps,
   evaluateVideoProbe,
   formatProbeFps,
+  UNREADABLE_VIDEO_MESSAGE,
+  validateSplitStepVideo,
 } from "@/lib/services/upload/validators/splitstep-validator";
 import { videoExtensionFor } from "@/lib/services/splitstep/object-keys";
 import {
@@ -212,13 +214,21 @@ test.describe("resolution boundary — the guide's 1080p minimum", () => {
     expect(result.error).not.toMatch(/splitstep|swingvision|computer vision/i);
   });
 
-  test("an odd size quotes its dimensions, so a near miss never reads as 1080p", () => {
-    const result = evaluateVideoProbe(
-      probe({ width: MIN_VIDEO_WIDTH - 1, height: MIN_VIDEO_HEIGHT }),
-    );
-    expect(result.error).toContain(
-      `${MIN_VIDEO_WIDTH - 1}×${MIN_VIDEO_HEIGHT}`,
-    );
+  test("an odd size quotes its dimensions against the full 1920×1080", () => {
+    // 1080 tall but too narrow: "We need 1080p" would read as a pass.
+    for (const [width, height] of [
+      [MIN_VIDEO_WIDTH - 1, MIN_VIDEO_HEIGHT],
+      [1440, 1080],
+      [1080, 1920],
+    ]) {
+      const result = evaluateVideoProbe(probe({ width, height }));
+      expect(result.reason).toBe("resolution");
+      expect(result.error).toContain(`This video is ${width}×${height}.`);
+      expect(result.error).toContain(
+        `We need ${MIN_VIDEO_WIDTH}×${MIN_VIDEO_HEIGHT} or higher.`,
+      );
+      expect(result.error).not.toContain("We need 1080p");
+    }
   });
 });
 
@@ -447,6 +457,23 @@ test.describe("unknown metadata stays distinct from a known violation", () => {
     );
     expect(result.success).toBe(false);
     expect(result.error).toContain("1080p");
+  });
+});
+
+test.describe("an unreadable file", () => {
+  test("shows one plain sentence but keeps the probe's error for analytics", async () => {
+    // Outside a browser the probe cannot open anything and the decode
+    // deferral answers "no", so a labelled MP4 reaches the refusal.
+    const file = new File([new Uint8Array(16)], "match.mp4", {
+      type: "video/mp4",
+    });
+    const result = await validateSplitStepVideo(file);
+    expect(result.success).toBe(false);
+    expect(result.reason).toBe("unreadable");
+    expect(result.error).toBe(UNREADABLE_VIDEO_MESSAGE);
+    // What upload_failed reports: the real failure, not the fixed sentence.
+    expect(result.cause).toBeTruthy();
+    expect(result.cause).not.toBe(UNREADABLE_VIDEO_MESSAGE);
   });
 });
 

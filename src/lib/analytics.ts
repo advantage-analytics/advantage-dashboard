@@ -90,7 +90,8 @@ export interface AnalyticsEvents {
     step: string;
     /**
      * Why the picker refused the video, as a stable slug to break down by —
-     * `error_message` is the sentence and moves with every copy edit. Null
+     * `error_message` is the sentence and moves with every copy edit (for an
+     * unreadable file, the probe's own error instead of the fixed one). Null
      * for a failure after the picker (transfer, submit, save), where `step`
      * already says what failed.
      */

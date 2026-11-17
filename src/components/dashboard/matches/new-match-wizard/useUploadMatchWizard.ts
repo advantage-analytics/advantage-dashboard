@@ -38,7 +38,6 @@ import {
   ValidationResult,
 } from "@/lib/services/upload";
 import { getParser, hasParser } from "@/lib/services/upload/parsers";
-import { UNREADABLE_VIDEO_MESSAGE } from "@/lib/services/upload/validators/splitstep-validator";
 import {
   DEFAULT_PROVIDER_ID,
   resolveStartingProvider,
@@ -2706,7 +2705,8 @@ export function useUploadMatchWizard({
           trackVideoRejected(
             "video_validation",
             result.reason ?? null,
-            result.error || "refused",
+            // The cause where the sentence hides it (an unreadable file).
+            result.cause || result.error || "refused",
             file,
             result.details?.video,
           );
@@ -2774,10 +2774,14 @@ export function useUploadMatchWizard({
       } catch (err) {
         if (generation !== fileGenerationRef.current) return;
         trackVideoRejected("video_read", "unreadable", err, file);
-        // The validator's own sentence for an unreadable file. The exception
-        // ("The operation was aborted.") names nothing the person can do; it
-        // still reaches `upload_failed` as `error_message` above.
-        setUploadError(UNREADABLE_VIDEO_MESSAGE);
+        // The exception ("The operation was aborted.") names nothing the
+        // person can do; it still reaches `upload_failed` as `error_message`
+        // above. Worded like the SplitStep validator's own unreadable refusal,
+        // but kept here: this hook is written against provider kind, so it
+        // does not import a vendor's validator.
+        setUploadError(
+          "We couldn't open this video. It may be damaged or still downloading. Download it again and add the new copy.",
+        );
       } finally {
         if (generation === fileGenerationRef.current) setIsProbing(false);
       }

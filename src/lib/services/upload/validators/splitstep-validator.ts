@@ -188,15 +188,22 @@ export function formatProbeFps(probe: VideoProbe): string | null {
 }
 
 /**
- * How a refused resolution is named: "720p" for the heights people know by
- * that name, the raw dimensions otherwise ("1919×1080" would read as a pass
- * if it said "1080p").
+ * How a refused resolution is named, and the bar it is held to. A height
+ * people know by name reads "720p" against "1080p". Anything else — 1440×1080,
+ * a portrait 1080×1920, 1919×1080 — quotes its dimensions against the full
+ * 1920×1080, because "1080p" beside a video that is 1080 tall reads as a pass.
  */
 const NAMED_HEIGHTS = new Set([360, 480, 540, 720]);
-function resolutionLabel(width: number, height: number): string {
+function resolutionShortfall(
+  width: number,
+  height: number,
+): { label: string; need: string } {
   return NAMED_HEIGHTS.has(height) && width > height
-    ? `${height}p`
-    : `${width}×${height}`;
+    ? { label: `${height}p`, need: "1080p" }
+    : {
+        label: `${width}×${height}`,
+        need: `${MIN_VIDEO_WIDTH}×${MIN_VIDEO_HEIGHT}`,
+      };
 }
 
 /**
@@ -213,12 +220,13 @@ export function evaluateVideoProbe(probe: VideoProbe): ValidationResult {
   const details: ValidationResult["details"] = { video: probe };
 
   if (probe.width < MIN_VIDEO_WIDTH || probe.height < MIN_VIDEO_HEIGHT) {
+    const { label, need } = resolutionShortfall(probe.width, probe.height);
     return {
       success: false,
       reason: "resolution",
       // The PlaySight/CIZR clause is here because their streams are where
       // 720p files come from; the original download is 1080p.
-      error: `This video is ${resolutionLabel(probe.width, probe.height)}. We need 1080p or higher. Record or export at 1080p. From PlaySight or CIZR, download the original file, not the stream.`,
+      error: `This video is ${label}. We need ${need} or higher. Record or export at 1080p. From PlaySight or CIZR, download the original file, not the stream.`,
       details,
     };
   }
@@ -386,7 +394,7 @@ export async function validateSplitStepVideo(
   let probe: VideoProbe;
   try {
     probe = await probeVideo(file);
-  } catch {
+  } catch (err) {
     // A probe failure is not the same fact as a bad file. `probeVideo` builds
     // an `HTMLVideoElement`, so it can only read what THIS BROWSER decodes —
     // and Chrome and Safari decode neither .avi nor .mkv, both of which the
@@ -426,6 +434,9 @@ export async function validateSplitStepVideo(
       success: false,
       reason: "unreadable",
       error: UNREADABLE_VIDEO_MESSAGE,
+      // The sentence above is the same for every unreadable file; the probe's
+      // own message is what tells a bad codec from a half-finished download.
+      cause: err instanceof Error ? err.message : String(err),
     };
   }
 

@@ -21,7 +21,6 @@ export type ProviderId = "swing-vision" | "atp-tour" | "splitstep";
  */
 export type ProviderKind = "import" | "processing";
 
-/** File validation result */
 /**
  * Why a video was refused before upload, as a stable slug.
  *
@@ -41,11 +40,18 @@ export type VideoRejectionReason =
   | "too_large"
   | "unreadable";
 
+/** File validation result */
 export interface ValidationResult {
   success: boolean;
   error?: string;
   /** Set on every video refusal (`success: false`); absent otherwise. */
   reason?: VideoRejectionReason;
+  /**
+   * What actually went wrong, when `error` is a fixed sentence that hides it
+   * (an unreadable file: codec, no video track, timeout). For `upload_failed`
+   * only — never shown to the person.
+   */
+  cause?: string;
   /**
    * Non-fatal findings the user should see but which do not block submission —
    * e.g. a frame rate the browser could not determine, or one that meets the
