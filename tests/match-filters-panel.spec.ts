@@ -120,7 +120,7 @@ function pillLabels(html: string): string[] {
 }
 
 test.describe("FiltersPanel markup", () => {
-  test("title, Clear all, and sections in order Score, Serve, Return, Result, Custom, Then", () => {
+  test("title, Clear all, and sections in order Score, Serve, Return, Result, Net, Custom, Then", () => {
     const html = render(fullAvailability());
     // The dropdown trigger's look: the SlidersHorizontal glyph, then the word.
     expect(html).toMatch(
@@ -134,6 +134,7 @@ test.describe("FiltersPanel markup", () => {
       "serve",
       "return",
       "result",
+      "net",
       "custom",
       "then",
     ]);
@@ -142,6 +143,7 @@ test.describe("FiltersPanel markup", () => {
       "Serve",
       "Return",
       "Result",
+      "Net",
       "Custom",
       "Then",
     ]);
@@ -355,6 +357,7 @@ test.describe("FiltersPanel markup", () => {
       Serve: "false",
       Return: "false",
       Result: "true",
+      Net: "false",
       Custom: "false",
       Then: "false",
     });
@@ -537,6 +540,7 @@ test.describe("FiltersPanel header, summaries and footer", () => {
       Serve: "Rudy Quan · second serve",
       Return: "Federico Gomez returning",
       Result: "Any",
+      Net: "Any",
       Custom: "Any",
       Then: "Any",
     });

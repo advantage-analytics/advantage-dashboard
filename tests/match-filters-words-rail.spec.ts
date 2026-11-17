@@ -145,6 +145,23 @@ test.describe("applied-words", () => {
     expect(appliedPhrases(EMPTY_MATCH_FILTERS, NAMES)).toEqual([]);
   });
 
+  test("Net reads who came in, then how, after Result", () => {
+    expect(
+      appliedPhrases(
+        filtersWith({
+          netHow: ["drawn-in", "approach"],
+          netCameIn: "you",
+          resultOutcome: ["won"],
+        }),
+        NAMES,
+      ).slice(1),
+    ).toEqual([
+      "Rudy at the net",
+      "approach to the net",
+      "drawn in to the net",
+    ]);
+  });
+
   test("the sentence order names every filter group exactly once", () => {
     expect([...SENTENCE_KEYS].sort()).toEqual([...MATCH_FILTER_KEYS].sort());
   });

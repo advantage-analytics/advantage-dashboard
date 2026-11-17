@@ -236,6 +236,8 @@ export const SENTENCE_KEYS: readonly MatchFilterKey[] = [
   "resultEnding",
   "resultMissed",
   "resultRallyLength",
+  "netCameIn",
+  "netHow",
   "customPlayer",
   "customSide",
   "customStroke",
