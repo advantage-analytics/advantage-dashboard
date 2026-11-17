@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Admin › Labels, under the lanes: every analysed match nobody is labelling
- * and nobody has added to the labellers' To do yet (`loadTodoCandidates`),
+ * and nobody has added to the labellers' To do yet (`loadAdminLabels`),
  * newest first. The admin ticks the ones worth checking and adds them; a
  * row's own "Add to To do" adds just that one. Labellers never see this
  * list — only what it puts in To do.
@@ -58,8 +58,9 @@ export function NotInTodoList({ rows }: { rows: readonly TodoCandidate[] }) {
       : rows.filter((row) => row.programName === workspace);
   const visible = expanded ? filtered : filtered.slice(0, NOT_IN_TODO_VISIBLE);
   const hidden = filtered.length - visible.length;
-  // Only ticked rows the filter still shows are added.
-  const picked = filtered.filter((row) => chosen.has(row.jobId));
+  // Only ticked rows on screen are added: a row ticked while the list was
+  // expanded, then hidden by a filter change that collapsed it, is not.
+  const picked = visible.filter((row) => chosen.has(row.jobId));
   const allVisiblePicked =
     visible.length > 0 && visible.every((row) => chosen.has(row.jobId));
 

@@ -37,6 +37,7 @@ import {
   labelDueAt,
   sortByDue,
   urgencyLevel,
+  type LabelQueueJob,
   type QueueSession,
   type UrgencyLevel,
 } from "@/lib/services/labels/queue";
@@ -275,48 +276,72 @@ function firstName(assignee: NonNullable<QueueSessionRow["assignee"]>): string {
   );
 }
 
+function groupSessionsByJob(
+  sessions: readonly QueueSessionRow[],
+): Map<string, QueueSessionRow[]> {
+  const byJob = new Map<string, QueueSessionRow[]>();
+  for (const session of sessions) {
+    const list = byJob.get(session.job_id);
+    if (list) list.push(session);
+    else byJob.set(session.job_id, [session]);
+  }
+  return byJob;
+}
+
+/** The job as `queue.ts`'s rules read it (`enterLabelQueue`, `canAddToTodo`). */
+function toQueueJob(
+  job: QueueJobRow,
+  match: QueueMatchRow | undefined,
+  session: QueueSessionRow | null | undefined,
+  source: Pick<LabelQueueSource, "ownerEmails" | "todo">,
+): LabelQueueJob {
+  return {
+    id: job.id,
+    completedAt: job.completed_at,
+    start_time_seconds: job.start_time_seconds,
+    end_time_seconds: job.end_time_seconds,
+    billable_seconds: job.billable_seconds,
+    ownerEmail: match?.created_by
+      ? (source.ownerEmails.get(match.created_by) ?? null)
+      : null,
+    addedAt: source.todo?.get(job.id) ?? null,
+    session: session
+      ? {
+          status: session.status,
+          assignedTo: session.assigned_to,
+          checkedAt: session.checked_at,
+          sentBackAt: session.sent_back_at,
+        }
+      : null,
+  };
+}
+
+function programNameOf(match: QueueMatchRow | undefined): string {
+  const program = Array.isArray(match?.programs)
+    ? (match.programs[0] ?? null)
+    : (match?.programs ?? null);
+  return program?.school_name
+    ? programDisplayName(program.school_name, program.team)
+    : "Personal";
+}
+
 /**
  * The queue: the newest completed job per match, kept when `enterLabelQueue`
  * says so, earliest due first (`sortByDue`). Pure.
  */
 export function buildLabelQueue(source: LabelQueueSource): LabelQueueEntry[] {
   const matchById = new Map(source.matches.map((match) => [match.id, match]));
-  const sessionsByJob = new Map<string, QueueSessionRow[]>();
-  for (const session of source.sessions) {
-    const list = sessionsByJob.get(session.job_id);
-    if (list) list.push(session);
-    else sessionsByJob.set(session.job_id, [session]);
-  }
+  const sessionsByJob = groupSessionsByJob(source.sessions);
 
   const entries: LabelQueueEntry[] = [];
   for (const job of newestCompletedJobPerMatch(source.jobs)) {
     const match = matchById.get(job.match_id);
     const session = sessionForJob(sessionsByJob.get(job.id) ?? []);
-    const addedAt = source.todo?.get(job.id) ?? null;
-    const enters = enterLabelQueue({
-      id: job.id,
-      completedAt: job.completed_at,
-      start_time_seconds: job.start_time_seconds,
-      end_time_seconds: job.end_time_seconds,
-      billable_seconds: job.billable_seconds,
-      ownerEmail: match?.created_by
-        ? (source.ownerEmails.get(match.created_by) ?? null)
-        : null,
-      addedAt,
-      session: session
-        ? {
-            status: session.status,
-            assignedTo: session.assigned_to,
-            checkedAt: session.checked_at,
-            sentBackAt: session.sent_back_at,
-          }
-        : null,
-    });
+    const queueJob = toQueueJob(job, match, session, source);
+    const addedAt = queueJob.addedAt ?? null;
+    const enters = enterLabelQueue(queueJob);
     if (!enters || !job.completed_at) continue;
 
-    const program = Array.isArray(match?.programs)
-      ? (match.programs[0] ?? null)
-      : (match?.programs ?? null);
     const assignee = session?.assignee ?? null;
     entries.push({
       id: job.id,
@@ -328,9 +353,7 @@ export function buildLabelQueue(source: LabelQueueSource): LabelQueueEntry[] {
       urgency: urgencyLevel(job.priority),
       player1Name: match?.player1_name ?? "Player 1",
       player2Name: match?.player2_name ?? "Player 2",
-      programName: program?.school_name
-        ? programDisplayName(program.school_name, program.team)
-        : "Personal",
+      programName: programNameOf(match),
       session: session
         ? {
             id: session.id,
@@ -646,40 +669,13 @@ export function buildTodoCandidates(
   source: Omit<LabelQueueSource, "photoUrl">,
 ): TodoCandidate[] {
   const matchById = new Map(source.matches.map((match) => [match.id, match]));
-  const sessionsByJob = new Map<string, QueueSessionRow[]>();
-  for (const session of source.sessions) {
-    const list = sessionsByJob.get(session.job_id);
-    if (list) list.push(session);
-    else sessionsByJob.set(session.job_id, [session]);
-  }
+  const sessionsByJob = groupSessionsByJob(source.sessions);
   const rows: TodoCandidate[] = [];
   for (const job of newestCompletedJobPerMatch(source.jobs)) {
     const match = matchById.get(job.match_id);
     if (!match || match.verified || !job.completed_at) continue;
     const session = sessionForJob(sessionsByJob.get(job.id) ?? []);
-    const offered = canAddToTodo({
-      id: job.id,
-      completedAt: job.completed_at,
-      start_time_seconds: job.start_time_seconds,
-      end_time_seconds: job.end_time_seconds,
-      billable_seconds: job.billable_seconds,
-      ownerEmail: match.created_by
-        ? (source.ownerEmails.get(match.created_by) ?? null)
-        : null,
-      addedAt: source.todo?.get(job.id) ?? null,
-      session: session
-        ? {
-            status: session.status,
-            assignedTo: session.assigned_to,
-            checkedAt: session.checked_at,
-            sentBackAt: session.sent_back_at,
-          }
-        : null,
-    });
-    if (!offered) continue;
-    const program = Array.isArray(match.programs)
-      ? (match.programs[0] ?? null)
-      : match.programs;
+    if (!canAddToTodo(toQueueJob(job, match, session, source))) continue;
     rows.push({
       jobId: job.id,
       matchId: job.match_id,
@@ -687,9 +683,7 @@ export function buildTodoCandidates(
       videoSeconds: jobVideoSeconds(job),
       player1Name: match.player1_name ?? "Player 1",
       player2Name: match.player2_name ?? "Player 2",
-      programName: program?.school_name
-        ? programDisplayName(program.school_name, program.team)
-        : "Personal",
+      programName: programNameOf(match),
     });
   }
   return rows.sort((a, b) => {
@@ -839,8 +833,10 @@ export async function readLabelSource(
  */
 export async function readLabelQueue(
   db: AdminClient,
+  /** Already read by the caller (`loadAdminLabels`), so it is read once. */
+  read?: Omit<LabelQueueSource, "photoUrl">,
 ): Promise<LabelQueueEntry[]> {
-  const source = await readLabelSource(db);
+  const source = read ?? (await readLabelSource(db));
   if (source.jobs.length === 0) return [];
 
   const entries = buildLabelQueue({
@@ -956,24 +952,36 @@ export async function loadAdminLabelBoard(
   return toAdminLabelBoard(await deps.readQueue(db));
 }
 
-export interface TodoCandidatesDependencies {
+export interface AdminLabelsDependencies {
   requireAdmin: () => Promise<{ id: string }>;
   createAdminClient: () => AdminClient;
   readSource: (db: AdminClient) => Promise<Omit<LabelQueueSource, "photoUrl">>;
+  readQueue: (
+    db: AdminClient,
+    source: Omit<LabelQueueSource, "photoUrl">,
+  ) => Promise<LabelQueueEntry[]>;
 }
-const candidateDefaults: TodoCandidatesDependencies = {
+const labelsDefaults: AdminLabelsDependencies = {
   requireAdmin: () => requireAdminOrNotFound(),
   createAdminClient,
   readSource: readLabelSource,
+  readQueue: readLabelQueue,
 };
 
 /**
- * The Not in To do list at `/admin/labels`: every analysed match an admin may
- * add to the labellers' To do, newest first. Admin-only — it names players.
+ * Everything `/admin/labels` shows from the queue, from one read: the board
+ * (`toAdminLabelBoard`) and Not in To do — every analysed match an admin may
+ * add to the labellers' To do, newest first. Admin-only — both name players.
  */
-export async function loadTodoCandidates(
-  deps: TodoCandidatesDependencies = candidateDefaults,
-): Promise<TodoCandidate[]> {
+export async function loadAdminLabels(
+  deps: AdminLabelsDependencies = labelsDefaults,
+): Promise<{ board: AdminLabelBoard; candidates: TodoCandidate[] }> {
   await deps.requireAdmin();
-  return buildTodoCandidates(await deps.readSource(deps.createAdminClient()));
+  const db = deps.createAdminClient();
+  const source = await deps.readSource(db);
+  const entries = await deps.readQueue(db, source);
+  return {
+    board: toAdminLabelBoard(entries),
+    candidates: buildTodoCandidates(source),
+  };
 }

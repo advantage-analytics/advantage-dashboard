@@ -54,9 +54,7 @@ function parseJobIds(jobIds: unknown): { ids: string[] } | { error: string } {
   if (!Array.isArray(jobIds) || jobIds.length === 0) {
     return { error: TODO_NOTHING_CHOSEN };
   }
-  const ids = [
-    ...new Set(jobIds.filter(isUuid).map((id) => (id as string).toLowerCase())),
-  ];
+  const ids = [...new Set(jobIds.filter(isUuid).map((id) => id.toLowerCase()))];
   if (ids.length === 0) return { error: "Invalid match id." };
   if (ids.length > TODO_ADD_MAX) return { error: TODO_TOO_MANY };
   return { ids };
@@ -111,7 +109,7 @@ export async function removeFromLabelTodo(
   const actor = await requireAdminActor(deps, NO_SESSION);
   if (!actor) return { error: ADMIN_REQUIRED };
   if (!isUuid(jobId)) return { error: "Invalid match id." };
-  const id = (jobId as string).toLowerCase();
+  const id = jobId.toLowerCase();
   try {
     const db = deps.createAdminClient();
     const entries = await (deps.readQueue ?? readLabelQueue)(db);

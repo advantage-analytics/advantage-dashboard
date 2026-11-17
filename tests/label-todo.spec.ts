@@ -366,3 +366,65 @@ test.describe("the label_todo migration", () => {
     expect(sql).not.toMatch(/\bdrop\b/i);
   });
 });
+
+test.describe("the label_todo follow-up migration", () => {
+  const dir = resolve(process.cwd(), "supabase/migrations");
+  const file = readdirSync(dir).find((name) =>
+    name.endsWith("_label_todo_newest_job.sql"),
+  );
+  const sql = (file ? readFileSync(resolve(dir, file), "utf8") : "").replace(
+    /--.*$/gm,
+    "",
+  );
+
+  test("verification pending reads the add on the newest job only", () => {
+    expect(file).toBeDefined();
+    expect(sql).toContain("where t.job_id = j.id");
+    expect(sql).not.toContain("t.match_id = m.id");
+    expect(sql).toContain("select pj.id,");
+    expect(sql).toContain(
+      "returns table (match_id uuid, results_at timestamptz, has_video boolean, labelling boolean)",
+    );
+  });
+
+  test("publishing clears the add, through a locked-down definer", () => {
+    expect(sql).toMatch(
+      /function public\.label_sessions_clear_todo_on_publish\(\)[\s\S]*?security definer\s+set search_path = ''/,
+    );
+    expect(sql).toContain(
+      "revoke execute on function public.label_sessions_clear_todo_on_publish() from public, anon, authenticated",
+    );
+    expect(sql).toContain(
+      "when (new.status = 'complete' and old.status is distinct from 'complete' and new.kind = 'analyst')",
+    );
+    expect(sql).not.toMatch(/\bdrop\b/i);
+  });
+});
+
+test.describe("loadAdminLabels", () => {
+  test("reads the source once and builds both the board and the list", async () => {
+    let reads = 0;
+    const read = source({
+      jobs: [job(1), job(2)],
+      todo: new Map([[id(2), "2026-11-15T00:00:00Z"]]),
+    });
+    const { loadAdminLabels } = await import("@/lib/data/label-queue-server");
+    const seen: unknown[] = [];
+    const result = await loadAdminLabels({
+      requireAdmin: async () => ({ id: ADMIN_ID }),
+      createAdminClient: () => ({}) as AdminClient,
+      readSource: async () => {
+        reads += 1;
+        return read;
+      },
+      readQueue: async (_db, given) => {
+        seen.push(given);
+        return [];
+      },
+    });
+    expect(reads).toBe(1);
+    expect(seen).toEqual([read]);
+    expect(result.candidates.map((row) => row.jobId)).toEqual([id(1)]);
+    expect(result.board.todo).toEqual([]);
+  });
+});
