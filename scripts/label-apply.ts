@@ -68,6 +68,7 @@ import {
   readStoredBackup,
   recompute,
   restoreErrorsJudged,
+  restoreVerificationStamp,
   restoreFold,
   restoreRows,
   type LabelApplyBackup,
@@ -212,6 +213,19 @@ async function runRestore(
     (await restoreErrorsJudged(db, backup))
       ? "errors marked as judged"
       : "errors marked as not judged",
+  );
+  const restamped = await restoreVerificationStamp(
+    db,
+    backup.matchId,
+    backup.verification,
+  );
+  console.log(
+    {
+      restored: "Verified by Advantage put back as it was",
+      none: "the match was not verified before; it stays unverified",
+      unknown: "Verified by Advantage left as it is (the backup kept no stamp)",
+      failed: "Verified by Advantage could NOT be put back; it stays off",
+    }[restamped],
   );
   const { insightsRequested } = await recompute(db, backup.matchId);
   console.log(
@@ -366,11 +380,13 @@ async function main() {
     `\nbackup: ${result.backupKey}${localFile ? ` (and ${localFile})` : ""}`,
   );
   console.log(`wrote ${result.points} points and ${result.shots} shots`);
-  // publishPlanned took the badge off before the write; only a publish from
+  // publishPlanned takes the badge off before the write; only a publish from
   // the console's Mark complete verifies these points again.
-  console.log(
-    "Verified by Advantage is off: Reopen and Mark complete in the console to verify these points.",
-  );
+  if (result.badgeRemoved !== false) {
+    console.log(
+      `Verified by Advantage ${result.badgeRemoved ? "is" : "may be"} off: Reopen and Mark complete in the console to verify these points.`,
+    );
+  }
   console.log(
     `re-linked ${result.bookmarksRelinked} of ${published.bookmarks.length} bookmark(s)`,
   );

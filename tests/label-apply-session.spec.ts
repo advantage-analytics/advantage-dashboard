@@ -7,6 +7,7 @@ import {
   labelFold,
   planApply,
   publishPlanned,
+  restoreVerificationStamp,
   recompute,
   restoredErrorsJudgedAt,
   restoreErrorsJudged,
@@ -382,6 +383,8 @@ async function markComplete(
   return { ...fake, result };
 }
 
+const MATCH = "33333333-3333-4333-8333-333333333333";
+
 // Verified by Advantage comes off just before the old points go and only
 // verify_match puts it back, so a publish that stops part-way — a failed
 // rebuild, a failed verify, a crash — never leaves it on unchecked points.
@@ -462,6 +465,46 @@ test("a verified match republished: badge off during the write, re-granted by ve
   // The fake's verify_match does not write the stamp; the unverify did run.
   expect(state.stamp.verified).toBe(false);
   expect(calls.some((c) => c.table === "verify_match")).toBe(true);
+});
+
+test("a published result says whether the badge came off", async () => {
+  for (const verified of [true, false]) {
+    const fake = fakeDatabase({ verified });
+    const context = sessionContext("forced");
+    const result = await publishPlanned({
+      db: fake.db,
+      context,
+      plan: planApply(context),
+      acceptScore: true,
+      deferInsights: true,
+    });
+    expect(result).toMatchObject({ ok: true, badgeRemoved: verified });
+  }
+});
+
+test("restoreVerificationStamp: puts a verified stamp back, and says when it cannot", async () => {
+  const stamp = {
+    verified: true,
+    verified_at: "2026-11-13T19:08:51+00:00",
+    verified_by: "55555555-5555-4555-8555-555555555555",
+    verified_review_id: null,
+  };
+  const fake = fakeDatabase({});
+  expect(await restoreVerificationStamp(fake.db, MATCH, stamp)).toBe(
+    "restored",
+  );
+  expect(fake.state.stamp).toEqual(stamp);
+  expect(await restoreVerificationStamp(fake.db, MATCH, undefined)).toBe(
+    "unknown",
+  );
+  expect(
+    await restoreVerificationStamp(fake.db, MATCH, {
+      verified: false,
+      verified_at: null,
+      verified_by: null,
+      verified_review_id: null,
+    }),
+  ).toBe("none");
 });
 
 test("a refusal before the write never touches the badge", async () => {
