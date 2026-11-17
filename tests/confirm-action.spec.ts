@@ -10,10 +10,19 @@ import { createLoader } from "./fixtures/vm-modules";
 
 type Verify = { type: string; token_hash: string };
 
-function load(auth: {
-  verifyOtp?: (args: Verify) => Promise<{ error: Error | null }>;
-  exchangeCodeForSession?: (code: string) => Promise<{ error: Error | null }>;
-}) {
+function load(
+  overrides: {
+    verifyOtp?: (args: Verify) => Promise<{ error: Error | null }>;
+    exchangeCodeForSession?: (code: string) => Promise<{ error: Error | null }>;
+  },
+  signedInAs: string | null = null,
+) {
+  const auth = {
+    getUser: async () => ({
+      data: { user: signedInAs ? { id: signedInAs } : null },
+    }),
+    ...overrides,
+  };
   const loader = createLoader({
     // `Error` is handed in so the module's `instanceof Error` — which is how
     // `toAuthError` tells a Supabase `AuthError` from anything else — sees the
@@ -87,6 +96,65 @@ test("a spent token lands on the error page with the translated message", async 
   expect(to).toBe(
     "/error?error=That%20link%20has%20expired.%20Request%20a%20new%20one%20and%20try%20again.",
   );
+});
+
+const expired = async () => ({
+  error: new Error("Token has expired or is invalid"),
+});
+
+test("a spent sign-in link opened while signed in carries on to next", async () => {
+  const { confirmLinkForm } = load({ verifyOtp: expired }, "user-1");
+  for (const type of ["email", "signup", "magiclink"]) {
+    const to = await landing(
+      confirmLinkForm(form({ token_hash: "abc123", type, next: "/dashboard" })),
+    );
+    expect(to).toBe("/dashboard");
+  }
+});
+
+test("a spent sign-in link opened signed out still reports it has expired", async () => {
+  const { confirmLinkForm } = load({ verifyOtp: expired }, null);
+  for (const type of ["email", "signup", "magiclink"]) {
+    const to = await landing(
+      confirmLinkForm(form({ token_hash: "abc123", type, next: "/dashboard" })),
+    );
+    expect(to).toBe(
+      "/error?error=That%20link%20has%20expired.%20Request%20a%20new%20one%20and%20try%20again.",
+    );
+  }
+});
+
+test("a rate-limited fresh link is reported even with a session", async () => {
+  const { confirmLinkForm } = load(
+    {
+      verifyOtp: async () => ({
+        error: new Error(
+          "For security purposes, you can only request this after 30 seconds",
+        ),
+      }),
+    },
+    "user-1",
+  );
+  const to = await landing(
+    confirmLinkForm(
+      form({ token_hash: "abc123", type: "magiclink", next: "/dashboard" }),
+    ),
+  );
+  expect(to).toBe(
+    "/error?error=Too%20many%20attempts.%20Wait%20a%20minute%2C%20then%20try%20again.",
+  );
+});
+
+test("a spent recovery link still reports the failure, signed in or not", async () => {
+  const { confirmLinkForm } = load({ verifyOtp: expired }, "user-1");
+  for (const type of ["recovery", "invite", "email_change"]) {
+    const to = await landing(
+      confirmLinkForm(
+        form({ token_hash: "abc123", type, next: "/update-password" }),
+      ),
+    );
+    expect(to).toMatch(/^\/error\?error=/);
+  }
 });
 
 test("a hostile next is clamped before the redirect", async () => {
