@@ -38,6 +38,7 @@ function row(
     urgency: "standard",
     dueAt: iso(10),
     claimable: false,
+    removable: false,
     sessionId: null,
     labellerId: null,
     labellerName: null,
@@ -286,11 +287,8 @@ test.describe("the admin's Labels board", () => {
     expect(text(html)).toContain(
       "These are already live for the player. Matches you publish yourself skip this list.",
     );
-    // The lanes hold only the queue, and say where older matches went.
-    expect(text(html)).toContain(
-      "The board shows matches analysed from November 17, 2026. Label older ones from Matches.",
-    );
-    expect(html).toContain('href="/admin/matches"');
+    // No date line any more: what is not in To do waits in its own list.
+    expect(text(html)).not.toContain("The board shows matches analysed from");
   });
 
   test("a row reads 'Player vs Player · Team', with hours, urgency and due text", () => {

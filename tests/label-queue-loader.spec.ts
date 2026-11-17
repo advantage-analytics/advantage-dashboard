@@ -93,6 +93,14 @@ function source(over: Partial<LabelQueueSource>): LabelQueueSource {
       [TEST_OWNER, "suite@example.com"],
     ]),
     photoUrl: (path) => (path ? `https://cdn.test/${path}` : null),
+    // Every job added to To do the moment its results landed, so each due
+    // time reads as completion plus 36 h; a test that needs a job left out
+    // passes its own map.
+    todo: new Map(
+      jobs.flatMap((row) =>
+        row.completed_at ? [[row.id, row.completed_at]] : [],
+      ),
+    ),
     ...over,
   };
 }
@@ -212,7 +220,7 @@ test.describe("newest completed job per match", () => {
     expect(entries).toEqual([]);
   });
 
-  test("queue.ts decides entry and order: no test owners, earliest due first", () => {
+  test("queue.ts decides entry and order: added only, no test owners, earliest due first", () => {
     const entries = buildLabelQueue(
       source({
         jobs: [
@@ -231,10 +239,19 @@ test.describe("newest completed job per match", () => {
           match({ id: "match-job-early", programs: null }),
           match({ id: "m-test", created_by: TEST_OWNER }),
         ],
+        // job-before was never added to To do; job-early was added a day
+        // after its results landed, so it is due 36 h from the add.
+        todo: new Map([
+          ["job-late", "2026-12-11T10:00:00Z"],
+          ["job-early", "2026-12-10T10:00:00Z"],
+          ["job-test", "2026-12-10T10:00:00Z"],
+          ["job-empty", "2026-12-10T10:00:00Z"],
+        ]),
       }),
     );
     expect(entries.map((entry) => entry.id)).toEqual(["job-early", "job-late"]);
-    expect(entries[0].dueAt).toBe("2026-12-10T22:00:00.000Z");
+    expect(entries[0].dueAt).toBe("2026-12-11T22:00:00.000Z");
+    expect(entries[0].addedAt).toBe("2026-12-10T10:00:00Z");
     expect(entries[0].programName).toBe("Personal");
     expect(entries[1].programName).toBe(PROGRAM);
   });

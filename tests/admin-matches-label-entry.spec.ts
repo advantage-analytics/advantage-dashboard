@@ -9,13 +9,12 @@ import {
   type LabelJobCandidate,
 } from "@/lib/data/admin-match-progress";
 import type { AdminMatchRow } from "@/lib/data/admin-matches-server";
-import { LABEL_QUEUE_FROM } from "@/lib/services/labels/queue";
 import { createLoader, marker } from "./fixtures/vm-modules";
 
 /**
  * Admin › Matches side panel — "Label this match" (T29), the way into
  * labelling for any analysed match, including the ones the label queue's
- * cut-off (`LABEL_QUEUE_FROM`) leaves out.
+ * To do (`label_todo`) does not hold.
  *
  * The panel is rendered offline through `fixtures/vm-modules`: the drawer
  * frame, links and the Resubmit / Copy buttons are stubbed, and
@@ -157,14 +156,11 @@ test("the panel draws no Label this match without a labelJobId", () => {
   expect(started).toEqual([]);
 });
 
-test("a match analysed before the queue's cut-off still gets the control", () => {
+test("an old match, never added to To do, still gets the control", () => {
   const { html, started } = render({
     labelJobId: OLDER_JOB,
     resultsLandedAt: "2026-09-01T13:00:00Z",
   });
-  expect(Date.parse("2026-09-01T13:00:00Z")).toBeLessThan(
-    Date.parse(LABEL_QUEUE_FROM),
-  );
   expect(html).toContain("Label this match");
   expect(started).toEqual([OLDER_JOB]);
 });

@@ -126,6 +126,12 @@ import {
   deletePracticeCopy,
   type CreatePracticeCopiesResult,
 } from "@/lib/services/labels/practice-session";
+import {
+  addToLabelTodo,
+  removeFromLabelTodo,
+  type TodoAddResult,
+  type TodoRemoveResult,
+} from "@/lib/services/labels/todo-session";
 import { revalidatePath } from "next/cache";
 import { withLabelOp } from "@/lib/supabase/op-context";
 import type { LabelGame } from "@/lib/services/labels/operations";
@@ -680,6 +686,33 @@ export async function assignLabelSessionAction(
   userId: string | null,
 ): Promise<LabelAssignResult> {
   return assignLabelSession(sessionId, userId);
+}
+
+/**
+ * Put analysed matches in the labellers' To do (Not in To do › Add). The
+ * service re-reads which of them are still on offer and skips the rest.
+ */
+export async function addToLabelTodoAction(
+  jobIds: string[],
+): Promise<TodoAddResult> {
+  const result = await addToLabelTodo(jobIds);
+  if ("ok" in result) {
+    revalidatePath("/admin/labels");
+    revalidatePath("/label");
+  }
+  return result;
+}
+
+/** Take one match out of To do (a To do row's Remove), while nobody holds it. */
+export async function removeFromLabelTodoAction(
+  jobId: string,
+): Promise<TodoRemoveResult> {
+  const result = await removeFromLabelTodo(jobId);
+  if ("ok" in result) {
+    revalidatePath("/admin/labels");
+    revalidatePath("/label");
+  }
+  return result;
 }
 
 /**
