@@ -663,10 +663,7 @@ export async function publishPlanned(params: {
       ),
       // Read before the unverify below, so a rolled-back write and a
       // `--restore` can put it back.
-      readVerificationStamp(db, matchId).then(
-        (s) => s,
-        () => null,
-      ),
+      readVerificationStamp(db, matchId).catch(() => null),
     ]);
   if (imported > 0) {
     return {

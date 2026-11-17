@@ -68,9 +68,9 @@ import {
   readStoredBackup,
   recompute,
   restoreErrorsJudged,
-  restoreVerificationStamp,
   restoreFold,
   restoreRows,
+  restoreVerificationStamp,
   type LabelApplyBackup,
 } from "@/lib/services/labels/apply-session";
 import {
