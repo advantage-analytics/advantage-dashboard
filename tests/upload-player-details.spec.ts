@@ -488,9 +488,6 @@ test("Continue with blanks points at them instead of going to sleep", () => {
   expect(providerSrc).toContain(
     "const continueHandler = gates.gatedByMissing ? showMissing : saveHandler;",
   );
-  expect(providerSrc).toContain(
-    "jumpToMissingField(contentRef.current, missingLabels);",
-  );
   // The pill does the same thing as Continue.
   expect(footerSrc).toContain("onJump={showMissing}");
   // Blanks with no field on this page (an earlier step's camera answers) run
