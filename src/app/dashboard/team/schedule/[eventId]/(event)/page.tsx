@@ -12,6 +12,7 @@ import { readyMatchIdsFrom } from "@/lib/schedule/entry-state";
 import { EventHeaderSlot } from "@/components/dashboard/schedule/event-header-slot";
 import { DualDetail } from "@/components/dashboard/schedule/dual-detail";
 import { TournamentDetail } from "@/components/dashboard/schedule/tournament-detail";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Event" };
 
@@ -51,7 +52,7 @@ export default async function EventPage({
   const initialMatchId = typeof query.match === "string" ? query.match : null;
 
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");

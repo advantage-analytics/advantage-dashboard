@@ -19,6 +19,7 @@ import { PresenceReport } from "@/components/dashboard/presence-provider";
 import type { EventDetail } from "@/lib/schedule/types";
 import { ComingSoonPage } from "@/components/dashboard/coming-soon";
 import { SCHEDULE_ENABLED } from "@/lib/schedule/availability";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Schedule" };
 
@@ -66,7 +67,7 @@ export default async function SchedulePage({
   }
 
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 /**
  * Settings › Team became Settings › Teams — a list of every program you
@@ -8,7 +9,7 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
  */
 export default async function TeamSettingsRedirect() {
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   const { active } = workspace;
   redirect(

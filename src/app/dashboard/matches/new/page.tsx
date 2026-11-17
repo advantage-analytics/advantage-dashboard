@@ -28,6 +28,7 @@ import {
 import { matchVideoAccessDeps } from "@/lib/services/match-video/access";
 import { lazyAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 /**
  * "New match" everywhere but an attachment visit, which is not one.
@@ -158,7 +159,7 @@ export default async function NewMatchPage({
 
   if (match) {
     const context = await getWorkspaceContext();
-    if (!context) redirect("/login");
+    if (!context) redirect(await loginRedirectPath("/dashboard"));
     const target = await getAddVideoTarget(
       match,
       context.viewer.id,

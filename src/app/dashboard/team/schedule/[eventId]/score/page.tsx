@@ -14,6 +14,7 @@ import { outcomeKey, type RoundSeed } from "@/lib/schedule/score-seed";
 import { nextRound } from "@/lib/schedule/tournament-run";
 import { ScoreOnlyFlow } from "@/components/dashboard/schedule/score-only-flow";
 import type { EventPreset } from "@/components/dashboard/matches/new-match-wizard/types";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Add score" };
 
@@ -57,7 +58,7 @@ export default async function ScoreEventPage({
   const { entry: requestedEntryId, round: requestedRound } = await searchParams;
 
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");

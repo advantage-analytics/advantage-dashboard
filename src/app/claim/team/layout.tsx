@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 /**
  * The signed-in front door to team setup (Onboarding & Team Setup, Stage 5→7).
@@ -20,7 +21,7 @@ export default async function TeamSetupLayout({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(await loginRedirectPath("/claim/team"));
 
   return <>{children}</>;
 }

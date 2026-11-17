@@ -12,6 +12,7 @@ import { EventHeaderSlot } from "@/components/dashboard/schedule/event-header-sl
 import { NewTournamentFlow } from "@/components/dashboard/schedule/static/new-tournament-flow";
 import type { ProgramSearchResult } from "@/lib/data/programs-server";
 import type { EventDetail } from "@/lib/schedule/types";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Edit event" };
 
@@ -72,7 +73,7 @@ export default async function EditEventPage({
   const { eventId } = await params;
 
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");

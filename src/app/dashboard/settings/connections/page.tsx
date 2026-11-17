@@ -5,6 +5,7 @@ import { ConnectionsSettings } from "@/components/dashboard/settings/connections
 import { listOAuthGrants } from "@/lib/auth/oauth-grants";
 import { mcpOrigin } from "@/lib/services/mcp/origin";
 import { createClient } from "@/lib/supabase/server";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Connections" };
 
@@ -23,7 +24,7 @@ export default async function ConnectionsPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(await loginRedirectPath("/dashboard"));
   const {
     data: { session },
   } = await supabase.auth.getSession();

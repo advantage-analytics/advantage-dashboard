@@ -30,6 +30,7 @@ import {
   invitesPendingLabel,
   playersLabel,
 } from "@/components/dashboard/team/roster-vocabulary";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Roster" };
 
@@ -72,7 +73,7 @@ export default async function RosterPage({
   searchParams: Promise<{ player?: string | string[] }>;
 }) {
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   const { active, viewer } = workspace;
   // The rail only offers this destination inside a program. Somebody who typed

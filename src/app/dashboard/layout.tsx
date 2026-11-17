@@ -14,6 +14,7 @@ import { UploadFailureListener } from "@/components/dashboard/toast/upload-failu
 import { timeOfDayGreeting } from "@/lib/ui/greeting";
 import { readMissingLegalDocuments } from "@/lib/legal/acceptance-server";
 import { createClient } from "@/lib/supabase/server";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 /**
  * Dashboard layout.
@@ -39,7 +40,7 @@ export default async function Layout({
   // Middleware refreshes the session; this covers the case where it has already
   // expired by the time the layout renders. Checked before anything else is
   // started, so a logged-out request pays for nothing it will discard.
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   // First run: the three-question onboarding owns the first dashboard visit.
   // Here rather than in `src/proxy.ts` for the same reason the login gate is —

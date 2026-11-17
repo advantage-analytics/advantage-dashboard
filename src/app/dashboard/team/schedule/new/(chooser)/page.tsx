@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { StaticEventChooser } from "@/components/dashboard/schedule/static/static-event-chooser";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "New event" };
 
@@ -22,7 +23,7 @@ export const metadata = { title: "New event" };
  */
 export default async function NewEventPage() {
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");

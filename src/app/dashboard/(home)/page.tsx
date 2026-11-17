@@ -44,12 +44,13 @@ import {
 import { HomeWidgetFrame } from "@/components/dashboard/home/home-widget-frame";
 import { AskPinCard } from "@/components/dashboard/home/ask-pin-card";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Home" };
 
 export default async function Home() {
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
   if (workspace.active.kind === "team") redirect("/dashboard/team");
   const supabase = await createClient();
   const userId = workspace.viewer.id;

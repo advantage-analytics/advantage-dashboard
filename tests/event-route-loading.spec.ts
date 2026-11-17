@@ -31,6 +31,11 @@ for (const leaf of ["edit", "score"]) {
       runInNewContext(output, {
         exports,
         require: (id: string) => {
+          if (id === "@/lib/auth/request-path")
+            return {
+              loginRedirectPath: async (fallback: string) =>
+                `/login?next=${encodeURIComponent(fallback)}`,
+            };
           if (id === "next/navigation")
             return {
               redirect: (path: string) => {

@@ -3,6 +3,7 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { getTeamSingleMatch } from "@/lib/data/single-match-server";
 import { SingleDetail } from "@/components/dashboard/schedule/single-detail";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Match" };
 
@@ -23,7 +24,7 @@ export default async function TeamSingleMatchPage({
   const { matchId } = await params;
 
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   const { active } = workspace;
   if (active.kind !== "team") redirect(`/dashboard/matches/${matchId}`);

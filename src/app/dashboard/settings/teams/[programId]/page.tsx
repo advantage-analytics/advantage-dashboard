@@ -12,6 +12,7 @@ import {
 } from "@/lib/data/teams-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { TeamDetail } from "@/components/dashboard/settings/teams/team-detail";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 /**
  * Settings › Teams › one program.
@@ -32,7 +33,7 @@ export default async function TeamPage({
 }) {
   const { programId } = await params;
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   const program = workspace.available.find(
     (candidate) => candidate.kind === "team" && candidate.id === programId,

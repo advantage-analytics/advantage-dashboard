@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { ClaimShell, AsidePanel } from "@/components/claim/claim-shell";
 import { TeamSetupForm } from "@/components/claim/team-setup-form";
 import { isCustomOrgType, readPendingTeam } from "../pending-team";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Set up your team" };
 
@@ -35,7 +36,7 @@ export default async function TeamSetupPage({
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) redirect(await loginRedirectPath("/claim/team"));
 
   const { data: profile } = await supabase
     .from("users")
