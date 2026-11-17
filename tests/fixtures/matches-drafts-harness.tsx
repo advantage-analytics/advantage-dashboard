@@ -4,13 +4,12 @@ import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
 import type { WorkspaceContextValue } from "@/lib/workspace/types";
 import { MatchesPageContent } from "@/components/dashboard/matches/matches-page-content";
 import { MatchesTitleRow } from "@/components/dashboard/matches/matches-title-row";
-import { MatchDrawerSlot } from "@/components/dashboard/matches/match-drawer-slot";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import type { DraftRowData } from "@/components/dashboard/matches/draft-row";
 
 /**
  * The Matches page's client half on fixed rows, laid out as the route lays it
- * out: the page column, then the slot the drawer portals into.
+ * out.
  *
  * - `m-scored` — a scored match with a video draft (`d-folded`) targeting it:
  *   the draft folds onto that row rather than listing a second one.
@@ -24,9 +23,8 @@ import type { DraftRowData } from "@/components/dashboard/matches/draft-row";
  * `?empty=1` drops them and the drafts, for the title row's subtitle.
  * `?draftsOnly=1` drops the matches and keeps two standalone drafts (`d-new`,
  * `d-other`): a workspace whose first match is still in flight.
- * Everything else on the URL
- * (`?match=`, `?draft=`) reaches the page through the navigation mock's
- * `useSearchParams()`, as it would from Next.
+ * Everything else on the URL (`?q=`, `?lifecycle=`) reaches the page through
+ * the navigation mock's `useSearchParams()`, as it would from Next.
  */
 
 const params = new URLSearchParams(window.location.search);
@@ -202,7 +200,6 @@ createRoot(document.getElementById("root")!).render(
           />
           <MatchesPageContent matches={MATCHES} drafts={DRAFTS} scope={scope} />
         </div>
-        <MatchDrawerSlot />
       </div>
     </WorkspaceProvider>
   </TooltipProvider>,

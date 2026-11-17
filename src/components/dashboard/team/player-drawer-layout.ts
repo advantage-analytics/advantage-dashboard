@@ -1,8 +1,10 @@
 /**
- * Layout constants for the roster drawer, in a module with no JSX and no
- * `"use client"`.
+ * Layout constants for a drawer's recent-match rows, in a module with no JSX
+ * and no `"use client"`. Written for the roster's player drawer (retired
+ * 2026-11-17, when roster rows began opening the player page) and still the
+ * track both Opponents drawers draw.
  *
- * They live apart from `player-drawer.tsx` so a test can import a value
+ * They live apart from the components so a test can import a value
  * without pulling the whole component graph — framer-motion, icons, hooks and
  * every sibling those reach — into the Node process running the spec. Reading
  * one string should not depend on a client component evaluating cleanly

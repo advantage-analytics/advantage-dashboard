@@ -118,8 +118,9 @@ function row(page: Page, id: string) {
   return page.locator(`[role="row"]#match-row-${id}`);
 }
 
-function drawer(page: Page) {
-  return page.getByRole("dialog");
+/** Where the mocked router was sent: a row click travels (`router.push`). */
+function pushes(page: Page) {
+  return page.evaluate(() => window.routerPushes ?? []);
 }
 
 for (const scope of ["personal", "team"] as const) {
@@ -160,7 +161,7 @@ for (const scope of ["personal", "team"] as const) {
     ).toHaveCount(0);
   });
 
-  test(`${scope}: the drawer of a match with a draft offers Continue upload`, async ({
+  test(`${scope}: a match with a draft offers Continue on its row, and the row opens the report`, async ({
     page,
   }) => {
     await open(page, scope === "team" ? "?scope=team" : "");
@@ -169,82 +170,60 @@ for (const scope of ["personal", "team"] as const) {
         ? "/dashboard/team/upload?draft=d-folded"
         : "/dashboard/matches/new?draft=d-folded";
 
-    await row(page, "m-scored").click();
-    const panel = drawer(page);
-    await expect(panel).toBeVisible();
-    const cont = panel.getByRole("link", {
-      name: "Continue upload",
-      exact: true,
-    });
-    await expect(cont).toHaveAttribute("href", href);
-    // The one primary is the draft's; the report link stays, as the ghost.
-    const view = panel.getByRole("link", { name: "View match", exact: true });
-    await expect(view).toHaveAttribute("href", "/dashboard/matches/m-scored");
-    await expect(cont).toHaveClass(/bg-\[var\(--blue\)\]/);
-    await expect(view).not.toHaveClass(/bg-\[var\(--blue\)\]/);
-    await expect(view).toHaveClass(/bg-transparent/);
+    await expect(
+      row(page, "m-scored").getByRole("link", {
+        name: "Continue",
+        exact: true,
+      }),
+    ).toHaveAttribute("href", href);
+    // A match without a folded draft: nothing on the row leads anywhere but
+    // the report — no Continue, and on a team table no link on the name.
+    await expect(row(page, "m-plain").getByRole("link")).toHaveCount(0);
 
-    // A match without a folded draft: no Continue upload, View match primary.
+    await row(page, "m-scored").click();
     await row(page, "m-plain").click();
-    await expect(
-      panel.getByRole("link", { name: "View match", exact: true }),
-    ).toHaveAttribute("href", "/dashboard/matches/m-plain");
-    await expect(
-      panel.getByRole("link", { name: "Continue upload" }),
-    ).toHaveCount(0);
-    await expect(
-      panel.getByRole("link", { name: "View match", exact: true }),
-    ).toHaveClass(/bg-\[var\(--blue\)\]/);
+    expect(await pushes(page)).toEqual([
+      "/dashboard/matches/m-scored",
+      "/dashboard/matches/m-plain",
+    ]);
   });
 }
 
-test("↑/↓ walk the standalone drafts, then the matches, never the folded draft", async ({
+test("a row travels and nothing peeks: a draft to its wizard, Enter like a click", async ({
   page,
 }) => {
   await open(page);
-  const selected = () =>
-    page.locator('[role="row"][aria-current="true"]').getAttribute("id");
-
   await row(page, "d-new").click();
-  await expect(drawer(page)).toBeVisible();
-  expect(await selected()).toBe("match-row-d-new");
-  await expect(drawer(page).getByText("1 / 1", { exact: true })).toBeVisible();
-
-  await page.keyboard.press("ArrowDown");
-  await expect(row(page, "m-scored")).toHaveAttribute("aria-current", "true");
-  await expect(
-    drawer(page).getByRole("link", { name: "Continue upload" }),
-  ).toHaveCount(1);
-
-  await page.keyboard.press("ArrowDown");
-  await expect(row(page, "m-plain")).toHaveAttribute("aria-current", "true");
-  await expect(
-    drawer(page).getByRole("button", { name: "Next" }),
-  ).toBeDisabled();
-
-  await page.keyboard.press("ArrowUp");
-  await expect(row(page, "m-scored")).toHaveAttribute("aria-current", "true");
-  await page.keyboard.press("ArrowUp");
-  await expect(row(page, "d-new")).toHaveAttribute("aria-current", "true");
-  await expect(
-    drawer(page).getByRole("button", { name: "Previous" }),
-  ).toBeDisabled();
-  expect(await page.evaluate(() => location.search)).toBe("?draft=d-new");
+  await row(page, "m-plain").focus();
+  await page.keyboard.press("Enter");
+  expect(await pushes(page)).toEqual([
+    "/dashboard/matches/new?draft=d-new",
+    "/dashboard/matches/m-plain",
+  ]);
+  // No drawer, no selected row, and nothing mirrored onto the URL.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator('[role="row"][aria-current]')).toHaveCount(0);
+  expect(await page.evaluate(() => location.search)).toBe("");
 });
 
-test("?draft= naming a folded draft lands on the match it fills", async ({
+test("every match row ends in the record chevron, a draft row in its ⋯", async ({
   page,
 }) => {
-  await open(page, "?draft=d-folded");
-  await expect(row(page, "m-scored")).toHaveAttribute("aria-current", "true");
+  await open(page);
+  for (const id of ["m-scored", "m-plain"]) {
+    await expect(row(page, id).locator("svg.lucide-chevron-right")).toHaveCount(
+      1,
+    );
+    await expect(
+      row(page, id).getByRole("button", { name: "Draft actions" }),
+    ).toHaveCount(0);
+  }
   await expect(
-    drawer(page).getByRole("link", { name: "Continue upload" }),
-  ).toHaveAttribute("href", "/dashboard/matches/new?draft=d-folded");
-  // Stepping away mirrors the match's own id, not the folded draft's.
-  await page.keyboard.press("ArrowDown");
-  await page.keyboard.press("ArrowUp");
-  await expect(row(page, "m-scored")).toHaveAttribute("aria-current", "true");
-  expect(await page.evaluate(() => location.search)).toBe("?match=m-scored");
+    row(page, "d-new").getByRole("button", { name: "Draft actions" }),
+  ).toHaveCount(1);
+  await expect(
+    row(page, "d-new").locator("svg.lucide-chevron-right"),
+  ).toHaveCount(0);
 });
 
 test("a draft whose match already has a video job shows nowhere", async ({
@@ -259,15 +238,9 @@ test("a draft whose match already has a video job shows nowhere", async ({
   await expect(row(page, "d-folded")).toHaveCount(0);
   await expect(row(page, "d-new")).toHaveCount(1);
 
-  await row(page, "m-scored").click();
-  const panel = drawer(page);
-  await expect(panel).toBeVisible();
   await expect(
-    panel.getByRole("link", { name: "Continue upload" }),
+    row(page, "m-scored").getByRole("link", { name: "Continue" }),
   ).toHaveCount(0);
-  const view = panel.getByRole("link", { name: "View match", exact: true });
-  await expect(view).toHaveAttribute("href", "/dashboard/matches/m-scored");
-  await expect(view).toHaveClass(/bg-\[var\(--blue\)\]/);
 });
 
 test("a score-only match (manual analysis, no job) still folds its draft", async ({
@@ -278,19 +251,16 @@ test("a score-only match (manual analysis, no job) still folds its draft", async
     row(page, "m-scored").getByText("Draft", { exact: true }),
   ).toHaveCount(1);
   await expect(row(page, "d-folded")).toHaveCount(0);
-  await row(page, "m-scored").click();
   await expect(
-    drawer(page).getByRole("link", { name: "Continue upload" }),
+    row(page, "m-scored").getByRole("link", { name: "Continue", exact: true }),
   ).toHaveAttribute("href", "/dashboard/matches/new?draft=d-folded");
 });
 
-test("the draft rail's ⋯ asks before discarding, and a refusal keeps the rail", async ({
+test("the draft row's ⋯ asks before discarding, and a refusal keeps the row", async ({
   page,
 }) => {
   await open(page, "?discard=refused");
-  await row(page, "d-new").click();
-  const panel = drawer(page);
-  await expect(panel).toBeVisible();
+  const panel = row(page, "d-new");
 
   // The ⋯ opens the product's float menu: one action row, grey at rest, the
   // consequence as its second line — nothing is deleted from here.
@@ -326,22 +296,21 @@ test("the draft rail's ⋯ asks before discarding, and a refusal keeps the rail"
     confirm.getByRole("button", { name: "Discard draft" }),
   ).toBeEnabled();
 
-  // Keep draft: back to the ⋯, the rail and the row as they were.
+  // Keep draft: back to the ⋯, the row as it was — and not one of those
+  // presses reached the row and sent the reader into the wizard.
   await confirm.getByRole("button", { name: "Keep draft" }).click();
   await expect(confirm).toHaveCount(0);
-  await expect(panel).toBeVisible();
-  await expect(row(page, "d-new")).toHaveAttribute("aria-current", "true");
+  await expect(panel).toHaveCount(1);
   await expect(trigger).toBeFocused();
   expect(await page.evaluate(() => window.routerRefreshes ?? 0)).toBe(0);
+  expect(await pushes(page)).toEqual([]);
 });
 
-test("confirming Discard draft deletes it, slides the rail out, then refreshes", async ({
+test("confirming Discard draft deletes it and refreshes the list, without travelling", async ({
   page,
 }) => {
   await open(page);
-  await row(page, "d-new").click();
-  const panel = drawer(page);
-  await expect(panel).toBeVisible();
+  const panel = row(page, "d-new");
 
   await panel.getByRole("button", { name: "Draft actions" }).click();
   await page.getByRole("menuitem", { name: /Discard draft/ }).click();
@@ -351,18 +320,17 @@ test("confirming Discard draft deletes it, slides the rail out, then refreshes",
   await confirm.getByRole("button", { name: "Discard draft" }).click();
 
   await expect(confirm).toHaveCount(0);
-  // The rail leaves the way Esc closes it; the list refresh waits for that.
-  await expect(panel).toHaveCount(0);
-  await expect(row(page, "d-new")).not.toHaveAttribute("aria-current", "true");
   expect(await page.evaluate(() => window.draftDiscards)).toEqual(["d-new"]);
   await expect
     .poll(() => page.evaluate(() => window.routerRefreshes ?? 0))
     .toBe(1);
+  // Focus is on the row below the one that is leaving, not dropped to the
+  // body, and the row never opened the wizard.
+  await expect(row(page, "m-scored")).toBeFocused();
+  expect(await pushes(page)).toEqual([]);
 });
 
-test("a draft row and its rail read back what was answered", async ({
-  page,
-}) => {
+test("a draft row reads back what was answered", async ({ page }) => {
   await open(page);
   const draftRow = row(page, "d-new");
 
@@ -383,33 +351,6 @@ test("a draft row and its rail read back what was answered", async ({
   await expect(
     draftRow.getByRole("link", { name: "Continue", exact: true }),
   ).toHaveAttribute("href", "/dashboard/matches/new?draft=d-new");
-
-  // The rail: named like a match, the step named and measured, the facts as
-  // the match rail draws them, the file honest about having to be picked
-  // again, and no sentence.
-  await draftRow.click();
-  const panel = drawer(page);
-  await expect(panel).toBeVisible();
-  await expect(
-    panel.getByRole("link", { name: "vs Sam Ortiz", exact: true }),
-  ).toHaveAttribute("href", "/dashboard/matches/new?draft=d-new");
-  await expect(
-    panel.getByText("Stopped at Video check", { exact: true }),
-  ).toBeVisible();
-  await expect(panel.getByText("3 / 4", { exact: true })).toBeVisible();
-  await expect(panel.getByRole("progressbar")).toHaveAttribute(
-    "aria-valuenow",
-    "3",
-  );
-  await expect(panel).toContainText("Sep 18");
-  await expect(panel).toContainText("Hard");
-  await expect(panel).toContainText("Advantage Intelligence");
-  await expect(panel).toContainText("match.mp4 · Pick again on Continue");
-  await expect(panel).toContainText("Edited Sep 22");
-  await expect(panel.getByText("step 3 of 4")).toHaveCount(0);
-  await expect(
-    panel.getByText(/It isn.t a match until you save it/),
-  ).toHaveCount(0);
 });
 
 test("team: the draft row puts the player under Player and the opponent under Opponent", async ({
@@ -422,13 +363,6 @@ test("team: the draft row puts the player under Player and the opponent under Op
     pill.locator("..").getByText("Jordan Park", { exact: true }),
   ).toHaveCount(1);
   await expect(draftRow.getByText("Sam Ortiz", { exact: true })).toHaveCount(1);
-  await draftRow.click();
-  await expect(
-    drawer(page).getByRole("link", {
-      name: "Jordan Park vs Sam Ortiz",
-      exact: true,
-    }),
-  ).toHaveCount(1);
 });
 
 /** The harness loaded, for a cut that may have left no match row to wait on. */
@@ -526,46 +460,9 @@ test.describe("the counts add up to the rows on screen", () => {
   });
 });
 
-test.describe("stepping stays in step with the rows shown", () => {
-  test("a search no draft answers has nothing above its first match", async ({
-    page,
-  }) => {
-    await openCut(page, "?q=Riley");
-    await row(page, "m-plain").click();
-    const panel = drawer(page);
-    await expect(
-      panel.getByRole("button", { name: "Previous" }),
-    ).toBeDisabled();
-    await expect(panel.getByRole("button", { name: "Next" })).toBeDisabled();
-    await page.keyboard.press("ArrowUp");
-    await expect(row(page, "m-plain")).toHaveAttribute("aria-current", "true");
-  });
-
-  test("a draft the search keeps is still walked first", async ({ page }) => {
-    await openCut(page, "?q=Fall");
-    await row(page, "d-new").click();
-    const panel = drawer(page);
-    await expect(panel.getByText("1 / 1", { exact: true })).toBeVisible();
-    await page.keyboard.press("ArrowDown");
-    await expect(row(page, "m-scored")).toHaveAttribute("aria-current", "true");
-    await page.keyboard.press("ArrowUp");
-    await expect(row(page, "d-new")).toHaveAttribute("aria-current", "true");
-  });
-
-  test("a deep link to a draft the cut hides lands closed", async ({
-    page,
-  }) => {
-    await openCut(page, "?q=Riley&draft=d-new");
-    await expect(row(page, "m-plain")).toHaveCount(1);
-    await expect(drawer(page)).toHaveCount(0);
-  });
-});
-
 test.describe("a workspace with drafts and no matches keeps the list", () => {
   for (const scope of ["personal", "team"] as const) {
-    test(`${scope}: the drafts list, and one opens and continues`, async ({
-      page,
-    }) => {
+    test(`${scope}: the drafts list, and one continues`, async ({ page }) => {
       const team = scope === "team" ? "&scope=team" : "";
       await openCut(page, `?draftsOnly=1${team}`);
 
@@ -581,21 +478,13 @@ test.describe("a workspace with drafts and no matches keeps the list", () => {
         0,
       );
 
-      await row(page, "d-new").click();
-      const panel = drawer(page);
-      await expect(panel.getByText("1 / 2", { exact: true })).toBeVisible();
       await expect(
-        panel.getByRole("link", { name: /Continue/ }).last(),
+        row(page, "d-new").getByRole("link", { name: "Continue", exact: true }),
       ).toHaveAttribute(
         "href",
         scope === "team"
           ? "/dashboard/team/upload?draft=d-new"
           : "/dashboard/matches/new?draft=d-new",
-      );
-      await page.keyboard.press("ArrowDown");
-      await expect(row(page, "d-other")).toHaveAttribute(
-        "aria-current",
-        "true",
       );
     });
   }
@@ -649,7 +538,9 @@ test.describe("the cards below lg list the drafts too", () => {
     return page.locator(`a#match-card-${id}`);
   }
 
-  test("a card reads back the draft and opens the rail", async ({ page }) => {
+  test("a card reads back the draft and holds its ⋯ beside the link", async ({
+    page,
+  }) => {
     await openCut(page, "?draftsOnly=1");
     const first = card(page, "d-new");
     await expect(first).toContainText("vs Sam Ortiz");
@@ -661,11 +552,12 @@ test.describe("the cards below lg list the drafts too", () => {
     );
     await expect(card(page, "d-other")).toContainText("No event yet");
 
-    await first.click();
+    // Discard sits beside the link, not inside it: a button in an anchor
+    // would follow the link when pressed.
+    await expect(first.getByRole("button")).toHaveCount(0);
     await expect(
-      drawer(page).getByText("Stopped at Video check", { exact: true }),
-    ).toBeVisible();
-    expect(await page.evaluate(() => location.search)).toContain("draft=d-new");
+      first.locator("..").getByRole("button", { name: "Draft actions" }),
+    ).toHaveCount(1);
   });
 
   test("beside matches a standalone draft gets a card, a folded one none", async ({

@@ -4,7 +4,7 @@ import { useMemo } from "react";
 
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
 import { DraftCard } from "./draft-card";
-import { DraftRow, type DraftRowData } from "./draft-row";
+import { DraftRow, draftHref, type DraftRowData } from "./draft-row";
 import { MatchCardGallery } from "./match-card-gallery";
 import { MatchCardList } from "./match-card-list";
 import {
@@ -14,12 +14,8 @@ import {
   listColumnLabels,
   listGridCols,
   LIST_MIN_WIDTH,
-  LIST_MIN_WIDTH_COMPACT,
-  LIST_TRACK_TRANSITION,
   TEAM_LIST_MIN_WIDTH,
-  TEAM_LIST_MIN_WIDTH_COMPACT,
   datesNeedYear,
-  eventCellFade,
 } from "./match-list-layout";
 import { cn } from "@/lib/utils";
 
@@ -32,7 +28,8 @@ interface MatchesGridProps {
   drafts?: DraftRowData[];
   /**
    * Drafts that fill a listed match, keyed by that match's id — drawn as the
-   * match row's Draft pill instead of rows of their own (`foldDrafts`).
+   * match row's Draft pill and "Continue" instead of rows of their own
+   * (`foldDrafts`).
    */
   foldedDrafts?: ReadonlyMap<string, DraftRowData>;
   newMatchId?: string | null;
@@ -40,12 +37,6 @@ interface MatchesGridProps {
   unseenIds?: Set<string>;
   /** Which wizard a draft resumes in. */
   scope?: "personal" | "team";
-  /** The match or draft open in the drawer, or null. */
-  selectedId?: string | null;
-  /** Row click and Enter/Space: open, switch or close the drawer. */
-  onToggle?: (id: string, viaKeyboard: boolean) => void;
-  /** The drawer is open (or closing) beside the table. */
-  drawerOpen?: boolean;
   /**
    * Drawn in place of the cards and in the table body when neither `matches`
    * nor `drafts` lists anything: a listed draft is an answer to give.
@@ -60,13 +51,8 @@ export function MatchesGrid({
   newMatchId,
   unseenIds,
   scope = "personal",
-  selectedId = null,
-  onToggle,
-  drawerOpen = false,
   empty,
 }: MatchesGridProps): React.JSX.Element {
-  // Both tables give up Event beside the open rail; the rail names the event.
-  const compact = drawerOpen;
   /* Which layout shows is a width question, so Tailwind answers it rather than
      React. Held in state it could only be read after mount, so the server — which
      has no viewport — always emitted the wide table and a phone painted
@@ -92,6 +78,10 @@ export function MatchesGrid({
       ),
     [drafts, matches],
   );
+  const continueHref = (matchId: string) => {
+    const folded = foldedDrafts?.get(matchId);
+    return folded ? draftHref(folded.id, scope) : null;
+  };
   const cardStyle = {
     padding: "2px 24px 6px",
     "--date-col": needsYear ? DATE_COL_WITH_YEAR : DATE_COL,
@@ -101,16 +91,7 @@ export function MatchesGrid({
     <>
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:hidden">
         {drafts.map((draft) => (
-          <DraftCard
-            key={draft.id}
-            draft={draft}
-            scope={scope}
-            onOpen={
-              onToggle
-                ? (viaKeyboard) => onToggle(draft.id, viaKeyboard)
-                : undefined
-            }
-          />
+          <DraftCard key={draft.id} draft={draft} scope={scope} />
         ))}
         {matches.map((match) => (
           <MatchCardGallery
@@ -118,13 +99,6 @@ export function MatchesGrid({
             match={match}
             scope={scope}
             isNew={match.id === newMatchId}
-            // Below `lg` the cards stand in for the table, so a tap peeks
-            // like a row click; the drawer comes up as a sheet over them.
-            onOpen={
-              onToggle
-                ? (viaKeyboard) => onToggle(match.id, viaKeyboard)
-                : undefined
-            }
           />
         ))}
         {matches.length === 0 && drafts.length === 0 ? (
@@ -140,35 +114,23 @@ export function MatchesGrid({
             of dividers (SKILL 8a). */}
         <div className="surface-card overflow-x-auto" style={cardStyle}>
           <div
-            className={cn(
-              LIST_TRACK_TRANSITION,
-              scope === "personal"
-                ? compact
-                  ? LIST_MIN_WIDTH_COMPACT
-                  : LIST_MIN_WIDTH
-                : compact
-                  ? TEAM_LIST_MIN_WIDTH_COMPACT
-                  : TEAM_LIST_MIN_WIDTH,
-            )}
+            className={
+              scope === "personal" ? LIST_MIN_WIDTH : TEAM_LIST_MIN_WIDTH
+            }
           >
             {/* Column headers — flush at the card inset, hairline underneath. */}
             <div
               className={cn(
                 LIST_ROW_FRAME,
-                LIST_TRACK_TRANSITION,
                 "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
               )}
-              style={listGridCols(scope, compact)}
+              style={listGridCols(scope)}
               role="row"
             >
               {listColumnLabels(scope).map((label, i) => (
                 <span
                   key={label || `col-${i}`}
-                  aria-hidden={(label === "Event" && compact) || undefined}
-                  className={cn(
-                    "eyebrow-sm min-w-0 truncate",
-                    label === "Event" && eventCellFade(compact),
-                  )}
+                  className="eyebrow-sm min-w-0 truncate"
                   role="columnheader"
                 >
                   {label}
@@ -180,14 +142,7 @@ export function MatchesGrid({
               the route-level entrance. */}
             <div>
               {drafts.map((draft) => (
-                <DraftRow
-                  key={draft.id}
-                  draft={draft}
-                  scope={scope}
-                  compact={compact}
-                  selected={draft.id === selectedId}
-                  onToggle={onToggle}
-                />
+                <DraftRow key={draft.id} draft={draft} scope={scope} />
               ))}
               {matches.map((match) => (
                 <MatchCardList
@@ -197,9 +152,7 @@ export function MatchesGrid({
                   isNew={match.id === newMatchId}
                   unseen={unseenIds?.has(match.id)}
                   hasDraft={foldedDrafts?.has(match.id) ?? false}
-                  compact={compact}
-                  selected={match.id === selectedId}
-                  onToggle={onToggle}
+                  continueHref={continueHref(match.id)}
                 />
               ))}
               {matches.length === 0 && drafts.length === 0 ? empty : null}

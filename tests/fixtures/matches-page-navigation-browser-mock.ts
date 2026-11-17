@@ -1,13 +1,13 @@
 /**
  * `next/navigation` for the Matches-page harness.
  *
- * `MatchesPageContent` reads its filters, sort and deep links
- * (`?match=` / `?draft=`) straight off `useSearchParams()` at mount, so the
+ * `MatchesPageContent` reads its filters and sort straight off
+ * `useSearchParams()` at mount, so the
  * shared mock's `null` would throw there. This one answers from the harness
  * URL instead, and `usePathname()` from the same place, so the page's
- * `replaceState` mirror writes back onto the harness path. `refresh()` is
- * counted, for the draft rail's discard, which refreshes once the rail has
- * left.
+ * `replaceState` mirror writes back onto the harness path. `push()` is
+ * recorded, for the rows, which travel; `refresh()` is counted, for a draft's
+ * discard.
  */
 declare global {
   interface Window {

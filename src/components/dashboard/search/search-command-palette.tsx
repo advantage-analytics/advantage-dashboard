@@ -1017,9 +1017,8 @@ export function SearchCommandPalette({
           router.push(`/dashboard/matches/${item.data.id}`);
           return;
         case "roster":
-          // The Roster page opens the drawer for a `?player` it is handed.
           router.push(
-            `/dashboard/team/roster?player=${encodeURIComponent(item.data.playerId)}`,
+            `/dashboard/team/roster/${encodeURIComponent(item.data.playerId)}`,
           );
           return;
         default:

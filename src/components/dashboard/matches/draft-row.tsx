@@ -15,14 +15,14 @@
  * row stores, in the cell a match row draws. The lifecycle cell is the
  * draft's own: the dashed wait ring the list uses for "something real is
  * waiting", the step it stopped at as one word (`stepLabel`), then
- * "Continue", the way back into the wizard. Beside the open rail the track
- * is at its 96px floor, so the word is screen-reader-only there (the rail
- * names the step); at rest it truncates before Continue ever does.
+ * "Continue", the way back into the wizard; the word truncates before
+ * Continue ever does.
  *
  * It behaves like every other row on the page: at rest on white, washed on
- * hover and while selected, and a click opens the drawer rather than
- * travelling. The drawer holds Discard, so the row carries no ⋯. "Continue"
- * in the cell and ⌘-click on the row still go straight back into the wizard.
+ * hover, and a click travels — into the wizard, the only page a draft has.
+ * Where a match row draws its chevron the draft draws its ⋯, which holds
+ * Discard (`DraftDiscardMenu`): "Continue" already says where the row goes,
+ * and a draft has no report whose menu could hold the action instead.
  */
 
 import Link from "next/link";
@@ -42,41 +42,30 @@ import { formatMatchDayShortYear } from "@/lib/data/match-day";
 import { cn } from "@/lib/utils";
 import { EventCell } from "./event-cell";
 import { matchRowId } from "./match-card-list";
+import { DraftDiscardMenu } from "./draft-discard-menu";
+import { draftHref } from "./draft-href";
 import {
   LIST_ROW_FRAME,
-  LIST_TRACK_TRANSITION,
+  ROW_TRAIL_PAD,
   listGridCols,
 } from "./match-list-layout";
 
 export type { DraftRowData };
 
-/** Where a draft resumes: the wizard of the workspace it was saved in. */
-export function draftHref(id: string, scope: "personal" | "team"): string {
-  return scope === "team"
-    ? `/dashboard/team/upload?draft=${id}`
-    : `/dashboard/matches/new?draft=${id}`;
-}
+export { draftHref };
 
 export function DraftRow({
   draft,
   scope,
-  compact = false,
-  selected = false,
-  onToggle,
 }: {
   draft: DraftRowData;
   scope: "personal" | "team";
-  /** The table beside the open drawer, with its Event track dropped. */
-  compact?: boolean;
-  /** This draft is the one in the drawer. */
-  selected?: boolean;
-  /** Open or close the drawer on this row; `viaKeyboard` moves focus into it. */
-  onToggle?: (id: string, viaKeyboard: boolean) => void;
 }): React.JSX.Element {
   const router = useRouter();
   const href = draftHref(draft.id, scope);
   const isTeam = scope === "team";
-  const title = draftTitle(draft, scope) ?? UNTITLED_DRAFT;
+  const name = draftTitle(draft, scope);
+  const title = name ?? UNTITLED_DRAFT;
 
   const draftPill = (
     <StatePill outline className="shrink-0">
@@ -89,30 +78,26 @@ export function DraftRow({
       id={matchRowId(draft.id)}
       role="row"
       tabIndex={0}
-      aria-current={selected ? "true" : undefined}
       aria-label={`${title}, draft`}
       onClick={(event) => {
-        if (event.metaKey || event.ctrlKey || !onToggle) {
-          router.push(href);
+        if (event.metaKey || event.ctrlKey) {
+          window.open(href, "_blank", "noopener");
           return;
         }
-        onToggle(draft.id, false);
+        router.push(href);
       }}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          if (onToggle) onToggle(draft.id, true);
-          else router.push(href);
+          router.push(href);
         }
       }}
       className={cn(
         LIST_ROW_FRAME,
-        LIST_TRACK_TRANSITION,
-        "group relative -mx-4 h-[52px] cursor-pointer rounded-[var(--radius-element)] px-4 hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none",
-        selected && "bg-[var(--surface-muted)]",
+        "group relative -mx-4 h-[52px] cursor-pointer rounded-[var(--radius-element)] px-4 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none",
       )}
-      style={listGridCols(scope, compact)}
+      style={listGridCols(scope)}
     >
       {/* Date — the match day entered so far, read the one way a match day is
           read; a dash until there is one. */}
@@ -182,22 +167,17 @@ export function DraftRow({
       )}
 
       {/* Event — the label the row stores, in the match row's own cell. */}
-      <EventCell name={draft.eventLabel} hidden={compact} />
+      <EventCell name={draft.eventLabel} />
 
       {/* Lifecycle — the step it stopped at, then the way back in. The ring is
           the list's "waiting on something real"; the word is the step's own
-          name. Beside the open rail the track is at its 96px floor, which
-          holds the ring and Continue and nothing else, so the word goes to
-          screen readers only there — the rail names the step — rather than
-          truncating to a letter. The mark never shrinks; the word truncates
-          before Continue ever does. */}
-      <span className="flex min-w-0 items-center gap-3.5">
+          name. The mark never shrinks; the word truncates before Continue
+          ever does, and below `xl` — where the track is near its floor and
+          would cut the word to a letter — it is for screen readers only. */}
+      <span className={cn("flex min-w-0 items-center gap-3.5", ROW_TRAIL_PAD)}>
         <AnalysisStatusLine
           mark="wait"
-          className={cn(
-            "min-w-0 [&>span:first-child]:shrink-0 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate",
-            compact && "[&>span:last-child]:sr-only",
-          )}
+          className="min-w-0 [&>span:first-child]:shrink-0 [&>span:last-child]:min-w-0 [&>span:last-child]:truncate max-xl:[&>span:last-child]:sr-only"
         >
           {stepLabel(draft.step, draft.providerKind)}
         </AnalysisStatusLine>
@@ -209,6 +189,19 @@ export function DraftRow({
           Continue
         </Link>
       </span>
+
+      {/* Where a match row draws its chevron: the ⋯ that holds Discard. */}
+      <DraftDiscardMenu
+        draftId={draft.id}
+        matchName={name}
+        focusAfterDiscard={() => {
+          const row = document.getElementById(matchRowId(draft.id));
+          const neighbour = (row?.nextElementSibling ??
+            row?.previousElementSibling) as HTMLElement | null;
+          return neighbour?.getAttribute("role") === "row" ? neighbour : null;
+        }}
+        className="absolute top-1/2 right-2 -translate-y-1/2"
+      />
     </div>
   );
 }

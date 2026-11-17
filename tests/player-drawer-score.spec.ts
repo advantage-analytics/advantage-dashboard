@@ -12,8 +12,9 @@ import {
 } from "@/lib/ui/score-format";
 
 /**
- * The roster drawer's recent-match row — `player-drawer.tsx`, reached from
- * `/dashboard/team/roster` via `roster-view.tsx`.
+ * A drawer's recent-match row — `opponent-drawer.tsx`'s today, on the track
+ * `player-drawer-layout.ts` holds; the roster drawer it was written for is
+ * gone (2026-11-17, roster rows open the player page).
  *
  * Two independent defects made that row read `6-4 0-0 0-0`, clipped: the score
  * carried trailing zero sets that `matches.score` genuinely stores, and the row
@@ -24,7 +25,7 @@ import {
  * the rest of `tests/` does not.
  *
  * ── What is reproduced, and why ─────────────────────────────────────────────
- * `player-drawer.tsx` is a Next client component pulling in navigation and
+ * The drawer is a Next client component pulling in navigation and
  * motion, and `@playwright/test` rewrites JSX in everything it transpiles into
  * its own component-test elements — so neither the row nor `<ScoreLine>` can be
  * server-rendered from here. The row's grid template and the score cell's

@@ -25,7 +25,7 @@ import { MatchesDayZeroPage } from "@/components/dashboard/matches/matches-day-z
 import { PresenceReport } from "@/components/dashboard/presence-provider";
 import { MatchesSkeleton } from "@/components/dashboard/matches/matches-skeleton";
 import { matchesListShape } from "@/components/dashboard/matches/match-list-layout";
-import { MatchDrawerSlot } from "@/components/dashboard/matches/match-drawer-slot";
+import { draftHref } from "@/components/dashboard/matches/draft-href";
 import { listMatchDrafts } from "@/lib/wizard/actions";
 import { loginRedirectPath } from "@/lib/auth/request-path";
 
@@ -63,9 +63,34 @@ export const metadata = { title: "Matches" };
  * closing the gap properly means a program column on `processing_jobs`, not a
  * fan-out of per-match channels.
  */
-export default async function MatchesPage(): Promise<React.JSX.Element> {
+const RECORD_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export default async function MatchesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    match?: string | string[];
+    draft?: string | string[];
+  }>;
+}): Promise<React.JSX.Element> {
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect(await loginRedirectPath("/dashboard"));
+  // `?match=` and `?draft=` opened the list's peek drawer until 2026-11-17.
+  // The rows travel now, so a link saved from then lands where its row goes:
+  // the match's report, or the draft's wizard.
+  const { match: linkedMatch, draft: linkedDraft } = await searchParams;
+  if (typeof linkedMatch === "string" && RECORD_ID.test(linkedMatch)) {
+    redirect(`/dashboard/matches/${linkedMatch}`);
+  }
+  if (typeof linkedDraft === "string" && RECORD_ID.test(linkedDraft)) {
+    redirect(
+      draftHref(
+        linkedDraft,
+        workspace.active.kind === "team" ? "team" : "personal",
+      ),
+    );
+  }
   const user = workspace.viewer;
   const supabase = await createClient();
   const isTeam = workspace.active.kind === "team";
@@ -152,8 +177,6 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
     matches.map((m) => m.date),
     drafts.map((d) => d.matchDate),
   );
-  // A row: the page column, then the slot the match drawer portals into — so
-  // the rail sits beside the column and the table reflows, as on the Roster.
   return (
     <div className="flex w-full flex-1 bg-[var(--surface-card)]">
       {report}
@@ -181,7 +204,6 @@ export default async function MatchesPage(): Promise<React.JSX.Element> {
           </Suspense>
         </WidgetBoundary>
       </div>
-      <MatchDrawerSlot />
     </div>
   );
 }
