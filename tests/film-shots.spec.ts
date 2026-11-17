@@ -166,7 +166,6 @@ test("the serve row: Stroke is Serve, Type is First or Second", () => {
     stroke: "Serve",
     type: "Second",
     placement: "Body, deuce court",
-    mph: "112",
     result: "In",
   });
   expect(shotTypeLabel(shot("f", 1, { shotType: "First Serve" }), null)).toBe(
@@ -191,7 +190,6 @@ test("a rally row: the point's return reads Return, every later shot Rally", () 
     stroke: "Forehand",
     type: "Return",
     placement: "Inside-out, deep",
-    mph: "74",
     result: "Out",
   });
   // Not the return: Rally, wherever the row sits — the stroke is Stroke's job.
@@ -275,11 +273,12 @@ test("nothing unmeasured is ever rendered as a zero", () => {
     stroke: "—",
     type: "—",
     placement: "—",
-    mph: "—",
     result: "—",
   });
-  // A measured zero still reads as zero — the dash means "not measured".
-  expect(shotRowCells({ ...blank, speedMph: 0 }, 4, "Lee").mph).toBe("0");
+  // Speed is never a cell, measured or not.
+  expect(shotRowCells({ ...blank, speedMph: 98 }, 4, "Lee")).not.toHaveProperty(
+    "mph",
+  );
 });
 
 test("Placement is the Direction filter's rule: Inside Out / Inside In need a hand", () => {

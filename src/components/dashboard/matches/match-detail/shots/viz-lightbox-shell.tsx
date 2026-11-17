@@ -218,6 +218,8 @@ export interface VizLightboxShellProps {
     total: number;
     render: (args: LightboxPointListArgs) => ReactNode;
   };
+  /** Over the Statistics rows (`WatchHintNotice`). */
+  statHint?: ReactNode;
   /** The footer's actions, left and right. `null`: no footer bar. */
   footer?: (args: LightboxFooterArgs) => {
     start?: ReactNode;
@@ -293,6 +295,7 @@ export function VizLightboxShell({
   controls,
   bandEditor,
   pointList,
+  statHint,
   footer,
   draft,
   pending = false,
@@ -1092,7 +1095,6 @@ export function VizLightboxShell({
                       zoneStats={isDraft ? null : result.zoneStats}
                       filters={filters}
                       subjectName={subjectName}
-                      unit={unit}
                       bands={isDraft ? null : bandOverlay}
                       transform={pz.t}
                       stage={pz.stage}
@@ -1308,6 +1310,7 @@ export function VizLightboxShell({
                             );
                           }}
                           onHover={setStatHover}
+                          hint={statHint ?? null}
                         />
                       </div>
                     ))}

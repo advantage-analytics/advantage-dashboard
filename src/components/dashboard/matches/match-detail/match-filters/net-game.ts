@@ -128,6 +128,33 @@ export function netEntryOf(
 }
 
 /**
+ * The shot that took `isPlayer1` to the net on `point` — what the
+ * Visualizations Net filter draws on a rally cut — or `undefined` when the
+ * side never came in (`netEntryOf` is `null`). N is the side's first net
+ * shot, as in {@link netEntryOf}:
+ *
+ * - `approach` / `serve-volley` — the side's own last shot before N: the
+ *   approach shot, or the serve it followed in.
+ * - `drawn-in` — N itself, the short ball the side ran onto; the shot before
+ *   it was hit from the back and took nobody in.
+ *
+ * With no own shot before N (a rally the side opened at the net), N itself.
+ */
+export function netApproachShotOf(
+  point: MatchPoint,
+  isPlayer1: boolean,
+): MatchShot | undefined {
+  const entry = netEntryOf(point, isPlayer1);
+  if (entry === null) return undefined;
+  const shots = point.shots ?? [];
+  const n = shots.findIndex((s) => s.isPlayer1 === isPlayer1 && isNetShot(s));
+  if (entry === "drawn-in") return shots[n];
+  return (
+    shots.slice(0, n).findLast((s) => s.isPlayer1 === isPlayer1) ?? shots[n]
+  );
+}
+
+/**
  * A ball-paths contact time as a lookup key: rounded to the millisecond, so a
  * `shots.video_time` that went through the database and back still finds the
  * stroke whose `contactTime` is that same value.

@@ -94,7 +94,6 @@ function Harness() {
           zoneStats={result.zoneStats}
           filters={state.filters}
           subjectName="Selected player"
-          unit="m"
           bands={null}
           transform={{ px: 0, py: 0, z: 1 }}
           stage={{ w: 700, h: 700 }}

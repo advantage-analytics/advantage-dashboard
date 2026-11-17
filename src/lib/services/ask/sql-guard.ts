@@ -238,7 +238,24 @@ interface WalkState {
   matchStatsReferenced: boolean;
   /** Whether a column named `side` was referenced anywhere in the statement. */
   sideReferenced: boolean;
+  /** Whether `ask.shots` was read anywhere in the statement. */
+  shotsReferenced: boolean;
+  /** Whether a `*` / `alias.*` column list appears anywhere in the statement. */
+  starReferenced: boolean;
 }
+
+/**
+ * Shot speed is never shown: a single camera cannot measure it accurately
+ * (UGA coaches call, 2026-11-16). The column stays in `ask.shots` and in the
+ * data; a query may not read it, by name or through `*`, so neither Ask nor
+ * the Claude connector can print it. Exported so the prompts can quote it.
+ */
+export const ASK_SPEED_HIDDEN_REASON =
+  "Shot speed is not available: a single camera cannot measure it accurately, so speed_mph may not be read. Answer without speed.";
+const SPEED_COLUMN = "speed_mph";
+const SHOTS_VIEW = "shots";
+export const ASK_SHOTS_STAR_REASON =
+  "sql reads ask.shots with *. Name the columns you need instead: speed_mph may not be read.";
 
 /** The view with two rows per match, and the column that tells them apart. */
 const TWO_SIDED_VIEW = "match_stats";
@@ -311,6 +328,7 @@ function checkRelation(name: Node, state: WalkState): void {
   }
   if ((ASK_VIEWS as readonly string[]).includes(relation)) {
     if (relation === TWO_SIDED_VIEW) state.matchStatsReferenced = true;
+    if (relation === SHOTS_VIEW) state.shotsReferenced = true;
     return;
   }
   if (schema === "ask") {
@@ -364,6 +382,21 @@ function walk(value: unknown, state: WalkState): void {
   }
   if (!isNode(value)) return;
 
+  // A `*` in a SELECT's own column list (`select *`, `select s.*`) — not
+  // `count(*)`, whose star is a call argument and reads no column.
+  if (
+    Array.isArray(value.columns) &&
+    value.columns.some(
+      (c) =>
+        isNode(c) &&
+        isNode(c.expr) &&
+        str(c.expr.type) === "ref" &&
+        str(c.expr.name) === "*",
+    )
+  ) {
+    state.starReferenced = true;
+  }
+
   const type = str(value.type);
   if (type !== undefined) {
     if (!NODE_ALLOWLIST.has(type)) {
@@ -399,9 +432,10 @@ function walk(value: unknown, state: WalkState): void {
             `Column reference "${str(table.schema)}.${str(table.name)}.${str(value.name)}" may not name a schema.`,
           );
         }
-        if (str(value.name)?.toLowerCase() === SIDE_COLUMN) {
-          state.sideReferenced = true;
-        }
+        const column = str(value.name)?.toLowerCase();
+        if (column === SIDE_COLUMN) state.sideReferenced = true;
+        if (column === SPEED_COLUMN) refuse(ASK_SPEED_HIDDEN_REASON);
+
         break;
       }
       default:
@@ -441,11 +475,16 @@ function checkOne(text: string, mode: WalkState["mode"]): WalkState {
     scopeReferenced: false,
     matchStatsReferenced: false,
     sideReferenced: false,
+    shotsReferenced: false,
+    starReferenced: false,
   };
   collectCteNames(statement, state.cteNames);
   walk(statement, state);
   if (mode === "sql" && state.matchStatsReferenced && !state.sideReferenced) {
     refuse(ASK_SIDE_REQUIRED_REASON);
+  }
+  if (state.shotsReferenced && state.starReferenced) {
+    refuse(ASK_SHOTS_STAR_REASON);
   }
   return state;
 }
@@ -465,7 +504,9 @@ function checkOne(text: string, mode: WalkState["mode"]): WalkState {
  *   ({@link ASK_SIDE_REQUIRED_REASON}); a mention is all that is checked —
  *   the view's two rows make a query without one wrong by construction, and
  *   one with it is the planner's to get right;
- * - every function is on {@link ASK_SQL_FUNCTION_ALLOWLIST}.
+ * - every function is on {@link ASK_SQL_FUNCTION_ALLOWLIST};
+ * - nothing reads `ask.shots.speed_mph`, by name or through a `*` over
+ *   `ask.shots` ({@link ASK_SPEED_HIDDEN_REASON}).
  *
  * The first problem found is the reason; the route feeds it back to the model.
  */

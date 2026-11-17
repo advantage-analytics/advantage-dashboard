@@ -438,3 +438,38 @@ test.describe("the planner's errors guidance (ASK_PLAN_ERRORS_RULE)", () => {
     expect(got).toMatchObject({ ok: true });
   });
 });
+
+test.describe("shot speed is never read (single-camera speed is not accurate)", () => {
+  const FROM = "from ask.shots sh join scope on scope.match_id = sh.match_id";
+
+  test("naming speed_mph is refused, anywhere in either string", () => {
+    expectRefused(
+      check(`select avg(sh.speed_mph) ${FROM}`),
+      /Shot speed is not available/,
+    );
+    expectRefused(
+      check(`select sh.shot_type ${FROM} where sh.speed_mph > 100`),
+      /Shot speed is not available/,
+    );
+    expectRefused(
+      check(
+        `select sh.shot_type ${FROM}`,
+        "select match_id from ask.shots where speed_mph > 0",
+      ),
+      /Shot speed is not available/,
+    );
+  });
+
+  test("a * over ask.shots is refused; count(*) and * over other views pass", () => {
+    expectRefused(check(`select * ${FROM}`), /Name the columns you need/);
+    expectRefused(check(`select sh.* ${FROM}`), /Name the columns you need/);
+    expect(check(`select count(*) as shots ${FROM}`)).toMatchObject({
+      ok: true,
+    });
+    expect(
+      check(
+        "select * from ask.matches m join scope on scope.match_id = m.match_id",
+      ),
+    ).toMatchObject({ ok: true });
+  });
+});

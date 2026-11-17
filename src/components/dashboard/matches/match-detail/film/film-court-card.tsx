@@ -156,7 +156,7 @@ const keyOf = (mark: FilmCourtMark) => `${mark.shotId}:${mark.kind}`;
 
 /**
  * The readout's three lines, built from the shot's own fields through the
- * same helpers the "Current point" widget uses — so an unmeasured speed,
+ * same helpers the "Current point" widget uses — so an unmeasured
  * placement or result prints {@link UNMEASURED} and never a `0`, which would
  * be a different claim about the match.
  */
@@ -166,9 +166,10 @@ function readoutLines(
   hand: Hand | null,
 ) {
   const cells = shotRowCells(mark.shot, mark.order, playerName, null, hand);
-  const speed = cells.mph === UNMEASURED ? UNMEASURED : `${cells.mph} mph`;
   return {
-    title: `${shotLabel(mark.shot)} · ${speed}`,
+    // No speed: a single camera cannot measure it accurately, so it is never
+    // shown (the data stays in `shots.speed_mph`).
+    title: shotLabel(mark.shot),
     who: `${cells.player} · Shot ${mark.order} of ${mark.rallyShots}`,
     where: `${cells.placement} · ${cells.result.toLowerCase()}`,
   };

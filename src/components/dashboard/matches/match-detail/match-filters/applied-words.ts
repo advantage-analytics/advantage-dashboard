@@ -1,5 +1,7 @@
 import { capitalize } from "@/lib/utils";
 
+import type { NetEntry } from "./net-game";
+
 import {
   bandOptionLabel,
   MATCH_FILTER_OPTIONS,
@@ -89,6 +91,11 @@ const RESULT_MISSED_PHRASE: Record<ResultMissed, string> = {
   Out: "missed out",
   Net: "missed in the net",
 };
+const NET_HOW_PHRASE: Record<NetEntry, string> = {
+  approach: "approach to the net",
+  "serve-volley": "serve and volley",
+  "drawn-in": "drawn in to the net",
+};
 const RALLY_LENGTH_PHRASE: Record<RallyLengthBand, string> = {
   short: "short rally (1–4)",
   medium: "medium rally (5–8)",
@@ -148,6 +155,8 @@ const PHRASE: {
     RESULT_MISSED_PHRASE[value as ResultMissed] ?? lower(option),
   resultRallyLength: (option, value) =>
     RALLY_LENGTH_PHRASE[value as RallyLengthBand] ?? lower(option),
+  netCameIn: (_, value, names) => `${playerName(value, names)} at the net`,
+  netHow: (option, value) => NET_HOW_PHRASE[value as NetEntry] ?? lower(option),
   customPlayer: (_, value, names) => `a shot by ${playerName(value, names)}`,
   customSide: (option) => `from the ${lower(option)} side`,
   customStroke: (option) => article(lower(option)),

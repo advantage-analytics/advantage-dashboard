@@ -52,7 +52,6 @@ import {
   type VizDot,
   type VizFilters,
 } from "./viz-model";
-import type { DistanceUnit } from "@/lib/format/distance";
 
 /**
  * The lightbox's court (once the fullscreen viewer's, Phase 2A) — one
@@ -190,7 +189,6 @@ export function LightboxCourt({
   zoneStats,
   filters,
   subjectName,
-  unit,
   bands,
   transform,
   stage,
@@ -219,8 +217,6 @@ export function LightboxCourt({
   zoneStats: Record<ZoneKey, ZoneStats> | null;
   filters: VizFilters;
   subjectName: string;
-  /** The viewer's Units preference — the readout's speed line follows it. */
-  unit: DistanceUnit;
   /**
    * The depth/contact band overlay's data (Phase 2B), or `null` on a cut
    * with no bands (Serve) or with the shading turned off. Passed as ONE
@@ -313,7 +309,6 @@ export function LightboxCourt({
           activeMeta,
           active.outcome,
           cut,
-          unit,
           activeMeta.pointId ? (whereFor?.(activeMeta.pointId) ?? null) : null,
           {
             match: matchFor?.(active) ?? null,
@@ -523,7 +518,6 @@ export function LightboxCourt({
                 cut={cut}
                 dots={dots}
                 subjectName={subjectName}
-                unit={unit}
                 activeId={activeId}
                 focusedId={focusedId}
                 selectedId={selectedId}
@@ -831,7 +825,6 @@ const MarkLayer = memo(function MarkLayer({
   cut,
   dots,
   subjectName,
-  unit,
   activeId,
   focusedId,
   selectedId,
@@ -847,9 +840,6 @@ const MarkLayer = memo(function MarkLayer({
   dots: VizDot[];
   focusIds: ReadonlySet<string> | null;
   subjectName: string;
-  /** The viewer's Units preference — the announced label's speed follows it,
-   *  same as the visible readout. */
-  unit: DistanceUnit;
   /** `false` while the band editor is open: no mark is a tab stop, so Tab
    *  goes from the dividers straight to the slab. */
   interactive: boolean;
@@ -870,18 +860,13 @@ const MarkLayer = memo(function MarkLayer({
         const { x, y } = projectViewerDot(cut, dot);
         const label = dot.meta
           ? (() => {
-              const r = buildReadout(
-                dot.meta,
-                { subject: subjectName },
-                cut,
-                unit,
-              );
+              const r = buildReadout(dot.meta, { subject: subjectName }, cut);
               return [r.title, ...r.lines].join(" — ");
             })()
           : `${subjectName} — mark`;
         return { dot, x, y, fill: fillFor(dot), label };
       }),
-    [dots, cut, subjectName, unit],
+    [dots, cut, subjectName],
   );
 
   // The tab stop: whichever mark was last focused, else the first. A

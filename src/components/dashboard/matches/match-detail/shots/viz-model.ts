@@ -42,8 +42,10 @@ import {
   errorMadeBy,
   hasActiveMatchFilters,
   hasCustom,
+  hasNet,
   hasThen,
   shotMatchesCustom,
+  shotMatchesNet,
   shotMatchesThen,
   finalShotOf,
   lastShotOf,
@@ -914,6 +916,12 @@ function matchFilterPass(
   );
   return {
     point: (p) => ids.has(p.id),
+    // Net alone (no Custom or Then): a rally cut draws the shot that took
+    // the side in — the approach shot — not every shot of the point.
+    rallyShot:
+      hasNet(match) && !hasCustom(match) && !hasThen(match)
+        ? (s, p) => shotMatchesNet(s, p, match, context)
+        : null,
     shot: hasCustom(match)
       ? (s) => shotMatchesCustom(s, match, context)
       : hasThen(match)
@@ -929,6 +937,8 @@ function matchFilterPass(
  * errors cuts plot a shot, so they test that shot too. */
 interface MatchPass {
   point: (p: MatchPoint) => boolean;
+  /** Rally cuts only: the Net filter's approach shot (`shotMatchesNet`). */
+  rallyShot: ((s: MatchShot, p: MatchPoint) => boolean) | null;
   shot: ((s: MatchShot) => boolean) | null;
 }
 
@@ -1224,6 +1234,7 @@ function computeRallyViz(
       total++;
       if (!passes) continue;
       if (matchPass?.shot && !matchPass.shot(shot)) continue;
+      if (matchPass?.rallyShot && !matchPass.rallyShot(shot, p)) continue;
       count++;
 
       dots.push({

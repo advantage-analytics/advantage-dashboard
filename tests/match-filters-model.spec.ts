@@ -1326,6 +1326,8 @@ const EVERYTHING: MatchFilters = {
   resultEnding: ["winner", "error"],
   resultMissed: ["Out", "Net"],
   resultRallyLength: ["short", "medium", "long"],
+  netCameIn: "you",
+  netHow: ["approach", "serve-volley", "drawn-in"],
   customPlayer: "opponent",
   customSide: ["deuce", "ad"],
   customStroke: ["Forehand", "Backhand", "Volley", "Overhead"],
@@ -1381,6 +1383,8 @@ test("an older ?f= string parses exactly as before and re-serializes unchanged",
         customLanded: [],
         thenContact: [],
         thenLanded: [],
+        netCameIn: null,
+        netHow: [],
       }),
     ),
   ).toBe(true);
@@ -1408,7 +1412,9 @@ test("Custom › Stroke and Then use their own short codes and round-trip", () =
   expect(serializeMatchFilters(EVERYTHING)).toBe(
     PRE_THEN_EVERYTHING.replace("_rc.i.m.n_", "_rc.i.nr.fr_rl.d.m.s_")
       .replace("_cd.", "_ck.fh.bh.vo.oh_cd.")
-      .replace("_cr.", "_cn.i_cl.s_cr.") +
+      .replace("_cr.", "_cn.i_cl.s_cr.")
+      // Net sits between Result and Custom (`np` Came in, `ne` How).
+      .replace("_cp.", "_np.y_ne.a.sv.d_cp.") +
       "_tp.y_ts.a_tk.bh.oh_td.dl.ii_tn.fr_tl.d.m_tr.2.7",
   );
   // matchFiltersQuery carries the same value as ?f=.
