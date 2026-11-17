@@ -121,8 +121,15 @@ update of `verified` is refused; the seed's dry run shows `verified: false`;
   `verified_by` = the admin, in the same server-side write. A
   `security definer` function `verify_match(p_match_id, p_actor)`,
   executable by `service_role` only, so the step 0 guard stays the only door.
-- **Revoke.** `reopenLabelSession` clears the four columns. The confirm dialog
-  says so: "Reopen and remove Verified by Advantage?"
+- **Revoke.** ~~`reopenLabelSession` clears the four columns.~~ Superseded
+  2026-11-16: Reopen keeps Verified by Advantage, since the published points
+  stay until the next publish re-stamps it (as Send back already did).
+  Every label publish (`publishPlanned`, the console's and the
+  `label-apply` script's) calls `unverify_match` just before it replaces the
+  points, and Mark complete's `verify_match` re-grants it after, so a publish
+  that stops part-way leaves the match unverified, never verified over
+  unchecked points. A rolled-back write and a `label-apply --restore` put back
+  only the stamp that verified the rows they restore.
 - **Display** (one helper, `verificationFor(row)` in `src/lib/data/`):
   - Loaders: replace the four "Verified result" mappings
     (`matches-list-types.ts:115`, `match-detail-server.ts:198`,

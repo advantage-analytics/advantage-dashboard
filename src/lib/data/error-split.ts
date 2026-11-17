@@ -6,9 +6,9 @@
  *   and `match_stats.forced_errors` carries its count.
  * - A video (Advantage Intelligence) match is judged only once Advantage has
  *   verified it AND judged its errors (`matches.errors_judged_at`). Both, not
- *   the marker alone: Reopen (`unverify_match`) clears `verified` but leaves
- *   the marker, and a reopened match must drop back to plain "Errors" until it
- *   is verified again.
+ *   the marker alone: `unverify_match` clears `verified` but leaves the
+ *   marker, and an unverified match must drop back to plain "Errors" until it
+ *   is verified again. (A Reopen keeps both: the published points stay.)
  * - Everything else — an unverified video match, or one verified before error
  *   judging existed (marker null) — is not judged: its "unforced" count is
  *   every error, and the report says "Errors".

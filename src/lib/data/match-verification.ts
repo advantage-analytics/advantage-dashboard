@@ -2,7 +2,11 @@
  * Verified by Advantage (docs/plans/advantage-review.md): someone at
  * Advantage checked every point of the match against the video. Granted only
  * by Advantage — `verify_match`, service role only, from the label console's
- * Mark complete — and removed by its Reopen (`unverify_match`).
+ * Mark complete. A Reopen keeps it (the published points stay until the next
+ * publish). That publish takes it off (`unverify_match`) just before it
+ * replaces the points, and `verify_match` puts it back once they are in, so a
+ * publish that stops part-way leaves the match unverified. The console has no
+ * control that removes it on its own.
  *
  * The one reading of `matches.verified` / `verified_at` for display: every
  * loader maps its row through `verificationFor`, and every surface prints
