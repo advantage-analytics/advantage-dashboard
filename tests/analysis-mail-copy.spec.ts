@@ -583,6 +583,8 @@ function loadNotifyAnalysisVerified(
     notifyAnalysisVerified: mod.notifyAnalysisVerified as (params: {
       supabase: unknown;
       jobId: string;
+      matchId: string;
+      sessionId: string;
     }) => Promise<void>,
     readyVerificationPending: mod.readyVerificationPending as (
       job: Record<string, unknown>,
@@ -594,42 +596,68 @@ function loadNotifyAnalysisVerified(
   };
 }
 
-const VERIFIED_JOB = {
-  created_by: "uploader-1",
-  match_id: MATCH_ID,
-  status: "completed",
-  error_code: null,
-  error_category: null,
-  error_step: null,
-  error_message: null,
-  video_object_key: "videos/x.mp4",
-  results_object_key: "results/x.json",
-};
+/** The reads `notifyAnalysisVerified` makes, answered from fixed rows. */
+function verifiedSupabase(rows: {
+  /** Other label sessions on the match that have published. */
+  earlier?: { id: string }[];
+  /** The match's jobs, newest first as the query orders them. */
+  jobs?: { id: string; created_by: string | null }[];
+}) {
+  const { earlier = [], jobs = [{ id: "job-1", created_by: "uploader-1" }] } =
+    rows;
+  const reads: string[] = [];
+  const chain = (table: string, result: unknown) => {
+    const builder: Record<string, unknown> = {};
+    for (const method of ["select", "eq", "neq", "not", "order", "limit"]) {
+      builder[method] = () => builder;
+    }
+    builder.maybeSingle = async () => result;
+    builder.then = (resolve: (v: unknown) => unknown) => {
+      reads.push(table);
+      return Promise.resolve(result).then(resolve);
+    };
+    return builder;
+  };
+  return {
+    reads,
+    supabase: {
+      from(table: string) {
+        if (table === "label_sessions") {
+          return chain(table, { data: earlier, error: null });
+        }
+        if (table === "processing_jobs") {
+          return chain(table, { data: jobs, error: null });
+        }
+        if (table === "matches") {
+          return chain(table, {
+            data: { player1_name: "Alex Rivera", player2_name: "Jordan Chen" },
+            error: null,
+          });
+        }
+        if (table === "users") {
+          return chain(table, {
+            data: { email: "alex@example.test" },
+            error: null,
+          });
+        }
+        throw new Error(`unexpected table ${table}`);
+      },
+    },
+  };
+}
+
+const TARGET = { jobId: "job-1", matchId: MATCH_ID, sessionId: "session-1" };
 
 test.describe("notifyAnalysisVerified", () => {
   quietConsole();
 
-  test("no ready mail went out for the job: nothing is claimed or sent", async () => {
+  test("no ready mail went out for the match: nothing is claimed or sent", async () => {
     const run = loadNotifyAnalysisVerified({ sent: [] });
-    await run.notifyAnalysisVerified({
-      supabase: fakeSupabase(VERIFIED_JOB, []),
-      jobId: "job-1",
-    });
+    const db = verifiedSupabase({});
+    await run.notifyAnalysisVerified({ supabase: db.supabase, ...TARGET });
     expect(run.reads).toEqual(["analysis_ready:job-1"]);
     expect(run.claims).toEqual([]);
     expect(run.verifiedInputs).toHaveLength(0);
-    expect(run.sentTags).toHaveLength(0);
-  });
-
-  test("a ready mail for ANOTHER job does not count", async () => {
-    const run = loadNotifyAnalysisVerified({
-      sent: ["analysis_ready:job-0"],
-    });
-    await run.notifyAnalysisVerified({
-      supabase: fakeSupabase(VERIFIED_JOB, []),
-      jobId: "job-1",
-    });
-    expect(run.claims).toEqual([]);
     expect(run.sentTags).toHaveLength(0);
   });
 
@@ -637,10 +665,8 @@ test.describe("notifyAnalysisVerified", () => {
     const run = loadNotifyAnalysisVerified({
       sent: ["analysis_ready:job-1"],
     });
-    await run.notifyAnalysisVerified({
-      supabase: fakeSupabase(VERIFIED_JOB, []),
-      jobId: "job-1",
-    });
+    const db = verifiedSupabase({});
+    await run.notifyAnalysisVerified({ supabase: db.supabase, ...TARGET });
     expect(run.claims).toEqual(["analysis_verified:job-1"]);
     expect(run.verifiedInputs).toEqual([
       {
@@ -652,15 +678,41 @@ test.describe("notifyAnalysisVerified", () => {
     expect(run.sentTags).toEqual([{ type: "analysis_verified" }]);
   });
 
+  test("the match was analysed again after the session was seeded: the announced job is the one followed up", async () => {
+    const run = loadNotifyAnalysisVerified({
+      sent: ["analysis_ready:job-2"],
+    });
+    const db = verifiedSupabase({
+      jobs: [
+        { id: "job-2", created_by: "uploader-1" },
+        { id: "job-1", created_by: "uploader-1" },
+      ],
+    });
+    await run.notifyAnalysisVerified({ supabase: db.supabase, ...TARGET });
+    // The session's own job is asked first, then the newer one.
+    expect(run.reads).toEqual(["analysis_ready:job-1", "analysis_ready:job-2"]);
+    expect(run.claims).toEqual(["analysis_verified:job-2"]);
+    expect(run.sentTags).toHaveLength(1);
+  });
+
+  test("another label session on the match already published: no mail, even with a ready mail on record", async () => {
+    const run = loadNotifyAnalysisVerified({
+      sent: ["analysis_ready:job-1"],
+    });
+    const db = verifiedSupabase({ earlier: [{ id: "session-0" }] });
+    await run.notifyAnalysisVerified({ supabase: db.supabase, ...TARGET });
+    expect(run.reads).toEqual([]);
+    expect(run.claims).toEqual([]);
+    expect(run.sentTags).toHaveLength(0);
+  });
+
   test("'Email me when analysis is ready' turned off since: nothing", async () => {
     const run = loadNotifyAnalysisVerified({
       sent: ["analysis_ready:job-1"],
       readyPref: false,
     });
-    await run.notifyAnalysisVerified({
-      supabase: fakeSupabase(VERIFIED_JOB, []),
-      jobId: "job-1",
-    });
+    const db = verifiedSupabase({});
+    await run.notifyAnalysisVerified({ supabase: db.supabase, ...TARGET });
     expect(run.claims).toEqual([]);
     expect(run.sentTags).toHaveLength(0);
   });
@@ -670,16 +722,14 @@ test.describe("notifyAnalysisVerified", () => {
       sent: ["analysis_ready:job-1"],
       claimLost: true,
     });
-    await run.notifyAnalysisVerified({
-      supabase: fakeSupabase(VERIFIED_JOB, []),
-      jobId: "job-1",
-    });
+    const db = verifiedSupabase({});
+    await run.notifyAnalysisVerified({ supabase: db.supabase, ...TARGET });
     expect(run.claims).toEqual(["analysis_verified:job-1"]);
     expect(run.verifiedInputs).toHaveLength(0);
     expect(run.sentTags).toHaveLength(0);
   });
 
-  test("never throws, even when the job read blows up", async () => {
+  test("never throws, even when a read blows up", async () => {
     const run = loadNotifyAnalysisVerified({
       sent: ["analysis_ready:job-1"],
     });
@@ -689,7 +739,7 @@ test.describe("notifyAnalysisVerified", () => {
       },
     };
     await expect(
-      run.notifyAnalysisVerified({ supabase: exploding, jobId: "job-1" }),
+      run.notifyAnalysisVerified({ supabase: exploding, ...TARGET }),
     ).resolves.toBeUndefined();
     expect(run.sentTags).toHaveLength(0);
   });

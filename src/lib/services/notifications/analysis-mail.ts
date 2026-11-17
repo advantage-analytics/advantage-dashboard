@@ -22,7 +22,10 @@ import {
   type RecoveryClass,
 } from "@/lib/data/match-analysis";
 import { verificationPendingFor } from "@/lib/data/match-verification";
-import { jobVideoSeconds } from "@/lib/services/labels/video-seconds";
+import {
+  jobVideoSeconds,
+  type JobVideoSpan,
+} from "@/lib/services/labels/video-seconds";
 import { alreadySent, claimSend, getNotificationPrefs } from "./should-notify";
 import { readReprocessParent } from "@/lib/services/splitstep/reprocess";
 
@@ -246,17 +249,12 @@ export async function notifyAnalysisOutcome(params: {
  * been stamped yet (`deriveAndPublish` writes `completed` just before this).
  */
 export function readyVerificationPending(
-  job: Record<string, unknown>,
+  job: JobVideoSpan & { completed_at: string | null },
   now: Date = new Date(),
 ): boolean {
   return verificationPendingFor({
-    results_at: (job.completed_at as string | null) ?? now.toISOString(),
-    has_video:
-      jobVideoSeconds({
-        start_time_seconds: job.start_time_seconds as number | null,
-        end_time_seconds: job.end_time_seconds as number | null,
-        billable_seconds: job.billable_seconds as number | null,
-      }) > 0,
+    results_at: job.completed_at ?? now.toISOString(),
+    has_video: jobVideoSeconds(job) > 0,
     labelling: false,
   });
 }
@@ -265,53 +263,72 @@ export function readyVerificationPending(
  * "Your match is Verified by Advantage" — to the player who already had the
  * ready mail for this job, after a label publish verified the match.
  *
- * The caller (`writeLabelSessionComplete`) calls this only when the publish
- * verified a match that was NOT verified before it, so a re-publish of a
- * verified match, or of anything verified before this shipped, never mails.
- * Here the rest of the rule:
+ * The caller (`writeLabelSessionComplete`) calls this only on a session's
+ * FIRST publish (`published_at` was null) that verified a match which was NOT
+ * verified before it. Here the rest of the rule:
  *
- *  - only after `analysis_ready:<job_id>` was sent. No ready mail (the switch
- *    was off, the account had no address, an admin reprocess) means the
- *    player was never told about the automatic numbers, so there is nothing
- *    to correct. Read with `alreadySent`, not claimed: that key is the ready
- *    mail's, never this one's;
+ *  - no other label session on the match has ever published. Together with
+ *    the caller's check this makes it the match's first verification: a
+ *    re-publish, a retry after a publish that took the badge off and then
+ *    failed to verify, and anything published before this shipped (job
+ *    94581238, whose player was told by hand) never mail;
+ *  - only after a ready mail went out for the match (`readyMailJob`): the
+ *    session's own job, else whichever of the match's jobs was announced (a
+ *    match analysed again after its session was seeded). No ready mail (the
+ *    switch was off, the account had no address, an admin reprocess) means
+ *    the player was never told about the automatic numbers, so there is
+ *    nothing to correct. Read with `alreadySent`, never claimed: that key is
+ *    the ready mail's;
  *  - the same switch as the ready mail, "Email me when analysis is ready",
  *    read now: someone who turned it off since gets nothing;
- *  - once per job, `analysis_verified:<job_id>`, claimed after the cheap reads
- *    for the same reason `notifyAnalysisOutcome` does.
+ *  - to that job's uploader, once per job, `analysis_verified:<job_id>`,
+ *    claimed after the cheap reads for the same reason `notifyAnalysisOutcome`
+ *    does.
  *
  * Never throws: it runs after the labels are published and the session is
  * closed, and a failure here must not read as a failed publish.
  */
 export async function notifyAnalysisVerified(params: {
   supabase: SupabaseClient;
+  /** The label session's own job (`label_sessions.job_id`). */
   jobId: string;
+  /** The match the publish verified (`label_sessions.match_id`). */
+  matchId: string;
+  /** The session that was just published. */
+  sessionId: string;
 }): Promise<void> {
-  const { supabase, jobId } = params;
+  const { supabase, jobId, matchId, sessionId } = params;
   try {
-    if (!(await alreadySent(`analysis_ready:${jobId}`))) {
+    // Only the match's first verification is news. Any other label session
+    // on this match that has ever published means the player's report was
+    // verified before (and possibly told so by hand) — this publish is a
+    // correction to a verified match, not the check the ready mail promised.
+    const { data: earlier, error: earlierError } = await supabase
+      .from("label_sessions")
+      .select("id")
+      .eq("match_id", matchId)
+      .neq("id", sessionId)
+      .not("published_at", "is", null)
+      .limit(1);
+    if (earlierError || (earlier?.length ?? 0) > 0) {
+      console.log(`${LOG} match published before — no verified mail`, {
+        matchId,
+        error: earlierError?.message,
+      });
+      return;
+    }
+
+    const announced = await readyMailJob(supabase, { jobId, matchId });
+    if (!announced) {
       console.log(`${LOG} verified, but no ready mail went out — none sent`, {
         jobId,
+        matchId,
       });
       return;
     }
 
-    const { data: job, error: jobError } = await supabase
-      .from("processing_jobs")
-      .select("created_by, match_id")
-      .eq("id", jobId)
-      .maybeSingle();
-    if (jobError || !job) {
-      console.warn(`${LOG} verified job not readable, nobody mailed`, {
-        jobId,
-        error: jobError?.message,
-      });
-      return;
-    }
-
-    const uploaderId = job.created_by as string | null;
-    const matchId = job.match_id as string | null;
-    if (!uploaderId || !matchId) return;
+    const uploaderId = announced.createdBy;
+    if (!uploaderId) return;
 
     const prefs = await getNotificationPrefs([uploaderId]);
     if (!prefs.get(uploaderId)?.notifyAnalysisReady) return;
@@ -328,7 +345,7 @@ export async function notifyAnalysisVerified(params: {
     const to = (user?.email as string | null)?.trim();
     if (!to || !match) return;
 
-    if (!(await claimSend(`analysis_verified:${jobId}`))) return;
+    if (!(await claimSend(`analysis_verified:${announced.id}`))) return;
 
     const sent = await sendEmail(
       analysisVerifiedEmail({
@@ -349,6 +366,38 @@ export async function notifyAnalysisVerified(params: {
       reason: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+/**
+ * The job whose ready mail announced this match, with its uploader, or null
+ * when none did. The session's own job first; otherwise the match's other
+ * jobs, newest first, since a match analysed again after its session was
+ * seeded announced the newer one.
+ */
+async function readyMailJob(
+  supabase: SupabaseClient,
+  input: { jobId: string; matchId: string },
+): Promise<{ id: string; createdBy: string | null } | null> {
+  const { data: jobs, error } = await supabase
+    .from("processing_jobs")
+    .select("id, created_by, created_at")
+    .eq("match_id", input.matchId)
+    .order("created_at", { ascending: false });
+  if (error || !jobs) return null;
+
+  const ordered = [
+    ...jobs.filter((job) => job.id === input.jobId),
+    ...jobs.filter((job) => job.id !== input.jobId),
+  ];
+  for (const job of ordered) {
+    if (await alreadySent(`analysis_ready:${job.id as string}`)) {
+      return {
+        id: job.id as string,
+        createdBy: (job.created_by as string | null) ?? null,
+      };
+    }
+  }
+  return null;
 }
 
 /**

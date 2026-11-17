@@ -100,7 +100,7 @@ export function analysisReadyEmail(input: AnalysisReadyInput): EmailMessage {
     preheader: statsPending
       ? `${matchTitle} has finished processing — the numbers land shortly.`
       : pending
-        ? "Your report is open. We're now checking every point against the video."
+        ? `Your report is open. ${VERIFICATION_PENDING_SCOPE}`
         : "Advantage Intelligence has finished with your video. Your report is open.",
     eyebrow: statsPending ? "Processing finished" : "Analysis ready",
     heading: statsPending
