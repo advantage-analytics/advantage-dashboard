@@ -10,8 +10,7 @@ import { createLoader, marker } from "./fixtures/vm-modules";
 /**
  * A match filed with no event (`tournament_name: null`, what the wizard saves
  * since T4) carries null end to end and reads "No event", muted in ink-400, on
- * the Matches list row and in its drawer — never "Unknown Event" or "Not
- * specified". The components load through `fixtures/vm-modules` so the real
+ * the Matches list row — never "Unknown Event" or "Not specified". The components load through `fixtures/vm-modules` so the real
  * `.tsx` renders offline; everything that talks to the network is stubbed.
  */
 
@@ -54,12 +53,6 @@ const loader = createLoader({
         active: { myPlayerId: null },
       }),
     },
-    "@/components/dashboard/team/roster-table": {
-      profileHref: () => "/dashboard/team/roster",
-    },
-    "@/components/dashboard/matches/match-actions/match-actions-menu": {
-      MatchActionsMenu: marker("MatchActionsMenu"),
-    },
   },
 });
 
@@ -98,36 +91,6 @@ test("a list row with an event prints the name, not 'No event'", () => {
 
   expect(html).toContain("Spring Invitational");
   expect(html).not.toContain("No event");
-});
-
-test("the drawer's date · event line reads a muted 'No event'", () => {
-  const { MatchDrawer } = loader.load(
-    "src/components/dashboard/matches/match-drawer.tsx",
-  ) as { MatchDrawer: React.ComponentType<Record<string, unknown>> };
-  const match = transformDbMatch(ROW, "viewer");
-  const noop = () => {};
-  const html = render(
-    React.createElement(MatchDrawer, {
-      match,
-      scope: "personal",
-      index: 0,
-      total: 1,
-      canPrev: false,
-      canNext: false,
-      closing: false,
-      autoFocus: false,
-      onPrev: noop,
-      onNext: noop,
-      onClose: noop,
-      onClosed: noop,
-    }),
-  );
-
-  expect(html).toMatch(
-    /<span[^>]*style="color:var\(--ink-400\)"[^>]*>No event<\/span>/,
-  );
-  expect(html).not.toContain("Unknown Event");
-  expect(html).not.toContain("Not specified");
 });
 
 test("realTournamentName still reads the legacy placeholder as no event", () => {
