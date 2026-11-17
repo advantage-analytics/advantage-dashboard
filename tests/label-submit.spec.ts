@@ -703,7 +703,7 @@ test.describe("the admin paths on a submitted session", () => {
     ).toBe(FROZEN);
   });
 
-  test("Reopen from submitted: back to labelling with submitted_at cleared, matched on submitted, and no unverify", async () => {
+  test("Reopen from submitted: back to labelling with submitted_at cleared, matched on submitted, and no RPC", async () => {
     const fake = client({ session: sessionRow("submitted") });
     expect(
       await writeLabelSessionReopen({

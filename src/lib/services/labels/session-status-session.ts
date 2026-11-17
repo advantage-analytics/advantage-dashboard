@@ -36,8 +36,10 @@
  * step 1): after the points are in and before the session closes, the match
  * is verified by the admin who pressed it (`verify_match`, service role
  * only — the one door `zz_matches_guard_verification` leaves). A failed
- * verify is a failed Complete: the lease is released and Complete again
- * publishes and verifies again. `scripts/label-apply.ts` publishes by hand
+ * verify is a failed Complete: the lease is released, an earlier Verified by
+ * Advantage the match still carries (a Reopen keeps it) comes off
+ * (`unverify_match`), since the points under it are new and unverified, and
+ * Complete again publishes and verifies again. `scripts/label-apply.ts` publishes by hand
  * and never verifies. The AI summary is asked for after that verify, failed or
  * not: generate-insights reads whether errors were judged off `verified`, so
  * asked any sooner it could save an "errors" summary on a judged match.
@@ -216,6 +218,18 @@ export async function writeLabelSessionComplete(params: {
           result.errorsJudged === true,
         )
       : null;
+    // A verify that failed after the points went in: a match still carrying
+    // an earlier stamp (a Reopen keeps it) would show Verified by Advantage
+    // over points nobody verified, so it comes off until Complete again.
+    // Before the AI summary, which reads `verified`.
+    const unverifyError =
+      result.ok && verified && "error" in verified && verified.matchId
+        ? (
+            await supabase.rpc("unverify_match", {
+              p_match_id: verified.matchId,
+            })
+          ).error
+        : null;
     // The statistics are in either way, and the verify's outcome is settled.
     // Not when the session row could not be read: there is no match to name,
     // and Complete again asks for it.
@@ -230,6 +244,9 @@ export async function writeLabelSessionComplete(params: {
       failure = result.error;
     } else if (!verified || "error" in verified) {
       failure = verified?.error ?? "Could not verify the match.";
+      if (unverifyError) {
+        failure += ` An earlier Verified by Advantage could not be removed either (${unverifyError.message}).`;
+      }
     } else {
       const closedAt = new Date(now()).toISOString();
       const { data: closed, error: closeError } = await supabase

@@ -124,7 +124,8 @@ export async function reportMatchIssue(
     return { ok: false, error: "Couldn't send that. Try again." };
   }
   if (!match) return { ok: false, error: "That match could not be found." };
-  // Only offered on a verified match; a stale tab after an unverify gets this.
+  // Only offered on a verified match; a stale tab after a republish whose
+  // verify failed (which takes the badge off) gets this.
   if (!match.verified) {
     return {
       ok: false,

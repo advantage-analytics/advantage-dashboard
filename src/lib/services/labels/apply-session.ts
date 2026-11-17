@@ -419,8 +419,10 @@ export async function recompute(
 /**
  * `matches.errors_judged_at`, set before the stats run so `calculate_match_stats`
  * counts `forced_errors` whatever then happens to `verify_match`, and cleared
- * when a reopened match is republished with an unmarked error. On an unverified
- * match it changes nothing a player sees: `error-split.ts` also needs `verified`.
+ * when a reopened match is republished with an unmarked error. A reopened match
+ * keeps Verified by Advantage, so the clear shows at once: the report drops to
+ * plain Errors, which is right for the points this publish writes
+ * (`error-split.ts` needs `verified` and the marker together).
  */
 async function setErrorsJudged(
   db: AdminClient,

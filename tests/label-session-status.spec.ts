@@ -68,7 +68,7 @@ function fakeClient(rows: {
   failCode?: string;
   /** Updates from this one on (0-based) fail with a plain error. */
   failFromUpdate?: number;
-  /** These RPCs (`verify_match`) fail. */
+  /** These RPCs (`verify_match`, `unverify_match`) fail. */
   failRpc?: string[];
 }) {
   const calls: Call[] = [];
@@ -296,6 +296,40 @@ test.describe("writeLabelSessionComplete", () => {
     expect(updates(fake).map((c) => c.values)).toEqual([
       { publishing_since: null },
     ]);
+    // An earlier stamp (a Reopen keeps it) comes off: the points under it are
+    // new and unverified.
+    expect(
+      fake.calls.filter((c) => c.op === "rpc").map((c) => c.table),
+    ).toEqual(["claim_label_publish_lease", "verify_match", "unverify_match"]);
+    expect(
+      fake.calls.find((c) => c.table === "unverify_match")?.values,
+    ).toEqual({ p_match_id: MATCH_ID });
+  });
+
+  test("a failed verify whose unverify also fails says so", async () => {
+    const fake = fakeClient({ failRpc: ["verify_match", "unverify_match"] });
+    expect(
+      await writeLabelSessionComplete({
+        actorId: ACTOR,
+        supabase: fake.supabase,
+        sessionId: SESSION_ID,
+        publish: PUBLISHED,
+      }),
+    ).toEqual({
+      error:
+        "The labels are published, but the match could not be marked Verified by Advantage: verify_match refused. Publish again to retry. An earlier Verified by Advantage could not be removed either (unverify_match refused).",
+    });
+  });
+
+  test("a verify that succeeds never unverifies", async () => {
+    const fake = fakeClient({});
+    await writeLabelSessionComplete({
+      actorId: ACTOR,
+      supabase: fake.supabase,
+      sessionId: SESSION_ID,
+      publish: PUBLISHED,
+    });
+    expect(fake.calls.some((c) => c.table === "unverify_match")).toBe(false);
   });
 
   test("a close that fails after the verify keeps Verified by Advantage", async () => {
