@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 /**
  * The link that opens a player's support thread from outside the app — the
@@ -13,7 +14,7 @@ import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
  */
 export default async function MessagesPage() {
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
   redirect(
     workspace.active.kind === "team"
       ? "/dashboard/team?messages=open"

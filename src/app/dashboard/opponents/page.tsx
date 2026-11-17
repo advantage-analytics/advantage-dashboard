@@ -9,6 +9,7 @@ import { TeamOpponentsPageContent } from "@/components/dashboard/opponents/team-
 import { getPersonalOpponents } from "@/lib/data/personal-opponents-server";
 import { getTeamOpponents } from "@/lib/data/team-opponents-server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Opponents" };
 
@@ -55,7 +56,7 @@ export default async function OpponentsPage({
   searchParams: Promise<OpponentsSearchParams>;
 }) {
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   if (workspace.active.kind === "team") {
     return (

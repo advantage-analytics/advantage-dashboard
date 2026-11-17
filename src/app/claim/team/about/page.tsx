@@ -5,6 +5,7 @@ import { WORKSPACE_COOKIE } from "@/lib/workspace/workspace-cookie";
 import { teamLabel } from "@/lib/data/programs-server";
 import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
 import { ProgramIntakeForm } from "@/components/claim/program-intake-form";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "About your program" };
 
@@ -34,7 +35,7 @@ export default async function ProgramIntakePage() {
     data: { user },
   } = await supabase.auth.getUser();
   // The layout already turned a signed-out visitor around; this is for the id.
-  if (!user) redirect("/login");
+  if (!user) redirect(await loginRedirectPath("/claim/team"));
 
   const programId = (await cookies()).get(WORKSPACE_COOKIE)?.value;
   if (!programId) redirect("/dashboard/team");

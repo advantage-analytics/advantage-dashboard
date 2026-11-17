@@ -27,6 +27,7 @@ import { formatEventSpan, siteLabel } from "@/lib/schedule/format";
 import { UploadMatchFlow } from "@/components/dashboard/matches/new-match-wizard";
 import { EventHeaderSlot } from "@/components/dashboard/schedule/event-header-slot";
 import type { EventPreset } from "@/components/dashboard/matches/new-match-wizard/types";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Upload a match" };
 
@@ -55,7 +56,7 @@ export default async function TeamUploadPage({
   const { entry: entryId, match: matchId, draft: draftId } = await searchParams;
 
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard/matches/new");

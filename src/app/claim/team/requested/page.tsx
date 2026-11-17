@@ -10,6 +10,7 @@ import {
 } from "@/components/claim/claim-shell";
 import { TYPE_LABEL } from "@/components/claim/existing-team-matches";
 import { isCustomOrgType } from "@/lib/services/programs/custom-org";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Request sent" };
 
@@ -40,7 +41,7 @@ export default async function TeamRequestedPage({
     data: { user },
   } = await supabase.auth.getUser();
   const email = user?.email?.trim().toLowerCase();
-  if (!user || !email) redirect("/login");
+  if (!user || !email) redirect(await loginRedirectPath("/claim/team"));
 
   const admin = createAdminClient();
   // Neither query depends on the other's result — both only need `team` (and

@@ -4,6 +4,7 @@ import { canManageTeamSchedule } from "@/lib/workspace/types";
 import { getLadder } from "@/lib/data/roster-server";
 import { getTeamSettings } from "@/lib/data/team-settings-server";
 import { NewTournamentFlow } from "@/components/dashboard/schedule/static/new-tournament-flow";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "New tournament" };
 
@@ -38,7 +39,7 @@ export const metadata = { title: "New tournament" };
  */
 export default async function NewTournamentPage() {
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   const { active } = workspace;
   if (active.kind !== "team") redirect("/dashboard");

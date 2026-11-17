@@ -74,6 +74,11 @@ function route(
       require: (id: string) => {
         if (id === "react") return React;
         if (id === "react/jsx-runtime") return jsx;
+        if (id === "@/lib/auth/request-path")
+          return {
+            loginRedirectPath: async (fallback: string) =>
+              `/login?next=${encodeURIComponent(fallback)}`,
+          };
         if (id === "next/navigation")
           return {
             redirect: (url: string) => {

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 
 /**
  * The Opponents entry is available in both workspaces. Authenticate here,
@@ -21,7 +22,7 @@ export default async function OpponentsLayout({
   children: React.ReactNode;
 }) {
   const workspace = await getWorkspaceContext();
-  if (!workspace) redirect("/login");
+  if (!workspace) redirect(await loginRedirectPath("/dashboard"));
 
   return <>{children}</>;
 }
