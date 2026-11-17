@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/shots/viz-model";
+import { isPlacementCut } from "@/components/dashboard/matches/match-detail/shots/cut-kinds";
 import {
   activeFilterEntries,
   applyVizUpdate,
@@ -1060,5 +1061,158 @@ test.describe("season filters", () => {
       normalizeSeasonFilters({ opponentHand: null, matches: [] }),
     ).toBeUndefined();
     expect(normalizeSeasonFilters(undefined)).toBeUndefined();
+  });
+});
+
+/* ── The Approaches cut (approach-heatmap T5) ─────────────────────────────
+ * `cut=approaches` plus its three filter groups, namespaced like `verr`:
+ * `ventry`, `vto` and `vdir`. A direction travels as a short code (`dtl`),
+ * never as `shots.zone`'s spaced words. */
+test.describe("approaches cut URL state", () => {
+  const ALL_ENTRIES = ["approach", "serve-volley", "drawn-in"] as const;
+  const ALL_WINGS = ["backhand", "middle", "forehand"] as const;
+  const ALL_DIRS = ["Crosscourt", "Middle", "Down the Line"] as const;
+
+  test("round-trips the cut with every entry, approach-to and direction value", () => {
+    const state = {
+      cut: "approaches" as const,
+      chart: "scatter" as const,
+      viewId: null,
+      filters: {
+        ...EMPTY_VIZ_FILTERS,
+        player: "opponent" as const,
+        ball: ["first" as const],
+        entry: [...ALL_ENTRIES],
+        approachTo: [...ALL_WINGS],
+        approachDir: [...ALL_DIRS],
+      },
+    };
+    const q = vizStateQuery(new URLSearchParams("tab=shots"), state);
+    const back = new URLSearchParams(q);
+    expect(back.get("cut")).toBe("approaches");
+    expect(back.getAll("ventry")).toEqual([...ALL_ENTRIES]);
+    expect(back.getAll("vto")).toEqual([...ALL_WINGS]);
+    expect(back.getAll("vdir")).toEqual(["crosscourt", "middle", "dtl"]);
+    expect(parseVizState(back)).toEqual(state);
+  });
+
+  test("each value round-trips on its own", () => {
+    const groups = [
+      ["entry", ALL_ENTRIES],
+      ["approachTo", ALL_WINGS],
+      ["approachDir", ALL_DIRS],
+    ] as const;
+    for (const [key, values] of groups) {
+      for (const value of values) {
+        const state = {
+          cut: "approaches" as const,
+          chart: "scatter" as const,
+          viewId: null,
+          filters: { ...EMPTY_VIZ_FILTERS, [key]: [value] },
+        };
+        const q = vizStateQuery(new URLSearchParams(), state);
+        expect(parseVizState(new URLSearchParams(q))).toEqual(state);
+      }
+    }
+  });
+
+  test("canonical order whatever the URL order; unknown words and spelled-out directions parse away", () => {
+    const s = parseVizState(
+      new URLSearchParams(
+        "cut=approaches&ventry=drawn-in&ventry=approach&vto=forehand&vto=backhand&vto=nope&vdir=dtl&vdir=Down+the+Line&vdir=crosscourt",
+      ),
+    );
+    expect(s.filters.entry).toEqual(["approach", "drawn-in"]);
+    expect(s.filters.approachTo).toEqual(["backhand", "forehand"]);
+    expect(s.filters.approachDir).toEqual(["Crosscourt", "Down the Line"]);
+  });
+
+  test("approaches is scatter only: chart=zones and chart=heat read as scatter", () => {
+    for (const chart of ["zones", "heat"]) {
+      expect(
+        parseVizState(new URLSearchParams(`cut=approaches&chart=${chart}`))
+          .chart,
+      ).toBe("scatter");
+    }
+  });
+
+  test("the approach groups parse away off the Approaches cut and never serialize there", () => {
+    const s = parseVizState(
+      new URLSearchParams("cut=serve&ventry=approach&vto=backhand&vdir=dtl"),
+    );
+    expect(s.filters).toEqual(EMPTY_VIZ_FILTERS);
+    const q = vizStateQuery(new URLSearchParams(), {
+      cut: "rallyPlacement",
+      chart: "scatter",
+      viewId: null,
+      filters: { ...EMPTY_VIZ_FILTERS, entry: ["approach"] },
+    });
+    expect(new URLSearchParams(q).has("ventry")).toBe(false);
+    expect(
+      carryFilters(
+        {
+          ...EMPTY_VIZ_FILTERS,
+          entry: ["approach"],
+          approachTo: ["middle"],
+          approachDir: ["Middle"],
+        },
+        "serve",
+      ),
+    ).toEqual(EMPTY_VIZ_FILTERS);
+  });
+
+  test("a URL with none of the new params parses as before", () => {
+    // The same URLs the cases above already pin, read again now that the
+    // approach groups exist: no new key appears, every group stays empty.
+    expect(
+      parseVizState(
+        new URLSearchParams(
+          "tab=shots&cut=serve&chart=zones&ball=first&zone=t&vset=2",
+        ),
+      ),
+    ).toEqual({
+      cut: "serve",
+      chart: "zones",
+      viewId: null,
+      filters: { ...EMPTY_VIZ_FILTERS, ball: ["first"], zone: ["t"], set: [2] },
+    });
+    const rally = parseVizState(
+      new URLSearchParams(
+        "cut=rallyPosition&chart=heat&player=opponent&rally=long",
+      ),
+    );
+    expect(rally.filters.entry).toEqual([]);
+    expect(rally.filters.approachTo).toEqual([]);
+    expect(rally.filters.approachDir).toEqual([]);
+    expect(parseVizState(new URLSearchParams("tab=shots"))).toEqual({
+      cut: null,
+      chart: "scatter",
+      viewId: null,
+      filters: EMPTY_VIZ_FILTERS,
+    });
+  });
+
+  test("applied tokens read the option labels", () => {
+    expect(
+      activeFilterEntries({
+        cut: "approaches",
+        chart: "scatter",
+        viewId: null,
+        filters: {
+          ...EMPTY_VIZ_FILTERS,
+          entry: ["serve-volley"],
+          approachTo: ["backhand"],
+          approachDir: ["Down the Line"],
+        },
+      }).map((e) => e.label),
+    ).toEqual([
+      OPTIONS.entry["serve-volley"],
+      OPTIONS.approachTo.backhand,
+      OPTIONS.approachDir["Down the Line"],
+    ]);
+  });
+
+  test("the cut is a placement cut", () => {
+    expect(isPlacementCut("approaches")).toBe(true);
   });
 });

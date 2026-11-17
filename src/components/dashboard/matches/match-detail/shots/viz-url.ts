@@ -382,7 +382,60 @@ export const OPTIONS = {
     forced: "Forced errors",
     doubleFault: "Double faults",
   },
+  // The Approaches cut's three groups. Their order is the canonical order a
+  // selection is kept in (`canonicalOptionValues`), and the order the stats
+  // rows list them in.
+  entry: {
+    approach: "Approach",
+    "serve-volley": "Serve and volley",
+    "drawn-in": "Drawn in",
+  },
+  approachTo: {
+    backhand: "Their backhand",
+    middle: "Middle",
+    forehand: "Their forehand",
+  },
+  approachDir: {
+    Crosscourt: "Crosscourt",
+    Middle: "Middle",
+    "Down the Line": "Down the line",
+  },
 } as const;
+
+/**
+ * The few option values that travel in the URL under a shorter code than
+ * their model value: an approach direction is `shots.zone`'s own words,
+ * spaces and all, so "Down the Line" goes as `dtl` — the codes the stats
+ * rows already key on. Every other value travels as itself.
+ */
+const URL_VALUE_CODES: Partial<
+  Record<string, Readonly<Record<string, string>>>
+> = {
+  approachDir: {
+    Crosscourt: "crosscourt",
+    Middle: "middle",
+    "Down the Line": "dtl",
+  },
+};
+
+function codesFor(key: string): Readonly<Record<string, string>> | undefined {
+  return Object.hasOwn(URL_VALUE_CODES, key) ? URL_VALUE_CODES[key] : undefined;
+}
+
+/** The word a filter value is written as in the URL (see `URL_VALUE_CODES`). */
+export function urlValueFor(key: string, value: string): string {
+  const codes = codesFor(key);
+  return codes && Object.hasOwn(codes, value) ? codes[value] : value;
+}
+
+/** `urlValueFor` reversed: the model value a URL word names, or the word
+ *  itself for a key with no codes (`parseFilters` then validates it). */
+function modelValueFor(key: string, word: string): string | null {
+  const codes = codesFor(key);
+  if (!codes) return word;
+  const found = Object.entries(codes).find(([, code]) => code === word);
+  return found ? found[0] : null;
+}
 
 /**
  * The word for the one option an unjudged match's Error type offers in place
@@ -426,6 +479,9 @@ const ORDER = [
   "rally",
   "game",
   "error",
+  "entry",
+  "approachTo",
+  "approachDir",
 ] as const;
 
 /**
@@ -440,10 +496,18 @@ export const VIZ_MATCH_FILTERS_PARAM = "vf";
  * The URL param a filter key travels as. `error` is namespaced to `verr`
  * for the same reason `set` is to `vset` (below): a bare `?error=` is the
  * kind of name an auth or redirect flow puts on the page, and every viz
- * write would strip it.
+ * write would strip it. The Approaches cut's groups take the same `v`
+ * prefix, short: `ventry`, `vto` (approach to) and `vdir` (direction).
  */
+const NAMESPACED_PARAMS: Readonly<Record<string, string>> = {
+  error: "verr",
+  entry: "ventry",
+  approachTo: "vto",
+  approachDir: "vdir",
+};
+
 export function paramFor(key: string): string {
-  return key === "error" ? "verr" : key;
+  return Object.hasOwn(NAMESPACED_PARAMS, key) ? NAMESPACED_PARAMS[key] : key;
 }
 
 // `set` (bare) is NOT a viz key: the match report already owns it
@@ -633,7 +697,8 @@ export function parseVizState(
     cutParam === "returnContact" ||
     cutParam === "rallyPosition" ||
     cutParam === "rallyPlacement" ||
-    cutParam === "errors"
+    cutParam === "errors" ||
+    cutParam === "approaches"
   ) {
     cut = cutParam;
   }
@@ -762,7 +827,7 @@ export function vizStateQuery(
 
     const values = state.filters[key] as readonly string[];
     for (const value of values) {
-      next.append(paramFor(key), value);
+      next.append(paramFor(key), urlValueFor(key, value));
     }
   }
 
@@ -871,6 +936,15 @@ export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
   // Error kinds only mean something on the errors cut.
   if (nextCut !== "errors" && filters.error?.length) {
     filters = { ...filters, error: [] };
+  }
+  // Nor do the approach groups off the Approaches cut.
+  if (
+    nextCut !== "approaches" &&
+    (filters.entry?.length ||
+      filters.approachTo?.length ||
+      filters.approachDir?.length)
+  ) {
+    filters = { ...filters, entry: [], approachTo: [], approachDir: [] };
   }
   // Every errors dot is a point the court's player lost on their own
   // error: anything carried in that asks for the court player's won points,
@@ -1051,7 +1125,10 @@ function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
     const optionKey = key as MultiOptionKey;
     const raw = params
       .getAll(paramFor(key))
-      .filter((v) => Object.hasOwn(OPTIONS[optionKey], v));
+      .map((word) => modelValueFor(key, word))
+      .filter(
+        (v): v is string => v !== null && Object.hasOwn(OPTIONS[optionKey], v),
+      );
     if (raw.length === 0) continue;
     filters[key] = canonicalOptionValues(optionKey, raw) as never;
   }

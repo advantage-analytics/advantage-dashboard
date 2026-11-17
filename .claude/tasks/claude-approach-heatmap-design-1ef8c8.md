@@ -71,7 +71,7 @@ ready).
 
 ## T5 · Add approaches labels, cut kind and URL state
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/viz-labels.tsx`, `shots/cut-kinds.ts`, `shots/viz-url.ts`; `tests/viz-url.spec.ts`, `tests/viz-labels.spec.ts`, `tests/saved-views-logic.spec.ts`

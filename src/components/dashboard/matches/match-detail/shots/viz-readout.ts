@@ -219,6 +219,7 @@ export function buildZoneReadout(
 
 /** What one of a cut's rows counts, singular and plural. */
 function rowNoun(cut: Cut, count: number): string {
+  if (cut === "approaches") return count === 1 ? "approach" : "approaches";
   const one =
     cut === "serve"
       ? "serve"

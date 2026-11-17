@@ -392,6 +392,20 @@ test.describe("statRowTooltip (a Statistics row's readout)", () => {
         .hint,
     ).toBe("Click to keep these 20 shots");
   });
+  test("an approaches row counts approaches", () => {
+    expect(
+      statRowTooltip(row, "approaches", { average: null, total: 40 }, false)
+        .lines[0],
+    ).toBe("12 of 20 approaches won");
+    expect(
+      statRowTooltip(
+        { ...row, count: 1, won: 1, winPct: 100 },
+        "approaches",
+        { average: null, total: 9 },
+        false,
+      ).lines[0],
+    ).toBe("1 of 1 approach won");
+  });
   test("an errors share row counts its errors of the group's, no average", () => {
     expect(
       statRowTooltip(

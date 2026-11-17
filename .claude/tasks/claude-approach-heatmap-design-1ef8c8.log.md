@@ -40,3 +40,13 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. Live has two migrations with no local file in this worktree (`20261117182112_label_todo`, `20261117183517_label_todo_newest_job`), presumably another branch's.
+
+## T5 · Add approaches labels, cut kind and URL state — done
+
+**gate:** mechanical pass · completion pass
+**changed:** `isPlacementCut("approaches")` is true; `legendItemsFor("approaches", "scatter")` gives Won, Lost, Forehand, Backhand; `viz-url.ts` parses `cut=approaches` (scatter only), adds `OPTIONS.entry` / `approachTo` / `approachDir` and the `ventry` / `vto` / `vdir` params, with directions written as short codes (`crosscourt`, `middle`, `dtl`) through a new `urlValueFor`, and clears them when leaving the cut. `saved-views-logic.ts` and `viz-analytics.ts` map through `urlValueFor`; `rowNoun` and `cutNoun` now read "approaches". Round-trip, old-URL, legend, placement and saved-view specs added.
+**follow-ups:**
+
+1. `bandKindFor("approaches")` now returns `"depth"` (it follows `isPlacementCut`); decide whether a scatter-only cut should return `null` so the chart menu offers no bands.
+2. "Middle" labels both an Approach to value and a Direction value; T10's sentence should tell them apart ("To the middle" / "Middle").
+3. `activeFilterEntries` lists the baseline `entry: ["approach"]` like any filter; T10 must treat it as the card's baseline.

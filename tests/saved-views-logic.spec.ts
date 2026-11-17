@@ -116,6 +116,28 @@ test("validateVizInput round-trips a NEW-shape multi-value filters object", () =
   });
 });
 
+test("validateVizInput accepts the approaches cut on scatter with its three filter groups", () => {
+  const result = validateVizInput({
+    cut: "approaches",
+    chart: "scatter",
+    filters: {
+      entry: ["approach", "serve-volley"],
+      approachTo: ["backhand"],
+      approachDir: ["Crosscourt", "Down the Line"],
+    },
+  });
+  expect(result).toEqual({
+    cut: "approaches",
+    chart: "scatter",
+    filters: {
+      ...EMPTY_VIZ_FILTERS,
+      entry: ["approach", "serve-volley"],
+      approachTo: ["backhand"],
+      approachDir: ["Crosscourt", "Down the Line"],
+    },
+  });
+});
+
 test("validateVizInput rejects an unknown cut", () => {
   expect(
     validateVizInput({ cut: "nonsense", chart: "scatter", filters: {} }),

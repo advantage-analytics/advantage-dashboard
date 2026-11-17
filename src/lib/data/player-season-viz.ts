@@ -258,6 +258,7 @@ export function cutNoun(cut: Cut): VizResult["noun"] {
   if (cut === "serve") return "serves";
   if (cut === "errors") return "errors";
   if (cut === "returnPlacement" || cut === "returnContact") return "returns";
+  if (cut === "approaches") return "approaches";
   return "shots";
 }
 

@@ -16,6 +16,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
   paramFor,
+  urlValueFor,
   parseVizState,
   VIZ_MATCH_FILTERS_PARAM,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
@@ -125,7 +126,7 @@ export function filtersToParams(filters: unknown): URLSearchParams {
       const values = Array.isArray(value) ? value : [value];
       for (const v of values) {
         if (v === null || v === undefined || v === "any") continue;
-        params.append(paramKey, String(v));
+        params.append(paramKey, urlValueFor(key, String(v)));
       }
     }
   }
