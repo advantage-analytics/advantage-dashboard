@@ -28,6 +28,7 @@ import {
   missingPointAdded,
   pointEndedEarly,
   placementMissing,
+  groundstrokeAtNet,
   pointRowMarkList,
   reviewChip,
   reviewFlag,
@@ -351,6 +352,7 @@ export function pointHints(
     servesFromBothSides(point, ghosts),
     serveLandingHint(point, ghosts),
     placementMissing(point, ghosts),
+    groundstrokeAtNet(point, ghosts),
   ];
   const { hints: own, count } = pointRowMarkList(point, marks);
   // "Into the net?" off the landing, unless the derivation already asks it.
@@ -447,6 +449,7 @@ function hintShotId(
     case "serves_from_both_sides":
     case "serve_in_landing_out":
     case "placement_missing":
+    case "groundstroke_at_net":
       return mark.params.shotId;
     default:
       return undefined;
@@ -617,6 +620,17 @@ function hintActions(
     case "serve_after_serve_in":
     case "serves_from_both_sides":
       return splitAt(HINT_ACTION_LABEL[mark.code], mark.params.shotId);
+    case "groundstroke_at_net": {
+      if (!onPatchShot) return [];
+      const { shotId, stroke } = mark.params;
+      return [
+        {
+          label: HINT_ACTION_LABEL.groundstroke_at_net,
+          // The S key's write: the volley link follows it (volley-link.ts).
+          run: () => onPatchShot(shotId, { stroke: `${stroke}_volley` }),
+        },
+      ];
+    }
     default:
       return [];
   }

@@ -1323,8 +1323,9 @@ function BlackEndedSuggestion({
   const arrival = rowArrival(arrive);
   const operations = edit.editable ? edit.operations : undefined;
   const first = accepted ? firstHintAction(hint) : null;
-  // "Shot placement" can't move the score, so it never wears the amber.
-  const grey = hint.code === "placement_missing";
+  // "Shot placement" and "Volley?" can't move the score: never the amber.
+  const grey =
+    hint.code === "placement_missing" || hint.code === "groundstroke_at_net";
   return (
     <div
       data-row="suggested-end"

@@ -79,6 +79,7 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   serves_from_both_sides: { shotId: "s-2" },
   serve_by_receiver: { shotId: "s-8", hitter: "p1", server: "p2" },
   placement_missing: { shotId: "s-1", stroke: "serve", missing: "landing" },
+  groundstroke_at_net: { shotId: "s-5", stroke: "forehand" },
   pick_winner: {},
   net_hit_contradicts_height: {},
   phantom_strokes_dropped: { eventIds: [41], hitter: "p2" },
@@ -153,6 +154,7 @@ test.describe("mark copy", () => {
       serves_from_both_sides: "Serves from both sides",
       serve_by_receiver: "Serve by the receiver",
       placement_missing: "No placement",
+      groundstroke_at_net: "Volley?",
       pick_winner: "Pick the winner",
       last_call_overruled: "Was the last ball in?",
       last_shot_untracked: "Was the last shot real?",
@@ -254,6 +256,7 @@ test.describe("mark copy", () => {
       shot_after_point_end: "Split here",
       serve_after_serve_in: "Split here",
       serves_from_both_sides: "Split here",
+      groundstroke_at_net: "Make it a volley",
     });
     expect(removeAfterLabel(1)).toBe("Yes, remove 1");
     expect(removeAfterLabel(3)).toBe("Yes, remove 3");

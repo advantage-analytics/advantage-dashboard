@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import { hintLabel, markHover } from "@/lib/services/labels/marks-copy";
 import {
   endingStale,
+  groundstrokeAtNet,
   lastLandingMissing,
   lastShotUnresolved,
   placementMissing,
@@ -1082,5 +1083,152 @@ test.describe("servesFromBothSides", () => {
     const shots = [serve("a", 1.25, { result: "in" }), serve("b", -0.7)];
     expect(serveAfterServeIn({ shots }, true)?.params).toEqual({ shotId: "b" });
     none(shots);
+  });
+});
+
+test.describe("groundstrokeAtNet", () => {
+  const NET = 11.885;
+  /** A vendor stroke, unchanged from its seed, hit `depth` m from the net. */
+  const hit = (
+    id: string,
+    kind: LabelShot["stroke"],
+    depth: number,
+    over: Partial<LabelShot> = {},
+  ): LabelShot => {
+    const row = stroke(id, IN, {
+      stroke: kind,
+      contactY: NET - depth,
+      ...over,
+    });
+    return {
+      ...row,
+      eventId: row.eventId ?? 1,
+      seed: {
+        hitter: row.hitter,
+        stroke: kind,
+        result: row.result,
+        spin: row.spin,
+        contact_x: row.contactX,
+        contact_y: row.contactY,
+        landing_x: row.landingX,
+        landing_y: row.landingY,
+        video_time: row.videoTime,
+      },
+      ...("seed" in over ? { seed: over.seed! } : {}),
+    };
+  };
+  const rally = (...list: LabelShot[]) => ({
+    shots: list.map((shot, i) => ({ ...shot, videoTime: i + 1 })),
+  });
+  const serve = hit("s", "first_serve", 12);
+
+  test("a groundstroke hit from inside the service line is asked", () => {
+    const mark = groundstrokeAtNet(
+      rally(serve, hit("r", "backhand", 11), hit("v", "forehand", 5)),
+      true,
+    );
+    expect(mark).toEqual({
+      code: "groundstroke_at_net",
+      tier: "hint",
+      scope: "shot",
+      params: { shotId: "v", stroke: "forehand" },
+    });
+    expect(markHover(mark!, NAMES)).toContain("inside the service line");
+  });
+
+  test("on the far side too: depth is read from the net either way", () => {
+    expect(
+      groundstrokeAtNet(
+        rally(serve, hit("r", "backhand", 11), hit("v", "backhand", -6)),
+        true,
+      )?.params,
+    ).toEqual({ shotId: "v", stroke: "backhand" });
+  });
+
+  test("behind the service line, a volley, or a serve: nothing", () => {
+    expect(
+      groundstrokeAtNet(
+        rally(serve, hit("r", "backhand", 11), hit("b", "forehand", 6.5)),
+        true,
+      ),
+    ).toBeNull();
+    expect(
+      groundstrokeAtNet(
+        rally(
+          serve,
+          hit("r", "backhand", 11),
+          hit("v", "forehand_volley", 3),
+          hit("o", "overhead", 2),
+        ),
+        true,
+      ),
+    ).toBeNull();
+    expect(groundstrokeAtNet(rally(hit("s", "first_serve", 1)), true)).toBe(
+      null,
+    );
+  });
+
+  test("never the return: a served ball bounces before it is met", () => {
+    expect(
+      groundstrokeAtNet(rally(serve, hit("r", "forehand", 4)), true),
+    ).toBeNull();
+  });
+
+  test("only the vendor's own call: an added or retyped stroke is the labeller's", () => {
+    const base = [serve, hit("r", "backhand", 11)];
+    expect(
+      groundstrokeAtNet(
+        rally(...base, hit("a", "forehand", 4, { eventId: null, seed: null })),
+        true,
+      ),
+    ).toBeNull();
+    const retyped = hit("t", "forehand", 4);
+    expect(
+      groundstrokeAtNet(
+        rally(...base, {
+          ...retyped,
+          seed: { ...retyped.seed!, stroke: "forehand_volley" },
+        }),
+        true,
+      ),
+    ).toBeNull();
+    expect(
+      groundstrokeAtNet(
+        rally(...base, hit("c", "forehand", 4, { contactY: null })),
+        true,
+      ),
+    ).toBeNull();
+  });
+
+  test("dismissed: the next one down the rally is asked", () => {
+    const point = {
+      ...rally(
+        serve,
+        hit("r", "backhand", 11),
+        hit("v1", "forehand", 4),
+        hit("x", "backhand", 9),
+        hit("v2", "backhand", 3),
+      ),
+      dismissed: ["volley:v1"],
+    };
+    expect(groundstrokeAtNet(point, true)?.params.shotId).toBe("v2");
+    expect(
+      groundstrokeAtNet(
+        { ...point, dismissed: ["volley:v1", "volley:v2"] },
+        true,
+      ),
+    ).toBeNull();
+  });
+
+  test("a point that is not a point asks nothing", () => {
+    expect(
+      groundstrokeAtNet(
+        {
+          ...rally(serve, hit("r", "backhand", 11), hit("v", "forehand", 4)),
+          ending: "let_replayed",
+        },
+        true,
+      ),
+    ).toBeNull();
   });
 });

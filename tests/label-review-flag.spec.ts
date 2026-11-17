@@ -82,6 +82,7 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   serves_from_both_sides: { shotId: "s1" },
   serve_by_receiver: { shotId: "s1", hitter: "p1", server: "p2" },
   placement_missing: { shotId: "s1", stroke: "serve", missing: "landing" },
+  groundstroke_at_net: { shotId: "s-5", stroke: "forehand" },
   pick_winner: {},
   net_hit_contradicts_height: {},
   phantom_strokes_dropped: { eventIds: [41], hitter: "p2" },
@@ -322,8 +323,10 @@ test.describe("a placement gap beside an amber question", () => {
 });
 
 test.describe("the item table", () => {
-  test("seven items in id order, each with its question and its codes", () => {
-    expect(REVIEW_ITEMS.map((item) => item.id)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  test("eight items in id order, each with its question and its codes", () => {
+    expect(REVIEW_ITEMS.map((item) => item.id)).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8,
+    ]);
     for (const item of REVIEW_ITEMS) {
       expect(item.question).toBe(REVIEW_ITEM_QUESTION[item.id]);
     }
@@ -360,6 +363,7 @@ test.describe("the item table", () => {
         "segment_proposal_differs",
       ],
       ["placement_missing"],
+      ["groundstroke_at_net"],
     ]);
   });
 

@@ -1,15 +1,15 @@
 /**
  * The header's flag list and its jumps: every point whose review flag is open,
  * read exactly as the row's chip reads it (`reviewFlag`), then grouped by the
- * seven items the flag asks and stepped through point by point. Pure, so the
+ * eight items the flag asks and stepped through point by point. Pure, so the
  * rail and the console's `[` / `]` keys share one answer.
  */
 
 import { isUnmarkedError } from "./ending-derived";
 import type { LabelMarks } from "./marks";
 import {
-  PLACEMENT_ITEM,
   REVIEW_ITEMS,
+  STROKE_DATA_ITEMS,
   reviewFlag,
   reviewItemQuestion,
   type ReviewItem,
@@ -283,9 +283,9 @@ export function flagStopLabel(stop: FlagStop): string {
  * when the whole flag is, as the row's chip draws it; a demoted flag is left
  * out, as the row leaves it off. Deleted points have none.
  *
- * "Shot placement" beside an open amber question splits off as a grey flag of
- * its own, so that point is in both lists: the amber one says only what can
- * move the score, and the grey one counts every gap. A jump still lands on the
+ * "Shot placement" and "Volley?" beside an open amber question split off as a
+ * grey flag of their own, so that point is in both lists: the amber one says
+ * only what can move the score, and the grey one counts every stroke to fix. A jump still lands on the
  * point once (`firstPerPoint`).
  */
 export function openFlags(
@@ -299,23 +299,25 @@ export function openFlags(
     const pointId = point.id;
     const pointNumber = point.pointIndex + 1;
     const open = flag.items.filter((item) => item.state === "open");
-    const placement = open.filter((item) => item.id === PLACEMENT_ITEM);
-    const amber = flag.tone === "score" && placement.length > 0;
+    const strokeData = open.filter((item) => STROKE_DATA_ITEMS.has(item.id));
+    const amber = flag.tone === "score" && strokeData.length > 0;
     flags.push({
       pointId,
       pointNumber,
       data: flag.tone === "data",
-      items: amber ? open.filter((item) => item.id !== PLACEMENT_ITEM) : open,
+      items: amber
+        ? open.filter((item) => !STROKE_DATA_ITEMS.has(item.id))
+        : open,
     });
     if (amber) {
-      flags.push({ pointId, pointNumber, data: true, items: placement });
+      flags.push({ pointId, pointNumber, data: true, items: strokeData });
     }
   }
   return flags;
 }
 
 export interface FlagRow {
-  /** The item's id as a string ("1"…"7"): the row's key and `data-flag-kind`. */
+  /** The item's id as a string ("1"…"8"): the row's key and `data-flag-kind`. */
   code: string;
   /** The item's question: "How did the last ball end?". */
   label: string;
@@ -334,7 +336,7 @@ export interface FlagGroup {
 
 /**
  * `flags` grouped by review item, in the order the items are answered
- * (`REVIEW_ITEMS`), and only where something is open: at most seven. A point
+ * (`REVIEW_ITEMS`), and only where something is open: at most eight. A point
  * with two items open is in both groups, so the groups' counts may add up to
  * more than the points.
  */

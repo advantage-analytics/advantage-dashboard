@@ -98,6 +98,8 @@ export const LABEL_ONLY_FLAGS = {
   SERVE_BY_RECEIVER: "serve_by_receiver",
   /** One of a point's first four or last two strokes lacks its coordinates. */
   PLACEMENT_MISSING: "placement_missing",
+  /** A vendor groundstroke hit from inside the service line: a volley? */
+  GROUNDSTROKE_AT_NET: "groundstroke_at_net",
   /**
    * The point's last stroke is seeded off its landing against the vendor's own
    * call on it — In where the vendor said out or net, or Out or Net where it
@@ -243,6 +245,7 @@ export const LABEL_MARK_META = {
   [LABEL_ONLY_FLAGS.SERVES_FROM_BOTH_SIDES]: { tier: "hint", scope: "shot" },
   [LABEL_ONLY_FLAGS.SERVE_IN_LANDING_OUT]: { tier: "hint", scope: "shot" },
   [LABEL_ONLY_FLAGS.PLACEMENT_MISSING]: { tier: "hint", scope: "shot" },
+  [LABEL_ONLY_FLAGS.GROUNDSTROKE_AT_NET]: { tier: "hint", scope: "shot" },
   [POINT_FLAGS.SECOND_SERVE_CALLED_OUT]: { tier: "count", scope: "point" },
   [POINT_FLAGS.RESULT_TYPE_UNKNOWN]: { tier: "count", scope: "point" },
   [SHOT_FLAGS.NET_HIT_CONTRADICTS_HEIGHT]: { tier: "hidden", scope: "shot" },
@@ -375,6 +378,8 @@ export interface LabelMarkParams {
     stroke: "serve" | "return" | "shot";
     missing: PlacementGap;
   };
+  /** The groundstroke to ask about, and which side: what "Make it a volley" writes. */
+  groundstroke_at_net: { shotId: string; stroke: "forehand" | "backhand" };
   net_hit_contradicts_height: NoParams;
   phantom_strokes_dropped: {
     /** The rally's strokes the transcript has no shot for. */

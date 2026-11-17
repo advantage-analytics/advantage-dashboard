@@ -562,6 +562,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     detail: string;
     actions: { label: string; run: () => void }[];
     dismissKey?: string;
+    afterShotId?: string;
   };
   type Hints = (
     point: LabelPoint,
@@ -732,6 +733,70 @@ test.describe("the hints read off the rows, with their answers", () => {
     expect(patched).toEqual([
       ["point", point.id, { ending: "error", ended_by: "p2" }],
     ]);
+  });
+
+  test("“Volley?” sits under its groundstroke, grey, and makes it a volley in one write", () => {
+    const { pointHints } = createLoader().load(MARK) as { pointHints: Hints };
+    const patched: unknown[][] = [];
+    const edit = {
+      onPatchShot: (...args: unknown[]) => patched.push(["shot", ...args]),
+    };
+    const base = fixturePoint();
+    const [serve] = base.shots;
+    const vendor = (
+      id: string,
+      eventId: number,
+      hitter: "p1" | "p2",
+      stroke: "forehand" | "backhand",
+      contactY: number,
+      videoTime: number,
+    ) => {
+      const row = {
+        ...serve,
+        id,
+        eventId,
+        hitter,
+        stroke,
+        result: "in" as const,
+        contactY,
+        videoTime,
+      };
+      return {
+        ...row,
+        seed: {
+          hitter,
+          stroke,
+          result: "in" as const,
+          spin: row.spin,
+          contact_x: row.contactX,
+          contact_y: contactY,
+          landing_x: row.landingX,
+          landing_y: row.landingY,
+          video_time: videoTime,
+        },
+      };
+    };
+    const point = {
+      ...base,
+      ending: null,
+      endedBy: null,
+      winner: null,
+      shots: [
+        serve,
+        vendor("s-ret", 301, "p2", "backhand", 23, (serve.videoTime ?? 0) + 1),
+        vendor("s-net", 302, "p1", "backhand", 8, (serve.videoTime ?? 0) + 2),
+      ],
+    };
+    const hints = pointHints(point, marksOf(point, []), NAMES, edit);
+    const volley = hints.find((h) => h.code === "groundstroke_at_net")!;
+    expect(volley.label).toBe("Volley?");
+    expect(volley.afterShotId).toBe("s-net");
+    expect(volley.dismissKey).toBe("volley:s-net");
+    expect(volley.actions.map((a) => a.label)).toEqual(["Make it a volley"]);
+    volley.actions[0].run();
+    expect(patched).toEqual([["shot", "s-net", { stroke: "backhand_volley" }]]);
+    const html = renderWell(point, marksOf(point, []));
+    expect(html).toContain('data-point-hint="groundstroke_at_net"');
   });
 
   test("Was the last ball in? answers with the vendor's call, until the result is changed", () => {

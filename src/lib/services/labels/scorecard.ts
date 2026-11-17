@@ -49,6 +49,7 @@ import {
   drawsGhosts,
   foldReviewItems,
   placementMissing,
+  groundstrokeAtNet,
   serveAfterServeIn,
   type MarkTone,
   type ReviewItemId,
@@ -431,8 +432,14 @@ function seededOutOrNet(shot: LabelShot): "out" | "net" | null {
   return isMissedResult(derived) ? derived : null;
 }
 
-/** "Shot placement" as the session opened, off the strokes' seeds. */
-function seededPlacementGap(point: LabelPoint, ghosts: boolean): LabelMark[] {
+/**
+ * "Shot placement" and "Volley?" as the session opened, off the strokes'
+ * seeds: the two row-read questions a stroke's seed decides.
+ */
+function seededStrokeQuestions(
+  point: LabelPoint,
+  ghosts: boolean,
+): LabelMark[] {
   const shots = seededOrder(point).flatMap((shot) =>
     shot.seed
       ? [
@@ -451,11 +458,12 @@ function seededPlacementGap(point: LabelPoint, ghosts: boolean): LabelMark[] {
         ]
       : [],
   );
-  const mark = placementMissing(
-    { shots, ending: point.seed?.ending ?? null },
-    ghosts,
-  );
-  return mark ? [mark] : [];
+  const seeded = { shots, ending: point.seed?.ending ?? null };
+  const asked: (LabelMark | null)[] = [
+    placementMissing(seeded, ghosts),
+    groundstrokeAtNet(seeded, ghosts),
+  ];
+  return asked.filter((mark): mark is LabelMark => mark !== null);
 }
 
 /**
@@ -722,10 +730,10 @@ export function buildScorecard(
       rows.set(key, row);
     }
     // The point's review flag as the session opened: its count and hint
-    // marks as open members, folded into items, plus "Shot placement" read
-    // off the seed, since no stored mark carries it. A tombstone is read like
+    // marks as open members, folded into items, plus "Shot placement" and
+    // "Volley?" read off the seed, since no stored mark carries them. A tombstone is read like
     // any row and measured against the point it became, as above.
-    const placement = seededPlacementGap(point, drawsGhosts(marks));
+    const placement = seededStrokeQuestions(point, drawsGhosts(marks));
     const opening = foldReviewItems(
       [
         ...pointMarks.filter((mark) => mark.tier !== "hidden"),
@@ -1020,7 +1028,7 @@ export function renderScorecard(
     "",
     "## Items, against what the labeller changed",
     "",
-    "The same marks folded into the review flag's items, as the session opened: a point counts once per item it carries, however many of the item's marks it has, amber items before grey. Live row marks (a stale ending, a missing last landing) are not in the opening marks, so they add no members here, except Shot placement, read off the seed. The demoted row is the points whose flag is grey and open on item 4 alone for the evidence-only codes; they are also counted in their item 4 row.",
+    "The same marks folded into the review flag's items, as the session opened: a point counts once per item it carries, however many of the item's marks it has, amber items before grey. Live row marks (a stale ending, a missing last landing) are not in the opening marks, so they add no members here, except Shot placement and Volley?, read off the seed. The demoted row is the points whose flag is grey and open on item 4 alone for the evidence-only codes; they are also counted in their item 4 row.",
     "",
     card.items.length === 0
       ? "No items."

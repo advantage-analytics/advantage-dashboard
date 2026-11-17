@@ -22,7 +22,7 @@ import { MARK_LABEL, markHover, type MarkNames } from "./marks-copy";
 import {
   drawsGhosts,
   lastCallAnswer,
-  PLACEMENT_ITEM,
+  STROKE_DATA_ITEMS,
   pointRowMarkList,
   reviewFlag,
   reviewItemQuestion,
@@ -206,6 +206,8 @@ export function reviewItemThenLabel(item: ReviewItem): string {
       return "check the game and serve order";
     case 7:
       return "place the shot";
+    case 8:
+      return "check whether it was a volley";
   }
 }
 
@@ -331,7 +333,8 @@ export function openReviewItems(
 }
 
 /**
- * What a jump from the grey list asks first: "Shot placement" where an amber
+ * What a jump from the grey list asks first: "Shot placement" or "Volley?"
+ * (`STROKE_DATA_ITEMS`, the first down the rally) where an amber
  * question on the same stroke would otherwise come before it, or the labeller
  * lands on that question from a list that said nothing about it. That is a
  * point in both lists (`openFlags`), or one whose settled amber question the
@@ -346,15 +349,15 @@ export function greyJumpFirstItem(
   keep?: readonly ReviewItemId[],
 ): ReviewItemId | undefined {
   const asked = openReviewItems(point, marks, points, keep);
-  const placement = asked.find((item) => item.id === PLACEMENT_ITEM);
-  if (!placement || !asked.some((item) => item.tone === "score")) {
+  const grey = asked.find((item) => STROKE_DATA_ITEMS.has(item.id));
+  if (!grey || !asked.some((item) => item.tone === "score")) {
     return undefined;
   }
   const at = rallyPosition(point, marks);
-  const gap = at(placement);
+  const gap = at(grey);
   return asked.some((item) => item.tone === "score" && at(item) < gap)
     ? undefined
-    : PLACEMENT_ITEM;
+    : grey.id;
 }
 
 // ── The step ────────────────────────────────────────────────────────────────
