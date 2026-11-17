@@ -36,9 +36,33 @@ export async function confirmLinkForm(formData: FormData): Promise<void> {
           token_hash: link.tokenHash,
         });
 
-  // Translated here — the error page renders whatever it is handed, and raw
-  // Supabase text is exactly what the auth rebuild set out to stop showing.
-  if (error) redirect(errorHref(toAuthError(error).message));
+  if (error) {
+    // A spent sign-in link opened by someone who is already signed in. On
+    // 2026-11-15 a new coach confirmed his account, went back to the email
+    // a minute later, tapped the same link and pressed Continue again: the
+    // token was gone, and "That link has expired" told a signed-in person
+    // that something had failed. For a link whose only job is to sign you in,
+    // a live session means it already did — so carry on to where it was going.
+    // Recovery, invite and email-change links do more than sign in, so they
+    // still report the failure.
+    if (link.kind === "token_hash" && SIGN_IN_ONLY.has(link.type)) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) redirect(link.next);
+    }
+
+    // Translated here — the error page renders whatever it is handed, and raw
+    // Supabase text is exactly what the auth rebuild set out to stop showing.
+    redirect(errorHref(toAuthError(error).message));
+  }
 
   redirect(link.next);
 }
+
+/** Link types whose whole effect is a session — see the spent-link branch. */
+const SIGN_IN_ONLY: ReadonlySet<string> = new Set([
+  "email",
+  "signup",
+  "magiclink",
+]);
