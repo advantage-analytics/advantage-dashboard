@@ -64,6 +64,7 @@ export function MenuSelect<T extends string>({
   open: openProp,
   onOpenChange,
   invalid = false,
+  container,
 }: {
   /** Accessible name — the visible caption or row label sits beside it. */
   label: string;
@@ -120,6 +121,8 @@ export function MenuSelect<T extends string>({
    * it does for any field. The caller prints the sentence under it.
    */
   invalid?: boolean;
+  /** Where the menu mounts; see `FloatMenu`'s `container`. */
+  container?: HTMLElement | null;
 }) {
   const [ownOpen, setOwnOpen] = useState(false);
   const open = openProp ?? ownOpen;
@@ -201,6 +204,7 @@ export function MenuSelect<T extends string>({
       trigger={trigger}
       label={label}
       tone={tone}
+      container={container}
       align={align ?? (variant === "underline" ? "start" : "end")}
       width={width ?? (variant === "underline" ? "trigger" : 232)}
       className={

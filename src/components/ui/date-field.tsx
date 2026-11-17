@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useImperativeHandle, useMemo, useRef } from "react";
+import {
+  useContext,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Button,
   Calendar,
@@ -9,6 +16,7 @@ import {
   CalendarGridBody,
   CalendarGridHeader,
   CalendarHeaderCell,
+  CalendarStateContext,
   DateInput,
   DatePicker,
   DateSegment,
@@ -16,6 +24,7 @@ import {
   Group,
   Heading,
   Popover,
+  useLocale,
 } from "react-aria-components";
 import type { CalendarDate } from "@internationalized/date";
 import {
@@ -23,6 +32,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { MenuSelect } from "@/components/ui/menu-select";
 import { formatIsoDate, parseIsoDate } from "@/lib/ui/date-value";
 import { cn } from "@/lib/utils";
 
@@ -85,6 +95,7 @@ export function DateField({
   className,
   handleRef,
   onIncompleteChange,
+  yearSelect = false,
 }: {
   /** Accessible name — the visible eyebrow or row label sits outside. */
   label: string;
@@ -119,6 +130,18 @@ export function DateField({
    * the field is controlled, so that would blank the segments the person kept.
    */
   onIncompleteChange?: (incomplete: boolean) => void;
+  /**
+   * Month and year menus in the calendar's header, in place of its title, so
+   * a date years away is two picks rather than a chevron press per month.
+   * **For a date of birth.** The calendar opens on today, and with only the
+   * chevrons a new player reached a birth year twenty years back by paging
+   * one month at a time — 296 clicks in 80 seconds on `/onboarding`
+   * (PostHog, 2026-11-17). A match or event date sits a few weeks from today,
+   * where the chevrons are the shorter path, so it leaves this off. The menus
+   * offer only what `min`/`max` allow; without a `min`, the years run back
+   * 120 from `max` (or from today).
+   */
+  yearSelect?: boolean;
 }) {
   const groupRef = useRef<HTMLDivElement>(null);
 
@@ -325,7 +348,16 @@ export function DateField({
                   aria-hidden="true"
                 />
               </Button>
-              <Heading className="text-[12px] font-medium text-[var(--ink-900)]" />
+              {yearSelect ? (
+                <>
+                  {/* Kept for the calendar's accessible name; the menus
+                      say the same thing on screen. */}
+                  <Heading className="sr-only" />
+                  <MonthYearSelects label={label} />
+                </>
+              ) : (
+                <Heading className="text-[12px] font-medium text-[var(--ink-900)]" />
+              )}
               <Button
                 slot="next"
                 className="flex size-7 cursor-pointer items-center justify-center rounded-[6px] text-[var(--ink-500)] transition-colors duration-150 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] data-[disabled]:cursor-default data-[disabled]:opacity-40"
@@ -379,5 +411,119 @@ export function DateField({
         </Dialog>
       </Popover>
     </DatePicker>
+  );
+}
+
+/** Years offered before `max` when the field has no `min`. */
+const UNBOUNDED_YEARS = 120;
+
+/**
+ * The calendar header's month and year menus (`yearSelect`). Reads the
+ * calendar react-aria builds below `Calendar` and moves its focused date, so
+ * the grid, the chevrons and the keyboard all follow; `setFocusedDate`
+ * clamps to `minValue`/`maxValue`, so a year whose month is out of range
+ * lands on the nearest day that is not.
+ *
+ * Each `MenuSelect` mounts its menu inside this header, not on
+ * `document.body`: the calendar popover closes on any press outside its own
+ * element and hides the rest of the page from assistive tech, so a menu
+ * portalled to the body would close the calendar on the first pick.
+ */
+function MonthYearSelects({ label }: { label: string }) {
+  const state = useContext(CalendarStateContext);
+  const { locale } = useLocale();
+  const [host, setHost] = useState<HTMLDivElement | null>(null);
+
+  const focused = state?.focusedDate;
+  const minValue = state?.minValue;
+  const maxValue = state?.maxValue;
+  const year = focused?.year;
+
+  const years = useMemo(() => {
+    if (year === undefined) return [];
+    const last = maxValue?.year ?? Math.max(year, new Date().getFullYear());
+    const first = minValue?.year ?? last - UNBOUNDED_YEARS;
+    const options: { value: string; label: string }[] = [];
+    // Newest first: the menu opens where a date of birth is nearest.
+    for (let y = last; y >= first; y -= 1) {
+      options.push({ value: String(y), label: String(y) });
+    }
+    return options;
+  }, [year, minValue?.year, maxValue?.year]);
+
+  const months = useMemo(() => {
+    if (year === undefined) return [];
+    const name = new Intl.DateTimeFormat(locale, {
+      month: "long",
+      timeZone: "UTC",
+    });
+    const options: { value: string; label: string }[] = [];
+    for (let m = 1; m <= 12; m += 1) {
+      // Only months with a pickable day in the focused year.
+      if (
+        minValue &&
+        (year < minValue.year || (year === minValue.year && m < minValue.month))
+      )
+        continue;
+      if (
+        maxValue &&
+        (year > maxValue.year || (year === maxValue.year && m > maxValue.month))
+      )
+        continue;
+      options.push({
+        value: String(m),
+        label: name.format(new Date(Date.UTC(2000, m - 1, 1))),
+      });
+    }
+    return options;
+  }, [year, locale, minValue, maxValue]);
+
+  if (!state || !focused) return null;
+
+  return (
+    <div
+      ref={setHost}
+      className="flex min-w-0 items-center gap-0.5"
+      // Escape inside an open menu closes that menu only. Radix closes it
+      // from a document listener; the key then bubbles on to the calendar
+      // popover, which would close too and drop the person out of the
+      // picker they were in the middle of.
+      onKeyDown={(event) => {
+        if (
+          event.key === "Escape" &&
+          (event.target as Element).closest('[role="menu"]')
+        )
+          event.stopPropagation();
+      }}
+    >
+      <MenuSelect
+        label={`${label} month`}
+        variant="text"
+        value={String(focused.month)}
+        options={months}
+        onChange={(next) =>
+          state.setFocusedDate(focused.set({ month: Number(next) }))
+        }
+        container={host}
+        align="start"
+        width={140}
+        scroll
+        className="font-medium"
+      />
+      <MenuSelect
+        label={`${label} year`}
+        variant="text"
+        value={String(focused.year)}
+        options={years}
+        onChange={(next) =>
+          state.setFocusedDate(focused.set({ year: Number(next) }))
+        }
+        container={host}
+        align="start"
+        width={96}
+        scroll
+        className="font-medium tabular-nums"
+      />
+    </div>
   );
 }

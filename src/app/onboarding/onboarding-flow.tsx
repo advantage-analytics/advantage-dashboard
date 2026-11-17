@@ -642,6 +642,7 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
                     onIncompleteChange={setDobIncomplete}
                     min={DOB_MIN}
                     max={todayUtc()}
+                    yearSelect
                     required
                     className="w-full"
                   />

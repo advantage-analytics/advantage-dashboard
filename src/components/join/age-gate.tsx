@@ -58,6 +58,7 @@ function JoinDobField({
         onIncompleteChange={onIncompleteChange}
         min={DOB_MIN}
         max={todayUtc()}
+        yearSelect
         required
         className="w-full"
       />
