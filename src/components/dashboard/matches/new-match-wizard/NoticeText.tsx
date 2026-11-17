@@ -1,3 +1,5 @@
+import { replayUnmask } from "@/lib/ui/replay-unmask";
+
 /**
  * NoticeText — a notice's message with its first sentence as the lead.
  *
@@ -9,13 +11,25 @@
  *
  * Colour is inherited: the strip decides it (`noteStripCls`, `warningStripCls`
  * or `errorStripCls`), never the text.
+ *
+ * The lead reads through in session replays (`replayUnmask()`): it is the
+ * source's own headline ("Frame rate too low.", "Recorded at 24 fps."), which
+ * may quote a measurement of the file but never a name. The rest stays masked,
+ * because a video error can end in an exception's message, a value the source
+ * did not write — so a message that carries one must lead with a sentence of
+ * its own ("Couldn't check this file. <message>").
  */
 export function NoticeText({ children }: { children: string }) {
+  const lead = (text: string) => (
+    <b className="font-medium" {...replayUnmask()}>
+      {text}
+    </b>
+  );
   const cut = children.indexOf(". ");
-  if (cut === -1) return <b className="font-medium">{children}</b>;
+  if (cut === -1) return lead(children);
   return (
     <span>
-      <b className="font-medium">{children.slice(0, cut + 1)}</b>
+      {lead(children.slice(0, cut + 1))}
       {children.slice(cut + 1)}
     </span>
   );

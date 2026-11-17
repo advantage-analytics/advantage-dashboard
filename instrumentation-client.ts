@@ -2,6 +2,7 @@ import posthog from "posthog-js";
 import { isPostHogOffInDev } from "@/lib/posthog-client";
 import { dropUnfixableNoise } from "@/lib/posthog-noise";
 import { rememberLandingUtms } from "@/lib/analytics";
+import { maskReplayText } from "@/lib/ui/replay-unmask";
 
 const projectToken = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const apiHost = process.env.NEXT_PUBLIC_POSTHOG_HOST;
@@ -31,8 +32,12 @@ if (isPostHogOffInDev) {
     // layout, clicks and errors; the content stays in Supabase.
     session_recording: {
       maskAllInputs: true,
-      // Every text node renders as asterisks in the replay.
+      // Every text node renders as asterisks in the replay...
       maskTextSelector: "*",
+      // ...except the UI's own words — step titles, button verbs, field
+      // captions — marked `replayUnmask()` in the source. An allowlist:
+      // unmarked text, a name included, stays masked. See replay-unmask.ts.
+      maskTextFn: maskReplayText,
       // Profile photos and program crests become grey placeholders.
       blockSelector: "img",
     },

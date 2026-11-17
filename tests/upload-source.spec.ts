@@ -11,6 +11,7 @@ import ts from "typescript";
 import { providers } from "@/lib/providers";
 import { providerKindOrNull } from "@/lib/services/upload";
 import { cn } from "@/lib/utils";
+import { replayMask, replayUnmask } from "@/lib/ui/replay-unmask";
 import { getInitials } from "@/lib/data/match-utils";
 import {
   canUploadForProgram,
@@ -319,6 +320,8 @@ const stepModule = (() => {
             require: (dep: string) => {
               if (dep === "react/jsx-runtime") return jsx;
               if (dep === "@/lib/utils") return { cn };
+              if (dep === "@/lib/ui/replay-unmask")
+                return { replayMask, replayUnmask };
               throw new Error(`unexpected import in the field caption: ${dep}`);
             },
           },

@@ -378,12 +378,15 @@ function OptionCard({
  */
 function Question({
   label,
+  subject,
   hint,
   value,
   options,
   onChange,
 }: {
   label: string;
+  /** A name leading the caption — see `FieldCaption`. */
+  subject?: string;
   hint: string;
   value: boolean | undefined;
   options: readonly [
@@ -394,10 +397,10 @@ function Question({
 }) {
   return (
     <div className="flex flex-col gap-2.5">
-      <FieldCaption label={label} required />
+      <FieldCaption subject={subject} label={label} required />
       <div
         role="radiogroup"
-        aria-label={label}
+        aria-label={subject ? `${subject} ${label}` : label}
         className="grid grid-cols-2 gap-2"
       >
         {options.map((option) => (
@@ -1601,7 +1604,8 @@ function TrimStepContentImpl({
           onChange={(v) => onAnswer("fixedCamera", v)}
         />
         <Question
-          label={`${who} at the start`}
+          subject={who}
+          label="at the start"
           /* The answer is about one frame, so when that frame moves far enough
              the answer is dropped and the hint says so — an emptied question
              with its usual hint reads as a bug rather than a request.
