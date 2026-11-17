@@ -259,10 +259,10 @@ interface WalkState {
  * stop in front of that — the model is told why instead of getting nulls.
  * `public.shots` keeps the recorded values. Exported so prompts can quote it.
  */
-export const ASK_UNICODE_IDENTIFIER_REASON =
-  'A U&"..." escaped identifier or string is not allowed. Write names plainly.';
 export const ASK_SPEED_HIDDEN_REASON =
   "Shot speed is not available: a single camera cannot measure it accurately, so speed_mph may not be read. Answer without speed.";
+export const ASK_UNICODE_IDENTIFIER_REASON =
+  'A U&"..." escaped identifier or string is not allowed. Write names plainly.';
 const SPEED_COLUMN = "speed_mph";
 const SHOTS_VIEW = "shots";
 export const ASK_SHOTS_STAR_REASON =
@@ -411,18 +411,23 @@ function walk(value: unknown, state: WalkState): void {
   if (Array.isArray(value.columnNames) && value.columnNames.length > 0) {
     refuse(ASK_COLUMN_ALIAS_LIST_REASON);
   }
-  // `join … using (speed_mph)` names the column outside any `ref` node, and
-  // an equi-join on it counts and groups shots by speed.
-  // A natural join matches on every same-named column: a derived table with
-  // a `speed_mph` alias would filter shots by speed with no `ref` to see.
-  // The parser refuses it today; refuse it here too in case that changes.
-  if (isNode(value.join) && /natural/i.test(str(value.join.type) ?? "")) {
-    refuse("A NATURAL join is not allowed. Join with ON or USING.");
-  }
-  if (isNode(value.join) && Array.isArray(value.join.using)) {
-    for (const column of value.join.using) {
-      if (isNode(column) && str(column.name)?.toLowerCase() === SPEED_COLUMN) {
-        refuse(ASK_SPEED_HIDDEN_REASON);
+  if (isNode(value.join)) {
+    // A natural join matches on every same-named column: a derived table with
+    // a `speed_mph` alias would filter shots by speed with no `ref` to see.
+    // The parser refuses it today; refuse it here too in case that changes.
+    if (/natural/i.test(str(value.join.type) ?? "")) {
+      refuse("A NATURAL join is not allowed. Join with ON or USING.");
+    }
+    // `join … using (speed_mph)` names the column outside any `ref` node, and
+    // an equi-join on it counts and groups shots by speed.
+    if (Array.isArray(value.join.using)) {
+      for (const column of value.join.using) {
+        if (
+          isNode(column) &&
+          str(column.name)?.toLowerCase() === SPEED_COLUMN
+        ) {
+          refuse(ASK_SPEED_HIDDEN_REASON);
+        }
       }
     }
   }

@@ -272,7 +272,7 @@ test("nothing unmeasured is ever rendered as a zero", () => {
     result: "—",
   });
   // Speed is never a cell, measured or not.
-  expect(shotRowCells({ ...blank }, 4, "Lee")).not.toHaveProperty("mph");
+  expect(shotRowCells(blank, 4, "Lee")).not.toHaveProperty("mph");
 });
 
 test("Placement is the Direction filter's rule: Inside Out / Inside In need a hand", () => {

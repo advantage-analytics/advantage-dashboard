@@ -1,6 +1,5 @@
 "use client";
 
-import { TEXT_ACTION_CLASS } from "@/lib/ui/text-action";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { unstable_rethrow, usePathname, useRouter } from "next/navigation";
@@ -17,6 +16,7 @@ import { StepMark } from "@/components/dashboard/shared/vertical-steps";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { HintRunner } from "@/components/dashboard/onboarding/hint-runner";
 import { activityHintDue } from "@/lib/onboarding/hints";
+import { TEXT_ACTION_CLASS } from "@/lib/ui/text-action";
 import {
   useLiveMatchAnalysis,
   withLiveAnalysis,
