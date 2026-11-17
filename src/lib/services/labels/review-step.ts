@@ -51,7 +51,7 @@ import {
   landedOnOwnSide,
   shortOfNet,
 } from "./shot-derived";
-import { isSuggestionKey } from "./suggestions";
+import { isSuggestionKey, volleyKey } from "./suggestions";
 
 // ── Writes ──────────────────────────────────────────────────────────────────
 
@@ -140,6 +140,7 @@ export const ADD_SHOT_ANSWER = "Add the shot";
 export const ADD_SECOND_SERVE_ANSWER = "Add the second serve";
 export const SPLIT_ANSWER = "Split here";
 export const SECOND_SERVE_ANSWER = "Make it a second serve";
+export const VOLLEY_ANSWER = "Make it a volley";
 
 /** "Remove the 2 shots after" — the follow-up's other answer. */
 export function removeShotsAfterLabel(count: number): string {
@@ -799,6 +800,13 @@ function stepAnswers(
         });
       }
       break;
+    case 8:
+      for (const { mark } of openMembers(item)) {
+        if (mark.code === "groundstroke_at_net") {
+          answers.push(volleyAnswer(mark.params));
+        }
+      }
+      break;
     case 6:
     case 7:
       break;
@@ -818,6 +826,29 @@ function stepAnswers(
     });
   }
   return answers;
+}
+
+/**
+ * "Volley?"'s yes: the stroke made a volley on its side, and the question
+ * stored as answered, so turning the stroke back into a groundstroke after
+ * watching the clip does not ask it again.
+ */
+export function volleyAnswer({
+  shotId,
+  stroke,
+}: {
+  shotId: string;
+  stroke: "forehand" | "backhand";
+}): ReviewAnswer {
+  return {
+    id: "volley",
+    label: VOLLEY_ANSWER,
+    kind: "plain",
+    writes: [
+      { write: "shot", shotId, patch: { stroke: `${stroke}_volley` } },
+      { write: "dismiss", keys: [volleyKey(shotId)] },
+    ],
+  };
 }
 
 /**

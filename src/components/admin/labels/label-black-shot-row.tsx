@@ -37,7 +37,7 @@ import {
   type LabelShotPatch,
 } from "@/lib/services/labels/edit";
 import type { LabelMarks, LabelSuggestion } from "@/lib/services/labels/marks";
-import { hoverLine } from "@/lib/services/labels/marks-state";
+import { hoverLine, isStrokeDataCode } from "@/lib/services/labels/marks-state";
 import {
   ADD_SHOT_AT_START,
   isLabelDeleteReason,
@@ -1324,8 +1324,7 @@ function BlackEndedSuggestion({
   const operations = edit.editable ? edit.operations : undefined;
   const first = accepted ? firstHintAction(hint) : null;
   // "Shot placement" and "Volley?" can't move the score: never the amber.
-  const grey =
-    hint.code === "placement_missing" || hint.code === "groundstroke_at_net";
+  const grey = isStrokeDataCode(hint.code);
   return (
     <div
       data-row="suggested-end"

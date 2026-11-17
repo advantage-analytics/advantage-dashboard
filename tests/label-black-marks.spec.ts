@@ -795,6 +795,21 @@ test.describe("the hints read off the rows, with their answers", () => {
     expect(volley.actions.map((a) => a.label)).toEqual(["Make it a volley"]);
     volley.actions[0].run();
     expect(patched).toEqual([["shot", "s-net", { stroke: "backhand_volley" }]]);
+    // With the console's operations, the answer is stored too: turning it
+    // back into a groundstroke after the clip does not ask again.
+    patched.length = 0;
+    const [withOps] = pointHints(point, marksOf(point, []), NAMES, {
+      ...edit,
+      operations: {
+        onDismissSuggestion: (...args: unknown[]) =>
+          patched.push(["dismiss", ...args]),
+      },
+    } as never).filter((h) => h.code === "groundstroke_at_net");
+    withOps.actions[0].run();
+    expect(patched).toEqual([
+      ["shot", "s-net", { stroke: "backhand_volley" }],
+      ["dismiss", point.id, "volley:s-net"],
+    ]);
     const html = renderWell(point, marksOf(point, []));
     expect(html).toContain('data-point-hint="groundstroke_at_net"');
   });

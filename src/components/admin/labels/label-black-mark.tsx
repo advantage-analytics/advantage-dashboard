@@ -55,6 +55,7 @@ import {
   hintDismissKey,
   isSuggestionKey,
   pointEndedKey,
+  volleyKey,
 } from "@/lib/services/labels/suggestions";
 import { cn } from "@/lib/utils";
 import type { SideNames } from "./label-format";
@@ -626,8 +627,16 @@ function hintActions(
       return [
         {
           label: HINT_ACTION_LABEL.groundstroke_at_net,
-          // The S key's write: the volley link follows it (volley-link.ts).
-          run: () => onPatchShot(shotId, { stroke: `${stroke}_volley` }),
+          run: () => {
+            // The S key's write: the volley link follows it (volley-link.ts).
+            onPatchShot(shotId, { stroke: `${stroke}_volley` });
+            // Answered for good: retyping it back to a groundstroke after
+            // watching the clip does not ask again.
+            const key = volleyKey(shotId);
+            if (operations && isSuggestionKey(key)) {
+              operations.onDismissSuggestion(point.id, key);
+            }
+          },
         },
       ];
     }

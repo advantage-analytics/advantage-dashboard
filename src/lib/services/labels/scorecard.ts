@@ -731,13 +731,14 @@ export function buildScorecard(
     }
     // The point's review flag as the session opened: its count and hint
     // marks as open members, folded into items, plus "Shot placement" and
-    // "Volley?" read off the seed, since no stored mark carries them. A tombstone is read like
-    // any row and measured against the point it became, as above.
-    const placement = seededStrokeQuestions(point, drawsGhosts(marks));
+    // "Volley?" read off the seed, since no stored mark carries them. A
+    // tombstone is read like any row and measured against the point it became,
+    // as above.
+    const strokeQuestions = seededStrokeQuestions(point, drawsGhosts(marks));
     const opening = foldReviewItems(
       [
         ...pointMarks.filter((mark) => mark.tier !== "hidden"),
-        ...placement,
+        ...strokeQuestions,
       ].map((mark) => ({ mark, state: "open" as const })),
       point,
       marks,

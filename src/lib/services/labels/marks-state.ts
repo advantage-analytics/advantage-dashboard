@@ -1366,7 +1366,7 @@ export type ReviewItemId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 export const PLACEMENT_ITEM: ReviewItemId = 7;
 
 /** "Volley?": a stroke's type, never the score, like "Shot placement". */
-export const VOLLEY_ITEM: ReviewItemId = 8;
+const VOLLEY_ITEM: ReviewItemId = 8;
 
 /**
  * The items about one stroke's data alone: grey always, and beside an open
@@ -1466,6 +1466,16 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
     codes: ["groundstroke_at_net"],
   },
 ];
+
+/**
+ * Whether `code` belongs to a `STROKE_DATA_ITEMS` item: a hint about one
+ * stroke's data, which the well draws grey like the flag list does.
+ */
+export function isStrokeDataCode(code: LabelMarkCode): boolean {
+  return REVIEW_ITEMS.some(
+    (item) => STROKE_DATA_ITEMS.has(item.id) && item.codes.includes(code),
+  );
+}
 
 /**
  * One mark under an item, with where it is in its life and the `dismissed`

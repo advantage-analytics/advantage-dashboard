@@ -285,8 +285,8 @@ export function flagStopLabel(stop: FlagStop): string {
  *
  * "Shot placement" and "Volley?" beside an open amber question split off as a
  * grey flag of their own, so that point is in both lists: the amber one says
- * only what can move the score, and the grey one counts every stroke to fix. A jump still lands on the
- * point once (`firstPerPoint`).
+ * only what can move the score, and the grey one counts every stroke to fix. A
+ * jump still lands on the point once (`firstPerPoint`).
  */
 export function openFlags(
   points: readonly LabelPoint[],
