@@ -17,6 +17,7 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { MenuSelect } from "@/components/ui/menu-select";
 import { DateField } from "@/components/ui/date-field";
 import { todayISO } from "@/lib/schedule/format";
+import { DOB_MIN } from "@/app/onboarding/age";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
@@ -370,6 +371,9 @@ function ProfileField({
           variant="underline"
           value={value}
           onChange={onChange}
+          // The same floor onboarding and the join age gate use, so a birth
+          // year accepted there can be picked here too.
+          min={DOB_MIN}
           max={maxDate}
           yearSelect
         />
