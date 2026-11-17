@@ -12,6 +12,7 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { PROGRAM_ROLE_LABEL } from "@/lib/workspace/types";
 import { ICON_BUTTON } from "@/components/dashboard/matches/match-drawer";
+import { MENU_ROW_ICON } from "@/components/dashboard/matches/match-actions/menu-row-classes";
 import { mayRemoveStaffProfile } from "./add-self-dialog";
 import {
   archiveProgramPlayer,
@@ -24,15 +25,6 @@ import {
 import type { ActionResult } from "@/components/dashboard/settings/actions";
 import { useClaimInvite } from "@/components/dashboard/team/roster-claim-invite";
 import type { RosterMember } from "@/lib/data/team-roster-server";
-
-/**
- * The leading glyph on each row of the menu: neutral ink-400 — never `--blue`
- * (`FloatMenuItem`'s default). Shared by every row so a later tweak to size,
- * colour or stroke weight is one edit. The Remove row adds
- * `group-hover`/`group-focus-visible` danger, so its label and icon turn red
- * together at the moment of intent (DS › Dropdown / Menu).
- */
-const MENU_ROW_ICON = "size-[13px] shrink-0 text-[var(--ink-400)]";
 
 /**
  * The permission, the correction, and the way off the roster.

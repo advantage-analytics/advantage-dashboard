@@ -78,11 +78,9 @@ export default async function MatchesPage({
   if (!workspace) redirect(await loginRedirectPath("/dashboard"));
   // `?match=` and `?draft=` opened the list's peek drawer until 2026-11-17.
   // The rows travel now, so a link saved from then lands where its row goes:
-  // the match's report, or the draft's wizard.
+  // the match's report (below, once the rows are read: a match this workspace
+  // does not list stays on the list), or the draft's wizard.
   const { match: linkedMatch, draft: linkedDraft } = await searchParams;
-  if (typeof linkedMatch === "string" && RECORD_ID.test(linkedMatch)) {
-    redirect(`/dashboard/matches/${linkedMatch}`);
-  }
   if (typeof linkedDraft === "string" && RECORD_ID.test(linkedDraft)) {
     redirect(
       draftHref(
@@ -107,6 +105,12 @@ export default async function MatchesPage({
       : query.eq("created_by", user.id).is("program_id", null),
   ]);
   if (error) throw new Error("Could not load matches", { cause: error });
+  if (
+    typeof linkedMatch === "string" &&
+    (data ?? []).some((row) => row.id === linkedMatch)
+  ) {
+    redirect(`/dashboard/matches/${linkedMatch}`);
+  }
   const rows = (data ?? []) as (DbMatch & {
     player2_id: string | null;
     created_by: string | null;
