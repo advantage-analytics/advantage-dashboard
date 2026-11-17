@@ -8,6 +8,12 @@ import {
 import type { EmailMessage } from "../send";
 import { showsStoredNote, type RecoveryClass } from "@/lib/data/match-analysis";
 import {
+  VERIFICATION_PENDING,
+  VERIFICATION_PENDING_SCOPE,
+  VERIFICATION_PENDING_UNTIL,
+  VERIFIED_BY_ADVANTAGE,
+} from "@/lib/data/match-verification";
+import {
   byClass,
   WAIT_OR_ASK_VARIANTS,
   waitOrAskVariant,
@@ -61,27 +67,61 @@ export interface AnalysisReadyInput {
    * pending: there is no answer to lead with yet.
    */
   ask?: { headline: string; conversationId: string } | null;
+  /**
+   * The match waits on a labeller's check (`verificationPendingFor`, the
+   * rule the report's "Verification pending" fact uses). The mail then says
+   * the check is coming, that the numbers may change until it lands, and
+   * that a second mail will say when (`analysisVerifiedEmail`). Absent or
+   * false, it promises none of that: a check the queue will not do is never
+   * promised.
+   *
+   * There is no "already verified" variant on purpose. This mail goes out
+   * within the Ask arrival cap of the results landing, and a match is only
+   * verified once a person has worked through those results, so it is
+   * always unverified when this is sent.
+   */
+  verificationPending?: boolean;
 }
 
+/**
+ * "Your match has been analyzed" — the automatic analysis, said plainly.
+ *
+ * It used to promise "every serve, return, hold and break" on 2026-11-17's
+ * raw vendor output, an hour before the label console rewrote all 123 points
+ * of the same match. It now claims only what the automatic analysis is, and
+ * leaves "every point checked" to Verified by Advantage.
+ */
 export function analysisReadyEmail(input: AnalysisReadyInput): EmailMessage {
   const { to, matchId, matchTitle, matchContext, score, statsPending } = input;
   const firstAnswer = statsPending ? null : (input.ask ?? null);
+  const pending = !statsPending && input.verificationPending === true;
 
   const content: EmailContent = {
     preheader: statsPending
       ? `${matchTitle} has finished processing — the numbers land shortly.`
-      : `Serve, return and pressure numbers for ${matchTitle} are in.`,
+      : pending
+        ? `Your report is open. ${VERIFICATION_PENDING_SCOPE}`
+        : "Advantage Intelligence has finished with your video. Your report is open.",
     eyebrow: statsPending ? "Processing finished" : "Analysis ready",
     heading: statsPending
       ? `${matchTitle} has finished processing`
-      : `${matchTitle} is ready`,
+      : `${matchTitle} has been analyzed`,
     body: statsPending
       ? [
-          "Your video has been analysed and the match is safely stored. The statistics are still being worked out, so the report will fill in rather than appear all at once.",
+          "Your video has been analyzed and the match is safely stored. The statistics are still being worked out, so the report will fill in rather than appear all at once.",
           "Nothing is needed from you — the page updates itself.",
         ]
       : [
-          "Every serve, return, hold and break from this match is now on the report — where the serve went, how the return came back, and which points actually turned it.",
+          pending
+            ? "Advantage Intelligence has finished with your video, and your report is open."
+            : "Advantage Intelligence has finished with your video. Your report has your match statistics and the points it found, each with its clip.",
+          // The report popover's own sentences, so the mail and the
+          // "Verification pending" fact never disagree.
+          ...(pending
+            ? [
+                `${VERIFICATION_PENDING_SCOPE} ${VERIFICATION_PENDING_UNTIL} We'll email you when it's done.`,
+              ]
+            : []),
           // The first answer's own sentence, as Ask wrote it; the button
           // beside the report's opens the conversation it is saved in.
           ...(firstAnswer
@@ -92,6 +132,9 @@ export function analysisReadyEmail(input: AnalysisReadyInput): EmailMessage {
       { label: "Match", value: matchTitle },
       { label: "Where", value: matchContext },
       { label: "Result", value: score },
+      ...(pending
+        ? [{ label: "Verification", value: VERIFICATION_PENDING }]
+        : []),
     ],
     cta: {
       label: statsPending ? "Open the match" : "Open the report",
@@ -112,14 +155,58 @@ export function analysisReadyEmail(input: AnalysisReadyInput): EmailMessage {
     to,
     subject: statsPending
       ? `${matchTitle} has finished processing`
-      : `Your report for ${matchTitle} is ready`,
+      : `${matchTitle} has been analyzed`,
     html: renderEmail(content),
     text: renderText(content),
     tags: {
       type: "analysis_ready",
       pending: statsPending ? "yes" : "no",
       ask: firstAnswer ? "yes" : "no",
+      verification: pending ? "pending" : "none",
     },
+  };
+}
+
+export interface AnalysisVerifiedInput {
+  to: string;
+  matchId: string;
+  /** "Alex Rivera vs. Jordan Chen" — already in the order the report shows. */
+  matchTitle: string;
+}
+
+/**
+ * "Your match is Verified by Advantage" — the follow-up to the ready mail.
+ *
+ * Sent only to the uploader who already had `analysisReadyEmail` for this
+ * match (`notifyAnalysisVerified` follows whichever of its jobs was
+ * announced): they may have read the automatic numbers, and the check has
+ * now replaced them. One paragraph and the report's
+ * button, in the verified badge's own words.
+ */
+export function analysisVerifiedEmail(
+  input: AnalysisVerifiedInput,
+): EmailMessage {
+  const { to, matchId, matchTitle } = input;
+
+  const content: EmailContent = {
+    preheader:
+      "We checked every point against the video. Your report has been updated to match.",
+    eyebrow: "Verified",
+    heading: `Your match is ${VERIFIED_BY_ADVANTAGE}`,
+    body: [
+      // The verified badge's popover (`VERIFIED_SCOPE`), said of this match.
+      "We've checked every point of this match against the video: who won and how it ended. Your report has been updated to match, so some statistics may differ from what you saw before.",
+    ],
+    cta: { label: "Open the report", url: matchUrl(matchId) },
+    note: preferenceNote("Email me when analysis is ready"),
+  };
+
+  return {
+    to,
+    subject: `${matchTitle} is now ${VERIFIED_BY_ADVANTAGE}`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "analysis_verified" },
   };
 }
 

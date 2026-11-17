@@ -97,7 +97,33 @@ export interface LabelPublishSummary {
    * as false, which leaves `matches.errors_judged_at` as the publish set it.
    */
   errorsJudged?: boolean;
+  /**
+   * Whether the publish took Verified by Advantage off the match
+   * (apply-session.ts `PublishResult`): true when it was verified before,
+   * false when it was not, null when its stamp could not be read. Only
+   * `false` lets the "now Verified by Advantage" mail go: a re-publish of a
+   * verified match, or an unreadable stamp, mails nobody.
+   */
+  badgeRemoved?: boolean | null;
 }
+
+/**
+ * The "now Verified by Advantage" mail, injectable so the writer is tested
+ * without the email stack. Called once the session is closed, on its first
+ * publish, when that publish verified a match that was not verified before
+ * it. The writer catches anything it throws.
+ */
+export type LabelVerifiedNotice = (
+  supabase: AdminClient,
+  target: { jobId: string; matchId: string; sessionId: string },
+) => Promise<void>;
+
+const notifyVerified: LabelVerifiedNotice = async (supabase, target) => {
+  // Loaded on use: it reaches the email stack and the preferences reads.
+  const { notifyAnalysisVerified } =
+    await import("@/lib/services/notifications/analysis-mail");
+  await notifyAnalysisVerified({ supabase, ...target });
+};
 
 export type LabelSessionStatusResult = LabelOpResult<{
   status: LabelSession["status"];
@@ -170,6 +196,8 @@ export async function writeLabelSessionComplete(params: {
    */
   beforePublish?: LabelBeforePublish;
   publish?: LabelPublish;
+  /** The "now Verified by Advantage" mail; `notifyAnalysisVerified` by default. */
+  verifiedNotice?: LabelVerifiedNotice;
   now?: () => number;
 }): Promise<LabelSessionStatusResult> {
   const {
@@ -178,6 +206,7 @@ export async function writeLabelSessionComplete(params: {
     checked = false,
     beforePublish,
     publish = publishCheckingScore,
+    verifiedNotice = notifyVerified,
     now = Date.now,
   } = params;
   const sessionId = normaliseId(params.sessionId);
@@ -261,6 +290,28 @@ export async function writeLabelSessionComplete(params: {
         };
       }
       if (!closed || closed.length === 0) return { error: RACED };
+      // The session's first publish verified a match that was not verified
+      // before it: tell the player who had the ready mail. Only here, after
+      // the close, so a publish that stops part-way never announces itself;
+      // and caught, because the labels are published whatever the mail does.
+      if (
+        result.badgeRemoved === false &&
+        verified.firstPublish &&
+        verified.jobId
+      ) {
+        try {
+          await verifiedNotice(supabase, {
+            jobId: verified.jobId,
+            matchId: verified.matchId,
+            sessionId,
+          });
+        } catch (err) {
+          console.error("[labels:status] verified notice threw", {
+            sessionId,
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
       return {
         ok: true,
         status: "complete",
@@ -367,12 +418,22 @@ async function verifyMatchOf(
   sessionId: string,
   actorId: string,
   errorsJudged: boolean,
-): Promise<{ matchId: string } | { matchId?: string; error: string }> {
+): Promise<
+  | { matchId: string; jobId: string | null; firstPublish: boolean }
+  | { matchId?: string; error: string }
+> {
+  // `published_at` is read before the close: the trigger stamps it on the
+  // session's first move to `complete` and never again, so null here means
+  // this publish is the session's first.
   const { data: row, error: readError } = await supabase
     .from("label_sessions")
-    .select("match_id")
+    .select("match_id, job_id, published_at")
     .eq("id", sessionId)
-    .maybeSingle<{ match_id: string }>();
+    .maybeSingle<{
+      match_id: string;
+      job_id: string | null;
+      published_at: string | null;
+    }>();
   if (readError || !row) {
     return {
       error: `The labels are published, but the match could not be marked Verified by Advantage: ${readError?.message ?? "session not found"}. Publish again to retry.`,
@@ -389,7 +450,11 @@ async function verifyMatchOf(
       error: `The labels are published, but the match could not be marked Verified by Advantage: ${error.message}. Publish again to retry.`,
     };
   }
-  return { matchId: row.match_id };
+  return {
+    matchId: row.match_id,
+    jobId: row.job_id ?? null,
+    firstPublish: !row.published_at,
+  };
 }
 
 /**
