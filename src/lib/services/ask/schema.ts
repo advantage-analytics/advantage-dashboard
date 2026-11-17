@@ -1285,7 +1285,7 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         name: "last_shot_number",
         type: "integer",
         meaning:
-          "The last shot's number within the point, as ask.shots.shot_number: join ask.shots on match_id, point_number and shot_number for anything else about that shot, such as its speed or spin; null when the point has no shots.",
+          "The last shot's number within the point, as ask.shots.shot_number: join ask.shots on match_id, point_number and shot_number for anything else about that shot, such as its spin or zone; null when the point has no shots.",
       },
     ],
   },

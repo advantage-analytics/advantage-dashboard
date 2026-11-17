@@ -261,6 +261,13 @@ const SPEED_COLUMN = "speed_mph";
 const SHOTS_VIEW = "shots";
 export const ASK_SHOTS_STAR_REASON =
   "sql reads ask.shots with *. Name the columns you need instead: speed_mph may not be read.";
+/**
+ * `ask.shots x(a, b, …)` renames a view's columns by position, so a later
+ * letter IS `speed_mph` under another name. No Ask answer needs a column-
+ * alias list (alias in the select list instead), so none is allowed.
+ */
+export const ASK_COLUMN_ALIAS_LIST_REASON =
+  "A column-alias list on a relation (`ask.shots x(a, b, …)`) is not allowed. Alias columns in the select list instead.";
 /** `select sh from ask.shots sh` / `array_agg(sh)`: the whole row, speed and all. */
 export const ASK_SHOTS_ROW_REASON =
   "sql reads a whole ask.shots row. Name the columns you need instead: speed_mph may not be read.";
@@ -393,6 +400,21 @@ function walk(value: unknown, state: WalkState): void {
   }
   if (!isNode(value)) return;
 
+  // `ask.shots x(a, b, …)` / `(select …) t(a, b)`: a positional rename can
+  // reach any column under a new name (ASK_COLUMN_ALIAS_LIST_REASON).
+  if (Array.isArray(value.columnNames) && value.columnNames.length > 0) {
+    refuse(ASK_COLUMN_ALIAS_LIST_REASON);
+  }
+  // `join … using (speed_mph)` names the column outside any `ref` node, and
+  // an equi-join on it counts and groups shots by speed.
+  if (isNode(value.join) && Array.isArray(value.join.using)) {
+    for (const column of value.join.using) {
+      if (isNode(column) && str(column.name)?.toLowerCase() === SPEED_COLUMN) {
+        refuse(ASK_SPEED_HIDDEN_REASON);
+      }
+    }
+  }
+
   // A `*` in a SELECT's own column list (`select *`, `select s.*`) — not
   // `count(*)`, whose star is a call argument and reads no column.
   if (
@@ -523,8 +545,10 @@ function checkOne(text: string, mode: WalkState["mode"]): WalkState {
  *   the view's two rows make a query without one wrong by construction, and
  *   one with it is the planner's to get right;
  * - every function is on {@link ASK_SQL_FUNCTION_ALLOWLIST};
- * - nothing reads `ask.shots.speed_mph`, by name, through a `*` over
- *   `ask.shots`, or as a whole row (`select sh`, `array_agg(sh)`)
+ * - nothing reads `ask.shots.speed_mph`: by name (a column reference or a
+ *   `join … using` list), through a `*` over `ask.shots`, as a whole row
+ *   (`select sh`, `array_agg(sh)`), or renamed by a column-alias list
+ *   (`ask.shots x(a, b, …)`, refused outright)
  *   ({@link ASK_SPEED_HIDDEN_REASON}).
  *
  * The first problem found is the reason; the route feeds it back to the model.

@@ -479,6 +479,35 @@ test.describe("shot speed is never read (single-camera speed is not accurate)", 
     });
   });
 
+  test("a column-alias list is refused: a positional rename reaches speed_mph", () => {
+    expectRefused(
+      check(
+        "select g from ask.shots x(a,b,c,d,e,f,g) join scope on scope.match_id = x.a",
+      ),
+      /column-alias list/,
+    );
+    expectRefused(
+      check(
+        "select t.a from (select sh.shot_type from ask.shots sh) t(a) join scope on true",
+      ),
+      /column-alias list/,
+    );
+  });
+
+  test("speed_mph in a join's USING list is refused", () => {
+    expectRefused(
+      check(
+        "select count(*) from ask.shots a join ask.shots b using (speed_mph) join scope on scope.match_id = a.match_id",
+      ),
+      /Shot speed is not available/,
+    );
+    expect(
+      check(
+        "select count(*) from ask.shots a join ask.shots b using (match_id, point_number) join scope on scope.match_id = a.match_id",
+      ),
+    ).toMatchObject({ ok: true });
+  });
+
   test("a * over ask.shots is refused; count(*) and * over other views pass", () => {
     expectRefused(check(`select * ${FROM}`), /Name the columns you need/);
     expectRefused(check(`select sh.* ${FROM}`), /Name the columns you need/);
