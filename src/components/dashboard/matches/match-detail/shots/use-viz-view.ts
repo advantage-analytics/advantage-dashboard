@@ -125,9 +125,21 @@ export function useVizView(): VizView {
             result ?? undefined,
             bands,
             unit,
+            // The Approaches rail reads hands and lob keys off it, as the
+            // court does (`computeViz` above).
+            context,
           )
         : null,
-    [points, cut, state.filters, subjectIsPlayer1, result, bands, unit],
+    [
+      points,
+      cut,
+      state.filters,
+      subjectIsPlayer1,
+      result,
+      bands,
+      unit,
+      context,
+    ],
   );
 
   const bandZones = useMemo(

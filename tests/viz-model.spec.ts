@@ -12,6 +12,7 @@ import {
   filterKeysFor,
   servePlacementMetrics,
   statRowAnnouncement,
+  statRowKeyOf,
   statsAreEmpty,
   subjectFor,
   type Cut,
@@ -3279,5 +3280,299 @@ test.describe("computeViz — approaches cut", () => {
     expect(r.count).toBe(netGameTally(MATCH, true, null).total);
     expect(r.dots.every((d) => d.meta?.handAssumed === true)).toBe(true);
     expect(r.dots.some((d) => d.meta?.ending === "lobbed")).toBe(false);
+  });
+});
+
+/* ── The Approaches statistics ─────────────────────────────────────────── */
+
+test.describe("computeVizStats — approaches cut", () => {
+  /**
+   * Your six net points in `MATCH` (you are player 1; a right-handed
+   * opponent), by wing · direction · ending:
+   *   serve-volley  serve-volley  backhand  —              won at the net (won)
+   *   passed-dtl    approach      forehand  Down the Line  passed down the line
+   *   passed-cc     approach      forehand  Down the Line  passed crosscourt
+   *   drawn-in      drawn-in      middle    Middle         your error
+   *   lobbed        approach      backhand  Crosscourt     lobbed
+   *   opp-error     approach      middle    —              won at the net (won)
+   */
+  const ctx: MatchFilterContext = {
+    youIsPlayer1: true,
+    hands: { player1: "right", player2: "right" },
+    lobKeys: LOBS,
+  };
+  const stats = (
+    filters: Partial<VizFilters> = {},
+    matchCtx: MatchFilterContext = ctx,
+  ) => {
+    const f = { ...EMPTY_VIZ_FILTERS, ...filters };
+    const result = computeViz(
+      MATCH,
+      "approaches",
+      f,
+      true,
+      "scatter",
+      matchCtx,
+    );
+    const s = computeVizStats(
+      MATCH,
+      "approaches",
+      f,
+      true,
+      result,
+      DEFAULT_BANDS,
+      "ft",
+      matchCtx,
+    );
+    return { result, stats: s };
+  };
+  /** A group's rows as `label: won of count`, in the rail's order. */
+  const wonRows = (s: ReturnType<typeof stats>["stats"], key: string) =>
+    s.groups
+      .find((g) => g.key === key)
+      ?.rows.map((r) => `${r.label}: ${r.won} of ${r.count} ${r.winPct}`);
+  const shareRows = (s: ReturnType<typeof stats>["stats"]) =>
+    s.groups
+      .find((g) => g.key === "approach-ended")
+      ?.rows.map((r) => `${r.label}: ${r.count} ${r.winPct}`);
+  const APPROACH: Partial<VizFilters> = { entry: ["approach"] };
+
+  test("KPI tiles: the count, 'of N approaches' only when narrowed, and Won %", () => {
+    const plain = stats(APPROACH);
+    expect(plain.stats.kpi).toEqual({
+      count: 4,
+      countLabel: "approaches",
+      won: 1,
+      winPct: 25,
+    });
+    expect(plain.stats.total).toBe(plain.result.count);
+
+    // A filter that narrows: the count reads against the cut's own pool.
+    const narrowed = stats({ ...APPROACH, approachTo: ["forehand"] });
+    expect(narrowed.stats.kpi).toEqual({
+      count: 2,
+      countLabel: "of 4 approaches",
+      won: 0,
+      winPct: 0,
+    });
+    expect(narrowed.stats.total).toBe(narrowed.result.count);
+
+    // A filter set that keeps everything does not narrow.
+    expect(
+      stats({ ...APPROACH, approachTo: ["forehand", "middle", "backhand"] })
+        .stats.kpi?.countLabel,
+    ).toBe("approaches");
+
+    // The noun follows the entry choice; with none, every net point.
+    expect(stats().stats.kpi).toEqual({
+      count: 6,
+      countLabel: "times at the net",
+      won: 2,
+      winPct: 33,
+    });
+    expect(stats({ entry: ["serve-volley"] }).stats.kpi?.countLabel).toBe(
+      "serve-and-volley point",
+    );
+
+    // Only this cut carries KPI tiles.
+    expect(
+      computeVizStats(
+        MATCH,
+        "rallyPlacement",
+        EMPTY_VIZ_FILTERS,
+        true,
+        undefined,
+        DEFAULT_BANDS,
+        "ft",
+      ).kpi,
+    ).toBeUndefined();
+  });
+
+  test("Approach to: their backhand, middle and their forehand, won x of n and %", () => {
+    const { stats: s } = stats();
+    expect(s.groups.map((g) => g.label)).toEqual([
+      "Approach to",
+      "Direction",
+      "How it ended",
+    ]);
+    expect(wonRows(s, "approach-to")).toEqual([
+      "Their backhand: 1 of 2 50",
+      "Middle: 1 of 2 50",
+      "Their forehand: 0 of 2 0",
+    ]);
+    // Won-rate rows, not shares.
+    const group = s.groups.find((g) => g.key === "approach-to")!;
+    expect(group.rows.every((r) => !r.share)).toBe(true);
+    expect(group.rows.map((r) => r.key)).toEqual([
+      "backhand",
+      "middle",
+      "forehand",
+    ]);
+  });
+
+  test("Direction is absent for a serve-and-volley-only pool and present otherwise", () => {
+    const sv = stats({ entry: ["serve-volley"] }).stats;
+    expect(sv.kpi?.count).toBe(1);
+    expect(sv.groups.map((g) => g.key)).toEqual([
+      "approach-to",
+      "approach-ended",
+    ]);
+
+    const all = stats().stats;
+    expect(wonRows(all, "approach-direction")).toEqual([
+      "Crosscourt: 0 of 1 0",
+      "Middle: 0 of 1 0",
+      "Down the line: 0 of 2 0",
+    ]);
+  });
+
+  test("How it ended: five rows with count and share, summing to the KPI count", () => {
+    const { stats: s } = stats();
+    expect(shareRows(s)).toEqual([
+      "Passed down the line: 1 17",
+      "Passed crosscourt: 1 17",
+      "Lobbed: 1 17",
+      "Won at the net: 2 33",
+      "Your error: 1 17",
+    ]);
+    const ended = s.groups.find((g) => g.key === "approach-ended")!;
+    expect(ended.rows.every((r) => r.share)).toBe(true);
+    expect(ended.rows.reduce((n, r) => n + r.count, 0)).toBe(s.kpi?.count);
+
+    // Narrowed, the rows still sum to the count shown.
+    const narrowed = stats({ ...APPROACH, approachTo: ["forehand"] }).stats;
+    const narrowedEnded = narrowed.groups.find(
+      (g) => g.key === "approach-ended",
+    )!;
+    expect(narrowedEnded.rows.reduce((n, r) => n + r.count, 0)).toBe(2);
+  });
+
+  test("with lob keys unknown there are four rows: two 'Passed or lobbed', no Lobbed", () => {
+    const { stats: s } = stats({}, { ...ctx, lobKeys: null });
+    expect(shareRows(s)).toEqual([
+      "Passed or lobbed down the line: 1 17",
+      // The lob's reply was crosscourt, so it joins the crosscourt pass.
+      "Passed or lobbed crosscourt: 2 33",
+      "Won at the net: 2 33",
+      "Your error: 1 17",
+    ]);
+    const ended = s.groups.find((g) => g.key === "approach-ended")!;
+    expect(ended.rows).toHaveLength(4);
+    expect(ended.rows.map((r) => r.label)).not.toContain("Lobbed");
+    expect(ended.rows.reduce((n, r) => n + r.count, 0)).toBe(s.kpi?.count);
+  });
+
+  test("each group ignores its own filter and follows the others", () => {
+    // approachTo set: Approach to keeps every wing; the others narrow.
+    const to = stats({ ...APPROACH, approachTo: ["forehand"] }).stats;
+    expect(wonRows(to, "approach-to")).toEqual([
+      "Their backhand: 0 of 1 0",
+      "Middle: 1 of 1 100",
+      "Their forehand: 0 of 2 0",
+    ]);
+    expect(wonRows(to, "approach-direction")).toEqual([
+      "Crosscourt: 0 of 0 null",
+      "Middle: 0 of 0 null",
+      "Down the line: 0 of 2 0",
+    ]);
+    expect(shareRows(to)).toEqual([
+      "Passed down the line: 1 50",
+      "Passed crosscourt: 1 50",
+      "Lobbed: 0 0",
+      "Won at the net: 0 0",
+      "Your error: 0 0",
+    ]);
+
+    // approachDir set: Direction keeps every direction; Approach to narrows.
+    const dir = stats({ ...APPROACH, approachDir: ["Crosscourt"] }).stats;
+    expect(dir.kpi?.count).toBe(1);
+    expect(wonRows(dir, "approach-direction")).toEqual([
+      "Crosscourt: 0 of 1 0",
+      "Middle: 0 of 0 null",
+      "Down the line: 0 of 2 0",
+    ]);
+    expect(wonRows(dir, "approach-to")).toEqual([
+      "Their backhand: 0 of 1 0",
+      "Middle: 0 of 0 null",
+      "Their forehand: 0 of 0 null",
+    ]);
+    expect(shareRows(dir)).toEqual([
+      "Passed down the line: 0 0",
+      "Passed crosscourt: 0 0",
+      "Lobbed: 1 100",
+      "Won at the net: 0 0",
+      "Your error: 0 0",
+    ]);
+  });
+
+  test("an approach with no placement counts in the KPI and ending, in no wing", () => {
+    const noLanding = netPoint("no-landing", {
+      server: 2,
+      winner: 2,
+      resultType: "Forehand Winner",
+      shots: [
+        netShot(1, false, "First Serve", { cy: 23.5, ly: 7 }),
+        netShot(2, true, "Forehand", { cy: 0.5, ly: 20 }),
+        netShot(3, false, "Backhand", { cy: 22, ly: 2 }),
+        netShot(4, true, "Forehand", { cy: 3, lx: null, ly: null }),
+        netShot(5, false, "Backhand", { cy: 22, ly: 6 }),
+        netShot(6, true, "Backhand Volley", { cy: 9, ly: 20 }),
+        netShot(7, false, "Forehand", { cy: 21, ly: 3 }),
+      ],
+    });
+    const s = computeVizStats(
+      [noLanding],
+      "approaches",
+      EMPTY_VIZ_FILTERS,
+      true,
+      undefined,
+      DEFAULT_BANDS,
+      "ft",
+      ctx,
+    );
+    expect(s.kpi?.count).toBe(1);
+    expect(s.total).toBe(1);
+    expect(
+      s.groups
+        .find((g) => g.key === "approach-to")!
+        .rows.reduce((n, r) => n + r.count, 0),
+    ).toBe(0);
+    expect(
+      s.groups
+        .find((g) => g.key === "approach-ended")!
+        .rows.reduce((n, r) => n + r.count, 0),
+    ).toBe(1);
+    expect(statsAreEmpty(s)).toBe(false);
+  });
+
+  test("rows are picks: each drawn mark keys to the row that counted it", () => {
+    const { result, stats: s } = stats();
+    for (const group of s.groups) {
+      for (const row of group.rows) {
+        const marks = result.dots.filter(
+          (d) =>
+            statRowKeyOf(
+              "approaches",
+              group.key,
+              d,
+              undefined,
+              DEFAULT_BANDS,
+            ) === row.key,
+        );
+        // Unfiltered, every approach is drawn, so each row's marks are its count.
+        expect(marks.length, `${group.key}/${row.key}`).toBe(row.count);
+      }
+    }
+    // The share rows announce as approaches, not errors.
+    const ended = s.groups.find((g) => g.key === "approach-ended")!;
+    expect(statRowAnnouncement(ended.rows[3], "approaches")).toBe(
+      "Won at the net: 33% of approaches, 2",
+    );
+    // The season fold keeps the rail's fixed order.
+    for (const group of s.groups) {
+      expect(orderStatRows([...group.rows].reverse(), group.key)).toEqual(
+        [...group.rows].reverse(),
+      );
+    }
   });
 });

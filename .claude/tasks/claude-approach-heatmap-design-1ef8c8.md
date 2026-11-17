@@ -46,7 +46,7 @@ ready).
 
 ## T3 · Compute the Approaches statistics
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/viz-model.ts` (`computeVizStats`); `tests/viz-model.spec.ts`; `shots/lightbox-stats.tsx` only if its group renderer needs a new row kind

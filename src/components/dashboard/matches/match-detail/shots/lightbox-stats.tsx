@@ -53,6 +53,8 @@ interface Figure {
   label: string;
   count: number;
   of: number;
+  /** A bare count over its label (the Approaches tile), not a rate. */
+  bare?: boolean;
 }
 
 /**
@@ -70,6 +72,15 @@ interface Figure {
  * shots". There it is "Shots won", the words the rows' own tooltips use.
  */
 function summaryFigures(stats: VizStats, cut: Cut): Figure[] {
+  // The Approaches cut's KPI tiles (`VizStats.kpi`): its groups each lift
+  // their own filter, so none of them sums to the approaches shown.
+  if (stats.kpi) {
+    const { count, countLabel, won } = stats.kpi;
+    return [
+      { key: "count", label: countLabel, count, of: count, bare: true },
+      { key: "won", label: wonFigureLabel(cut), count: won, of: count },
+    ];
+  }
   const figures: Figure[] = [];
   const first = stats.groups.find((g) => g.rows.length > 0);
   if (first && !first.rows.some((r) => r.share)) {
@@ -236,14 +247,18 @@ export function LightboxStats({
             data-stat-summary=""
             className="grid grid-cols-2 gap-x-3 gap-y-4"
           >
-            {figures.map((f) => (
-              <SummaryFigure
-                key={f.key}
-                label={f.label}
-                count={f.count}
-                of={f.of}
-              />
-            ))}
+            {figures.map((f) =>
+              f.bare ? (
+                <CountFigure key={f.key} label={f.label} count={f.count} />
+              ) : (
+                <SummaryFigure
+                  key={f.key}
+                  label={f.label}
+                  count={f.count}
+                  of={f.of}
+                />
+              ),
+            )}
           </div>
           <GroupSpacer edge="between" />
         </>
@@ -451,6 +466,31 @@ function StatBar({ pct }: { pct: number | null }) {
       className="absolute inset-y-0 left-0 rounded-[2px] bg-[var(--blue)] transition-[width] duration-[var(--duration-reveal)] ease-[var(--ease-chart)] motion-reduce:transition-none"
       style={{ width: `${pct ?? 0}%` }}
     />
+  );
+}
+
+/** A count over what it counts ("6 · of 9 approaches"), in the summary
+ *  figure's type, with no rate and so no bar. */
+function CountFigure({ label, count }: { label: string; count: number }) {
+  const shownCount = useTweenedNumber(count);
+  return (
+    <p className="m-0 flex min-w-0 flex-col gap-0.5">
+      <span className="sr-only">
+        {count} {label}
+      </span>
+      <span
+        aria-hidden="true"
+        className="text-[16px] leading-[1.35] text-[var(--ink-900)] tabular-nums"
+      >
+        {shownCount}
+      </span>
+      <span
+        aria-hidden="true"
+        className="text-micro text-[var(--ink-600)] tabular-nums"
+      >
+        {label}
+      </span>
+    </p>
   );
 }
 
