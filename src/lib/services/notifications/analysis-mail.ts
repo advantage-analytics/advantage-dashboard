@@ -3,6 +3,7 @@ import {
   analysisFailedEmail,
   analysisFailedInternalEmail,
   analysisReadyEmail,
+  analysisVerifiedEmail,
   sendEmail,
   webhookUnreadableInternalEmail,
   INTERNAL_ALERTS_ADDRESS,
@@ -20,7 +21,9 @@ import {
   jobRecoveryFacts,
   type RecoveryClass,
 } from "@/lib/data/match-analysis";
-import { claimSend, getNotificationPrefs } from "./should-notify";
+import { verificationPendingFor } from "@/lib/data/match-verification";
+import { jobVideoSeconds } from "@/lib/services/labels/video-seconds";
+import { alreadySent, claimSend, getNotificationPrefs } from "./should-notify";
 import { readReprocessParent } from "@/lib/services/splitstep/reprocess";
 
 const LOG = "[notifications:analysis]";
@@ -73,7 +76,7 @@ export async function notifyAnalysisOutcome(params: {
     const { data: job, error: jobError } = await supabase
       .from("processing_jobs")
       .select(
-        "created_by, match_id, status, error_code, error_category, error_step, error_message, video_object_key, results_object_key",
+        "created_by, match_id, status, error_code, error_category, error_step, error_message, video_object_key, results_object_key, completed_at, start_time_seconds, end_time_seconds, billable_seconds",
       )
       .eq("id", jobId)
       .maybeSingle();
@@ -205,6 +208,7 @@ export async function notifyAnalysisOutcome(params: {
                 playedSets(scoreSetsFrom(match.score as RawMatchScore | null)),
               ) || "Score not entered",
             ask,
+            verificationPending: readyVerificationPending(job),
           })
         : analysisFailedEmail({
             to,
@@ -229,6 +233,119 @@ export async function notifyAnalysisOutcome(params: {
     console.error(`${LOG} threw`, {
       jobId,
       outcome,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * Whether the ready mail may say "Verification pending": the report's own
+ * rule (`verificationPendingFor`), fed from the job that just completed. No
+ * labeller holds a match whose results landed seconds ago, so `labelling` is
+ * false; `results_at` is the job's `completed_at`, or now when the row has not
+ * been stamped yet (`deriveAndPublish` writes `completed` just before this).
+ */
+export function readyVerificationPending(
+  job: Record<string, unknown>,
+  now: Date = new Date(),
+): boolean {
+  return verificationPendingFor({
+    results_at: (job.completed_at as string | null) ?? now.toISOString(),
+    has_video:
+      jobVideoSeconds({
+        start_time_seconds: job.start_time_seconds as number | null,
+        end_time_seconds: job.end_time_seconds as number | null,
+        billable_seconds: job.billable_seconds as number | null,
+      }) > 0,
+    labelling: false,
+  });
+}
+
+/**
+ * "Your match is Verified by Advantage" — to the player who already had the
+ * ready mail for this job, after a label publish verified the match.
+ *
+ * The caller (`writeLabelSessionComplete`) calls this only when the publish
+ * verified a match that was NOT verified before it, so a re-publish of a
+ * verified match, or of anything verified before this shipped, never mails.
+ * Here the rest of the rule:
+ *
+ *  - only after `analysis_ready:<job_id>` was sent. No ready mail (the switch
+ *    was off, the account had no address, an admin reprocess) means the
+ *    player was never told about the automatic numbers, so there is nothing
+ *    to correct. Read with `alreadySent`, not claimed: that key is the ready
+ *    mail's, never this one's;
+ *  - the same switch as the ready mail, "Email me when analysis is ready",
+ *    read now: someone who turned it off since gets nothing;
+ *  - once per job, `analysis_verified:<job_id>`, claimed after the cheap reads
+ *    for the same reason `notifyAnalysisOutcome` does.
+ *
+ * Never throws: it runs after the labels are published and the session is
+ * closed, and a failure here must not read as a failed publish.
+ */
+export async function notifyAnalysisVerified(params: {
+  supabase: SupabaseClient;
+  jobId: string;
+}): Promise<void> {
+  const { supabase, jobId } = params;
+  try {
+    if (!(await alreadySent(`analysis_ready:${jobId}`))) {
+      console.log(`${LOG} verified, but no ready mail went out — none sent`, {
+        jobId,
+      });
+      return;
+    }
+
+    const { data: job, error: jobError } = await supabase
+      .from("processing_jobs")
+      .select("created_by, match_id")
+      .eq("id", jobId)
+      .maybeSingle();
+    if (jobError || !job) {
+      console.warn(`${LOG} verified job not readable, nobody mailed`, {
+        jobId,
+        error: jobError?.message,
+      });
+      return;
+    }
+
+    const uploaderId = job.created_by as string | null;
+    const matchId = job.match_id as string | null;
+    if (!uploaderId || !matchId) return;
+
+    const prefs = await getNotificationPrefs([uploaderId]);
+    if (!prefs.get(uploaderId)?.notifyAnalysisReady) return;
+
+    const [{ data: match }, { data: user }] = await Promise.all([
+      supabase
+        .from("matches")
+        .select("player1_name, player2_name")
+        .eq("id", matchId)
+        .maybeSingle(),
+      supabase.from("users").select("email").eq("id", uploaderId).maybeSingle(),
+    ]);
+
+    const to = (user?.email as string | null)?.trim();
+    if (!to || !match) return;
+
+    if (!(await claimSend(`analysis_verified:${jobId}`))) return;
+
+    const sent = await sendEmail(
+      analysisVerifiedEmail({
+        to,
+        matchId,
+        matchTitle: `${match.player1_name} vs. ${match.player2_name}`,
+      }),
+    );
+    if (!sent.ok) {
+      console.warn(`${LOG} verified email not delivered`, {
+        jobId,
+        error: sent.error,
+      });
+    }
+  } catch (error) {
+    console.error(`${LOG} verified notice threw`, {
+      jobId,
       reason: error instanceof Error ? error.message : String(error),
     });
   }

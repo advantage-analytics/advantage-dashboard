@@ -4,6 +4,7 @@ import { emailOrigin } from "@/lib/site-url";
 import {
   analysisFailedEmail,
   analysisReadyEmail,
+  analysisVerifiedEmail,
   type AnalysisFailedInput,
 } from "@/lib/services/email";
 import { createLoader } from "./fixtures/vm-modules";
@@ -376,5 +377,320 @@ test.describe("analysisReadyEmail with a first answer", () => {
     });
     expect(pending.html).not.toContain("/dashboard/ask");
     expect(pending.tags).toMatchObject({ pending: "yes", ask: "no" });
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * analysisReadyEmail — the automatic analysis, said plainly (2026-11-17)
+ *
+ * A player got "Every serve, return, hold and break from this match is now on
+ * the report" on raw vendor output, opened it three times, and was never told
+ * when the label console rewrote every point 51 minutes later. The ready mail
+ * now claims only what the automatic analysis is; "every point checked" is
+ * Verified by Advantage's, and has its own mail.
+ * ---------------------------------------------------------------------- */
+
+test.describe("analysisReadyEmail copy", () => {
+  const ready = (
+    overrides: Partial<Parameters<typeof analysisReadyEmail>[0]> = {},
+  ) =>
+    analysisReadyEmail({
+      to: "alex@example.test",
+      matchId: MATCH_ID,
+      matchTitle: "Alex Rivera vs. Jordan Chen",
+      matchContext: "Stanford Men's Tennis · 17 Nov 2026",
+      score: "6-4 3-6 7-5",
+      ...overrides,
+    });
+
+  test("verification pending: says the check is coming, and that the numbers may change", () => {
+    const msg = ready({ verificationPending: true });
+    expect(msg.subject).toBe("Alex Rivera vs. Jordan Chen has been analyzed");
+    expect(msg.text).toContain(
+      "Advantage Intelligence has finished with your video, and your report is open.",
+    );
+    expect(msg.text).toContain(
+      "We are checking every point against the video: who won and how it ended. Until then, your statistics come from the automatic analysis and may change. We'll email you when it's done.",
+    );
+    expect(msg.text).toContain("Verification pending");
+    expect(msg.text).toContain(
+      'You\'re getting this because "Email me when analysis is ready" is on',
+    );
+    expect(msg.tags).toMatchObject({
+      type: "analysis_ready",
+      verification: "pending",
+    });
+  });
+
+  test("no check coming: promises no check and no second mail", () => {
+    const msg = ready();
+    expect(msg.subject).toBe("Alex Rivera vs. Jordan Chen has been analyzed");
+    expect(msg.text).toContain(
+      "Advantage Intelligence has finished with your video. Your report has your match statistics and the points it found, each with its clip.",
+    );
+    expect(msg.text).not.toContain("Verification pending");
+    expect(msg.text).not.toContain("checking every point");
+    expect(msg.text).not.toContain("We'll email you");
+    expect(msg.tags).toMatchObject({ verification: "none" });
+  });
+
+  test("the overclaim is gone, and no internal or vendor name reaches the player", () => {
+    for (const msg of [ready(), ready({ verificationPending: true })]) {
+      // "is ready" survives only in the switch's own name, in the note.
+      expect(msg.subject).not.toContain("is ready");
+      for (const part of [msg.subject, msg.html, msg.text]) {
+        expect(part).not.toContain("Every serve, return, hold and break");
+        expect(part.toLowerCase()).not.toContain("splitstep");
+        expect(part.toLowerCase()).not.toContain("analyst");
+      }
+    }
+  });
+
+  test("stats still being worked out: no verification line either way", () => {
+    const msg = ready({ statsPending: true, verificationPending: true });
+    expect(msg.text).not.toContain("Verification pending");
+    expect(msg.tags).toMatchObject({ pending: "yes", verification: "none" });
+  });
+});
+
+test.describe("analysisVerifiedEmail copy", () => {
+  test("one paragraph, the badge's words, and the report's button", () => {
+    const msg = analysisVerifiedEmail({
+      to: "alex@example.test",
+      matchId: MATCH_ID,
+      matchTitle: "Alex Rivera vs. Jordan Chen",
+    });
+    expect(msg.subject).toBe(
+      "Alex Rivera vs. Jordan Chen is now Verified by Advantage",
+    );
+    expect(msg.text).toContain("Your match is Verified by Advantage");
+    expect(msg.text).toContain(
+      "We've checked every point of this match against the video: who won and how it ended. Your report has been updated to match, so some statistics may differ from what you saw before.",
+    );
+    expect(msg.html).toContain("Open the report");
+    expect(msg.html).toContain(
+      `<a href="${emailOrigin()}/dashboard/matches/${MATCH_ID}"`,
+    );
+    expect(msg.text).toContain(
+      'You\'re getting this because "Email me when analysis is ready" is on',
+    );
+    // One paragraph and a button: no facts panel.
+    expect(msg.text).not.toContain("Where");
+    for (const part of [msg.subject, msg.html, msg.text]) {
+      expect(part.toLowerCase()).not.toContain("splitstep");
+      expect(part.toLowerCase()).not.toContain("analyst");
+    }
+    expect(msg.tags).toEqual({ type: "analysis_verified" });
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * readyVerificationPending — the report's rule, fed from the finished job
+ * ---------------------------------------------------------------------- */
+
+test("readyVerificationPending: a job with video after the queue's start is pending; one with no video is not", () => {
+  const { readyVerificationPending } = loadNotifyAnalysisVerified();
+  const after = "2026-11-17T06:46:00Z";
+  expect(
+    readyVerificationPending({
+      completed_at: after,
+      start_time_seconds: 0,
+      end_time_seconds: 5400,
+      billable_seconds: 5400,
+    }),
+  ).toBe(true);
+  expect(
+    readyVerificationPending({
+      completed_at: after,
+      start_time_seconds: null,
+      end_time_seconds: null,
+      billable_seconds: null,
+    }),
+  ).toBe(false);
+  // Before the queue's start: never promised a check the queue will not do.
+  expect(
+    readyVerificationPending({
+      completed_at: "2026-10-01T00:00:00Z",
+      start_time_seconds: 0,
+      end_time_seconds: 5400,
+      billable_seconds: 5400,
+    }),
+  ).toBe(false);
+});
+
+/* -------------------------------------------------------------------------
+ * notifyAnalysisVerified — only after a ready mail for the same job
+ * ---------------------------------------------------------------------- */
+
+function loadNotifyAnalysisVerified(
+  options: {
+    /** `notification_sends` keys already present. */
+    sent?: string[];
+    readyPref?: boolean;
+    /** `claimSend` answers false: another caller got there first. */
+    claimLost?: boolean;
+  } = {},
+) {
+  const { sent = [], readyPref = true, claimLost = false } = options;
+  const reads: string[] = [];
+  const claims: string[] = [];
+  const verifiedInputs: unknown[] = [];
+  const sentTags: unknown[] = [];
+
+  const loader = createLoader({
+    globals: { Error },
+    stubs: {
+      "@/lib/services/email": {
+        sendEmail: async (msg: { tags?: unknown }) => {
+          sentTags.push(msg.tags);
+          return { ok: true, id: "sent-1" };
+        },
+        analysisVerifiedEmail: (input: unknown) => {
+          verifiedInputs.push(input);
+          return {
+            to: "x@example.test",
+            subject: "stub",
+            html: "",
+            text: "",
+            tags: { type: "analysis_verified" },
+          };
+        },
+        analysisReadyEmail: () => ({}),
+        analysisFailedEmail: () => ({}),
+        analysisFailedInternalEmail: () => ({}),
+        INTERNAL_ALERTS_ADDRESS: "alerts@example.test",
+      },
+      "@/lib/data/programs-server": {
+        programDisplayName: () => "Stanford Men's Tennis",
+      },
+      "./should-notify": {
+        alreadySent: async (key: string) => {
+          reads.push(key);
+          return sent.includes(key);
+        },
+        claimSend: async (key: string) => {
+          claims.push(key);
+          return !claimLost;
+        },
+        getNotificationPrefs: async () =>
+          new Map([["uploader-1", { notifyAnalysisReady: readyPref }]]),
+      },
+    },
+  });
+
+  const mod = loader.load("src/lib/services/notifications/analysis-mail.ts");
+  return {
+    notifyAnalysisVerified: mod.notifyAnalysisVerified as (params: {
+      supabase: unknown;
+      jobId: string;
+    }) => Promise<void>,
+    readyVerificationPending: mod.readyVerificationPending as (
+      job: Record<string, unknown>,
+    ) => boolean,
+    reads,
+    claims,
+    verifiedInputs,
+    sentTags,
+  };
+}
+
+const VERIFIED_JOB = {
+  created_by: "uploader-1",
+  match_id: MATCH_ID,
+  status: "completed",
+  error_code: null,
+  error_category: null,
+  error_step: null,
+  error_message: null,
+  video_object_key: "videos/x.mp4",
+  results_object_key: "results/x.json",
+};
+
+test.describe("notifyAnalysisVerified", () => {
+  quietConsole();
+
+  test("no ready mail went out for the job: nothing is claimed or sent", async () => {
+    const run = loadNotifyAnalysisVerified({ sent: [] });
+    await run.notifyAnalysisVerified({
+      supabase: fakeSupabase(VERIFIED_JOB, []),
+      jobId: "job-1",
+    });
+    expect(run.reads).toEqual(["analysis_ready:job-1"]);
+    expect(run.claims).toEqual([]);
+    expect(run.verifiedInputs).toHaveLength(0);
+    expect(run.sentTags).toHaveLength(0);
+  });
+
+  test("a ready mail for ANOTHER job does not count", async () => {
+    const run = loadNotifyAnalysisVerified({
+      sent: ["analysis_ready:job-0"],
+    });
+    await run.notifyAnalysisVerified({
+      supabase: fakeSupabase(VERIFIED_JOB, []),
+      jobId: "job-1",
+    });
+    expect(run.claims).toEqual([]);
+    expect(run.sentTags).toHaveLength(0);
+  });
+
+  test("after the ready mail: one send, claimed per job, to the uploader, with the match's title", async () => {
+    const run = loadNotifyAnalysisVerified({
+      sent: ["analysis_ready:job-1"],
+    });
+    await run.notifyAnalysisVerified({
+      supabase: fakeSupabase(VERIFIED_JOB, []),
+      jobId: "job-1",
+    });
+    expect(run.claims).toEqual(["analysis_verified:job-1"]);
+    expect(run.verifiedInputs).toEqual([
+      {
+        to: "alex@example.test",
+        matchId: MATCH_ID,
+        matchTitle: "Alex Rivera vs. Jordan Chen",
+      },
+    ]);
+    expect(run.sentTags).toEqual([{ type: "analysis_verified" }]);
+  });
+
+  test("'Email me when analysis is ready' turned off since: nothing", async () => {
+    const run = loadNotifyAnalysisVerified({
+      sent: ["analysis_ready:job-1"],
+      readyPref: false,
+    });
+    await run.notifyAnalysisVerified({
+      supabase: fakeSupabase(VERIFIED_JOB, []),
+      jobId: "job-1",
+    });
+    expect(run.claims).toEqual([]);
+    expect(run.sentTags).toHaveLength(0);
+  });
+
+  test("already sent for this job (claim lost): no second copy", async () => {
+    const run = loadNotifyAnalysisVerified({
+      sent: ["analysis_ready:job-1"],
+      claimLost: true,
+    });
+    await run.notifyAnalysisVerified({
+      supabase: fakeSupabase(VERIFIED_JOB, []),
+      jobId: "job-1",
+    });
+    expect(run.claims).toEqual(["analysis_verified:job-1"]);
+    expect(run.verifiedInputs).toHaveLength(0);
+    expect(run.sentTags).toHaveLength(0);
+  });
+
+  test("never throws, even when the job read blows up", async () => {
+    const run = loadNotifyAnalysisVerified({
+      sent: ["analysis_ready:job-1"],
+    });
+    const exploding = {
+      from() {
+        throw new Error("db down");
+      },
+    };
+    await expect(
+      run.notifyAnalysisVerified({ supabase: exploding, jobId: "job-1" }),
+    ).resolves.toBeUndefined();
+    expect(run.sentTags).toHaveLength(0);
   });
 });

@@ -313,6 +313,65 @@ test.describe("writeLabelSessionComplete", () => {
     }
   });
 
+  test("the 'now Verified by Advantage' mail goes only when this publish verified a match that was not verified before", async () => {
+    const WITH_JOB = {
+      status: "labelling",
+      marks_enabled: true,
+      match_id: MATCH_ID,
+      job_id: "job-1",
+    };
+    const run = async (
+      badgeRemoved: boolean | null | undefined,
+      rows: Parameters<typeof fakeClient>[0] = { session: WITH_JOB },
+    ) => {
+      const fake = fakeClient(rows);
+      const notices: string[] = [];
+      const result = await writeLabelSessionComplete({
+        actorId: ACTOR,
+        supabase: fake.supabase,
+        sessionId: SESSION_ID,
+        publish: async () => ({ ...(await PUBLISHED()), badgeRemoved }),
+        verifiedNotice: async (_db, jobId) => {
+          // After the close: the session is already complete.
+          expect(updates(fake).at(-1)?.values).toMatchObject({
+            status: "complete",
+          });
+          notices.push(jobId);
+        },
+      });
+      return { result, notices };
+    };
+
+    // Unverified before, verified now: the session's job is named.
+    const first = await run(false);
+    expect(first.result).toMatchObject({ ok: true, status: "complete" });
+    expect(first.notices).toEqual(["job-1"]);
+
+    // A re-publish of a verified match (and anything verified before this
+    // shipped), or a stamp the publish could not read: nobody is mailed.
+    expect((await run(true)).notices).toEqual([]);
+    expect((await run(null)).notices).toEqual([]);
+    expect((await run(undefined)).notices).toEqual([]);
+
+    // A session with no job has no ready mail to follow.
+    expect(
+      (
+        await run(false, {
+          session: { ...WITH_JOB, job_id: null },
+        })
+      ).notices,
+    ).toEqual([]);
+
+    // A failed verify or a failed close announces nothing.
+    expect(
+      (await run(false, { session: WITH_JOB, failRpc: ["verify_match"] }))
+        .notices,
+    ).toEqual([]);
+    expect(
+      (await run(false, { session: WITH_JOB, failFromUpdate: 0 })).notices,
+    ).toEqual([]);
+  });
+
   test("a close that fails after the verify keeps Verified by Advantage", async () => {
     const fake = fakeClient({ failFromUpdate: 0 });
     const result = await writeLabelSessionComplete({
