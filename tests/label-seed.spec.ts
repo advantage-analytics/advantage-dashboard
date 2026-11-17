@@ -720,8 +720,16 @@ function fakeClient({
             table === "label_sessions" &&
             state.filters.status === "complete"
           ) {
+            // Answers only the lookup the seed must make: this job, never a
+            // practice copy, so dropping either filter fails the spec.
+            const scoped =
+              state.filters.job_id === JOB_ID &&
+              state.filters["not.kind"] === "practice";
             return {
-              data: publishedSessionId ? { id: publishedSessionId } : null,
+              data:
+                scoped && publishedSessionId
+                  ? { id: publishedSessionId }
+                  : null,
               error: null,
             };
           }
