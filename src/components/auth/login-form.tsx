@@ -22,6 +22,7 @@ import { authHref, safeNext } from "@/lib/auth/safe-next";
 import { readFormFields } from "@/lib/auth/form-fields";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
+import { loginFailureReason, type LoginMethod } from "@/lib/auth/login-failure";
 
 /**
  * Google's brand mark. Hoisted out of the component because it is static and
@@ -113,6 +114,7 @@ export function LoginForm({
       // otherwise the home dashboard, even if the profile is incomplete.
       router.push(destination);
     } catch (err: unknown) {
+      captureLoginFailed("password", err);
       setError(toAuthError(err));
     } finally {
       setIsLoading(false);
@@ -148,6 +150,7 @@ export function LoginForm({
       },
     });
     if (oauthError) {
+      captureLoginFailed("google", oauthError);
       setError(toAuthError(oauthError));
       return;
     }
@@ -248,4 +251,15 @@ export function LoginForm({
       </div>
     </form>
   );
+}
+
+/**
+ * `login_failed`: the method and a fixed reason slug, never the error itself
+ * or anything typed — see `login-failure.ts`. The only record of a sign-in
+ * that did not work; without it a person stuck on `/login` looks like a
+ * person who never tried.
+ */
+function captureLoginFailed(method: LoginMethod, err: unknown): void {
+  if (!isPostHogConfigured) return;
+  posthog.capture("login_failed", { method, reason: loginFailureReason(err) });
 }
