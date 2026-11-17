@@ -493,6 +493,13 @@ test("Continue with blanks points at them instead of going to sleep", () => {
   );
   // The pill does the same thing as Continue.
   expect(footerSrc).toContain("onJump={showMissing}");
+  // Blanks with no field on this page (an earlier step's camera answers) run
+  // the save, whose refusal names them, instead of a silent no-op.
+  expect(providerSrc).toContain(
+    "if (!jumpToMissingField(contentRef.current, missingLabels)) saveHandler();",
+  );
+  const pillSrc = readFileSync(`${WIZARD}/MissingFieldsPill.tsx`, "utf8");
+  expect(pillSrc).toContain("if (targets.length === 0) return false;");
 
   // Each flagged field gets its red rule and its sentence.
   for (const [label, sentence] of [

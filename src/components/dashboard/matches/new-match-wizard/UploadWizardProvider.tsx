@@ -178,17 +178,6 @@ export function UploadWizardProvider({
   });
   const gates = useWizardGates(wizard, scoreCheck.unanswered);
 
-  // The step Continue was last pressed on with blanks, so the red marks show
-  // there and nowhere else — moving away and back starts clean.
-  const [flaggedStep, setFlaggedStep] = useState<typeof step | null>(null);
-  const missingLabels = gates.missing.labels;
-  const showMissing = useCallback(() => {
-    setFlaggedStep(step);
-    jumpToMissingField(contentRef.current, missingLabels);
-  }, [step, missingLabels]);
-  const flaggedMissing =
-    flaggedStep === step && step === "match" ? missingLabels.join("|") : "";
-
   const saveHandler =
     step === "provider"
       ? wizard.handleProviderContinue
@@ -199,6 +188,20 @@ export function UploadWizardProvider({
           : admin?.attachment
             ? wizard.handleCreateMatch
             : scoreCheck.saveMatch;
+  // The step Continue was last pressed on with blanks, so the red marks show
+  // there and nowhere else — moving away and back starts clean.
+  const [flaggedStep, setFlaggedStep] = useState<typeof step | null>(null);
+  const missingLabels = gates.missing.labels;
+  // Nothing on this page to point at (only an earlier step's answers are
+  // blank): Continue runs the save, whose refusal names them, rather than
+  // doing nothing — the dead button this replaced.
+  const showMissing = useCallback(() => {
+    setFlaggedStep(step);
+    if (!jumpToMissingField(contentRef.current, missingLabels)) saveHandler();
+  }, [step, missingLabels, saveHandler]);
+  const flaggedMissing =
+    flaggedStep === step && step === "match" ? missingLabels.join("|") : "";
+
   // On the details step, blanks turn Continue into "show me what's missing".
   const continueHandler = gates.gatedByMissing ? showMissing : saveHandler;
 

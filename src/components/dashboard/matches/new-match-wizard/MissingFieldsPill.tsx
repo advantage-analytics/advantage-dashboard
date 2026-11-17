@@ -59,16 +59,20 @@ const TARGETS: Record<string, (root: HTMLElement) => HTMLElement | null> = {
   scoring: (root) => root.querySelector('[data-field="Scoring"]'),
 };
 
-/** Scroll to and focus the first missing field in page order. */
+/**
+ * Scroll to and focus the first missing field in page order. Returns whether
+ * there was one on this page — a blank that belongs to an earlier step (the
+ * camera answers) has no field here to go to.
+ */
 export function jumpToMissingField(
   root: HTMLElement | null,
   labels: readonly string[],
-) {
-  if (!root) return;
+): boolean {
+  if (!root) return false;
   const targets = labels
     .map((label) => TARGETS[label]?.(root) ?? null)
     .filter((el): el is HTMLElement => el !== null);
-  if (targets.length === 0) return;
+  if (targets.length === 0) return false;
   targets.sort((a, b) =>
     a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1,
   );
@@ -79,4 +83,5 @@ export function jumpToMissingField(
     behavior: reduce ? "auto" : "smooth",
   });
   first.focus({ preventScroll: true });
+  return true;
 }
