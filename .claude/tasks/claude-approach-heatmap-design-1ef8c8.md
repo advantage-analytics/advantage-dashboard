@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Add the approaches cut to the viz model
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T1
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/viz-model.ts`; `tests/viz-model.spec.ts`; one-line entries in the `Record<Cut, …>` maps (`shots/viz-labels.tsx`, `shots/viz-analytics.ts`, `shots/court-art.tsx`, `src/lib/data/player-season-viz.ts`)

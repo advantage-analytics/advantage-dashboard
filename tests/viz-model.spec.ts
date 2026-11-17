@@ -3,6 +3,7 @@ import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import {
   EMPTY_VIZ_FILTERS,
   chartAllowedOn,
+  chartsFor,
   collapseErrorFilter,
   computeViz,
   computeVizStats,
@@ -29,6 +30,20 @@ import {
 import type { MatchFilterContext } from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { servePoint } from "./fixtures/viz-serve-points";
 import { rallyShot } from "./fixtures/viz-rally-points";
+import {
+  LOBS,
+  MATCH,
+  OPP_APPROACH,
+  PASSED_DTL,
+  p as netPoint,
+  s as netShot,
+} from "./fixtures/approach-points";
+import { approachOf } from "@/components/dashboard/matches/match-detail/match-filters/approach";
+import {
+  netGameTally,
+  type NetEnding,
+  type NetEntry,
+} from "@/components/dashboard/matches/match-detail/match-filters/net-game";
 import {
   heatBoundsFor,
   projectServeMetricDot,
@@ -2962,4 +2977,307 @@ test("orderStatRows leaves a Depth group as it came and sorts every other by win
     "mid",
     "deep",
   ]);
+});
+
+/* ── The Approaches cut ────────────────────────────────────────────────── */
+
+test.describe("computeViz — approaches cut", () => {
+  const ALL_ENTRIES: NetEntry[] = ["serve-volley", "approach", "drawn-in"];
+  /** You are player 1 (the low end); both right-handed; lobs known. */
+  const ctx: MatchFilterContext = {
+    youIsPlayer1: true,
+    hands: { player1: "right", player2: "right" },
+    lobKeys: LOBS,
+  };
+  const approaches = (
+    filters: Partial<VizFilters> = {},
+    subjectIsPlayer1 = true,
+    matchCtx: MatchFilterContext | undefined = ctx,
+    points: MatchPoint[] = MATCH,
+  ) =>
+    computeViz(
+      points,
+      "approaches",
+      { ...EMPTY_VIZ_FILTERS, ...filters },
+      subjectIsPlayer1,
+      "scatter",
+      matchCtx,
+    );
+  /** The approach `shot` 4 of a point you are then passed on. */
+  const passedAfter = (id: string, approach: MatchShot) =>
+    netPoint(id, {
+      server: 2,
+      winner: 2,
+      resultType: "Forehand Winner",
+      shots: [
+        netShot(1, false, "First Serve", { cy: 23.5, ly: 7 }),
+        netShot(2, true, "Forehand", { cy: 0.5, ly: 20 }),
+        netShot(3, false, "Backhand", { cy: 22, ly: 2 }),
+        approach,
+        netShot(5, false, "Backhand", { cy: 22, ly: 6 }),
+        netShot(6, true, "Backhand Volley", { cy: 9, ly: 20 }),
+        netShot(7, false, "Forehand", { cy: 21, ly: 3 }),
+      ],
+    });
+
+  test("the cut is scatter only and has its own three filter groups", () => {
+    expect(chartsFor("approaches")).toEqual(["scatter"]);
+    expect(chartAllowedOn("approaches", "zones")).toBe(false);
+    expect(chartAllowedOn("approaches", "heat")).toBe(false);
+
+    expect(EMPTY_VIZ_FILTERS.entry).toEqual([]);
+    expect(EMPTY_VIZ_FILTERS.approachTo).toEqual([]);
+    expect(EMPTY_VIZ_FILTERS.approachDir).toEqual([]);
+
+    const base = [
+      "player",
+      "set",
+      "game",
+      "ball",
+      "court",
+      "pressure",
+      "result",
+      "rally",
+    ];
+    expect(filterKeysFor("approaches")).toEqual([
+      ...base,
+      "entry",
+      "approachTo",
+      "approachDir",
+      "match",
+    ]);
+    // No other cut's key list moved.
+    expect(filterKeysFor("serve")).toEqual([...base, "zone", "match"]);
+    expect(filterKeysFor("errors")).toEqual([...base, "error", "match"]);
+    for (const cut of [
+      "returnPlacement",
+      "returnContact",
+      "rallyPosition",
+      "rallyPlacement",
+    ] as const) {
+      expect(filterKeysFor(cut)).toEqual([...base, "match"]);
+    }
+  });
+
+  test("counts the subject's net points, one dot per placed approach", () => {
+    const all = approaches();
+    const mine = MATCH.filter((pt) => approachOf(pt, true, LOBS, "right"));
+    expect(mine.length).toBeGreaterThan(1);
+    expect(all.total).toBe(mine.length);
+    expect(all.count).toBe(mine.length);
+    expect(all.noun).toBe("approaches");
+    expect(all.zoneStats).toBeNull();
+    expect(all.dots.map((d) => d.id).sort()).toEqual(
+      mine.map((pt) => pt.id).sort(),
+    );
+    // The opponent's one approach is not the subject's.
+    expect(all.dots.map((d) => d.id)).not.toContain(OPP_APPROACH.id);
+  });
+
+  test("entry narrows the count", () => {
+    const all = approaches();
+    for (const entry of ALL_ENTRIES) {
+      const r = approaches({ entry: [entry] });
+      expect(r.count, entry).toBeGreaterThan(0);
+      expect(r.count, entry).toBeLessThan(all.count);
+      expect(r.total).toBe(all.total);
+      expect(r.dots.every((d) => d.meta?.entry === entry)).toBe(true);
+    }
+    expect(approaches({ entry: ALL_ENTRIES }).count).toBe(all.count);
+  });
+
+  test("approachTo narrows the count", () => {
+    const all = approaches();
+    let sum = 0;
+    for (const wing of ["forehand", "middle", "backhand"] as const) {
+      const r = approaches({ approachTo: [wing] });
+      expect(r.count, wing).toBeGreaterThan(0);
+      expect(r.count, wing).toBeLessThan(all.count);
+      expect(r.dots.every((d) => d.meta?.wing === wing)).toBe(true);
+      sum += r.count;
+    }
+    // Every fixture approach has a placement, so the wings split them all.
+    expect(sum).toBe(all.count);
+  });
+
+  test("approachDir narrows the count", () => {
+    const all = approaches();
+    for (const dir of ["Crosscourt", "Middle", "Down the Line"] as const) {
+      const r = approaches({ approachDir: [dir] });
+      expect(r.count, dir).toBeGreaterThan(0);
+      expect(r.count, dir).toBeLessThan(all.count);
+      expect(r.dots.every((d) => d.meta?.direction === dir)).toBe(true);
+    }
+    // A serve has no direction, so serve and volley matches none of them.
+    const any = approaches({
+      approachDir: ["Crosscourt", "Middle", "Down the Line"],
+    });
+    expect(any.dots.some((d) => d.meta?.entry === "serve-volley")).toBe(false);
+    expect(any.count).toBeLessThan(all.count);
+  });
+
+  test("a net point with no approach landing is counted but draws no dot", () => {
+    const noLanding = passedAfter(
+      "no-landing",
+      netShot(4, true, "Forehand", { cy: 3, lx: null, ly: null }),
+    );
+    const r = approaches({}, true, ctx, [noLanding]);
+    expect(r.count).toBe(1);
+    expect(r.total).toBe(1);
+    expect(r.dots).toEqual([]);
+    // With no wing it matches no "Approach to" choice, and stays in the pool.
+    const narrowed = approaches(
+      { approachTo: ["forehand", "middle", "backhand"] },
+      true,
+      ctx,
+      [noLanding],
+    );
+    expect(narrowed.count).toBe(0);
+    expect(narrowed.total).toBe(1);
+  });
+
+  test("a dot is the placement, with the contact as its pair", () => {
+    const placed = passedAfter("placed", {
+      ...netShot(4, true, "Backhand", {
+        cy: 3,
+        lx: -3,
+        ly: 21,
+        zone: "Down the Line",
+      }),
+      contactX: 1,
+    });
+    const r = approaches({}, true, ctx, [placed]);
+    expect(r.dots).toHaveLength(1);
+    const [dot] = r.dots;
+    expect(dot.id).toBe("placed");
+    // Placement: metres to the hitter's right, and past the net.
+    expect(dot.lateralM).toBeCloseTo(-3, 6);
+    expect(dot.depthM).toBeCloseTo(21 - NET_Y, 6);
+    expect(dot.atNet).toBe(false);
+    // Contact: 3m inside the hitter's own baseline.
+    expect(dot.pair?.lateralM).toBeCloseTo(1, 6);
+    expect(dot.pair?.depthM).toBeCloseTo(-3, 6);
+    expect(dot.outcome).toBe("lost");
+    expect(dot.shape).toBe("triangle");
+    expect(dot.meta).toMatchObject({
+      pointId: "placed",
+      wonBySubject: false,
+      shotType: "Backhand",
+      entry: "approach",
+      wing: "forehand",
+      direction: "Down the Line",
+      ending: "passed",
+      handAssumed: false,
+    });
+  });
+
+  test("the high end's placement and contact are mirrored", () => {
+    const r = approaches({}, false);
+    expect(r.count).toBe(1);
+    const [dot] = r.dots;
+    expect(dot.id).toBe(OPP_APPROACH.id);
+    // Struck from y 21 to (3, 2): the hitter faces −y, so +x is their left.
+    expect(dot.lateralM).toBeCloseTo(-3, 6);
+    expect(dot.depthM).toBeCloseTo(NET_Y - 2, 6);
+    expect(dot.pair?.depthM).toBeCloseTo(21 - 23.77, 6);
+    expect(dot.outcome).toBe("lost");
+  });
+
+  test("a landing with no contact draws a dot with no pair", () => {
+    const noContact = passedAfter("no-contact", {
+      ...netShot(4, true, "Forehand", { cy: 3, lx: -3, ly: 21 }),
+      contactX: null,
+    });
+    const r = approaches({}, true, ctx, [noContact]);
+    expect(r.count).toBe(1);
+    expect(r.dots).toHaveLength(1);
+    expect(r.dots[0].lateralM).toBeCloseTo(-3, 6);
+    expect(r.dots[0].pair).toBeUndefined();
+    expect("pair" in r.dots[0]).toBe(false);
+  });
+
+  test("with the opponent as subject the wing follows the player's hand", () => {
+    // The opponent (player 2) approaches to their left: a right-handed
+    // player's forehand, a left-handed player's backhand.
+    const wingFor = (hands: MatchFilterContext["hands"]) =>
+      approaches({ player: "opponent" }, false, { ...ctx, hands }).dots[0].meta;
+    expect(wingFor({ player1: "right", player2: "right" })?.wing).toBe(
+      "forehand",
+    );
+    expect(wingFor({ player1: "left", player2: "right" })?.wing).toBe(
+      "backhand",
+    );
+    // The opponent's own hand is not the one that matters.
+    expect(wingFor({ player1: "right", player2: "left" })?.wing).toBe(
+      "forehand",
+    );
+    expect(wingFor({ player1: "left", player2: "right" })?.handAssumed).toBe(
+      false,
+    );
+    // Unknown: read as right-handed, and flagged.
+    const unknown = wingFor({ player1: null, player2: "left" });
+    expect(unknown?.wing).toBe("forehand");
+    expect(unknown?.handAssumed).toBe(true);
+    // The filter reads the same wing.
+    const left: MatchFilterContext = {
+      ...ctx,
+      hands: { player1: "left", player2: "right" },
+    };
+    expect(approaches({ approachTo: ["backhand"] }, false, left).count).toBe(1);
+    expect(approaches({ approachTo: ["forehand"] }, false, left).count).toBe(0);
+
+    // And with you as subject it is the opponent's hand.
+    const mine = (hands: MatchFilterContext["hands"]) =>
+      approaches({}, true, { ...ctx, hands }).dots.find(
+        (d) => d.id === PASSED_DTL.id,
+      )?.meta?.wing;
+    expect(mine({ player1: "left", player2: "right" })).toBe("forehand");
+    expect(mine({ player1: "right", player2: "left" })).toBe("backhand");
+  });
+
+  test("with all three entries the cut equals the Net game tally, for both seats", () => {
+    const ENDINGS: NetEnding[] = [
+      "winner",
+      "opponent-error",
+      "own-error",
+      "passed",
+      "lobbed",
+    ];
+    let seen = 0;
+    for (const seat of [true, false]) {
+      for (const lobKeys of [LOBS, null]) {
+        const tally = netGameTally(MATCH, seat, lobKeys);
+        const r = approaches({ entry: ALL_ENTRIES }, seat, { ...ctx, lobKeys });
+        const label = `p1=${seat} lobs=${lobKeys !== null}`;
+        expect(r.count, label).toBe(tally.total);
+        expect(r.total, label).toBe(tally.total);
+        // Every fixture approach is placed, so the dots are the whole count.
+        expect(r.dots, label).toHaveLength(r.count);
+        for (const ending of ENDINGS) {
+          expect(
+            r.dots.filter((d) => d.meta?.ending === ending).length,
+            `${label} ${ending}`,
+          ).toBe(tally.endings[ending]);
+        }
+        for (const entry of ALL_ENTRIES) {
+          expect(
+            approaches({ entry: [entry] }, seat, { ...ctx, lobKeys }).count,
+            `${label} ${entry}`,
+          ).toBe(tally.entries[entry]);
+        }
+        seen += tally.total;
+      }
+    }
+    expect(seen).toBeGreaterThan(0);
+    // Lob keys move a point between two endings, never the count.
+    expect(netGameTally(MATCH, true, LOBS).endings.lobbed).toBe(1);
+    expect(netGameTally(MATCH, true, null).endings.lobbed).toBe(0);
+  });
+
+  test("no context: the hand is assumed and lobs are unknown", () => {
+    const r = computeViz(MATCH, "approaches", EMPTY_VIZ_FILTERS, true);
+    expect(r.count).toBe(netGameTally(MATCH, true, null).total);
+    expect(r.dots.every((d) => d.meta?.handAssumed === true)).toBe(true);
+    expect(r.dots.some((d) => d.meta?.ending === "lobbed")).toBe(false);
+  });
 });

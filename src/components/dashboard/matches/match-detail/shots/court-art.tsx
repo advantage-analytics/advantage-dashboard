@@ -365,6 +365,7 @@ const CUT_NOUN: Record<Cut, string> = {
   rallyPosition: "rally position",
   rallyPlacement: "rally placement",
   errors: "errors",
+  approaches: "approaches",
 };
 
 // Heat mode's aria-label reads "Serve placement heat map, 63 serves" — a
@@ -379,14 +380,19 @@ const HEAT_CUT_LABEL: Record<Cut, string> = {
   rallyPosition: "Rally position",
   rallyPlacement: "Rally placement",
   errors: "Errors",
+  approaches: "Approaches",
 };
-const HEAT_NOUN: Record<Cut, "serves" | "returns" | "shots" | "errors"> = {
+const HEAT_NOUN: Record<
+  Cut,
+  "serves" | "returns" | "shots" | "errors" | "approaches"
+> = {
   serve: "serves",
   returnPlacement: "returns",
   returnContact: "returns",
   rallyPosition: "shots",
   rallyPlacement: "shots",
   errors: "errors",
+  approaches: "approaches",
 };
 
 /**

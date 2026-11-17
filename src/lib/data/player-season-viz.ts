@@ -585,6 +585,7 @@ export const SEASON_CUT_LABEL: Record<Cut, string> = {
   rallyPosition: "Rally position",
   rallyPlacement: "Rally placement",
   errors: "Errors",
+  approaches: "Approaches",
 };
 
 /** The lookup key for a Statistics row's marks (`statRowDots`). On serve

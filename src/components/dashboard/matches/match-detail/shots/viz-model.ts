@@ -53,6 +53,13 @@ import {
   type MatchFilterKey,
   type MatchFilters,
 } from "../match-filters/model";
+import {
+  approachLateralM,
+  approachOf,
+  type ApproachDirection,
+  type ApproachWing,
+} from "../match-filters/approach";
+import type { NetEnding, NetEntry } from "../match-filters/net-game";
 import { bandKindFor, marksAreShots } from "./cut-kinds";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
@@ -63,7 +70,8 @@ export type Cut =
   | "returnContact"
   | "rallyPosition"
   | "rallyPlacement"
-  | "errors";
+  | "errors"
+  | "approaches";
 export type Chart = "scatter" | "zones" | "heat";
 export type PlayerFilter = "you" | "opponent";
 
@@ -90,6 +98,9 @@ export type PressureFilter = readonly PressureValue[];
 export type ResultFilter = readonly ResultValue[];
 export type RallyFilter = readonly RallyValue[];
 export type ErrorFilter = readonly ErrorValue[];
+export type EntryFilter = readonly NetEntry[];
+export type ApproachToFilter = readonly ApproachWing[];
+export type ApproachDirFilter = readonly ApproachDirection[];
 
 export interface ShotFilterState {
   set: SetFilter;
@@ -106,6 +117,12 @@ export interface VizFilters extends ShotFilterState {
   player: PlayerFilter;
   /** Errors cut only: which errors are plotted. Empty = every error. */
   error: ErrorFilter;
+  /** Approaches cut only: how the subject came in. Empty = every entry. */
+  entry: EntryFilter;
+  /** Approaches cut only: the opponent's wing the approach went to. */
+  approachTo: ApproachToFilter;
+  /** Approaches cut only: the approach shot's direction. */
+  approachDir: ApproachDirFilter;
   /**
    * The Video tab's advanced filters (`match-filters/model.ts`), edited
    * through the same `FiltersPanel`. AND'd with every group above. Its
@@ -125,6 +142,9 @@ export const EMPTY_VIZ_FILTERS: VizFilters = {
   result: [],
   rally: [],
   error: [],
+  entry: [],
+  approachTo: [],
+  approachDir: [],
   match: EMPTY_MATCH_FILTERS,
 };
 
@@ -168,6 +188,16 @@ export interface VizDotMeta {
    * always agree on a point. Absent everywhere else.
    */
   stroke?: string;
+  /** Approaches cut only: how the subject came in (`netEntryOf`). */
+  entry?: NetEntry;
+  /** Approaches cut only: the opponent's wing the approach went to. */
+  wing?: ApproachWing | null;
+  /** Approaches cut only: the approach shot's direction; null for a serve. */
+  direction?: ApproachDirection | null;
+  /** Approaches cut only: how the point ended (`netEndingOf`). */
+  ending?: NetEnding;
+  /** Approaches cut only: `wing` assumes a right-handed opponent. */
+  handAssumed?: boolean;
 }
 
 /**
@@ -217,6 +247,13 @@ export interface VizDot {
   lateralM: number;
   depthM: number;
   atNet: boolean;
+  /**
+   * Approaches cut only: where the approach shot was struck, in
+   * `contactMetrics`' frame. The dot's own `lateralM`/`depthM` stay the
+   * placement, so code that reads one position per dot is unaffected. Absent
+   * when the contact is unmeasured.
+   */
+  pair?: { lateralM: number; depthM: number };
   /** Optional (every existing fixture that hand-builds a `VizDot`
    *  without it stays valid) — `computeViz`/`computeRallyViz` always set it
    *  for a real point/shot; only absent for a caller-constructed test dot
@@ -228,15 +265,17 @@ export interface VizResult {
   dots: VizDot[];
   count: number; // points matching the filters (rallyPosition: matching SHOTS)
   total: number; // drawable points in the cut's pool (rallyPosition: drawable SHOTS)
-  noun: "serves" | "returns" | "shots" | "errors";
+  noun: "serves" | "returns" | "shots" | "errors" | "approaches";
   zoneStats: Record<ZoneKey, ZoneStats> | null; // serve cut only
   /** Drawable out/net serves, excluded from the service-zone denominator. */
   serveOutOrNetCount?: number;
 }
 
 /** All three chart types support every visualization cut except Errors,
- * which has no service boxes or bands to count into — scatter and heat. */
+ * which has no service boxes or bands to count into — scatter and heat —
+ * and Approaches, whose dot is a contact/placement pair — scatter only. */
 export function chartAllowedOn(cut: Cut, chart: Chart): boolean {
+  if (cut === "approaches") return chart === "scatter";
   if (cut === "errors") return chart === "scatter" || chart === "heat";
   return (
     [
@@ -247,6 +286,13 @@ export function chartAllowedOn(cut: Cut, chart: Chart): boolean {
       "rallyPlacement",
     ].includes(cut) && ["scatter", "heat", "zones"].includes(chart)
   );
+}
+
+const CHARTS: readonly Chart[] = ["scatter", "zones", "heat"];
+
+/** The charts `cut` can be drawn as (`chartAllowedOn`), in menu order. */
+export function chartsFor(cut: Cut): Chart[] {
+  return CHARTS.filter((chart) => chartAllowedOn(cut, chart));
 }
 
 /* ── Helpers moved from the retired shot-filters hook ────────────────────── */
@@ -881,6 +927,9 @@ const BASE_KEYS = [
 export function filterKeysFor(cut: Cut): (keyof VizFilters)[] {
   if (cut === "serve") return [...BASE_KEYS, "zone", "match"];
   if (cut === "errors") return [...BASE_KEYS, "error", "match"];
+  if (cut === "approaches") {
+    return [...BASE_KEYS, "entry", "approachTo", "approachDir", "match"];
+  }
   return [...BASE_KEYS, "match"];
 }
 
@@ -1332,6 +1381,99 @@ function computeErrorsViz(
 }
 
 /**
+ * Approaches cut: one entry per point the SUBJECT came to the net on
+ * (`approachOf`, so this cut and the Net game card count the same points the
+ * same way). Unlike the other cuts, a point with no drawable placement still
+ * counts in `count` and `total` (the statistics are about the approach, not
+ * its landing); it only draws no dot.
+ *
+ * A dot is the approach shot's placement in the opponent's court, from behind
+ * the hitter (`approachLateralM`, `rallyLandingMetrics`' depth), with the
+ * contact as its `pair` when measured. `entry`, `approachTo` and
+ * `approachDir` narrow; an approach with no wing or direction matches neither
+ * filter once it is set. The wing is the hand of the seat the subject is
+ * approaching against, so on the opponent's court it is the player's.
+ */
+function computeApproachViz(
+  points: MatchPoint[],
+  filters: VizFilters,
+  subjectIsPlayer1: boolean,
+  matchPass: MatchPass | null,
+  matchCtx: MatchFilterContext | undefined,
+): VizResult {
+  let total = 0;
+  let count = 0;
+  const dots: VizDot[] = [];
+  const hands = matchCtx?.hands;
+  const opponentHand =
+    (subjectIsPlayer1 ? hands?.player2 : hands?.player1) ?? null;
+
+  for (const p of points) {
+    const approach = approachOf(
+      p,
+      subjectIsPlayer1,
+      matchCtx?.lobKeys,
+      opponentHand,
+    );
+    if (!approach) continue;
+    const { shot } = approach;
+
+    total++;
+    if (!pointMatchesFilters(p, filters, "serve", subjectIsPlayer1, "return")) {
+      continue;
+    }
+    if (matchPass !== null) {
+      if (!matchPass.point(p)) continue;
+      if (matchPass.shot && !matchPass.shot(shot)) continue;
+    }
+    if (filters.entry.length && !filters.entry.includes(approach.entry)) {
+      continue;
+    }
+    if (
+      filters.approachTo.length &&
+      (approach.wing === null || !filters.approachTo.includes(approach.wing))
+    ) {
+      continue;
+    }
+    if (
+      filters.approachDir.length &&
+      (approach.direction === null ||
+        !filters.approachDir.includes(approach.direction))
+    ) {
+      continue;
+    }
+    count++;
+
+    // The placement, by the classifier's own rule: null when unmeasured or
+    // the ball never crossed, exactly where `approach.lane` is null.
+    const lateralM = approachLateralM(shot);
+    const landing = lateralM === null ? null : rallyLandingMetrics(shot);
+    if (lateralM === null || !landing) continue;
+    const contact = contactMetrics(shot.contactX, shot.contactY);
+
+    dots.push({
+      id: p.id,
+      lateralM,
+      depthM: landing.depthM,
+      outcome: p.wonByPlayer1 === subjectIsPlayer1 ? "won" : "lost",
+      shape: shapeFromShotType(shot.shotType),
+      atNet: false,
+      ...(contact ? { pair: contact } : {}),
+      meta: {
+        ...pointDotMeta(p, subjectIsPlayer1, shot),
+        entry: approach.entry,
+        wing: approach.wing,
+        direction: approach.direction,
+        ending: approach.ending,
+        handAssumed: approach.handAssumed,
+      },
+    });
+  }
+
+  return { dots, count, total, noun: "approaches", zoneStats: null };
+}
+
+/**
  * `VizDotMeta` common to every dot drawn for point `p`, plus the one shot
  * (`shotType`/`result`) the specific dot came from — `serve`
  * reads the resolved serve shot, `returnPlacement`/`returnContact` the
@@ -1412,6 +1554,15 @@ export function computeViz(
       subjectIsPlayer1,
       matchPass,
       errorsJudgedIn(matchCtx),
+    );
+  }
+  if (cut === "approaches") {
+    return computeApproachViz(
+      points,
+      filters,
+      subjectIsPlayer1,
+      matchPass,
+      matchCtx,
     );
   }
 

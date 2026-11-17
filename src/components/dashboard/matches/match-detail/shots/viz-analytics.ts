@@ -35,6 +35,7 @@ const CUTS = {
   rallyPosition: true,
   rallyPlacement: true,
   errors: true,
+  approaches: true,
 } satisfies Record<Cut, true>;
 const CHARTS = {
   scatter: true,

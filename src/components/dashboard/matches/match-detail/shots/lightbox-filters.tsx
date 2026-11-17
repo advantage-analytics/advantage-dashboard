@@ -96,6 +96,7 @@ const NOUN: Record<VizResult["noun"], { singular: string; plural: string }> = {
   returns: { singular: "return", plural: "returns" },
   shots: { singular: "shot", plural: "shots" },
   errors: { singular: "error", plural: "errors" },
+  approaches: { singular: "approach", plural: "approaches" },
 };
 
 /** "Show 9 serves": the advanced drawer's count noun for the court's noun. */
@@ -104,6 +105,7 @@ export const COUNT_NOUN: Record<VizResult["noun"], CountNoun> = {
   returns: { one: "return", many: "returns" },
   shots: { one: "shot", many: "shots" },
   errors: { one: "error", many: "errors" },
+  approaches: { one: "approach", many: "approaches" },
 };
 
 /**
