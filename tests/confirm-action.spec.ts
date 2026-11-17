@@ -112,6 +112,39 @@ test("a spent sign-in link opened while signed in carries on to next", async () 
   }
 });
 
+test("a spent sign-in link opened signed out still reports it has expired", async () => {
+  const { confirmLinkForm } = load({ verifyOtp: expired }, null);
+  for (const type of ["email", "signup", "magiclink"]) {
+    const to = await landing(
+      confirmLinkForm(form({ token_hash: "abc123", type, next: "/dashboard" })),
+    );
+    expect(to).toBe(
+      "/error?error=That%20link%20has%20expired.%20Request%20a%20new%20one%20and%20try%20again.",
+    );
+  }
+});
+
+test("a rate-limited fresh link is reported even with a session", async () => {
+  const { confirmLinkForm } = load(
+    {
+      verifyOtp: async () => ({
+        error: new Error(
+          "For security purposes, you can only request this after 30 seconds",
+        ),
+      }),
+    },
+    "user-1",
+  );
+  const to = await landing(
+    confirmLinkForm(
+      form({ token_hash: "abc123", type: "magiclink", next: "/dashboard" }),
+    ),
+  );
+  expect(to).toBe(
+    "/error?error=Too%20many%20attempts.%20Wait%20a%20minute%2C%20then%20try%20again.",
+  );
+});
+
 test("a spent recovery link still reports the failure, signed in or not", async () => {
   const { confirmLinkForm } = load({ verifyOtp: expired }, "user-1");
   for (const type of ["recovery", "invite", "email_change"]) {

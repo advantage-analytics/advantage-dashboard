@@ -44,8 +44,13 @@ export async function confirmLinkForm(formData: FormData): Promise<void> {
     // that something had failed. For a link whose only job is to sign you in,
     // a live session means it already did — so carry on to where it was going.
     // Recovery, invite and email-change links do more than sign in, so they
-    // still report the failure.
-    if (link.kind === "token_hash" && SIGN_IN_ONLY.has(link.type)) {
+    // still report the failure. Only a spent link qualifies: a rate limit or
+    // an outage on a fresh link must still say so, session or not.
+    if (
+      link.kind === "token_hash" &&
+      SIGN_IN_ONLY.has(link.type) &&
+      isSpentLink(error)
+    ) {
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -58,6 +63,16 @@ export async function confirmLinkForm(formData: FormData): Promise<void> {
   }
 
   redirect(link.next);
+}
+
+/**
+ * GoTrue answers a used or timed-out token with `otp_expired` ("Email link is
+ * invalid or has expired"). The code is checked first; the phrase is the
+ * fallback, matched the way `toAuthError` matches it, since the wire format
+ * has changed between releases.
+ */
+function isSpentLink(error: { message: string; code?: string }): boolean {
+  return error.code === "otp_expired" || /expired/i.test(error.message);
 }
 
 /** Link types whose whole effect is a session — see the spent-link branch. */
