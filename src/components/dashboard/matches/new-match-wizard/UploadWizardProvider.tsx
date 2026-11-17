@@ -6,6 +6,7 @@ import {
   use,
   useCallback,
   useRef,
+  useState,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -24,6 +25,7 @@ import { useDraftSaving } from "./useDraftSaving";
 import { useScoreCheck } from "./useScoreCheck";
 import { useWizardGates, type WizardGates } from "./useWizardGates";
 import { useWizardKeys } from "./useWizardKeys";
+import { jumpToMissingField } from "./MissingFieldsPill";
 import {
   continueLabelFor,
   stepHeading,
@@ -56,11 +58,18 @@ export interface UploadWizardContextValue {
     oneSetSettled: boolean;
     /** The viewer has never created a match — the trim step's caption. */
     firstUpload: boolean;
+    /**
+     * The details step's blanks, "|"-joined, once Continue has been pressed
+     * past them; "" before. `DetailsStepContent` marks each one red.
+     */
+    flaggedMissing: string;
   };
   /** What the page itself adds on top of the hook's handlers. */
   actions: {
     /** The primary button and plain Enter — the step's own continue. */
     continue: () => void;
+    /** Marks the details step's blanks red and goes to the first. */
+    showMissing: () => void;
     /** Writes the draft row, then leaves — only if the write worked. */
     saveDraft: () => Promise<void>;
     dismissScoreCheck: () => void;
@@ -169,7 +178,7 @@ export function UploadWizardProvider({
   });
   const gates = useWizardGates(wizard, scoreCheck.unanswered);
 
-  const continueHandler =
+  const saveHandler =
     step === "provider"
       ? wizard.handleProviderContinue
       : step === "file"
@@ -179,6 +188,22 @@ export function UploadWizardProvider({
           : admin?.attachment
             ? wizard.handleCreateMatch
             : scoreCheck.saveMatch;
+  // The step Continue was last pressed on with blanks, so the red marks show
+  // there and nowhere else — moving away and back starts clean.
+  const [flaggedStep, setFlaggedStep] = useState<typeof step | null>(null);
+  const missingLabels = gates.missing.labels;
+  // Nothing on this page to point at (only an earlier step's answers are
+  // blank): Continue runs the save, whose refusal names them, rather than
+  // doing nothing — the dead button this replaced.
+  const showMissing = useCallback(() => {
+    setFlaggedStep(step);
+    if (!jumpToMissingField(contentRef.current, missingLabels)) saveHandler();
+  }, [step, missingLabels, saveHandler]);
+  const flaggedMissing =
+    flaggedStep === step && step === "match" ? missingLabels.join("|") : "";
+
+  // On the details step, blanks turn Continue into "show me what's missing".
+  const continueHandler = gates.gatedByMissing ? showMissing : saveHandler;
 
   // The same `gates.continueDisabled` the footer button is disabled by.
   useWizardKeys({
@@ -212,9 +237,11 @@ export function UploadWizardProvider({
       scoreCheckVisible: scoreCheck.visible,
       oneSetSettled: scoreCheck.oneSetSettled,
       firstUpload,
+      flaggedMissing,
     },
     actions: {
       continue: continueHandler,
+      showMissing,
       saveDraft,
       dismissScoreCheck: scoreCheck.dismiss,
       chooseOneSet: scoreCheck.chooseOneSet,

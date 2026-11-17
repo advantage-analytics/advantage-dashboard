@@ -261,7 +261,7 @@ test("New opponent and the empty hint still work around the section", () => {
   expect(src).toMatch(
     /teammatesShown\.some\(\(p\) => normalizedPersonName\(p\.name\) === needle\)/,
   );
-  expect(src).toContain("else if (hitTeammate) pickTeammate(hitTeammate);");
+  expect(src).toContain("if (hitTeammate) return pickTeammate(hitTeammate);");
 });
 
 // ---- 3. The pick -------------------------------------------------------------
@@ -295,8 +295,9 @@ test("picking a teammate writes name, roster id, source, style and clears the te
     expect(Object.prototype.hasOwnProperty.call(claimed, key)).toBe(true);
 
   const src = read(`${WIZARD}/DetailsStepContent.tsx`);
-  expect(src).toContain("Object.entries(teammatePick(row))");
-  expect(src).toContain("onPickTeammate={pickTeammate}");
+  expect(src).toContain("const fields = teammatePick(row);");
+  expect(src).toContain("Object.entries(fields)");
+  expect(src).toContain("focusNextOpponentAnswer(pickTeammate(row))");
 });
 
 // ---- 4. The read-back --------------------------------------------------------

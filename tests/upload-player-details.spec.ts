@@ -111,6 +111,7 @@ function renderSelect(props: {
   placeholder?: string;
   width?: number;
   disabled?: boolean;
+  invalid?: boolean;
 }) {
   const MenuSelect = menuSelectModule.MenuSelect as React.ComponentType<
     Record<string, unknown>
@@ -189,7 +190,7 @@ test("a real answer shows its label and marks exactly that row chosen", () => {
   );
 });
 
-test("disabled passes through to the trigger, for the opponent fields while naming is in progress", () => {
+test("disabled passes through to the trigger", () => {
   const { html } = renderSelect({
     label: "Opponent hand",
     value: undefined,
@@ -198,6 +199,18 @@ test("disabled passes through to the trigger, for the opponent fields while nami
     disabled: true,
   });
   expect(html).toContain('disabled=""');
+});
+
+test("invalid draws the form-red rule on a closed trigger", () => {
+  const { html } = renderSelect({
+    label: "Opponent hand",
+    value: undefined,
+    placeholder: "Hand",
+    options: HAND_OPTIONS,
+    invalid: true,
+  });
+  expect(html).toContain("border-[var(--error)]");
+  expect(html).not.toContain("border-[var(--border-field)]");
 });
 
 test("a short backhand label stays on one line, with room reserved for the check, at the width the wizard asks for", () => {
@@ -265,22 +278,27 @@ test("both players get required underline MenuSelect fields for hand and backhan
   expect(detailsSrc).not.toContain("function WordSelect");
 });
 
-test("the opponent-naming hints read '[enter] to add them' under the name and 'Hand and backhand open once the opponent is added.' under the selects", () => {
-  // The old single-line hint under the name is gone.
-  expect(detailsSrc).not.toContain("Hand and backhand after the name");
-
-  // The Kbd chip + inline copy under the name input.
-  expect(detailsSrc).toContain('<Kbd size="sm">enter</Kbd> to add them');
-
-  // The hint spanning under the two disabled selects, only while naming is
-  // in progress, in the DS-layering-safe Tailwind ink colour (not
-  // `text-micro`, which is unlayered — see `FieldCaption.tsx`).
-  expect(detailsSrc).toContain(
+test("a typed opponent saves on its own, and Hand and Backhand never wait for it", () => {
+  // The Enter-only hint and the note under two locked selects are gone: a
+  // parent on 2026-11-15 typed a name, never pressed Enter, and stopped at
+  // Hand and Backhand that would not open.
+  expect(detailsSrc).not.toContain("to add them");
+  expect(detailsSrc).not.toContain(
     "Hand and backhand open once the opponent is added.",
   );
+  expect(detailsSrc).not.toContain("disabled={namingOpponent}");
+
+  // Leaving the field settles the name, unless the focus went into the menu.
+  expect(detailsSrc).toContain("onBlur={(e) => {");
   expect(detailsSrc).toContain(
-    '<span className="text-[11px] text-[var(--ink-600)] sm:col-span-2 sm:col-start-2">',
+    "opponentMenuRef.current?.contains(e.relatedTarget)",
   );
+  expect(detailsSrc).toMatch(
+    /Pick from the list, or type a new name\. It saves when you\s+move on\./,
+  );
+
+  // An answer given while a name is still typed lands on that person.
+  expect(detailsSrc).toContain("if (namingOpponent) commitTypedOpponent();");
 });
 
 test("hand and backhand answer in one word, so their menus need no extra width", () => {
@@ -452,4 +470,50 @@ test("saveMyStyle only ever writes the CALLER's own row — it takes no target i
   // backhand are recorded on the match row only (`player_hand`/
   // `opponent_hand` in `MatchData`), never fed back into anyone's roster row.
   expect(fn).not.toContain("program_players");
+});
+
+test("Continue with blanks points at them instead of going to sleep", () => {
+  const gatesSrc = readFileSync(`${WIZARD}/useWizardGates.ts`, "utf8");
+  const providerSrc = readFileSync(
+    `${WIZARD}/UploadWizardProvider.tsx`,
+    "utf8",
+  );
+  const footerSrc = readFileSync(`${WIZARD}/UploadWizardFooter.tsx`, "utf8");
+
+  // Blank fields no longer disable Continue; the early-end question still does.
+  expect(gatesSrc).toContain(
+    "missingMatchAnswers: !admin?.attachment && scoreCheckUnanswered,",
+  );
+  // Pressed with blanks, Continue (and plain Enter) shows what is missing.
+  expect(providerSrc).toContain(
+    "const continueHandler = gates.gatedByMissing ? showMissing : saveHandler;",
+  );
+  // The pill does the same thing as Continue.
+  expect(footerSrc).toContain("onJump={showMissing}");
+  // Blanks with no field on this page (an earlier step's camera answers) run
+  // the save, whose refusal names them, instead of a silent no-op.
+  expect(providerSrc).toContain(
+    "if (!jumpToMissingField(contentRef.current, missingLabels)) saveHandler();",
+  );
+  const pillSrc = readFileSync(`${WIZARD}/MissingFieldsPill.tsx`, "utf8");
+  expect(pillSrc).toContain("if (targets.length === 0) return false;");
+
+  // Each flagged field gets its red rule and its sentence.
+  for (const [label, sentence] of [
+    ["opponent", "Name the opponent to continue"],
+    ["opponent hand", "Pick their hand to continue"],
+    ["opponent backhand", "Pick their backhand to continue"],
+    ["player hand", "Pick a hand to continue"],
+    ["player backhand", "Pick a backhand to continue"],
+  ]) {
+    expect(detailsSrc).toContain(`flagged.has("${label}")`);
+    expect(detailsSrc).toContain(sentence);
+  }
+});
+
+test("an invalid underline select draws the form-red rule until it opens", () => {
+  const menuSrc = readFileSync("src/components/ui/menu-select.tsx", "utf8");
+  expect(menuSrc).toMatch(
+    /: invalid\s+\? "border-\[var\(--error\)\]"\s+: "border-\[var\(--border-field\)\]"/,
+  );
 });
