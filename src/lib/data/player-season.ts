@@ -140,6 +140,11 @@ export interface SeasonMatch extends SeasonMatchStats {
   score?: string | null;
   /** `matches.court_type`, raw. */
   courtType?: string | null;
+  /**
+   * Verified by Advantage (`verificationFor`). Optional, as `won`: only the
+   * season's "N verified" count reads it.
+   */
+  verified?: boolean;
 }
 
 /* ── Head to head rows ───────────────────────────────────────────────────── */

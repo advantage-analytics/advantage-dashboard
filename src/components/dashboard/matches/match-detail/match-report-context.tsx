@@ -189,6 +189,14 @@ export interface MatchReportMeta {
    */
   playbackEndpoint: string | null;
   /**
+   * Where the report asks whether the match has been Verified by Advantage
+   * since it rendered (`VerificationWatch`), when the reader cannot ask the
+   * database themselves — the share link's `/api/share/${token}/verification`,
+   * since its reader has no session. `null` reads `matches.verified_at`
+   * through the reader's own browser client. Defaults to `null`.
+   */
+  verificationEndpoint: string | null;
+  /**
    * The views this report offers, in rail order. All three under
    * `/dashboard`; on `/m/[token]` only what the link carries. The rail
    * switcher draws these rows and `?tab=` cannot open anything else.
@@ -232,6 +240,7 @@ export interface MatchReportProviderProps extends Omit<
   | "readOnly"
   | "sample"
   | "playbackEndpoint"
+  | "verificationEndpoint"
   | "statsUnavailable"
   | "foldUnreconciled"
   | "views"
@@ -248,6 +257,8 @@ export interface MatchReportProviderProps extends Omit<
   sample?: boolean;
   /** See `MatchReportMeta.playbackEndpoint`. Defaults to `null`. */
   playbackEndpoint?: string | null;
+  /** See `MatchReportMeta.verificationEndpoint`. Defaults to `null`. */
+  verificationEndpoint?: string | null;
   /**
    * Where a read-only mount reads the match's ball-paths file. The match's own
    * `/api/matches/${matchId}/ball-paths` asks the reader's session whether
@@ -293,6 +304,7 @@ export function MatchReportProvider({
   readOnly = false,
   sample = false,
   playbackEndpoint = null,
+  verificationEndpoint = null,
   ballPathsEndpoint = null,
   recordView = true,
   views = ALL_REPORT_VIEWS,
@@ -438,6 +450,7 @@ export function MatchReportProvider({
       readOnly,
       sample,
       playbackEndpoint,
+      verificationEndpoint,
       views,
     }),
     [
@@ -458,6 +471,7 @@ export function MatchReportProvider({
       readOnly,
       sample,
       playbackEndpoint,
+      verificationEndpoint,
       views,
     ],
   );
