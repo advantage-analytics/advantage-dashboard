@@ -51,15 +51,16 @@ export function WatchHintNotice() {
   // Dismissed for good: nothing to say, and nothing of the rows depends on it.
   if (seen) return null;
   return (
-    <div role="note" className={`${noteStripCls} mb-4`}>
+    <div role="note" className={`${noteStripCls} mb-5`}>
       <Info
         aria-hidden
         className={`${noteIconCls} text-[var(--ink-400)]`}
         strokeWidth={1.5}
       />
-      {/* Text takes the width; Got it rides the trailing edge on the first
-          line's baseline, so the note is two lines of reading, not three
-          stacked rows with a dangling action under them. */}
+      {/* Text takes the width; Got it is the strip's trailing action,
+          centred on the whole text block rather than pinned to its first
+          line, so the note is two lines of reading, not three stacked rows
+          with a dangling action under them. */}
       <p className="m-0 min-w-0 flex-1">
         <span className="font-medium text-[var(--ink-900)]">
           Pick a row to watch only its points.
@@ -77,9 +78,8 @@ export function WatchHintNotice() {
           writeHintSeen();
           setSeen(true);
         }}
-        // 11px × 1.6 first line: the 12px label sits on it with no nudge.
         // The negative margin grows the hit area without moving the word.
-        className={`${TEXT_ACTION_CLASS} -my-1 ml-1 shrink-0 self-start py-1 leading-[17.6px] whitespace-nowrap`}
+        className={`${TEXT_ACTION_CLASS} -my-1 ml-2 shrink-0 self-center py-1 whitespace-nowrap`}
       >
         Got it
       </button>
