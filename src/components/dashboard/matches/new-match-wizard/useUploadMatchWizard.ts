@@ -3024,7 +3024,14 @@ export function useUploadMatchWizard({
         }
       } catch (err) {
         if (!isCurrent()) return;
-        setUploadError(err instanceof Error ? err.message : "Validation error");
+        // Lead-first, like the probe's refusal: the notice strip shows its
+        // first sentence in session replays, and an exception's message is
+        // not ours to show there.
+        setUploadError(
+          err instanceof Error && err.message
+            ? `Couldn't check this file. ${err.message}`
+            : "Couldn't check this file.",
+        );
         return;
       }
 

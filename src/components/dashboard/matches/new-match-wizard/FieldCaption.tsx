@@ -1,3 +1,4 @@
+import { replayMask, replayUnmask } from "@/lib/ui/replay-unmask";
 import { cn } from "@/lib/utils";
 
 /**
@@ -29,21 +30,33 @@ export function Required({ className }: { className?: string }) {
  * `tag` is provenance ("from the file"), pushed to the right of the row.
  * Colour is set by a Tailwind class and nothing here uses a DS type class,
  * so the unlayered `.eyebrow`/`.text-micro` colours cannot override it.
+ *
+ * The label reads through in session replays (`replayUnmask()`), so `label`
+ * must be written in the source — never a name or any other value. A caption
+ * about a person takes the name as `subject`, which stays masked and leads the
+ * label: `subject="Sam" label="at the start"` reads "Sam at the start". `tag`
+ * stays masked too, since some callers build it from an event's line slot.
  */
 export function FieldCaption({
   label,
+  subject,
   required = false,
   tag,
   className,
 }: {
   label: string;
+  subject?: string;
   required?: boolean;
   tag?: string;
   className?: string;
 }) {
   return (
     <span className={cn("flex items-baseline gap-2", className)}>
-      <span className="text-[11px] leading-[1.4] text-[var(--ink-600)]">
+      <span
+        {...replayUnmask()}
+        className="text-[11px] leading-[1.4] text-[var(--ink-600)]"
+      >
+        {subject && <span {...replayMask()}>{subject} </span>}
         {label}
         {required && <Required className="ml-0.5" />}
       </span>

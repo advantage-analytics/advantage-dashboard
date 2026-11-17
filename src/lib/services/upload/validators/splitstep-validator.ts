@@ -388,7 +388,12 @@ export async function validateSplitStepVideo(
     }
     return {
       success: false,
-      error: err instanceof Error ? err.message : "Couldn't read this video.",
+      // Lead-first: the notice strip shows its first sentence in session
+      // replays, and an exception's message is not ours to show there.
+      error:
+        err instanceof Error && err.message
+          ? `Couldn't read this video. ${err.message}`
+          : "Couldn't read this video.",
     };
   }
 

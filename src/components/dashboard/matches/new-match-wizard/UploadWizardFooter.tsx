@@ -9,6 +9,7 @@ import { jumpToMissingField, MissingFieldsPill } from "./MissingFieldsPill";
 import { useUploadWizard } from "./UploadWizardProvider";
 import { focusRingCls } from "./styles";
 import { controlName } from "@/lib/ui/control-name";
+import { replayUnmask } from "@/lib/ui/replay-unmask";
 
 /**
  * The wizard footer's three slots, each reading the wizard context — composed
@@ -168,6 +169,7 @@ export function SaveDraftButton() {
       onClick={() => void saveDraft()}
       disabled={draftSaving || doubles}
       {...controlName("wizard_save_draft")}
+      {...replayUnmask()}
       className="shrink-0 cursor-pointer text-[11px] whitespace-nowrap text-[var(--ink-500)] transition-colors duration-150 hover:text-[var(--ink-900)] disabled:cursor-default disabled:opacity-50 disabled:hover:text-[var(--ink-500)]"
     >
       {draftSaving ? "Saving…" : "Save draft"}

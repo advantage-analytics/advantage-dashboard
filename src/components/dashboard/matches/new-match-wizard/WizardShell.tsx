@@ -18,6 +18,7 @@ import type { ReactNode, RefObject } from "react";
 import Link from "next/link";
 import { advButton } from "@/lib/ui/adv-button";
 import { controlName } from "@/lib/ui/control-name";
+import { replayUnmask } from "@/lib/ui/replay-unmask";
 import { cn } from "@/lib/utils";
 import { StepIndicator } from "./StepIndicator";
 import { CONTENT_CLS } from "./styles";
@@ -93,10 +94,15 @@ export function WizardShell({
 
       <div className={`${CONTENT_CLS} pt-16 pb-24`}>
         <div className="flex flex-col gap-3">
-          <span className="eyebrow">
+          {/* Session replays read the eyebrow, the title and the footer's
+              words (`replayUnmask()`): every caller passes source-written
+              copy for them. Not the description, which some callers build
+              from a player's or an event's name. */}
+          <span className="eyebrow" {...replayUnmask()}>
             Step {stepIndex + 1} of {stepCount}
           </span>
           <h1
+            {...replayUnmask()}
             className="max-w-[560px] text-[30px] leading-[1.15] font-light tracking-[-0.3px] text-[var(--ink-900)]"
             style={{ textWrap: "pretty" }}
           >
@@ -134,6 +140,7 @@ export function WizardShell({
               // Enter here goes back, never Continue — see `isWizardExit`.
               data-wizard-exit
               {...controlName("wizard_back")}
+              {...replayUnmask()}
               className={FOOTER_LINK_CLS}
             >
               Back
@@ -147,6 +154,7 @@ export function WizardShell({
             <Link
               href={cancelHref}
               {...controlName("wizard_cancel")}
+              {...replayUnmask()}
               className={FOOTER_LINK_CLS}
             >
               Cancel
@@ -172,6 +180,7 @@ export function WizardShell({
             disabled={continueDisabled}
             data-wizard-continue
             {...controlName("wizard_continue")}
+            {...replayUnmask()}
             className={advButton("primary", "md")}
           >
             {continueLabel}
