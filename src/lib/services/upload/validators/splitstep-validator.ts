@@ -60,6 +60,7 @@
 import {
   probeVideo,
   snapToStandardFps,
+  VideoReadError,
   type VideoProbe,
 } from "@/lib/video/probe";
 import {
@@ -388,12 +389,13 @@ export async function validateSplitStepVideo(
     }
     return {
       success: false,
-      // Lead-first: the notice strip shows its first sentence in session
+      // The probe's own refusals are lead-first already. Anything else gets a
+      // lead of ours: the notice strip shows its first sentence in session
       // replays, and an exception's message is not ours to show there.
       error:
-        err instanceof Error && err.message
-          ? `Couldn't read this video. ${err.message}`
-          : "Couldn't read this video.",
+        err instanceof VideoReadError
+          ? err.message
+          : `Couldn't read this video. ${err instanceof Error ? err.message : ""}`.trim(),
     };
   }
 

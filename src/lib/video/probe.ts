@@ -189,9 +189,16 @@ function measureFps(video: FrameCallbackVideo): Promise<number | null> {
 }
 
 /**
+ * A refusal `probeVideo` wrote itself: lead-first, with no value from the
+ * file in it, so callers show `message` as it is. Anything else a probe
+ * throws is the browser's, and a caller puts a sentence of its own first.
+ */
+export class VideoReadError extends Error {}
+
+/**
  * Read metadata from a local video file.
  *
- * @throws Error when the browser cannot decode the file at all — that is a real
+ * @throws VideoReadError when the browser cannot decode the file at all — that is a real
  * validation failure (corrupt file, unsupported codec) and callers should
  * surface it.
  */
@@ -213,7 +220,7 @@ export async function probeVideo(file: File): Promise<VideoProbe> {
 
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(
-        () => reject(new Error("Timed out reading video metadata.")),
+        () => reject(new VideoReadError("Timed out reading video metadata.")),
         METADATA_TIMEOUT_MS,
       );
       const cleanup = () => {
@@ -228,7 +235,7 @@ export async function probeVideo(file: File): Promise<VideoProbe> {
       const onError = () => {
         cleanup();
         reject(
-          new Error(
+          new VideoReadError(
             "Couldn't read this video. It may be corrupt or use a codec this browser can't decode.",
           ),
         );
@@ -244,7 +251,7 @@ export async function probeVideo(file: File): Promise<VideoProbe> {
       : 0;
 
     if (!width || !height) {
-      throw new Error(
+      throw new VideoReadError(
         "Couldn't read this video's dimensions. It may not contain a video track.",
       );
     }

@@ -3031,9 +3031,7 @@ export function useUploadMatchWizard({
         // already has its fixed lead ("This export couldn't be read —").
         setUploadError(
           getProviderKind(selectedProvider) === "processing"
-            ? message
-              ? `Couldn't check this file. ${message}`
-              : "Couldn't check this file."
+            ? `Couldn't check this file. ${message}`.trim()
             : message || "Validation error",
         );
         return;
