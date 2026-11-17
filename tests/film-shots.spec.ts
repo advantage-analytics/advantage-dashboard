@@ -22,7 +22,6 @@ const shot = (id: string, videoTime: number | null, extra = {}) => ({
   isPlayer1: true,
   shotType: "Forehand",
   spinType: "topspin",
-  speedMph: 70,
   zone: null,
   result: "In",
   videoTime,
@@ -155,7 +154,6 @@ test("the serve row: Stroke is Serve, Type is First or Second", () => {
   const serve = shot("a", 1, {
     shotType: "Second Serve",
     spinType: "flat",
-    speedMph: 111.6,
     zone: "Body, deuce court",
     result: "In",
   });
@@ -181,7 +179,6 @@ test("a rally row: the point's return reads Return, every later shot Rally", () 
   const rally = shot("b", 1, {
     shotType: "FOREHAND",
     spinType: "topspin",
-    speedMph: 74,
     zone: "Inside-out, deep",
     result: "Out",
   });
@@ -262,7 +259,6 @@ test("nothing unmeasured is ever rendered as a zero", () => {
   const blank = shot("c", 1, {
     shotType: null,
     spinType: null,
-    speedMph: null,
     zone: null,
     result: null,
   });
@@ -276,9 +272,7 @@ test("nothing unmeasured is ever rendered as a zero", () => {
     result: "—",
   });
   // Speed is never a cell, measured or not.
-  expect(shotRowCells({ ...blank, speedMph: 98 }, 4, "Lee")).not.toHaveProperty(
-    "mph",
-  );
+  expect(shotRowCells({ ...blank }, 4, "Lee")).not.toHaveProperty("mph");
 });
 
 test("Placement is the Direction filter's rule: Inside Out / Inside In need a hand", () => {

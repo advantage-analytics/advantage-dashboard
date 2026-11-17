@@ -44,7 +44,6 @@ function shot(o: Partial<MatchShot> & { id: string }): MatchShot {
     isPlayer1: true,
     shotType: null,
     spinType: null,
-    speedMph: null,
     zone: null,
     result: null,
     videoTime: null,

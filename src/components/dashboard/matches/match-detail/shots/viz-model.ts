@@ -142,10 +142,8 @@ export type Outcome = "won" | "lost" | "miss";
  * literal `"player1"` check — a player-2 viewer must see their OWN
  * won/lost, not the raw server-side winner.
  *
- * `speedMph` is `null` whenever the shot's own `MatchShot.speedMph` is
- * null (never fabricated — Global Constraints: "no fabricated serve
- * speed") — it does NOT reach back to a heavier per-shot query the way, say,
- * video alignment does; if a shot row has no speed, this dot has no speed.
+ * No shot speed: single-camera speed is not accurate, so it is never loaded
+ * (`MatchShot` has none) and no readout prints it.
  */
 export interface VizDotMeta {
   /** Source point, shared by all rally-shot marks from that point. */
@@ -164,7 +162,6 @@ export interface VizDotMeta {
    * can't disagree. Always `false` off the serve cut: no other cut has aces.
    */
   isAce: boolean;
-  speedMph: number | null;
   /**
    * Errors cut only: the stroke the point ended on, by Result › Shot's own
    * rule (`finalShotOf`) — so the stats card's Stroke rows and that filter
@@ -1336,7 +1333,7 @@ function computeErrorsViz(
 
 /**
  * `VizDotMeta` common to every dot drawn for point `p`, plus the one shot
- * (`shotType`/`result`/`speedMph`) the specific dot came from — `serve`
+ * (`shotType`/`result`) the specific dot came from — `serve`
  * reads the resolved serve shot, `returnPlacement`/`returnContact` the
  * resolved return shot, `rallyPosition` builds its own inline (a rally dot
  * already has its own `MatchShot` in hand from `pickRallyShots`, no
@@ -1349,7 +1346,6 @@ function pointDotMeta(
     | {
         shotType?: string | null;
         result?: string | null;
-        speedMph?: number | null;
       }
     | null
     | undefined,
@@ -1366,7 +1362,6 @@ function pointDotMeta(
     wonBySubject: p.wonByPlayer1 === subjectIsPlayer1,
     shotType: shot?.shotType ?? null,
     result: shot?.result ?? null,
-    speedMph: shot?.speedMph ?? null,
   };
 }
 
@@ -1489,12 +1484,9 @@ export function computeViz(
       // `p.firstShotResult` above via `classifyServePlacement`'s fallback
       // path), and without this fallback its `meta` silently went blank
       // even though the point's own flattened fields had the answer.
-      // `speedMph` has no flattened equivalent, so it stays `serveShot?.
-      // speedMph ?? null` — never fabricated.
       const serveMetaShot = {
         shotType: serveShot?.shotType ?? p.firstShotType ?? null,
         result: serveShot?.result ?? p.firstShotResult ?? null,
-        speedMph: serveShot?.speedMph ?? null,
       };
 
       dots.push({
@@ -1547,7 +1539,6 @@ export function computeViz(
       const returnMetaShot = {
         shotType: returnShot?.shotType ?? p.secondShotType ?? null,
         result: returnShot?.result ?? p.secondShotResult ?? null,
-        speedMph: returnShot?.speedMph ?? null,
       };
       for (const d of mine) {
         dots.push({

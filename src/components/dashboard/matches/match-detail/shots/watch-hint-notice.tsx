@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Info } from "lucide-react";
 
+import { TEXT_ACTION_CLASS } from "@/lib/ui/text-action";
+
 import {
   noteIconCls,
   noteStripCls,
@@ -42,10 +44,6 @@ function writeHintSeen(): void {
   }
 }
 
-/** The DS blue text action (`activity-tray.tsx`'s TEXT_ACTION_CLASS). */
-const TEXT_ACTION =
-  "cursor-pointer text-[12px] font-medium text-[var(--blue)] transition-colors duration-150 hover:text-[var(--blue-hover)] focus-visible:underline focus-visible:outline-none";
-
 export function WatchHintNotice() {
   // The lightbox is client-only (`ssr: false`), so storage is readable on the
   // first render and there is no server markup to disagree with.
@@ -73,7 +71,7 @@ export function WatchHintNotice() {
             writeHintSeen();
             setSeen(true);
           }}
-          className={TEXT_ACTION}
+          className={TEXT_ACTION_CLASS}
         >
           Got it
         </button>

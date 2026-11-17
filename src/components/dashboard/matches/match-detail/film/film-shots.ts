@@ -396,9 +396,9 @@ export function shotTypeLabel(
 /**
  * A shot's seven cells (handoff H1 §B, frame `E-route-P1-P2.html`).
  *
- * `MatchShot` carries only `shotType`, `spinType`, `zone` and `result` that
- * a row prints (never `speedMph`: single-camera speed is not accurate, so no
- * screen shows it), so three columns are derived rather than read: Stroke reads
+ * `MatchShot` carries only `shotType`, `spinType`, `zone` and `result` for
+ * a row to print (no speed: single-camera speed is not accurate, so it is
+ * never loaded), so three columns are derived rather than read: Stroke reads
  * "Serve" for either serve row, "Type" is {@link shotTypeLabel} — the shot's
  * job in the rally, keyed on `shotType` plus the point's return
  * ({@link pointReturnShotId}), never on `order` — and Placement is

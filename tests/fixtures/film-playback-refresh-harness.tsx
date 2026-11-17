@@ -173,7 +173,6 @@ function shots(pointId: string, first: number): MatchShot[] {
     isPlayer1: i % 2 === 0,
     shotType: i === 0 ? "Serve" : "Forehand",
     spinType: null,
-    speedMph: null,
     zone: null,
     result: null,
     videoTime: Number(videoTime.toFixed(2)),

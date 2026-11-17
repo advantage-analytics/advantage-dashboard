@@ -37,7 +37,6 @@ const shot = (
   isPlayer1,
   shotType: "Forehand",
   spinType: "topspin",
-  speedMph: 70,
   zone: null,
   result,
   videoTime: null,

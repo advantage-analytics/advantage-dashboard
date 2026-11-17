@@ -120,9 +120,8 @@ export function buildReadout(
   }
   const score = (meta.pointScore ?? "").trim();
   if (score !== "") facts.push(pointScoreLabel(score));
-  // No shot speed, measured or not: a single camera cannot read it
-  // accurately, so no screen prints it (UGA coaches call, 2026-11-16). The
-  // data stays in `shots.speed_mph`; `meta.speedMph` is simply not shown.
+  // No shot speed: a single camera cannot read it accurately, so it is never
+  // loaded and never printed (UGA coaches call, 2026-11-16).
 
   const lines: string[] = [];
   if (shotLine !== null && shotLine !== "") lines.push(shotLine);

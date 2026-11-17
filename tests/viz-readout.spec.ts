@@ -20,7 +20,6 @@ function meta(overrides: Partial<VizDotMeta> = {}): VizDotMeta {
     shotType: "First Serve",
     result: "In",
     isAce: false,
-    speedMph: 118,
     ...overrides,
   };
 }
@@ -129,7 +128,7 @@ test("a rally shot names the stroke alone — the cut is not a return", () => {
 
 test("'In' alone says nothing a serve dot does not already say — no shot line", () => {
   const r = buildReadout(
-    meta({ shotType: null, result: "In", speedMph: null, pointScore: null }),
+    meta({ shotType: null, result: "In", pointScore: null }),
     NAMES,
     "serve",
   );
@@ -166,7 +165,6 @@ test("nothing measured at all leaves the fact line out and monoLine at -1", () =
     meta({
       setNumber: 0,
       pointScore: null,
-      speedMph: null,
       shotType: null,
       result: null,
     }),
@@ -184,9 +182,7 @@ const HOLES: Partial<VizDotMeta>[] = [
   { shotType: null, result: null },
   { shotType: "", result: "" },
   { pointScore: null },
-  { speedMph: null },
-  { speedMph: 0 },
-  { setNumber: 0, pointScore: null, speedMph: null, shotType: null },
+  { setNumber: 0, pointScore: null, shotType: null },
   { wonBySubject: false, result: "Net", shotType: null },
   { isAce: true, result: "In", shotType: "First Serve" },
 ];
@@ -279,7 +275,6 @@ test.describe("buildMarkReadout (the lightbox)", () => {
     shotType: "First Serve",
     result: "In",
     isAce: false,
-    speedMph: null,
   };
   test("legend word, score, shot and the caller's where", () => {
     expect(
@@ -294,9 +289,9 @@ test.describe("buildMarkReadout (the lightbox)", () => {
     });
   });
   test("a measured speed is never printed beside the shot", () => {
-    expect(
-      buildMarkReadout({ ...meta, speedMph: 104 }, "won", "serve", null).shot,
-    ).toBe("First serve");
+    expect(buildMarkReadout({ ...meta }, "won", "serve", null).shot).toBe(
+      "First serve",
+    );
   });
   test("an ace is Ace; a miss is Out; the errors cut says Error", () => {
     expect(
