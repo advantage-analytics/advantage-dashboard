@@ -15,7 +15,7 @@ import { createLoader, marker } from "./fixtures/vm-modules";
 /**
  * Admin › Matches side panel — "Label this match" (T29), the way into
  * labelling for any analysed match, including the ones the label queue's
- * cut-off (`LABEL_QUEUE_FROM`, 2026-10-29) leaves out.
+ * cut-off (`LABEL_QUEUE_FROM`) leaves out.
  *
  * The panel is rendered offline through `fixtures/vm-modules`: the drawer
  * frame, links and the Resubmit / Copy buttons are stubbed, and

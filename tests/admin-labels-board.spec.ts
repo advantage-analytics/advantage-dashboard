@@ -288,7 +288,7 @@ test.describe("the admin's Labels board", () => {
     );
     // The lanes hold only the queue, and say where older matches went.
     expect(text(html)).toContain(
-      "The board shows matches analysed from October 29, 2026. Label older ones from Matches.",
+      "The board shows matches analysed from November 17, 2026. Label older ones from Matches.",
     );
     expect(html).toContain('href="/admin/matches"');
   });

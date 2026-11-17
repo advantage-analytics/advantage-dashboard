@@ -664,7 +664,12 @@ export function AdminLaneRow({
         disabled={isPending}
         onClick={() => {
           onOpen?.();
-          start();
+          // A row to check opens the published session itself. Starting one
+          // would seed a fresh session from the vendor's results beside it,
+          // which then blocks Send back (one open session per match) and,
+          // if published, would replace the labeller's work.
+          if (toCheck) router.push(`/admin/labels/${toCheck}`);
+          else start();
         }}
         className="flex w-full cursor-pointer flex-col rounded-[var(--radius-element)] px-3 pb-2 text-left transition-colors duration-100 outline-none hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] active:scale-[0.998] disabled:cursor-progress"
       >

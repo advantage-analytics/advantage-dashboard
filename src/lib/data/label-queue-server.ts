@@ -31,7 +31,7 @@ import { programDisplayName } from "@/lib/data/programs-server";
 import { labellerName } from "@/lib/services/labels/assign-session";
 import { idChunks } from "@/lib/services/labels/chunks";
 import {
-  LABEL_QUEUE_FROM,
+  LABEL_QUEUE_CARRIED_FROM,
   claimableJobIds,
   enterLabelQueue,
   labelDueAt,
@@ -698,7 +698,7 @@ export async function readLabelQueue(
         .eq("provider", PROVIDER_ID)
         .eq("status", "completed")
         .not("results_object_key", "is", null)
-        .gte("completed_at", LABEL_QUEUE_FROM)
+        .gte("completed_at", LABEL_QUEUE_CARRIED_FROM)
         .order("completed_at", { ascending: false })
         .order("id")
         .returns<QueueJobRow[]>(),

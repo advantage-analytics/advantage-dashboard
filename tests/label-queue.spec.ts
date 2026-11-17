@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   LABEL_CLAIM_CHOICES,
   LABEL_DUE_WINDOW_HOURS,
+  LABEL_QUEUE_CARRIED_FROM,
   LABEL_QUEUE_FROM,
   claimableJobIds,
   enterLabelQueue,
@@ -24,7 +25,7 @@ const at = (offsetMs: number) => new Date(NOW.getTime() + offsetMs);
 function job(over: Partial<LabelQueueJob> = {}): LabelQueueJob {
   return {
     id: "job-a",
-    completedAt: "2026-11-01T10:00:00Z",
+    completedAt: "2026-11-20T10:00:00Z",
     start_time_seconds: 0,
     end_time_seconds: 3600,
     billable_seconds: 3600,
@@ -37,7 +38,8 @@ function job(over: Partial<LabelQueueJob> = {}): LabelQueueJob {
 test.describe("label queue: due time", () => {
   test("constants are the settled launch rules", () => {
     expect(LABEL_DUE_WINDOW_HOURS).toBe(36);
-    expect(LABEL_QUEUE_FROM).toBe("2026-10-29T00:00:00Z");
+    expect(LABEL_QUEUE_FROM).toBe("2026-11-17T00:00:00Z");
+    expect(LABEL_QUEUE_CARRIED_FROM).toBe("2026-10-29T00:00:00Z");
     expect(LABEL_CLAIM_CHOICES).toBe(3);
   });
 
@@ -96,6 +98,40 @@ test.describe("label queue: who enters", () => {
       false,
     );
     expect(enterLabelQueue(job({ completedAt: null }))).toBe(false);
+  });
+
+  test("before the to-do cut-off, only work already started stays", () => {
+    const carried = "2026-11-06T10:00:00Z";
+    // Waiting for a labeller: off the to-do, so off the queue.
+    expect(enterLabelQueue(job({ completedAt: carried }))).toBe(false);
+    expect(
+      enterLabelQueue(
+        job({
+          completedAt: carried,
+          session: { status: "labelling", assignedTo: null },
+        }),
+      ),
+    ).toBe(false);
+    // Held, sent back, handed in or published and unchecked: kept.
+    for (const session of [
+      { status: "labelling", assignedTo: "u1" },
+      { status: "labelling", assignedTo: null, sentBackAt: carried },
+      { status: "submitted", assignedTo: "u1" },
+      { status: "complete", assignedTo: "u1" },
+    ]) {
+      expect(enterLabelQueue(job({ completedAt: carried, session }))).toBe(
+        true,
+      );
+    }
+    // A checked one has left, as it does after the cut-off.
+    expect(
+      enterLabelQueue(
+        job({
+          completedAt: carried,
+          session: { status: "complete", assignedTo: "u1", checkedAt: carried },
+        }),
+      ),
+    ).toBe(false);
   });
 
   test("a zero-length video is left out", () => {
