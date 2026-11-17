@@ -32,3 +32,11 @@ is the runner's. Newest entries at the bottom.
 1. A row click on Approach to / Direction acts as a pick, but those groups lift their own filter; the mockup makes a row click set the filter. Decide in T8/T10.
 2. T13: the season merge must carry `VizStats.kpi` across matches (sum count and won, rebuild the label, or recompute).
 3. Check `statRowTooltip`'s share noun reads "approaches" once T5 lands the labels.
+
+## T4 · Let saved views store the approaches cut — done
+
+**gate:** mechanical pass · completion pass
+**changed:** New `supabase/migrations/20261117222932_saved_views_approaches.sql` re-creates `saved_views_cut_check` with `approaches` added to the six existing cuts. Live constraint read first (six cuts, as expected), applied through the Supabase MCP `apply_migration` on the first attempt, re-read after (seven cuts); the filename matches the version live recorded.
+**follow-ups:**
+
+1. Live has two migrations with no local file in this worktree (`20261117182112_label_todo`, `20261117183517_label_todo_newest_job`), presumably another branch's.

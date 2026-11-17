@@ -60,7 +60,7 @@ ready).
 
 ## T4 · Let saved views store the approaches cut
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) new `supabase/migrations/<timestamp>_saved_views_approaches.sql`
 - **done when:**
