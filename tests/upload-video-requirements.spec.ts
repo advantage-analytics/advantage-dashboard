@@ -202,9 +202,23 @@ test.describe("resolution boundary — the guide's 1080p minimum", () => {
     }
   });
 
-  test("a 720p phone clip is refused with its own dimensions quoted", () => {
+  test("a 720p clip is refused by the name people know it by, with the fix", () => {
     const result = evaluateVideoProbe(probe({ width: 1280, height: 720 }));
-    expect(result.error).toContain("1280×720");
+    expect(result.reason).toBe("resolution");
+    expect(result.error?.startsWith("This video is 720p. ")).toBe(true);
+    expect(result.error).toContain(
+      "download the original file, not the stream",
+    );
+    expect(result.error).not.toMatch(/splitstep|swingvision|computer vision/i);
+  });
+
+  test("an odd size quotes its dimensions, so a near miss never reads as 1080p", () => {
+    const result = evaluateVideoProbe(
+      probe({ width: MIN_VIDEO_WIDTH - 1, height: MIN_VIDEO_HEIGHT }),
+    );
+    expect(result.error).toContain(
+      `${MIN_VIDEO_WIDTH - 1}×${MIN_VIDEO_HEIGHT}`,
+    );
   });
 });
 
@@ -221,8 +235,11 @@ test.describe("frame-rate boundary", () => {
   test("a rate genuinely under the floor is fatal and quotes the file's own rate", () => {
     const result = evaluateVideoProbe(probe({ fps: 24 }));
     expect(result.success).toBe(false);
+    expect(result.reason).toBe("frame_rate");
     expect(result.error).toContain("24 fps");
     expect(result.error).toContain(`${MIN_VIDEO_FPS} fps`);
+    // Re-exporting a stream can't add frames: the fix is the original.
+    expect(result.error).toContain("ask for the original recording");
   });
 
   test("meeting the floor but not the preference is a note, not a warning", () => {
@@ -249,6 +266,7 @@ test.describe("frame-rate boundary", () => {
     expect(error).toContain("29.2 fps");
     // Lead-first: the strip sets the first sentence as the lead.
     expect(error.startsWith("Frame rate too low. ")).toBe(true);
+    expect(result.reason).toBe("frame_rate_variable");
     expect(error).toContain(`${MIN_CONTAINER_AVERAGE_FPS} fps`);
     expect(error).toContain("constant 30 fps");
     expect(error).not.toMatch(/splitstep|swingvision/i);
@@ -443,7 +461,11 @@ test.describe("duration boundary", () => {
       probe({ durationSeconds: MIN_TRIM_DURATION_SECONDS - 1 }),
     );
     expect(short.success).toBe(false);
-    expect(short.error).toContain("too short");
+    expect(short.reason).toBe("too_short");
+    expect(short.error).toContain(
+      `${MIN_TRIM_DURATION_SECONDS - 1} seconds long`,
+    );
+    expect(short.error).toContain("download the full recording");
   });
 });
 

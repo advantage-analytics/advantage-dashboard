@@ -38,6 +38,7 @@ import {
   ValidationResult,
 } from "@/lib/services/upload";
 import { getParser, hasParser } from "@/lib/services/upload/parsers";
+import { UNREADABLE_VIDEO_MESSAGE } from "@/lib/services/upload/validators/splitstep-validator";
 import {
   DEFAULT_PROVIDER_ID,
   resolveStartingProvider,
@@ -2704,6 +2705,7 @@ export function useUploadMatchWizard({
           setUploadError(result.error || "This video can't be analyzed.");
           trackVideoRejected(
             "video_validation",
+            result.reason ?? null,
             result.error || "refused",
             file,
             result.details?.video,
@@ -2771,15 +2773,11 @@ export function useUploadMatchWizard({
         });
       } catch (err) {
         if (generation !== fileGenerationRef.current) return;
-        trackVideoRejected("video_read", err, file);
-        // Lead-first, like the validator's refusals: the strip sets the first
-        // sentence as its lead, and a bare exception message ("The operation
-        // was aborted.") would otherwise be the whole notice.
-        setUploadError(
-          err instanceof Error && err.message
-            ? `Couldn't read this video. ${err.message}`
-            : "Couldn't read this video.",
-        );
+        trackVideoRejected("video_read", "unreadable", err, file);
+        // The validator's own sentence for an unreadable file. The exception
+        // ("The operation was aborted.") names nothing the person can do; it
+        // still reaches `upload_failed` as `error_message` above.
+        setUploadError(UNREADABLE_VIDEO_MESSAGE);
       } finally {
         if (generation === fileGenerationRef.current) setIsProbing(false);
       }
