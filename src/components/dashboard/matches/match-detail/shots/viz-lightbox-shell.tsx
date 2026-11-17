@@ -218,7 +218,7 @@ export interface VizLightboxShellProps {
     total: number;
     render: (args: LightboxPointListArgs) => ReactNode;
   };
-  /** Over the Statistics rows (`WatchHintNotice`). */
+  /** Atop the Statistics panel, above the figures (`WatchHintNotice`). */
   statHint?: ReactNode;
   /** The footer's actions, left and right. `null`: no footer bar. */
   footer?: (args: LightboxFooterArgs) => {

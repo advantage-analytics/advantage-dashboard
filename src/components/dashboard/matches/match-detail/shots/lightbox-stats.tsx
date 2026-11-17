@@ -140,7 +140,8 @@ export function LightboxStats({
   pick: StatPick | null;
   onPick: (pick: StatPick | null) => void;
   onHover: (pick: StatPick | null) => void;
-  /** Drawn above the rows (`WatchHintNotice`): how to watch what a row picks. */
+  /** Drawn under the top spacer, above the summary figures
+   *  (`WatchHintNotice`): how to watch what a row picks. */
   hint?: ReactNode;
 }) {
   // The readout's content outlives the hover by its fade: `open` goes, the

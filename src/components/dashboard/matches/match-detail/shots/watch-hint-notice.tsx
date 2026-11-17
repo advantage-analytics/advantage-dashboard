@@ -17,13 +17,15 @@ import {
  * owner picked a one-time note over the rows (option B) over an action on the
  * picked row (option A).
  *
- * Shown once per browser, over the Statistics rows of a court whose points
- * can be played — the grey note strip (`primitives.md` › Notice strips: a
- * fact, nothing wrong), one line with the footer button's name in ink-900,
+ * Shown once per browser, at the top of the Statistics panel (above the
+ * summary figures) for a court whose points can be played — the grey note
+ * strip (`primitives.md` › Notice strips: a fact, nothing wrong), one line
+ * with the footer button's name in ink-900,
  * and a blue Got it pushed right that closes it for good — the shape of
- * primitives.md's settled one-line strip with its action at the end. Remembered in localStorage beside the film room's own
- * preferences, as `film-skip-dead-hint.tsx` remembers its card: a viewer
- * preference, not an account flag, so no `users` column and no write path.
+ * primitives.md's settled one-line strip with its action at the end.
+ * Remembered in localStorage beside the film room's own preferences, as
+ * `film-skip-dead-hint.tsx` remembers its card: a viewer preference, not an
+ * account flag, so no `users` column and no write path.
  */
 
 const HINT_SEEN_KEY = "viz:watch-hint-seen";
@@ -76,8 +78,9 @@ export function WatchHintNotice() {
           setSeen(true);
         }}
         // 17.6px = the strip's 11px × 1.6 line, so the 12px word sits on it.
-        // The negative margin grows the hit area without moving the word.
-        className={`${TEXT_ACTION_CLASS} -my-1 ml-2 shrink-0 py-1 leading-[17.6px] whitespace-nowrap`}
+        // Padding grows the tap target to ~42px tall; the matching negative
+        // margins keep the word, and the strip's height, where they were.
+        className={`${TEXT_ACTION_CLASS} -my-3 -mr-2 shrink-0 px-2 py-3 leading-[17.6px] whitespace-nowrap`}
       >
         Got it
       </button>
