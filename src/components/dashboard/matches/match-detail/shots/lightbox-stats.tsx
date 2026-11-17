@@ -140,7 +140,8 @@ export function LightboxStats({
   pick: StatPick | null;
   onPick: (pick: StatPick | null) => void;
   onHover: (pick: StatPick | null) => void;
-  /** Drawn above the rows (`WatchHintNotice`): how to watch what a row picks. */
+  /** Drawn under the top spacer, above the summary figures
+   *  (`WatchHintNotice`): how to watch what a row picks. */
   hint?: ReactNode;
 }) {
   // The readout's content outlives the hover by its fade: `open` goes, the
@@ -179,7 +180,6 @@ export function LightboxStats({
       : null;
   return (
     <div className="flex min-h-full flex-col">
-      {hint}
       {tip !== null &&
         tipContent !== null &&
         createPortal(
@@ -230,6 +230,9 @@ export function LightboxStats({
           tip.anchor.host,
         )}
       <GroupSpacer edge="top" />
+      {/* Under the top spacer, not over it: the column has no padding of its
+          own, so above it the strip sat flush on the tab row's hairline. */}
+      {hint}
       {figures.length > 0 && (
         <>
           <div
