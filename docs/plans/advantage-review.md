@@ -124,8 +124,9 @@ update of `verified` is refused; the seed's dry run shows `verified: false`;
 - **Revoke.** ~~`reopenLabelSession` clears the four columns.~~ Superseded
   2026-11-16: Reopen keeps Verified by Advantage, since the published points
   stay until the next publish re-stamps it (as Send back already did).
-  `unverify_match` now runs only when a publish lands new points and then
-  fails to verify them, so an earlier stamp never sits over unverified points.
+  Mark complete's publish calls `unverify_match` just before it replaces the
+  points and `verify_match` re-grants it after, so a publish that stops
+  part-way leaves the match unverified, never verified over unchecked points.
 - **Display** (one helper, `verificationFor(row)` in `src/lib/data/`):
   - Loaders: replace the four "Verified result" mappings
     (`matches-list-types.ts:115`, `match-detail-server.ts:198`,

@@ -419,10 +419,10 @@ export async function recompute(
 /**
  * `matches.errors_judged_at`, set before the stats run so `calculate_match_stats`
  * counts `forced_errors` whatever then happens to `verify_match`, and cleared
- * when a reopened match is republished with an unmarked error. A reopened match
- * keeps Verified by Advantage, so the clear shows at once: the report drops to
- * plain Errors, which is right for the points this publish writes
- * (`error-split.ts` needs `verified` and the marker together).
+ * when a reopened match is republished with an unmarked error. Mark complete's
+ * publish has already taken Verified by Advantage off (`unverifyFirst`), so
+ * the marker changes nothing a player sees until `verify_match` puts the badge
+ * back: `error-split.ts` needs `verified` and the marker together.
  */
 async function setErrorsJudged(
   db: AdminClient,
@@ -517,16 +517,7 @@ export type PublishResult =
        */
       errorsJudged: boolean;
     }
-  | {
-      ok: false;
-      error: string;
-      /**
-       * The new points are in although the publish failed (the statistics
-       * could not be rebuilt). Mark complete takes Verified by Advantage off,
-       * since nobody verified them. Absent: the match is as it was.
-       */
-      pointsWritten?: true;
-    };
+  | { ok: false; error: string };
 
 /**
  * Publish an already-loaded and planned session. The backup is stored before
@@ -547,6 +538,15 @@ export async function publishPlanned(params: {
    * only `verify_match` sets, and that runs after this returns.
    */
   deferInsights?: boolean;
+  /**
+   * Take Verified by Advantage off (`unverify_match`) just before the old
+   * points are deleted, and refuse to publish if that fails. Mark complete
+   * sets it and re-verifies after, so the badge is never on points nobody
+   * verified — whatever stops the publish part-way, a crash or a timeout
+   * included. A refusal before this point leaves the badge as it was.
+   * `scripts/label-apply.ts` leaves it unset: it never touched the badge.
+   */
+  unverifyFirst?: boolean;
 }): Promise<PublishResult> {
   const { db, context, plan, acceptScore } = params;
   const { session } = context;
@@ -621,6 +621,18 @@ export async function publishPlanned(params: {
   const backupKey = await storeBackup(db, backup);
   params.onBackup?.(backup);
 
+  if (params.unverifyFirst) {
+    const { error: unverifyError } = await db.rpc("unverify_match", {
+      p_match_id: matchId,
+    });
+    if (unverifyError) {
+      return {
+        ok: false,
+        error: `Not published — Verified by Advantage could not be taken off the match first, so nothing was written: ${unverifyError.message}`,
+      };
+    }
+  }
+
   let written: { idByNumber: Map<number, string>; shots: number };
   let bookmarksRelinked: number;
   try {
@@ -661,7 +673,6 @@ export async function publishPlanned(params: {
   } catch (err) {
     return {
       ok: false,
-      pointsWritten: true,
       error: `The labelled points are published, but the statistics could not be rebuilt (${err instanceof Error ? err.message : String(err)}). Publish again to retry; the previous version is backed up at ${backupKey}.`,
     };
   }
@@ -701,5 +712,6 @@ export async function publishLabelSession(params: {
     plan: planApply(context),
     acceptScore: params.acceptScore || !context.session.marksEnabled,
     deferInsights: true,
+    unverifyFirst: true,
   });
 }

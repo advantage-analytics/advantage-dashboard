@@ -37,11 +37,12 @@
  * is verified by the admin who pressed it (`verify_match`, service role
  * only — the one door `zz_matches_guard_verification` leaves). A failed
  * verify is a failed Complete: the lease is released and Complete again
- * publishes and verifies again. Whenever a Complete fails after the new points
- * went in — a failed verify, statistics that could not be rebuilt, a throw
- * inside the publish — an earlier Verified by Advantage the match still
- * carries (a Reopen keeps it) comes off (`unverify_match`), since nobody
- * verified the points under it. `scripts/label-apply.ts` publishes by hand
+ * publishes and verifies again. The publish itself takes an earlier Verified
+ * by Advantage off (a Reopen keeps it) just before it deletes the old points
+ * (`unverifyFirst`, apply-session.ts), so whatever stops it after that — a
+ * failed rebuild, a failed verify, a crash or a timeout — leaves the match
+ * unverified, never verified over points nobody checked; only `verify_match`
+ * puts the badge back. `scripts/label-apply.ts` publishes by hand
  * and never verifies. The AI summary is asked for after that verify, failed or
  * not: generate-insights reads whether errors were judged off `verified`, so
  * asked any sooner it could save an "errors" summary on a judged match.
@@ -113,7 +114,7 @@ export type LabelPublish = (
   sessionId: string,
 ) => Promise<
   | ({ ok: true } & Omit<LabelPublishSummary, "insightsRequested">)
-  | { ok: false; error: string; pointsWritten?: true }
+  | { ok: false; error: string }
 >;
 
 /**
@@ -206,22 +207,12 @@ export async function writeLabelSessionComplete(params: {
   if (typeof claimedAt !== "string") return { error: PUBLISHING };
 
   let failure: string;
-  // Whether this call may have left new points on the match that nobody
-  // verified: set as the publish starts (a throw inside it may come after the
-  // rows went in), cleared by a publish that refused or put the old rows back,
-  // and by a verify that succeeds.
-  let unverifiedPoints = false;
-  let unverifyError: string | null = null;
   try {
     const blocked = (await beforePublish?.(supabase, sessionId)) ?? null;
-    if (blocked === null) unverifiedPoints = true;
     const result =
       blocked === null
         ? await publish(supabase, sessionId)
         : ({ ok: false, error: blocked } as const);
-    if (!result.ok && !("pointsWritten" in result && result.pointsWritten)) {
-      unverifiedPoints = false;
-    }
     const verified = result.ok
       ? await verifyMatchOf(
           supabase,
@@ -230,20 +221,6 @@ export async function writeLabelSessionComplete(params: {
           result.errorsJudged === true,
         )
       : null;
-    if (verified && !("error" in verified)) unverifiedPoints = false;
-    // New points nobody verified — a verify that failed, or a publish that
-    // failed after the rows went in: a match still carrying an earlier stamp
-    // (a Reopen keeps it) would show Verified by Advantage over them, so it
-    // comes off until Complete again. Before the AI summary, which reads
-    // `verified`.
-    if (unverifiedPoints) {
-      unverifyError = await unverifyMatchOf(
-        supabase,
-        sessionId,
-        verified?.matchId,
-      );
-      unverifiedPoints = false;
-    }
     // The statistics are in either way, and the verify's outcome is settled.
     // Not when the session row could not be read: there is no match to name,
     // and Complete again asks for it.
@@ -297,13 +274,6 @@ export async function writeLabelSessionComplete(params: {
     }
   } catch (err) {
     failure = `Could not publish the labels: ${err instanceof Error ? err.message : String(err)}`;
-    // A throw from inside the publish may come after the rows went in.
-    if (unverifiedPoints) {
-      unverifyError = await unverifyMatchOf(supabase, sessionId, undefined);
-    }
-  }
-  if (unverifyError) {
-    failure += ` Verified by Advantage could not be taken off the match either (${unverifyError}).`;
   }
 
   // Not published, or not fully: release the lease so it can be retried.
@@ -420,34 +390,6 @@ async function verifyMatchOf(
     };
   }
   return { matchId: row.match_id };
-}
-
-/**
- * Take Verified by Advantage off the session's match (`unverify_match`):
- * the sentence that says why it could not, or null. A no-op on a match that
- * was never verified. Never throws. `matchId` when the caller already read it.
- */
-async function unverifyMatchOf(
-  supabase: AdminClient,
-  sessionId: string,
-  matchId: string | undefined,
-): Promise<string | null> {
-  try {
-    let id = matchId;
-    if (!id) {
-      const { data: row, error: readError } = await supabase
-        .from("label_sessions")
-        .select("match_id")
-        .eq("id", sessionId)
-        .maybeSingle<{ match_id: string }>();
-      if (readError || !row) return readError?.message ?? "session not found";
-      id = row.match_id;
-    }
-    const { error } = await supabase.rpc("unverify_match", { p_match_id: id });
-    return error ? error.message : null;
-  } catch (err) {
-    return err instanceof Error ? err.message : String(err);
-  }
 }
 
 /**

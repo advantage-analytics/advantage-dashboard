@@ -296,40 +296,21 @@ test.describe("writeLabelSessionComplete", () => {
     expect(updates(fake).map((c) => c.values)).toEqual([
       { publishing_since: null },
     ]);
-    // An earlier stamp (a Reopen keeps it) comes off: the points under it are
-    // new and unverified.
-    expect(
-      fake.calls.filter((c) => c.op === "rpc").map((c) => c.table),
-    ).toEqual(["claim_label_publish_lease", "verify_match", "unverify_match"]);
-    expect(
-      fake.calls.find((c) => c.table === "unverify_match")?.values,
-    ).toEqual({ p_match_id: MATCH_ID });
   });
 
-  test("a failed verify whose unverify also fails says so", async () => {
-    const fake = fakeClient({ failRpc: ["verify_match", "unverify_match"] });
-    expect(
+  test("the writer never unverifies: the publish took the badge off before its write", async () => {
+    for (const fake of [
+      fakeClient({}),
+      fakeClient({ failRpc: ["verify_match"] }),
+    ]) {
       await writeLabelSessionComplete({
         actorId: ACTOR,
         supabase: fake.supabase,
         sessionId: SESSION_ID,
         publish: PUBLISHED,
-      }),
-    ).toEqual({
-      error:
-        "The labels are published, but the match could not be marked Verified by Advantage: verify_match refused. Publish again to retry. Verified by Advantage could not be taken off the match either (unverify_match refused).",
-    });
-  });
-
-  test("a verify that succeeds never unverifies", async () => {
-    const fake = fakeClient({});
-    await writeLabelSessionComplete({
-      actorId: ACTOR,
-      supabase: fake.supabase,
-      sessionId: SESSION_ID,
-      publish: PUBLISHED,
-    });
-    expect(fake.calls.some((c) => c.table === "unverify_match")).toBe(false);
+      });
+      expect(fake.calls.some((c) => c.table === "unverify_match")).toBe(false);
+    }
   });
 
   test("a close that fails after the verify keeps Verified by Advantage", async () => {
@@ -358,45 +339,6 @@ test.describe("writeLabelSessionComplete", () => {
       publish: async () => ({ ok: false, error: "Not published: no." }),
     });
     expect(fake.calls.some((c) => c.table === "verify_match")).toBe(false);
-    // Nothing was written, so an earlier Verified by Advantage still holds.
-    expect(fake.calls.some((c) => c.table === "unverify_match")).toBe(false);
-  });
-
-  test("a publish that wrote the points but not the statistics takes the badge off", async () => {
-    const fake = fakeClient({});
-    const error =
-      "The labelled points are published, but the statistics could not be rebuilt (stats down).";
-    expect(
-      await writeLabelSessionComplete({
-        actorId: ACTOR,
-        supabase: fake.supabase,
-        sessionId: SESSION_ID,
-        publish: async () => ({ ok: false, error, pointsWritten: true }),
-      }),
-    ).toEqual({ error });
-    expect(
-      fake.calls.filter((c) => c.op === "rpc").map((c) => c.table),
-    ).toEqual(["claim_label_publish_lease", "unverify_match"]);
-    expect(
-      fake.calls.find((c) => c.table === "unverify_match")?.values,
-    ).toEqual({ p_match_id: MATCH_ID });
-  });
-
-  test("a publish that throws takes the badge off: the rows may be in", async () => {
-    const fake = fakeClient({});
-    expect(
-      await writeLabelSessionComplete({
-        actorId: ACTOR,
-        supabase: fake.supabase,
-        sessionId: SESSION_ID,
-        publish: async () => {
-          throw new Error("restore failed");
-        },
-      }),
-    ).toEqual({ error: "Could not publish the labels: restore failed" });
-    expect(
-      fake.calls.find((c) => c.table === "unverify_match")?.values,
-    ).toEqual({ p_match_id: MATCH_ID });
   });
 
   test("a publish the snapshot refused never touches the badge", async () => {

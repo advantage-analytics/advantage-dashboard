@@ -191,6 +191,7 @@ function fakeDatabase(
     errorsJudgedAt?: string;
     failMarker?: boolean;
     failVerify?: boolean;
+    failUnverify?: boolean;
     failInsights?: boolean;
   } = {},
 ) {
@@ -225,6 +226,10 @@ function fakeDatabase(
         case "calculate_match_stats":
           calculateMatchStats();
           return { data: null, error: null };
+        case "unverify_match":
+          return options.failUnverify
+            ? { data: null, error: { message: "unverify refused" } }
+            : { data: null, error: null };
         case "verify_match":
           if (options.failVerify) {
             return { data: null, error: { message: "verify refused" } };
@@ -335,10 +340,72 @@ async function markComplete(
         plan: planApply(context),
         acceptScore: true,
         deferInsights: true,
+        unverifyFirst: true,
       }),
   });
   return { ...fake, result };
 }
+
+// Verified by Advantage comes off just before the old points go and only
+// verify_match puts it back, so a publish that stops part-way — a failed
+// rebuild, a failed verify, a crash — never leaves it on unchecked points.
+test("Mark complete's publish takes the badge off before the delete; verify puts it back after", async () => {
+  const { calls, result } = await markComplete("forced");
+  expect(result).toMatchObject({ ok: true, status: "complete" });
+  const unverify = calls.findIndex((c) => c.table === "unverify_match");
+  const firstDelete = calls.findIndex((c) => c.op === "delete");
+  expect(unverify).toBeGreaterThan(-1);
+  expect(firstDelete).toBeGreaterThan(unverify);
+  expect(calls.findIndex((c) => c.table === "verify_match")).toBeGreaterThan(
+    firstDelete,
+  );
+  expect(calls[unverify].values).toEqual({
+    p_match_id: "33333333-3333-4333-8333-333333333333",
+  });
+});
+
+test("a failed rebuild after the write leaves the badge off: no verify", async () => {
+  const { calls, result } = await markComplete("forced", { failMarker: true });
+  expect(result).toMatchObject({
+    error: expect.stringContaining("statistics could not be rebuilt"),
+  });
+  expect(calls.some((c) => c.table === "unverify_match")).toBe(true);
+  expect(calls.some((c) => c.table === "verify_match")).toBe(false);
+});
+
+test("a badge that will not come off stops the publish before anything is written", async () => {
+  const { calls, state, result } = await markComplete("forced", {
+    failUnverify: true,
+  });
+  expect(result).toEqual({
+    error:
+      "Not published — Verified by Advantage could not be taken off the match first, so nothing was written: unverify refused",
+  });
+  expect(calls.some((c) => c.op === "delete" || c.op === "insert")).toBe(false);
+  expect(state.points).toEqual([]);
+  expect(calls.some((c) => c.table === "verify_match")).toBe(false);
+});
+
+test("a refusal before the write never touches the badge", async () => {
+  const context = sessionContext("forced");
+  context.session.points = [];
+  const { calls, result } = await markComplete(context);
+  expect(result).toMatchObject({
+    error: expect.stringContaining("there are no points to write"),
+  });
+  expect(calls.some((c) => c.table === "unverify_match")).toBe(false);
+});
+
+test("Mark complete's own publish asks for unverifyFirst", () => {
+  const source = readFileSync(
+    "src/lib/services/labels/apply-session.ts",
+    "utf8",
+  );
+  const fn = source.slice(
+    source.indexOf("export async function publishLabelSession"),
+  );
+  expect(fn).toContain("unverifyFirst: true");
+});
 
 test("publish with every error marked: points, stats, then verify with p_errors_judged — forced_errors counted", async () => {
   const { calls, state, result } = await markComplete("forced");
