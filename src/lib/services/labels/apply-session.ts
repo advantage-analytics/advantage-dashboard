@@ -466,7 +466,10 @@ export async function restoreVerificationStamp(
       verified_by: stamp.verified_by,
       verified_review_id: stamp.verified_review_id,
     })
-    .eq("id", matchId);
+    .eq("id", matchId)
+    // Only over the badge this publish or restore took off: a stamp granted
+    // since is newer than the one being put back, and is left alone.
+    .eq("verified", false);
   return error ? "failed" : "restored";
 }
 
