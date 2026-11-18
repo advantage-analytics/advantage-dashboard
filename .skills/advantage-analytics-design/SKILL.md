@@ -62,8 +62,9 @@ that decides which of two conflicting patterns wins.
 > is the shorter surface, not the higher one. Where this skill and
 > `DESIGN.md` disagree on anything v3 did not touch, `DESIGN.md` is newer.
 > The supersessions so far: nav active is a neutral wash; the Matches column
-> order is Date-first; container rows (events, players) peek in a drawer and
-> carry no chevron; status pills
+> order is Date-first; event rows peek in a drawer and carry no chevron,
+> while match and player rows open their page and carry one (2026-11-17);
+> status pills
 > carry no counts; the page title is the first thing in the scroll body with
 > no eyebrow above it; the selected-row check is Signal Blue site-wide; what
 > a confirm costs is prose, not a bulleted tub. **Every state pill is grey and

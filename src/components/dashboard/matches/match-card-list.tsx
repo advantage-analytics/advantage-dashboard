@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ChevronRight } from "lucide-react";
 import {
   LIST_ROW_FRAME,
-  LIST_TRACK_TRANSITION,
+  ROW_TRAIL_PAD,
   listGridCols,
 } from "./match-list-layout";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
@@ -18,7 +19,6 @@ import { StatePill } from "@/components/ui/state-pill";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { RowLifecycle } from "./row-state";
 import { EventCell } from "./event-cell";
-import { profileHref } from "@/components/dashboard/team/roster-table";
 import { cn } from "@/lib/utils";
 
 /**
@@ -33,9 +33,11 @@ import { cn } from "@/lib/utils";
  * player carries the row (13/500 ink-900) and the opponent follows at regular
  * weight in ink-700, so the two names do not compete.
  *
- * The row PEEKS. A click opens the match drawer beside the table; ⌘/Ctrl-click
- * and the drawer's title go to the report; Enter or Space opens it from the
- * keyboard. It is the Roster's selection model, owned by `MatchesPageContent`.
+ * The row OPENS THE REPORT (`tables.md` rule 3): a click, Enter or Space
+ * travels, ⌘/Ctrl-click opens it in a new tab, and the trailing chevron says
+ * so. Nothing else on the row is a link — the player's name is plain text,
+ * because a name that led to the player page was the click readers made when
+ * they wanted the match (2026-11-17).
  */
 
 /**
@@ -87,19 +89,17 @@ interface MatchCardListProps {
   /**
    * A saved upload fills this match (a draft folded onto it by `foldDrafts`) —
    * draws the outlined Draft pill beside the row's name, `DraftRow`'s variant.
-   * Its "Continue upload" lives in the drawer, not the row.
    */
   hasDraft?: boolean;
+  /**
+   * Where that saved upload resumes (`draftHref`), drawn as "Continue" in the
+   * lifecycle cell — a draft row's own way back into the wizard.
+   */
+  continueHref?: string | null;
   scope?: "personal" | "team";
-  /** The team table beside the open drawer, with its Event track dropped. */
-  compact?: boolean;
-  /** This row's match is the one in the drawer. */
-  selected?: boolean;
-  /** Open or close the drawer on this row; `viaKeyboard` moves focus into it. */
-  onToggle?: (id: string, viaKeyboard: boolean) => void;
 }
 
-/** The row's DOM id, so stepping in the drawer can scroll and focus it. */
+/** The row's DOM id, so a discarded draft can hand focus to its neighbour. */
 export function matchRowId(matchId: string): string {
   return `match-row-${matchId}`;
 }
@@ -109,10 +109,8 @@ export function MatchCardList({
   isNew,
   unseen,
   hasDraft = false,
+  continueHref = null,
   scope = "personal",
-  compact = false,
-  selected = false,
-  onToggle,
 }: MatchCardListProps): React.JSX.Element {
   const router = useRouter();
   const isWin = match.score.winner === "player1";
@@ -147,31 +145,26 @@ export function MatchCardList({
       id={matchRowId(match.id)}
       role="row"
       tabIndex={0}
-      aria-current={selected ? "true" : undefined}
       onClick={(event) => {
         if (event.metaKey || event.ctrlKey) {
-          router.push(href);
+          window.open(href, "_blank", "noopener");
           return;
         }
-        if (onToggle) onToggle(match.id, false);
-        else router.push(href);
+        router.push(href);
       }}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          if (onToggle) onToggle(match.id, true);
-          else router.push(href);
+          router.push(href);
         }
       }}
       className={cn(
         LIST_ROW_FRAME,
-        LIST_TRACK_TRANSITION,
-        "group relative -mx-4 h-[52px] cursor-pointer rounded-[var(--radius-element)] px-4 hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none",
-        selected && "bg-[var(--surface-muted)]",
+        "group relative -mx-4 h-[52px] cursor-pointer rounded-[var(--radius-element)] px-4 transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none",
         isNew && "animate-[highlight-new-match_1.5s_ease-out_0.4s_both]",
       )}
-      style={listGridCols(scope, compact)}
+      style={listGridCols(scope)}
     >
       {/* Date — the key column, tabular, matching Schedule and the roster card. */}
       <span
@@ -190,20 +183,9 @@ export function MatchCardList({
             name={match.player1.name}
             viewer={isViewerRow ? viewer : null}
           />
-          {match.player1.profileId ? (
-            <Link
-              href={profileHref(match.player1.profileId)}
-              // The row opens the drawer; the name goes to the player.
-              onClick={(event) => event.stopPropagation()}
-              className="min-w-0 truncate rounded-[var(--radius-cell)] text-[13px] font-medium text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-            >
-              {match.player1.name}
-            </Link>
-          ) : (
-            <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
-              {match.player1.name}
-            </span>
-          )}
+          <span className="min-w-0 truncate text-[13px] font-medium text-[var(--ink-900)]">
+            {match.player1.name}
+          </span>
           {draftPill}
         </span>
       )}
@@ -264,23 +246,52 @@ export function MatchCardList({
         name={match.tournamentName}
         round={match.round}
         practice={isPractice}
-        hidden={compact}
       />
 
       {/* Analysis — the settled outcome, the upload's chip and bar, or the
           one word that explains an exception, on the rest. `grid` blockifies
           the chip onto the cell's line and stretches it across the track;
-          `row-lifecycle` identifies the lifecycle container (see globals.css). */}
-      <div className="row-lifecycle grid min-w-0 items-center">
-        <RowLifecycle
-          analysis={match.analysis}
-          verification={match.verification}
-          verificationPending={match.verificationPending}
-          label={[match.player2.name, match.tournamentName]
-            .filter(Boolean)
-            .join(", ")}
-        />
+          `row-lifecycle` identifies the lifecycle container (see globals.css).
+          A saved upload that fills this match adds its "Continue", the draft
+          row's own link back into the wizard. */}
+      <div className={cn("flex min-w-0 items-center gap-3.5", ROW_TRAIL_PAD)}>
+        <div className="row-lifecycle grid min-w-0 flex-1 items-center">
+          <RowLifecycle
+            analysis={match.analysis}
+            verification={match.verification}
+            verificationPending={match.verificationPending}
+            label={[match.player2.name, match.tournamentName]
+              .filter(Boolean)
+              .join(", ")}
+          />
+        </div>
+        {continueHref && (
+          <Link
+            href={continueHref}
+            onClick={(event) => event.stopPropagation()}
+            className="shrink-0 rounded-[var(--radius-cell)] text-[12px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          >
+            Continue
+          </Link>
+        )}
       </div>
+
+      <RowChevron />
     </div>
+  );
+}
+
+/**
+ * The record chevron (`tables.md` rule 3): 13px, ink-300 at rest and ink-900
+ * while the row is hovered or focused, pinned to the row's right edge in the
+ * room `ROW_TRAIL_PAD` keeps clear.
+ */
+export function RowChevron(): React.JSX.Element {
+  return (
+    <ChevronRight
+      aria-hidden="true"
+      strokeWidth={1.5}
+      className="pointer-events-none absolute top-1/2 right-4 size-[13px] -translate-y-1/2 text-[var(--ink-300)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--ink-900)] group-focus-visible:text-[var(--ink-900)]"
+    />
   );
 }

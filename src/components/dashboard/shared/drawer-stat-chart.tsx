@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * The peek drawer's stat chart: the six-match sparkline and the 26px pills
- * that switch it. Lifted out of `team/player-drawer.tsx` unchanged, so the
- * roster's player drawer and the personal Opponents drawer draw one chart
+ * that switch it. Lifted out of the roster's player drawer (retired
+ * 2026-11-17), so both Opponents drawers draw one chart
  * rather than two that drift.
  */
 

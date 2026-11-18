@@ -417,9 +417,8 @@
   }
 }
 
-/* The Matches table's tracks follow the rail (`LIST_TRACK_TRANSITION`). With
-   reduced motion they take their end state at once; the Event cell's opacity
-   fade stays, since it carries the state change without moving anything. */
+/* The Opponents tables' tracks follow their rail (`LIST_TRACK_TRANSITION`).
+   With reduced motion they take their end state at once. */
 @media (prefers-reduced-motion: reduce) {
   .matches-track-shift {
     transition: none;

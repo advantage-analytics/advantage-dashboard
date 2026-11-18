@@ -353,7 +353,7 @@ would not tell a coach what they are choosing ("Staff", "Owner and coaches"),
 and leave it off when it would ("Clay").
 
 **Destructive rows rest grey, turn red on intent** (2026-09-13, in-repo — the
-Roster drawer's Options menu and the Schedule drawer's event menu). A delete /
+Roster row's Options menu and the Schedule drawer's event menu). A delete /
 remove row sits last, below a hairline, and at rest reads exactly like its
 siblings: label in the menu's own ink, 13px leading glyph (`Trash2`) in
 `--ink-400`. On pointer hover **and** keyboard focus the label and the glyph

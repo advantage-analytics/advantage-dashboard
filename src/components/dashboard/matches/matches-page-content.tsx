@@ -2,15 +2,7 @@
 import { SortTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 
-import {
-  useState,
-  useMemo,
-  useRef,
-  useEffect,
-  useCallback,
-  useSyncExternalStore,
-} from "react";
-import { createPortal } from "react-dom";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { GalleryHorizontalEnd } from "lucide-react";
@@ -18,7 +10,7 @@ import { AppliedFilterStrip } from "@/components/dashboard/shared/applied-filter
 import { EmptyMatches } from "./empty-matches";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
-import { draftHref, type DraftRowData } from "./draft-row";
+import type { DraftRowData } from "./draft-row";
 import {
   isAnalysisReady,
   isInFlight,
@@ -38,20 +30,8 @@ import {
   rosterPlayerCutName,
 } from "@/lib/data/roster-player-cut";
 import { providers } from "@/lib/providers";
-import { markReportSeen, useUnseenReportIds } from "@/lib/ui/seen-reports";
+import { useUnseenReportIds } from "@/lib/ui/seen-reports";
 import { MatchesGrid, type SortField, type SortDir } from "./matches-grid";
-import { DRAWER_ATTR, MatchDrawer } from "./match-drawer";
-import { DraftDrawer } from "./draft-drawer";
-import { matchRowId } from "./match-card-list";
-import { matchCardId } from "./match-card-gallery";
-
-/** The match's row, or below `lg` (rows hidden) its card. */
-function matchElement(matchId: string): HTMLElement | null {
-  const row = document.getElementById(matchRowId(matchId));
-  if (row && row.offsetParent !== null) return row;
-  return document.getElementById(matchCardId(matchId)) ?? row;
-}
-import { MATCH_DRAWER_SLOT_ID } from "./match-drawer-slot";
 import {
   MatchesFilterPanel,
   type FilterOption,
@@ -410,11 +390,6 @@ function emptyCutCopy({
 /** A stable "no drafts", so the default does not bust every memo keyed on it. */
 const NO_DRAFTS: DraftRowData[] = [];
 
-/** The slot never changes once mounted, so there is nothing to subscribe to. */
-function noopSubscribe(): () => void {
-  return () => {};
-}
-
 /* ─── Main content ─── */
 /** A match with no analysis job, or one that has finished, has a report to read. */
 function hasReadableReport(m: DisplayMatch) {
@@ -478,7 +453,7 @@ export function MatchesPageContent({
 
   // A draft that fills a listed match (an "Add video" started from a scored
   // line) is more work on that match, not a second one: it folds onto the
-  // match's row — a Draft pill there, "Continue upload" in its drawer — and
+  // match's row — a Draft pill there, "Continue" in its lifecycle cell — and
   // only the rest list as draft rows. `drafts` below means the standalone ones;
   // `listedDrafts` is those of them the current view shows.
   //
@@ -563,12 +538,6 @@ export function MatchesPageContent({
     [matches],
   );
   const unseenIds = useUnseenReportIds(readyMatchIds);
-  // Rows opened in the drawer this visit. Opening one marks it seen, which
-  // would drop it from the "New" view and take its own drawer with it, so the
-  // view keeps what was opened for the life of this page.
-  const [openedIds, setOpenedIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
   const [page, setPage] = useState(() => Number(searchParams.get("page")) || 1);
 
   // Track newly created match for highlight animation
@@ -650,7 +619,7 @@ export function MatchesPageContent({
     // answer "what's the state of this match", the panel answers everything
     // else, and the two never gate on the same predicate.
     if (lifecycle === "new") {
-      result = result.filter((m) => unseenIds.has(m.id) || openedIds.has(m.id));
+      result = result.filter((m) => unseenIds.has(m.id));
     } else if (lifecycle === "in-progress") {
       result = result.filter(
         (m) => !!m.analysis && isInFlight(m.analysis.status),
@@ -658,7 +627,7 @@ export function MatchesPageContent({
     }
 
     return result;
-  }, [matches, search, rosterPlayer, filters, lifecycle, unseenIds, openedIds]);
+  }, [matches, search, rosterPlayer, filters, lifecycle, unseenIds]);
 
   // A filtered view is its own screen (v3's Data Table law 8), so a draft stays
   // only if it answers the cut. It can answer the palette's `?q=` with what it
@@ -729,196 +698,6 @@ export function MatchesPageContent({
   const rangeStart = sorted.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const rangeEnd = Math.min(safePage * PAGE_SIZE, sorted.length);
 
-  /* ── The drawer ──────────────────────────────────────────────────────────
-     The Roster's selection model, verbatim: click opens and selects, clicking
-     the selected row closes, ↑ ↓ step, Esc closes, and `?match=` / `?draft=`
-     are the deep links that land open. `selectedId` is the washed row;
-     `drawerId` outlives it by the slide-out, so the rail can animate closed.
-     Listed drafts sit above the matches on every page, so stepping walks them
-     first, then the whole filtered list, turning the page when it has to. */
-  const [selectedId, setSelectedId] = useState<string | null>(() => {
-    const matchId = searchParams.get("match");
-    if (matchId && serverMatches.some((m) => m.id === matchId)) return matchId;
-    const draftId = searchParams.get("draft");
-    if (!draftId) return null;
-    if (drafts.some((d) => d.id === draftId)) return draftId;
-    // A link to a draft that folded lands on the match it fills.
-    for (const [foldedMatchId, draft] of foldedDrafts) {
-      if (draft.id === draftId) return foldedMatchId;
-    }
-    return null;
-  });
-  const [drawerId, setDrawerId] = useState<string | null>(selectedId);
-  const [closing, setClosing] = useState(false);
-  const [openedByKeyboard, setOpenedByKeyboard] = useState(false);
-  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const drawerDraftIndex = drawerId
-    ? listedDrafts.findIndex((d) => d.id === drawerId)
-    : -1;
-  const drawerDraft =
-    drawerDraftIndex >= 0 ? listedDrafts[drawerDraftIndex] : null;
-  const drawerIndex =
-    drawerId && !drawerDraft ? sorted.findIndex((m) => m.id === drawerId) : -1;
-  const drawerMatch = drawerIndex >= 0 ? sorted[drawerIndex] : null;
-  // The drawer's "Continue upload": where the draft folded onto this match
-  // resumes, when one is.
-  const drawerFolded = drawerMatch ? foldedDrafts.get(drawerMatch.id) : null;
-  const drawerContinueHref = drawerFolded
-    ? draftHref(drawerFolded.id, scope)
-    : null;
-  // Stepping order: drafts, then matches. A row's place in it decides whether
-  // ↑ and ↓ have anywhere to go.
-  const drawerPosition = drawerDraft
-    ? drawerDraftIndex
-    : drawerMatch
-      ? listedDrafts.length + drawerIndex
-      : -1;
-  const rowCount = listedDrafts.length + sorted.length;
-
-  // A record that left the list — deleted, discarded, or cut by a filter —
-  // takes the drawer with it rather than leaving it open on a row nobody sees.
-  if (drawerId && !drawerMatch && !drawerDraft) {
-    setSelectedId(null);
-    setDrawerId(null);
-    setClosing(false);
-  }
-
-  const finishClose = useCallback(() => {
-    if (closeTimer.current) clearTimeout(closeTimer.current);
-    closeTimer.current = null;
-    setDrawerId(null);
-    setClosing(false);
-  }, []);
-
-  const selectRow = useCallback(
-    (id: string, viaKeyboard: boolean) => {
-      if (closeTimer.current) clearTimeout(closeTimer.current);
-      closeTimer.current = null;
-      setClosing(false);
-      setSelectedId(id);
-      setDrawerId(id);
-      setOpenedByKeyboard(viaKeyboard);
-      // The drawer is the report's front door on this page, so opening a row
-      // reads it: the "New" dot clears here, not only on the detail route.
-      // Only a finished report can be read — a queued or processing match
-      // opened to check progress must still read as new when it completes.
-      const opened = matches.find((m) => m.id === id);
-      if (opened && hasReadableReport(opened)) {
-        markReportSeen(id);
-        setOpenedIds((prev) => new Set(prev).add(id));
-      }
-    },
-    [matches],
-  );
-
-  const closeDrawer = useCallback(
-    (returnFocusTo: string | null) => {
-      setSelectedId(null);
-      setClosing(true);
-      // The animation's end normally finishes the close; this covers reduced
-      // motion, where no animation runs. A second
-      // close during the slide replaces the timer rather than orphaning it —
-      // an orphan would fire later and shut whatever drawer opened next.
-      if (closeTimer.current) clearTimeout(closeTimer.current);
-      closeTimer.current = setTimeout(finishClose, 240);
-      if (returnFocusTo) {
-        matchElement(returnFocusTo)?.focus();
-      }
-    },
-    [finishClose],
-  );
-
-  const toggleRow = useCallback(
-    (id: string, viaKeyboard: boolean) => {
-      if (selectedId === id) closeDrawer(viaKeyboard ? id : null);
-      else selectRow(id, viaKeyboard);
-    },
-    [selectedId, selectRow, closeDrawer],
-  );
-
-  const stepRow = useCallback(
-    (direction: 1 | -1) => {
-      if (!selectedId) return;
-      const draftAt = listedDrafts.findIndex((d) => d.id === selectedId);
-      const position =
-        draftAt >= 0
-          ? draftAt
-          : listedDrafts.length + sorted.findIndex((m) => m.id === selectedId);
-      const target = position + direction;
-      if (target < 0 || target >= listedDrafts.length + sorted.length) return;
-      let nextId: string;
-      if (target < listedDrafts.length) {
-        nextId = listedDrafts[target].id;
-      } else {
-        const matchAt = target - listedDrafts.length;
-        nextId = sorted[matchAt].id;
-        setPage(Math.floor(matchAt / PAGE_SIZE) + 1);
-      }
-      selectRow(nextId, true);
-      requestAnimationFrame(() => {
-        matchElement(nextId)?.scrollIntoView({ block: "nearest" });
-      });
-    },
-    [listedDrafts, sorted, selectedId, selectRow],
-  );
-
-  useEffect(() => {
-    return () => {
-      if (closeTimer.current) clearTimeout(closeTimer.current);
-    };
-  }, []);
-
-  // Esc and the arrows work wherever focus is, standing down for fields, open
-  // menus and modal dialogs — the drawer's own dialog told apart by its attr.
-  useEffect(() => {
-    if (!selectedId) return;
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (
-        event.defaultPrevented ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey
-      )
-        return;
-      const target = event.target as HTMLElement | null;
-      if (target) {
-        if (target.closest("input, textarea, select, [contenteditable=true]"))
-          return;
-        if (
-          target.closest(
-            `[role="dialog"]:not([${DRAWER_ATTR}] [role="dialog"])`,
-          )
-        )
-          return;
-        if (target.closest("[data-radix-popper-content-wrapper]")) return;
-      }
-
-      if (event.key === "Escape") {
-        event.preventDefault();
-        closeDrawer(selectedId);
-      } else if (event.key === "ArrowDown") {
-        event.preventDefault();
-        stepRow(1);
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        stepRow(-1);
-      }
-    }
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedId, closeDrawer, stepRow]);
-
-  // The rail renders beside the page column, not inside it, so the table
-  // reflows the way the Roster's does. The page draws the slot; this reads it
-  // after hydration (the server has no document, so it renders no drawer).
-  const drawerSlot = useSyncExternalStore(
-    noopSubscribe,
-    () => document.getElementById(MATCH_DRAWER_SLOT_ID),
-    () => null,
-  );
-
   // Reset page when filters/query/lifecycle change
   useEffect(() => {
     setPage(1);
@@ -939,10 +718,6 @@ export function MatchesPageContent({
     if (page > 1) params.set("page", String(page));
     if (lifecycle !== "all") params.set("lifecycle", lifecycle);
     for (const f of filters) params.append(f.key, f.value);
-    if (selectedId) {
-      const isDraft = drafts.some((d) => d.id === selectedId);
-      params.set(isDraft ? "draft" : "match", selectedId);
-    }
     // `?messages=open` is the shell's support dialog, not this page's state:
     // rebuilding the query without it would close the dialog under the user.
     const messages = new URLSearchParams(window.location.search).get(
@@ -963,8 +738,6 @@ export function MatchesPageContent({
     page,
     filters,
     lifecycle,
-    selectedId,
-    drafts,
     pathname,
   ]);
 
@@ -1167,11 +940,6 @@ export function MatchesPageContent({
         scope={scope}
         newMatchId={newMatchId}
         unseenIds={unseenIds}
-        selectedId={selectedId}
-        onToggle={toggleRow}
-        // Not while closing: the tracks widen as the rail shrinks, in the
-        // same 200ms, rather than waiting for it to finish and then jumping.
-        drawerOpen={(drawerMatch !== null || drawerDraft !== null) && !closing}
         // A cut that leaves nothing keeps the table — headers and card — and
         // says so in its body (see `TableEmptyBody`).
         empty={
@@ -1190,47 +958,6 @@ export function MatchesPageContent({
           />
         }
       />
-
-      {drawerSlot &&
-        drawerDraft &&
-        createPortal(
-          <DraftDrawer
-            draft={drawerDraft}
-            scope={scope}
-            index={drawerDraftIndex}
-            total={listedDrafts.length}
-            canPrev={drawerPosition > 0}
-            canNext={drawerPosition < rowCount - 1}
-            closing={closing}
-            autoFocus={openedByKeyboard}
-            onPrev={() => stepRow(-1)}
-            onNext={() => stepRow(1)}
-            onClose={() => closeDrawer(drawerDraft.id)}
-            onClosed={finishClose}
-          />,
-          drawerSlot,
-        )}
-
-      {drawerSlot &&
-        drawerMatch &&
-        createPortal(
-          <MatchDrawer
-            match={drawerMatch}
-            continueHref={drawerContinueHref}
-            scope={scope}
-            index={drawerIndex}
-            total={sorted.length}
-            canPrev={drawerPosition > 0}
-            canNext={drawerPosition < rowCount - 1}
-            closing={closing}
-            autoFocus={openedByKeyboard}
-            onPrev={() => stepRow(-1)}
-            onNext={() => stepRow(1)}
-            onClose={() => closeDrawer(drawerMatch.id)}
-            onClosed={finishClose}
-          />,
-          drawerSlot,
-        )}
 
       {/* Footer — the range in micro type, and the way to the rest of the list
           as one quiet blue link (Platform Audit Pb2). "Older" because the list

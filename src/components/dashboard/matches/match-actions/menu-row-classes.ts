@@ -6,7 +6,7 @@
  */
 
 /**
- * The leading glyph on each menu row, as the Roster drawer's Options menu and
+ * The leading glyph on each menu row, as the Roster row's Options menu and
  * the Schedule drawer's event menu draw it: 13px, neutral ink-400 — never
  * `--blue` (`FloatMenuItem`'s default).
  */
