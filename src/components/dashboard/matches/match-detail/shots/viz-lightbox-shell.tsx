@@ -1430,7 +1430,7 @@ export function VizLightboxShell({
                         emptyLine:
                           cut === "serve" && dots.length > 0
                             ? `${dots.length} ${dots.length === 1 ? "serve" : "serves"} went out. A fault isn't a point, so there is no clip; the court shows where they landed.`
-                            : `No ${result.noun} match these filters.`,
+                            : emptyLine,
                       })
                     ) : (
                       // `-mx-2 px-2`: a row's hover wash hangs 8px past the

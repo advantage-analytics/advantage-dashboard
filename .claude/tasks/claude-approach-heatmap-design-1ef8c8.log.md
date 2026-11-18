@@ -271,3 +271,9 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The filter panel's "Approach to" checklist still shows on a match with no wings (out of scope).
+
+## T28 · Give the Points pane the shared empty sentence — done
+
+**gate:** mechanical PASS · completion-review pass
+
+**changed:** The Points pane's empty sentence in `viz-lightbox-shell.tsx` is now the shell's shared `emptyLine` (none recorded with no filter, none matching with one), except the serve cut's "serves went out" sentence, which is unchanged. New case in `tests/viz-approach-filters-browser.spec.ts`; no existing assertion edited.

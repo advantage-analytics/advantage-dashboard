@@ -664,3 +664,21 @@ test("the Statistics pane of a player with no approaches says what the stage say
   );
   expect(errors).toEqual([]);
 });
+
+test("the Points pane of a player with no approaches says what the stage says: none recorded with no filter, none matching with one", async ({
+  page,
+}) => {
+  const { dialog, errors } = await openApproaches(page, "&net=you");
+  await toOpponent(dialog);
+  await showPoints(dialog);
+  await expect(dialog).toContainText("No points to play");
+  await expect(dialog).toContainText(/No approaches recorded for .+ yet/);
+  await expect(dialog).not.toContainText("match these filters");
+
+  const panel = await openPanel(page);
+  await panel.getByRole("checkbox", { name: /^Their backhand\b/ }).click();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toContainText("No approaches match these filters");
+  await expect(dialog).not.toContainText("recorded for");
+  expect(errors).toEqual([]);
+});

@@ -396,7 +396,7 @@ ready).
 
 ## T28 · Give the Points pane the shared empty sentence
 
-- **status:** todo
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/viz-lightbox-shell.tsx` (the `emptyLine:` handed to `pointList.render` ~1417; the shared `emptyLine` ~920); `tests/viz-approach-filters-browser.spec.ts` (the `?net=you` option exists)
 - **routes:** `/dashboard/matches/[matchId]`
