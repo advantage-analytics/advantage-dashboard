@@ -323,7 +323,7 @@ const REAL_NET_Y = 11.885;
 const REAL_COURT_LENGTH = 23.77;
 const REAL_SERVICE_Y = 5.485;
 const SERVE_BOX_DEPTH_M = REAL_NET_Y - REAL_SERVICE_Y; // ≈6.4
-const SERVE_BOX_HALF_WIDTH_M = 4.115;
+const SERVE_BOX_HALF_WIDTH_M = SINGLES_HALF_M; // the box spans the singles width
 const SERVE_LINE_TOL_M = 0.2;
 
 /* ── Serve placement metrics ───────────────────────────────────────────────

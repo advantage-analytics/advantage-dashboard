@@ -929,7 +929,6 @@ export function VizLightboxShell({
           many: approachNoun(filters.entry, 2),
         }
       : undefined;
-  const listTotal = pointList?.total ?? 0;
   const legend = legendItemsFor(cut, chart);
   const heat = chart === "heat";
 
@@ -1395,7 +1394,7 @@ export function VizLightboxShell({
                         className="mono tabular text-[10px] text-[var(--ink-400)]"
                         aria-label={draftCountLine(
                           matched.length,
-                          listTotal,
+                          pointList.total,
                           listNoun,
                         )}
                       >
