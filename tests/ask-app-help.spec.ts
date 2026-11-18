@@ -4,6 +4,7 @@ import {
   askUploadAccess,
   asksToUpload,
   readAppHelp,
+  type AskUploadAccess,
 } from "@/lib/services/ask/app-help";
 import type { Workspace } from "@/lib/workspace/types";
 import {
@@ -102,10 +103,12 @@ test.describe("readAppHelp", () => {
   });
 
   const ASK = "I want to upload a match";
+  // `readAppHelp` reads access lazily; these hand it a fixed one.
+  const as = (access: AskUploadAccess) => () => access;
 
   test("a program still being confirmed keeps the link, for SwingVision imports", () => {
     // The team upload page still opens; only video waits (`canSubmitVideo`).
-    expect(readAppHelp(ASK, TEAM, { kind: "pending" })).toEqual({
+    expect(readAppHelp(ASK, TEAM, as({ kind: "pending" }))).toEqual({
       message:
         "ZZ Test Program is still being confirmed, so match video can't be sent yet. SwingVision imports work now.",
       link: {
@@ -118,33 +121,51 @@ test.describe("readAppHelp", () => {
 
   test("a player the upload policy keeps out gets the rule and no link", () => {
     expect(
-      readAppHelp(ASK, TEAM, {
-        kind: "policy",
-        limitedTo: "owner and coaches",
-        staff: false,
-      }),
+      readAppHelp(
+        ASK,
+        TEAM,
+        as({ kind: "policy", limitedTo: "owner_coaches", staff: false }),
+      ),
     ).toEqual({
       message:
-        "ZZ Test Program limits match uploads to owner and coaches, so your account can't add one. A coach can send the match.",
+        "ZZ Test Program lets only the owner and coaches add matches, so your account can't upload one. A coach can send the match.",
       link: null,
     });
   });
 
+  test("under an owner-only policy a player is sent to the owner, not a coach", () => {
+    // Coaches are kept out by the same policy, so "a coach can send it" would
+    // send the player to someone who cannot.
+    expect(
+      readAppHelp(
+        ASK,
+        TEAM,
+        as({ kind: "policy", limitedTo: "owner", staff: false }),
+      )?.message,
+    ).toBe(
+      "ZZ Test Program lets only the owner add matches, so your account can't upload one. The owner can send the match.",
+    );
+  });
+
   test("staff the policy keeps out are told the owner can widen it", () => {
     expect(
-      readAppHelp(ASK, TEAM, {
-        kind: "policy",
-        limitedTo: "owner only",
-        staff: true,
-      })?.message,
+      readAppHelp(
+        ASK,
+        TEAM,
+        as({ kind: "policy", limitedTo: "owner", staff: true }),
+      )?.message,
     ).toBe(
-      "ZZ Test Program limits match uploads to owner only, so your account can't add one. The owner can widen it in Team settings.",
+      "ZZ Test Program lets only the owner add matches, so your account can't upload one. The owner can widen it in Team settings.",
     );
   });
 
   test("a player whose own grant is off, in a program open to everyone", () => {
     expect(
-      readAppHelp(ASK, TEAM, { kind: "policy", limitedTo: null, staff: false }),
+      readAppHelp(
+        ASK,
+        TEAM,
+        as({ kind: "policy", limitedTo: null, staff: false }),
+      ),
     ).toEqual({
       message:
         "ZZ Test Program turns uploads on player by player, and yours isn't on yet. A coach can send the match or turn uploads on for you.",
@@ -154,11 +175,12 @@ test.describe("readAppHelp", () => {
 
   test('no sentence talks about "this match": none has been chosen', () => {
     for (const access of [
-      { kind: "pending" } as const,
-      { kind: "policy", limitedTo: "all staff", staff: false } as const,
-      { kind: "policy", limitedTo: null, staff: false } as const,
-    ]) {
-      expect(readAppHelp(ASK, TEAM, access)?.message).not.toContain(
+      { kind: "pending" },
+      { kind: "policy", limitedTo: "staff", staff: false },
+      { kind: "policy", limitedTo: "owner", staff: false },
+      { kind: "policy", limitedTo: null, staff: false },
+    ] satisfies AskUploadAccess[]) {
+      expect(readAppHelp(ASK, TEAM, as(access))?.message).not.toContain(
         "this match",
       );
     }
@@ -166,8 +188,19 @@ test.describe("readAppHelp", () => {
 
   test("access is a team matter: a personal question still gets the wizard", () => {
     expect(
-      readAppHelp(ASK, PERSONAL_ASK_SCOPE, { kind: "pending" })?.link?.href,
+      readAppHelp(ASK, PERSONAL_ASK_SCOPE, as({ kind: "pending" }))?.link?.href,
     ).toBe("/dashboard/matches/new?return=ask");
+  });
+
+  test("a question about the matches never reads the upload rules", () => {
+    let read = false;
+    expect(
+      readAppHelp("How is my second serve?", TEAM, () => {
+        read = true;
+        return { kind: "allowed" };
+      }),
+    ).toBeNull();
+    expect(read).toBe(false);
   });
 
   test("a question about the matches reads nothing", () => {
@@ -349,13 +382,13 @@ test.describe("askUploadAccess", () => {
   test("the policy is asked first: a kept-out player is policy even while pending", () => {
     expect(
       askUploadAccess(team({ role: "player", canSubmitVideo: false })),
-    ).toEqual({ kind: "policy", limitedTo: "all staff", staff: false });
+    ).toEqual({ kind: "policy", limitedTo: "staff", staff: false });
   });
 
   test("a coach under an owner-only policy is staff the owner can let in", () => {
     expect(askUploadAccess(team({ uploadPolicy: "owner" }))).toEqual({
       kind: "policy",
-      limitedTo: "owner only",
+      limitedTo: "owner",
       staff: true,
     });
   });

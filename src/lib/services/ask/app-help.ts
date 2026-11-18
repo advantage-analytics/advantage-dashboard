@@ -4,7 +4,7 @@ import { WIZARD_FROM_ASK_HREF } from "@/lib/matches/new-match-visit";
 import {
   canUploadForProgram,
   isProgramStaff,
-  uploadPolicyLabel,
+  type UploadPolicy,
   type Workspace,
 } from "@/lib/workspace/types";
 
@@ -85,14 +85,17 @@ export function asksToUpload(question: string): boolean {
  *   only SwingVision imports go through until it is (`canSubmitVideo`).
  * - `policy` — the program's upload policy keeps this member out
  *   (`canUploadForProgram()`): the page turns them away. `limitedTo` is the
- *   policy's label in a sentence ("owner and coaches"), or null when uploads
- *   are open to everyone and only this player's own grant is off; `staff`
- *   decides who can change it.
+ *   policy, or null when uploads are open to everyone and only this player's
+ *   own grant is off; `staff` decides who can change it.
  */
 export type AskUploadAccess =
   | { kind: "allowed" }
   | { kind: "pending" }
-  | { kind: "policy"; limitedTo: string | null; staff: boolean };
+  | {
+      kind: "policy";
+      limitedTo: Exclude<UploadPolicy, "everyone"> | null;
+      staff: boolean;
+    };
 
 const ALLOWED: AskUploadAccess = { kind: "allowed" };
 
@@ -106,9 +109,7 @@ export function askUploadAccess(workspace: Workspace): AskUploadAccess {
     return {
       kind: "policy",
       limitedTo:
-        workspace.uploadPolicy === "everyone"
-          ? null
-          : uploadPolicyLabel(workspace.uploadPolicy).toLowerCase(),
+        workspace.uploadPolicy === "everyone" ? null : workspace.uploadPolicy,
       staff: isProgramStaff(workspace),
     };
   }
@@ -123,11 +124,14 @@ export function askUploadAccess(workspace: Workspace): AskUploadAccess {
  * own upload button by, so nobody is sent to a page that turns them away. Its
  * sentences are Ask's own: the upload wizard's refusals talk about "this
  * match", and here no match has been chosen.
+ *
+ * `access` is read only once the question has asked to upload, so a team
+ * question about the matches never reads the upload rules at all.
  */
 export function readAppHelp(
   question: string,
   scope: AskScope,
-  access: AskUploadAccess = ALLOWED,
+  access: () => AskUploadAccess = () => ALLOWED,
 ): AskAppHelp | null {
   if (!asksToUpload(question)) return null;
   if (scope.kind === "personal") {
@@ -141,7 +145,8 @@ export function readAppHelp(
     };
   }
   const name = scope.programName;
-  switch (access.kind) {
+  const upload = access();
+  switch (upload.kind) {
     case "allowed":
       return {
         message: `Match videos for ${name} are sent from the upload page.`,
@@ -162,15 +167,32 @@ export function readAppHelp(
         },
       };
     case "policy":
-      return {
-        message:
-          access.limitedTo === null
-            ? `${name} turns uploads on player by player, and yours isn't on yet. A coach can send the match or turn uploads on for you.`
-            : `${name} limits match uploads to ${access.limitedTo}, so your account can't add one. ` +
-              (access.staff
-                ? "The owner can widen it in Team settings."
-                : "A coach can send the match."),
-        link: null,
-      };
+      return { message: policyRefusal(name, upload), link: null };
   }
+}
+
+/** Who a policy lets add matches, as the sentence names them. */
+const ALLOWED_UPLOADERS = {
+  owner: "the owner",
+  owner_coaches: "the owner and coaches",
+  staff: "staff",
+} as const;
+
+/**
+ * Why the policy keeps this member out, and who can help — never someone the
+ * same policy keeps out too: under an owner-only policy the owner sends the
+ * match, not a coach.
+ */
+function policyRefusal(
+  name: string,
+  access: Extract<AskUploadAccess, { kind: "policy" }>,
+): string {
+  if (access.limitedTo === null) {
+    return `${name} turns uploads on player by player, and yours isn't on yet. A coach can send the match or turn uploads on for you.`;
+  }
+  const lead = `${name} lets only ${ALLOWED_UPLOADERS[access.limitedTo]} add matches, so your account can't upload one.`;
+  if (access.staff) return `${lead} The owner can widen it in Team settings.`;
+  return access.limitedTo === "owner"
+    ? `${lead} The owner can send the match.`
+    : `${lead} A coach can send the match.`;
 }

@@ -104,11 +104,7 @@ import {
 } from "@/lib/services/ask/cache";
 import { isAskAgentEnabled } from "@/lib/services/ask/agent";
 import { askCoachMode, isAskCoachModeEnabled } from "@/lib/services/ask/coach";
-import {
-  askUploadAccess,
-  asksToUpload,
-  readAppHelp,
-} from "@/lib/services/ask/app-help";
+import { askUploadAccess, readAppHelp } from "@/lib/services/ask/app-help";
 import { retrieveAskExamples } from "@/lib/services/ask/examples";
 import { askAdapterModel, askStageModels } from "@/lib/services/ask/model";
 import {
@@ -431,14 +427,14 @@ export async function POST(request: Request): Promise<Response> {
   // with the page that does it (`app-help.ts`). Read here, before the
   // embedding, the cache and the reservation: it needs none of them, and a
   // viewer with no questions left still gets the link.
-  // The upload rules are read only for a question that asks to upload.
-  const appHelp = asksToUpload(body.question)
-    ? readAppHelp(
-        body.question,
-        scope,
-        teamWorkspace ? askUploadAccess(teamWorkspace) : undefined,
-      )
-    : null;
+  // The upload rules are read lazily: only once the question has asked to
+  // upload, so a team question about the matches never reads them.
+  const uploadWorkspace = teamWorkspace;
+  const appHelp = readAppHelp(
+    body.question,
+    scope,
+    uploadWorkspace ? () => askUploadAccess(uploadWorkspace) : undefined,
+  );
 
   // The question's embedding, for the nearest rated examples (`examples.ts`).
   // Started here, beside the reads, since it needs nothing but the question;
