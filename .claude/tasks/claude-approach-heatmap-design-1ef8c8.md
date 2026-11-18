@@ -406,3 +406,16 @@ ready).
   - [ ] The spec asserts that with a filter ticked that nothing matches the Points pane reads "No approaches match these filters"
   - [ ] No existing assertion in `tests/viz-approach-filters-browser.spec.ts`, `tests/viz-lightbox-browser.spec.ts` or `tests/lightbox-points.spec.ts` is edited
 - **notes:** From /pr-check receipt 38059d5; T21 follow-up 1. The pane builds its own `No ${result.noun} match these filters.` whatever the filter state, so a subject with no approaches reads "No points to play / No approaches match these filters." beside a stage and Statistics pane that say "No approaches recorded for … yet". The fix is in the shell, not `lightbox-point-list.tsx`, which only prints what it is handed. The "No points to play" heading stays. The shared line has no trailing full stop; the pane's had one. Model the two cases on T21's `?net=you` cases in the same spec.
+
+## T29 · Stop the Approaches copy saying "you": rename "Your error" and "How you came in"
+
+- **status:** doing
+- **model:** sonnet
+- **files:** (guess) `src/components/dashboard/matches/match-detail/match-filters/approach.ts` (`APPROACH_BUCKET_LABEL["own-error"]` ~56); `shots/viz-model.ts` (the `entry` filter phrase label ~1953); `shots/lightbox-filters.tsx` (section label ~210, comment ~148); `shots/default-cuts.ts` (comments ~24, ~71); `tests/viz-approach-filters-browser.spec.ts` (~26, 154, 189, 543); `tests/player-season-viz.spec.ts` (~2668, 2777, 2864); `tests/viz-model.spec.ts` (~3437, 3458, 3484, 3505)
+- **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`
+- **done when:**
+  - [ ] `grep -rn "Your error\|How you came in" src tests` returns nothing: the "How it ended" row label is "Error at the net" (`APPROACH_BUCKET_LABEL["own-error"]`), and the filter group heading, the `entry` filter phrase and every comment naming them say "Way to the net"
+  - [ ] The filter strip's loosened phrase reads "Way to the net: any", and the section list in `tests/viz-approach-filters-browser.spec.ts` (`APPROACH_SECTIONS`) is `["Way to the net", "Approach to", "Direction"]`
+  - [ ] The assertions that pinned the old strings (`tests/viz-approach-filters-browser.spec.ts`, `tests/player-season-viz.spec.ts`, `tests/viz-model.spec.ts`) now assert "Error at the net" or "Way to the net" in the same positions, with every count, ordering and other expected string unchanged
+  - [ ] No other label, constant, key or id changes: the `"own-error"` and `entry` keys, every other `APPROACH_BUCKET_LABEL` entry, and the "Approach to" and "Direction" labels are untouched, and the diff is only these string replacements
+- **notes:** From /pr-check receipt 5919b9e not-ready (pipeline-guardrails-reviewer). Repo rule: only the player the report is about reads "you". "Your error" counts someone else's errors when `player=opponent` and for coaches and teammates, and "How you came in" has the same problem. Replacement wording: "Error at the net" and "Way to the net". The other "came in" strings under `src/` ("Came in by" in `net-game-*`, `head-to-head-rows.ts`) are different surfaces and must not change. Keep any sentence-casing or capitalisation of the surrounding comments as is.
