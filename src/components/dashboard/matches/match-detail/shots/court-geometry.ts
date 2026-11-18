@@ -1343,8 +1343,12 @@ export const VIEWER_LANDING_FRAME = {
  * on the strip ends draw. It is a little shorter than `courtFrame`'s 44-unit
  * apron so "Full court" is still a step out from here, not the same view.
  */
-// ≈1.9 m (6.2 ft) past each baseline.
-const VIEWER_APPROACH_APRON = 32;
+// ≈2.1 m (7 ft) past each baseline. T23: 36, up from 32 — the apron words
+// open at a landing cut's type size now (`viewerApproachLabelScale`), and at
+// 32 "Placement" over the wing names left no room above it for the mono
+// face's ascent. Keep it under ~43, where this frame is as tall as
+// `courtFrame` and "Full court" stops being a step out.
+const VIEWER_APPROACH_APRON = 36;
 export const VIEWER_APPROACH_FRAME = {
   minX: VIEWER_COURT.courtFrame.minX,
   minY: VIEWER_COURT.farBaselineY - VIEWER_APPROACH_APRON,
@@ -1367,6 +1371,24 @@ function frameFitZ(
     stage.h / (frame.h * pxPerUnit),
   );
   return clampNum(fitZ * multiplier, ZOOM_MIN, ZOOM_MAX);
+}
+
+/**
+ * How much larger the Approaches court draws its words than every landing
+ * cut does, on `stage`. The art's words are SVG `font-size`s in viewBox
+ * units, so their on-screen size is size × zoom, and Approaches opens on the
+ * whole length (`VIEWER_APPROACH_FRAME`) — about half the zoom the landing
+ * cuts open at (`VIEWER_LANDING_FRAME`). Multiplying its type by the ratio of
+ * the two frames' fits on the SAME stage opens its band labels at exactly
+ * the size Returns opens its own at. A ratio, not one fixed multiplier,
+ * because `frameFitZ` takes the smaller of the width and height fits: on a
+ * tall, narrow stage both frames are width-bound and this is 1. Never below
+ * 1 — the landing frame is the shorter of the two at the same width.
+ */
+export function viewerApproachLabelScale(stage: Size): number {
+  const landing = frameFitZ(VIEWER_LANDING_FRAME, stage);
+  const approach = frameFitZ(VIEWER_APPROACH_FRAME, stage);
+  return Math.max(1, landing / approach);
 }
 
 /**

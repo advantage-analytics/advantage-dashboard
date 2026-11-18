@@ -140,10 +140,12 @@ function BandRate({
   y,
   pct,
   count,
+  scale,
 }: {
   y: number;
   pct: number;
   count: number;
+  scale: number;
 }) {
   const shownPct = useTweenedNumber(pct);
   const shownCount = useTweenedNumber(count);
@@ -154,13 +156,13 @@ function BandRate({
       fill={LINE_COLOR}
       fillOpacity={0.8}
       fontFamily="var(--font-sans)"
-      fontSize={BAND_RATE_SIZE}
+      fontSize={BAND_RATE_SIZE * scale}
       className="animate-[fadeIn_var(--duration-enter)_var(--ease-chart)]"
     >
       {shownPct}%
       <tspan
         fontFamily="var(--font-mono)"
-        fontSize={BAND_COUNT_SIZE}
+        fontSize={BAND_COUNT_SIZE * scale}
         fillOpacity={0.6}
       >
         {` · ${shownCount}`}
@@ -187,6 +189,14 @@ export interface VizBandsOverlayProps {
    */
   editing?: boolean;
   zones?: boolean;
+  /**
+   * Multiplies the labels' type (and the inset that keeps a label inside
+   * its band) — the Approaches court opens on the whole length, at about
+   * half the zoom of a landing cut, and passes
+   * `viewerApproachLabelScale(stage)` so its labels open at the size every
+   * other cut's do. Omitted: 1, every other cut's own sizes.
+   */
+  labelScale?: number;
 }
 
 export const VizBandsOverlay = memo(function VizBandsOverlay({
@@ -196,6 +206,7 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
   statRows,
   editing = false,
   zones = false,
+  labelScale = 1,
 }: VizBandsOverlayProps) {
   const edges = viewerBandEdges(kind, dividersFt);
   // One rect per row, between consecutive edges. A mismatch means a caller
@@ -221,9 +232,9 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
 
         const caps = editing ? bandEditingLabel(row) : bandCaps(row);
         const labelY =
-          height >= BAND_LABEL_MIN_H
-            ? top + BAND_LABEL_INSET
-            : (top + bottom) / 2 + 2.2;
+          height >= BAND_LABEL_MIN_H * labelScale
+            ? top + BAND_LABEL_INSET * labelScale
+            : (top + bottom) / 2 + 2.2 * labelScale;
 
         const stat = statRows?.find((r) => r.key === row.key) ?? null;
         const hasRate =
@@ -250,19 +261,25 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
               style={BAND_WASH_TRANSITION}
             />
             <text
+              data-viz-band-label=""
               x={BAND_LABEL_X}
               y={labelY}
               textAnchor="end"
               fill={LINE_COLOR}
               fillOpacity={0.72}
               fontFamily="var(--font-mono)"
-              fontSize={BAND_LABEL_SIZE}
-              letterSpacing={BAND_LABEL_TRACKING}
+              fontSize={BAND_LABEL_SIZE * labelScale}
+              letterSpacing={BAND_LABEL_TRACKING * labelScale}
             >
               {caps}
             </text>
             {hasRate && (
-              <BandRate y={labelY} pct={stat.winPct ?? 0} count={stat.count} />
+              <BandRate
+                y={labelY}
+                pct={stat.winPct ?? 0}
+                count={stat.count}
+                scale={labelScale}
+              />
             )}
           </g>
         );

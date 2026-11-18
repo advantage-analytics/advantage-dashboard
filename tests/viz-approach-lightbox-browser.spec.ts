@@ -384,3 +384,106 @@ test("another cut's opened court draws no apron words", async ({ page }) => {
   }
   expect(errors).toEqual([]);
 });
+
+/* ── T23: the opened court's words open at the size Returns' do ────────── */
+
+/**
+ * The art's words are SVG `font-size`s in viewBox units, so their size on
+ * screen is size × the opening zoom — and Approaches opens on the whole
+ * length, about half the zoom a landing cut opens at. Measured on the real
+ * shell with the cut's saved bands drawn (`?bands=1`), against Returns
+ * (`returnPlacement`) opened at the same viewport.
+ */
+const VIEWPORTS = [
+  { width: 1512, height: 982 },
+  { width: 1180, height: 820 },
+] as const;
+
+/** The court at its opening frame, on `cut`, with its bands drawn. */
+async function openBanded(
+  page: Page,
+  cut: "approaches" | "returnPlacement",
+  viewport: { width: number; height: number },
+) {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize(viewport);
+  await page.goto(`${origin}/?hand=right&bands=1&cut=${cut}`);
+  const dialog = page.getByRole("dialog", { name: "Approaches" });
+  await expect(dialog).toBeVisible();
+  const stage = dialog.locator("[data-court-stage]");
+  await expect(stage.locator("[data-viz-mark]")).toHaveCount(4);
+  await expect(stage.locator("[data-viz-band-label]").first()).toBeVisible();
+  return { stage, errors };
+}
+
+/** The first band's caps label — the same row on both cuts. */
+async function firstBandLabel(stage: ReturnType<Page["locator"]>) {
+  return (await stage.locator("[data-viz-band-label]").first().boundingBox())!;
+}
+
+function overlaps(a: Box, b: Box): boolean {
+  return (
+    a.x < b.x + b.width &&
+    b.x < a.x + a.width &&
+    a.y < b.y + b.height &&
+    b.y < a.y + a.height
+  );
+}
+
+test("a depth band label opens at the same height on Approaches as on Returns", async ({
+  page,
+}) => {
+  const viewport = VIEWPORTS[0];
+  const returns = await openBanded(page, "returnPlacement", viewport);
+  const returnsLabel = await firstBandLabel(returns.stage);
+  const approaches = await openBanded(page, "approaches", viewport);
+  const approachLabel = await firstBandLabel(approaches.stage);
+  expect(returnsLabel.height).toBeGreaterThan(0);
+  expect(Math.abs(approachLabel.height - returnsLabel.height)).toBeLessThan(
+    0.5,
+  );
+  expect([...returns.errors, ...approaches.errors]).toEqual([]);
+});
+
+for (const viewport of VIEWPORTS) {
+  test(`at ${viewport.width}×${viewport.height} every apron word opens no smaller than Returns' band label, and no two words or band labels overlap`, async ({
+    page,
+  }) => {
+    const returns = await openBanded(page, "returnPlacement", viewport);
+    const bandHeight = (await firstBandLabel(returns.stage)).height;
+    const { stage, errors } = await openBanded(page, "approaches", viewport);
+    const stageBox = (await stage.boundingBox())!;
+    const { all } = await apronLabels(stage);
+    expect(all.map((l) => l.text).sort()).toEqual(
+      ["Contact", "Middle", "Placement", "Their BH", "Their FH"].sort(),
+    );
+    for (const label of all) {
+      expect(label.box.height, label.text).toBeGreaterThanOrEqual(bandHeight);
+      expect(inside(label.box, stageBox), label.text).toBe(true);
+    }
+    // No two apron words share any of the stage.
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) {
+        expect(
+          overlaps(all[i].box, all[j].box),
+          `${all[i].text} / ${all[j].text}`,
+        ).toBe(false);
+      }
+    }
+    // Nor does any word sit on a band's label or its rate.
+    const bandTexts = stage.locator("[data-viz-bands] text");
+    const n = await bandTexts.count();
+    expect(n).toBeGreaterThan(0);
+    for (let i = 0; i < n; i++) {
+      const band = (await bandTexts.nth(i).boundingBox())!;
+      for (const label of all) {
+        expect(overlaps(label.box, band), `${label.text} / band ${i}`).toBe(
+          false,
+        );
+      }
+    }
+    expect([...returns.errors, ...errors]).toEqual([]);
+  });
+}

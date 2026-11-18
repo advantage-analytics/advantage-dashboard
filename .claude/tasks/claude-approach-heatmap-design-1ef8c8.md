@@ -326,7 +326,7 @@ ready).
 
 ## T23 · Size the opened Approaches court's labels like Returns
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/lightbox-court.tsx` (`ApproachApronLabels` ~763, the `APPROACH_*_LABEL_Y` constants ~141, the `VizBandsOverlay` call ~595); `shots/viz-bands-overlay.tsx` (`BAND_LABEL_SIZE` and the other band type sizes); `shots/court-geometry.ts` (`VIEWER_APPROACH_FRAME`, `VIEWER_LANDING_FRAME`, `frameFitZ`); `shots/court-art.tsx` (`APPROACH_SIDE_LABEL_SIZE`, `APPROACH_LANE_LABEL_SIZE`); `tests/viz-approach-lightbox-browser.spec.ts` + `tests/fixtures/viz-approach-lightbox-harness.tsx`; `tests/court-geometry.spec.ts`
 - **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`

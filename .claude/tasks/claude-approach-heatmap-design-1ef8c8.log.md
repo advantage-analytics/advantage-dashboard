@@ -220,3 +220,14 @@ is the runner's. Newest entries at the bottom.
 
 1. With the bar gone, the gap above "Won x of N" on that card is 10px smaller than on other cards — check on screen.
 2. Other cuts' cards still draw an empty grey track when they have nothing; left alone as out of scope.
+
+## T23 · Size the opened Approaches court's labels like Returns — done
+
+**gate:** mechanical PASS · completion-review pass
+
+**changed:** New `viewerApproachLabelScale(stage)` in `court-geometry.ts` (Returns opening zoom ÷ Approaches opening zoom on the actual stage, floored at 1); the lightbox passes it to the band overlay (`labelScale` prop, default 1), the apron words (lightbox-only sizes, Ys stacked from the font extent) and the empty-bands text, on Approaches only. `VIEWER_APPROACH_APRON` 32 → 36 so "Placement" clears the stage with the mono face. Labels keep scaling with zoom after the opening frame. Harness `?bands=1`; new cases in `viz-approach-lightbox-browser.spec.ts` and `court-geometry.spec.ts`. Wall card sizes untouched.
+
+**follow-ups:**
+
+1. The test browser draws the labels in Times (no next/font inside SVG in the harness); the layout is sized for Roboto Mono's taller ascent — check the opened court on screen.
+2. "Full court" is now only ~3% wider than the opening frame (was 4.5%); no geometry test pins that margin.

@@ -13,9 +13,7 @@ import {
   APPROACH_LABEL_INK,
   APPROACH_LABEL_TRACKING,
   APPROACH_LANE_LABEL_OPACITY,
-  APPROACH_LANE_LABEL_SIZE,
   APPROACH_SIDE_LABEL_OPACITY,
-  APPROACH_SIDE_LABEL_SIZE,
   APRON_FILL,
   approachLaneText,
   leftLaneIsForehand,
@@ -33,6 +31,7 @@ import {
   projectViewerDot,
   starPoints,
   trianglePointsFor,
+  viewerApproachLabelScale,
   viewerArtPoint,
   viewerHeatFilterRegion,
   viewerBandEdges,
@@ -133,14 +132,41 @@ const ZONE_COUNT_Y = VIEWER_COURT.netY + 21;
 const DEUCE_LABEL_X = (VIEWER_COURT.singlesLeft + VIEWER_COURT.centreX) / 2;
 const AD_LABEL_X = (VIEWER_COURT.centreX + VIEWER_COURT.singlesRight) / 2;
 
-// The Approaches apron (`VIEWER_APPROACH_FRAME`, 32 units past each
+// The Approaches apron (`VIEWER_APPROACH_FRAME`'s apron past each
 // baseline): "Placement" and the wing names above the far baseline, "Contact"
-// below the near one — on the apron only, never on the court. Baselines
-// measured so each line's capitals clear the one below by ~6 units and the
-// top line clears the frame's edge by about as much.
-const APPROACH_LANE_LABEL_Y = VIEWER_COURT.farBaselineY - 8;
-const APPROACH_PLACEMENT_LABEL_Y = VIEWER_COURT.farBaselineY - 20;
-const APPROACH_CONTACT_LABEL_Y = VIEWER_COURT.nearBaselineY + 20;
+// below the near one — on the apron only, never on the court.
+//
+// T23: the opened court multiplies these by `viewerApproachLabelScale`, so
+// they open no smaller than a landing cut's band labels (5.6 units at that
+// cut's zoom) — the wing names at a hair over that, the side words a step
+// up. They are the lightbox's own: the wall card's `ApproachCourtArt` keeps
+// `court-art.tsx`'s `APPROACH_*_LABEL_SIZE`.
+const APPROACH_LIGHTBOX_SIDE_SIZE = 6.4;
+const APPROACH_LIGHTBOX_LANE_SIZE = 5.8;
+// The lines are stacked by the face's own extent rather than at fixed Ys,
+// so they clear each other at every scale: a line's box runs about an
+// ascent above its baseline and a descent below it (`--font-mono`'s metrics,
+// rounded up), and `APPROACH_APRON_GAP` units (× the scale) separate a line
+// from the next and the wing line from the baseline.
+const APRON_FONT_ASCENT = 1.05;
+const APRON_FONT_DESCENT = 0.3;
+const APPROACH_APRON_GAP = 1.2;
+
+/** The apron words' sizes and baselines at `scale`. */
+function approachApronLayout(scale: number) {
+  const side = APPROACH_LIGHTBOX_SIDE_SIZE * scale;
+  const lane = APPROACH_LIGHTBOX_LANE_SIZE * scale;
+  const gap = APPROACH_APRON_GAP * scale;
+  const laneY = VIEWER_COURT.farBaselineY - gap - APRON_FONT_DESCENT * lane;
+  return {
+    side,
+    lane,
+    laneY,
+    placementY:
+      laneY - APRON_FONT_ASCENT * lane - gap - APRON_FONT_DESCENT * side,
+    contactY: VIEWER_COURT.nearBaselineY + gap + APRON_FONT_ASCENT * side,
+  };
+}
 /** Centre of each hitter's-view third of the singles court (`laneOf`). */
 const APPROACH_LANE_X = (() => {
   const third = (VIEWER_COURT.singlesRight - VIEWER_COURT.singlesLeft) / 3;
@@ -358,6 +384,11 @@ export function LightboxCourt({
   const court = heat ? HEAT_COURT_FILL : COURT_FILL;
   const vb = VIEWER_COURT.viewBox;
   const z = transform.z;
+  // T23: the whole length opens at about half a landing cut's zoom, and the
+  // art's type is in viewBox units — so the Approaches court's words are
+  // drawn larger by the ratio of the two frames' fits on this stage. They
+  // still scale with the zoom after that, as on every cut.
+  const labelScale = cut === "approaches" ? viewerApproachLabelScale(stage) : 1;
 
   const highlighted = cut === "serve" ? highlightedZoneKeys(filters) : null;
   // The Zones chart IS its six cells — the same white wash, scaled to the
@@ -592,7 +623,11 @@ export function LightboxCourt({
             make the baseline itself look dimmed. Outside `MarkLayer` and
             memo'd on its own props, so a pan frame never re-renders it. */}
           {bands !== null && (
-            <VizBandsOverlay {...bands} zones={chart === "zones"} />
+            <VizBandsOverlay
+              {...bands}
+              zones={chart === "zones"}
+              labelScale={labelScale}
+            />
           )}
 
           <CourtLines />
@@ -604,7 +639,7 @@ export function LightboxCourt({
               textAnchor="middle"
               fill={LINE_COLOR}
               fontFamily="var(--font-sans)"
-              fontSize={8}
+              fontSize={8 * labelScale}
             >
               {isPlacementCut(cut)
                 ? "No depth bands selected"
@@ -614,6 +649,7 @@ export function LightboxCourt({
 
           {cut === "approaches" && (
             <ApproachApronLabels
+              scale={labelScale}
               leftIsForehand={
                 opponentHand !== undefined
                   ? opponentHand !== "left"
@@ -760,23 +796,30 @@ export function LightboxCourt({
  * wing over each third just past the far baseline, "Contact" under the near
  * half. Under the marks, and deaf to the pointer, so no word takes a hover.
  */
-function ApproachApronLabels({ leftIsForehand }: { leftIsForehand: boolean }) {
+function ApproachApronLabels({
+  leftIsForehand,
+  scale,
+}: {
+  leftIsForehand: boolean;
+  scale: number;
+}) {
   const laneText = approachLaneText(leftIsForehand);
+  const layout = approachApronLayout(scale);
   return (
     <g
       data-approach-labels=""
       aria-hidden="true"
       fill={APPROACH_LABEL_INK}
       fontFamily="var(--font-mono)"
-      letterSpacing={APPROACH_LABEL_TRACKING}
+      letterSpacing={APPROACH_LABEL_TRACKING * scale}
       textAnchor="middle"
       style={{ textTransform: "uppercase", pointerEvents: "none" }}
     >
       <text
         data-approach-label="placement"
         x={VIEWER_COURT.centreX}
-        y={APPROACH_PLACEMENT_LABEL_Y}
-        fontSize={APPROACH_SIDE_LABEL_SIZE}
+        y={layout.placementY}
+        fontSize={layout.side}
         fillOpacity={APPROACH_SIDE_LABEL_OPACITY}
       >
         Placement
@@ -784,8 +827,8 @@ function ApproachApronLabels({ leftIsForehand }: { leftIsForehand: boolean }) {
       <text
         data-approach-label="contact"
         x={VIEWER_COURT.centreX}
-        y={APPROACH_CONTACT_LABEL_Y}
-        fontSize={APPROACH_SIDE_LABEL_SIZE}
+        y={layout.contactY}
+        fontSize={layout.side}
         fillOpacity={APPROACH_SIDE_LABEL_OPACITY}
       >
         Contact
@@ -795,8 +838,8 @@ function ApproachApronLabels({ leftIsForehand }: { leftIsForehand: boolean }) {
           key={lane}
           data-approach-lane={lane}
           x={APPROACH_LANE_X[lane]}
-          y={APPROACH_LANE_LABEL_Y}
-          fontSize={APPROACH_LANE_LABEL_SIZE}
+          y={layout.laneY}
+          fontSize={layout.lane}
           fillOpacity={APPROACH_LANE_LABEL_OPACITY}
         >
           {laneText[lane]}

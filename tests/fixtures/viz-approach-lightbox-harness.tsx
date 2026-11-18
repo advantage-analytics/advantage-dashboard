@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { VizLightboxShell } from "@/components/dashboard/matches/match-detail/shots/viz-lightbox-shell";
 import type { Hand } from "@/components/dashboard/matches/match-detail/match-filters/shot-geometry";
 import {
+  bandZonesFor,
   EMPTY_VIZ_FILTERS,
   type Cut,
   computeVizStats,
@@ -22,6 +23,9 @@ import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
  * Query: `?hand=left|right|unknown` hands the shell the opponent's hand (the
  * apron's wing names); without it the shell gets none, as on the season's
  * court. `?cut=<cut>` opens the same dots on another cut instead.
+ * `?bands=1` draws the cut's saved depth/contact bands (`DEFAULT_BANDS`,
+ * through `bandZonesFor`, as `use-viz-view.ts` does); without it the court
+ * has none.
  */
 
 const params = new URLSearchParams(window.location.search);
@@ -33,6 +37,7 @@ const OPPONENT_HAND: Hand | null | undefined =
       ? null
       : undefined;
 const CUT = (params.get("cut") ?? "approaches") as Cut;
+const BANDS = params.get("bands") === "1";
 
 function meta(extra: Partial<VizDotMeta>): VizDotMeta {
   return {
@@ -111,6 +116,10 @@ function Approaches() {
     () => computeVizStats([], CUT, filters, true, result, DEFAULT_BANDS, "ft"),
     [filters, result],
   );
+  const bandZones = useMemo(
+    () => (BANDS ? bandZonesFor(CUT, DEFAULT_BANDS, "ft", stats) : null),
+    [stats],
+  );
   return (
     <VizLightboxShell
       cut={CUT}
@@ -121,7 +130,7 @@ function Approaches() {
       stats={stats}
       subjectName="Avery Kim"
       unit="ft"
-      bandZones={null}
+      bandZones={bandZones}
       hasFilters={false}
       statRowDots={() => null}
       title="Approaches"

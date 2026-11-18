@@ -33,6 +33,7 @@ import {
   VIEWER_COURT,
   projectViewerDot,
   viewerInitialTransform,
+  viewerApproachLabelScale,
   viewerFullCourtTransform,
   viewerLandingHalf,
   VIEWER_LANDING_FRAME,
@@ -1423,6 +1424,32 @@ test.describe("viewerInitialTransform — approaches", () => {
         expect(t.py + nearBaseline.y * t.z).toBeCloseTo(s.h * (500 / 950), 3);
       }
     }
+  });
+});
+
+/**
+ * T23: the Approaches court's words are drawn larger by
+ * `viewerApproachLabelScale`, so at the two cuts' opening zooms a word of the
+ * same size reads the same on screen: scale × the Approaches zoom is the
+ * landing cuts' zoom, on every stage shape.
+ */
+test.describe("viewerApproachLabelScale", () => {
+  test("brings the Approaches opening zoom up to a landing cut's, and is 1 where both frames are width-bound", () => {
+    for (const s of [
+      { w: 700, h: 900 },
+      { w: 1100, h: 640 },
+      { w: 820, h: 560 },
+      { w: 360, h: 1400 },
+    ]) {
+      const scale = viewerApproachLabelScale(s);
+      expect(scale).toBeGreaterThanOrEqual(1);
+      expect(scale * viewerInitialTransform("approaches", s).z).toBeCloseTo(
+        viewerInitialTransform("returnPlacement", s).z,
+        6,
+      );
+    }
+    // Tall and narrow: the width decides both fits.
+    expect(viewerApproachLabelScale({ w: 360, h: 1400 })).toBeCloseTo(1, 6);
   });
 });
 
