@@ -2,13 +2,15 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 
-import { getLabelPayReport } from "@/lib/data/practice-server";
+import { getLabelPayReport, groupSittings } from "@/lib/data/practice-server";
 import type { AdminClient } from "@/lib/supabase/admin";
 
 /**
  * The label pay report (`/admin/labels/pay`, T39): a non-practice session is
  * paid once, on the UTC day it was first published, to whoever made its first
- * submission; it reads "checked" once an admin has passed it. Offline — the
+ * submission; it reads "checked" once an admin has passed it. Time worked is
+ * that labeller's own work minutes on it, folded into sittings. Practice sets
+ * are not in the report. Offline — the
  * loader runs on an injected admin client that filters in-memory rows the way
  * PostgREST would.
  */
@@ -34,6 +36,7 @@ interface SessionFixture {
   published_at: string | null;
   checked_at: string | null;
   job: typeof HOUR_JOB | null;
+  match: { player1_name: string | null; player2_name: string | null } | null;
 }
 
 function session(
@@ -46,6 +49,7 @@ function session(
     published_at: null,
     checked_at: null,
     job: HOUR_JOB,
+    match: { player1_name: "Reyes", player2_name: "Okafor" },
     ...over,
   };
 }
@@ -60,6 +64,7 @@ function fakeDb(
     label_sessions: SessionFixture[];
     label_submissions: Row[];
     users: Row[];
+    label_work_beats?: Row[];
   },
   reads: string[][] = [],
 ): AdminClient {
@@ -68,6 +73,7 @@ function fakeDb(
     label_sessions: sessions,
     label_submissions: tables.label_submissions,
     users: tables.users,
+    label_work_beats: tables.label_work_beats ?? [],
   };
 
   return {
@@ -182,6 +188,9 @@ test.describe("label pay report", () => {
       publishedAt: "2026-11-10T09:00:00Z",
       state: "published",
       videoHours: 1,
+      match: "Reyes v Okafor",
+      workedMinutes: null,
+      sittings: [],
     });
     expect(result.rows).toEqual([
       {
@@ -192,7 +201,8 @@ test.describe("label pay report", () => {
         publishedHours: 1,
         checkedSessions: 0,
         checkedHours: 0,
-        practiceSets: 0,
+        workedMinutes: 0,
+        untrackedSessions: 1,
       },
     ]);
   });
@@ -269,32 +279,6 @@ test.describe("label pay report", () => {
     expect(result.rows).toEqual([]);
   });
 
-  test("practice sets still count by their first submission, never as hours", async () => {
-    const result = await report({
-      label_sessions: [
-        session({ id: "p-in", kind: "practice", status: "submitted" }),
-        session({ id: "p-before", kind: "practice", status: "submitted" }),
-        session({ id: "p-open", kind: "practice", status: "labelling" }),
-      ],
-      label_submissions: [
-        submission("p-in", ANA, "2026-11-03T09:00:00Z"),
-        submission("p-before", ANA, "2026-10-28T09:00:00Z"),
-        submission("p-open", ANA, "2026-11-04T09:00:00Z"),
-      ],
-      users,
-    });
-
-    expect(result.lines).toEqual([]);
-    expect(result.rows).toEqual([
-      expect.objectContaining({
-        labellerId: ANA,
-        practiceSets: 1,
-        publishedSessions: 0,
-        checkedSessions: 0,
-      }),
-    ]);
-  });
-
   test("never reads label_submissions whole: only the range, and the sessions it names", async () => {
     const reads: string[][] = [];
     const result = await report(
@@ -322,9 +306,8 @@ test.describe("label pay report", () => {
     expect(result.lines).toEqual([
       expect.objectContaining({ sessionId: "s-in", labellerId: ANA }),
     ]);
-    expect(result.rows.find((r) => r.labellerId === BEN)).toMatchObject({
-      practiceSets: 1,
-    });
+    // Practice sets are not in the report at all.
+    expect(result.rows.map((r) => r.labellerId)).toEqual([ANA]);
     for (const filters of reads) {
       expect(
         filters.includes("submitted_at gte") ||
@@ -332,6 +315,83 @@ test.describe("label pay report", () => {
         filters.join(", "),
       ).toBe(true);
     }
+  });
+
+  test("time worked is the paid labeller's own minutes, in sittings split by a long gap", async () => {
+    const beat = (sessionId: string, by: string, minute: string): Row => ({
+      session_id: sessionId,
+      user_id: by,
+      minute,
+    });
+    const result = await report({
+      label_sessions: [
+        session({
+          id: "s-worked",
+          published_at: "2026-11-17T15:00:00Z",
+          checked_at: "2026-11-18T09:00:00Z",
+        }),
+        session({ id: "s-none", published_at: "2026-11-16T15:00:00Z" }),
+      ],
+      label_submissions: [
+        submission("s-worked", ANA, "2026-11-17T14:00:00Z"),
+        submission("s-none", ANA, "2026-11-16T14:00:00Z"),
+      ],
+      label_work_beats: [
+        // Ana's two sittings: 07:04–07:07 (a 2-minute pause inside it),
+        // then 09:00 after a long break.
+        beat("s-worked", ANA, "2026-11-16T07:04:00Z"),
+        beat("s-worked", ANA, "2026-11-16T07:06:00Z"),
+        beat("s-worked", ANA, "2026-11-16T09:00:00Z"),
+        // Before the publish, but still Ana's work on this session.
+        // Someone else checking it is not.
+        beat("s-worked", ADMIN, "2026-11-18T08:59:00Z"),
+        beat("s-worked", BEN, "2026-11-17T10:00:00Z"),
+      ],
+      users,
+    });
+
+    const worked = result.lines.find((l) => l.sessionId === "s-worked");
+    expect(worked).toMatchObject({
+      match: "Reyes v Okafor",
+      state: "checked",
+      workedMinutes: 3,
+      sittings: [
+        {
+          start: "2026-11-16T07:04:00.000Z",
+          end: "2026-11-16T07:07:00.000Z",
+          minutes: 2,
+        },
+        {
+          start: "2026-11-16T09:00:00.000Z",
+          end: "2026-11-16T09:01:00.000Z",
+          minutes: 1,
+        },
+      ],
+    });
+    expect(result.lines.find((l) => l.sessionId === "s-none")).toMatchObject({
+      workedMinutes: null,
+      sittings: [],
+    });
+    expect(result.rows).toEqual([
+      expect.objectContaining({
+        labellerId: ANA,
+        workedMinutes: 3,
+        untrackedSessions: 1,
+      }),
+    ]);
+  });
+
+  test("a gap of exactly the sitting gap stays one sitting; one minute more splits it", () => {
+    expect(
+      groupSittings([
+        "2026-11-16T07:00:00Z",
+        "2026-11-16T07:15:00Z",
+        "2026-11-16T07:31:00Z",
+        // A duplicate minute counts once.
+        "2026-11-16T07:31:00Z",
+      ]).map((s) => s.minutes),
+    ).toEqual([2, 1]);
+    expect(groupSittings([])).toEqual([]);
   });
 
   test("the page and table say Published and Checked, never Submitted or Approved", () => {
@@ -349,7 +409,7 @@ test.describe("label pay report", () => {
       ),
       "utf8",
     );
-    expect(table).toContain("Published h");
-    expect(table).toContain("Checked h");
+    expect(table).toContain('"Published"');
+    expect(table).toContain('"Checked"');
   });
 });

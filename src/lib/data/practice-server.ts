@@ -346,10 +346,25 @@ export async function getPracticeOverview(
  * The pay report
  * ---------------------------------------------------------------------- */
 
+/**
+ * One unbroken stretch of work on a session: consecutive work minutes with no
+ * gap longer than {@link SITTING_GAP_MINUTES}. `start` is the first minute,
+ * `end` the minute after the last one, so a single-minute sitting reads
+ * 07:04–07:05.
+ */
+export interface PaySitting {
+  start: string;
+  end: string;
+  /** Active minutes inside the sitting: its `label_work_beats` rows. */
+  minutes: number;
+}
+
 export interface PaySessionLine {
   sessionId: string;
   labellerId: string;
   labellerName: string;
+  /** "Player 1 v Player 2", from the session's match. */
+  match: string;
   /** First time the session was published (`label_sessions.published_at`). */
   publishedAt: string;
   /**
@@ -358,6 +373,13 @@ export interface PaySessionLine {
    */
   state: "published" | "checked";
   videoHours: number;
+  /**
+   * The paid labeller's own active minutes on the session, or null when none
+   * were recorded (labelled before the console recorded work minutes).
+   */
+  workedMinutes: number | null;
+  /** Oldest first; empty when `workedMinutes` is null. */
+  sittings: PaySitting[];
 }
 
 /** Published and checked are disjoint: a checked session is not also published. */
@@ -369,7 +391,10 @@ export interface PayLabellerRow {
   publishedHours: number;
   checkedSessions: number;
   checkedHours: number;
-  practiceSets: number;
+  /** Active minutes across the sessions that recorded any. */
+  workedMinutes: number;
+  /** Paid sessions with no work minutes recorded, so not in `workedMinutes`. */
+  untrackedSessions: number;
 }
 
 export type PayReport =
@@ -381,6 +406,15 @@ export type PayReport =
       lines: PaySessionLine[];
     }
   | { ok: false; reason: "admin-required" };
+
+/**
+ * A gap between two work minutes longer than this starts a new sitting. A
+ * beat is posted only while someone is at the console (work-beats.ts), so a
+ * short gap is a pause inside one sitting, a long one a break between two.
+ */
+export const SITTING_GAP_MINUTES = 15;
+
+const MINUTE_MS = 60_000;
 
 /** `YYYY-MM-DD` or null. */
 export function parseDay(value: unknown): string | null {
@@ -397,16 +431,54 @@ function dayAfter(day: string): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * One labeller's work minutes on one session (ISO strings, any order) folded
+ * into sittings, oldest first.
+ */
+export function groupSittings(minutes: readonly string[]): PaySitting[] {
+  const times = [...new Set(minutes)]
+    .map((m) => new Date(m).getTime())
+    .filter((t) => !Number.isNaN(t))
+    .sort((a, b) => a - b);
+  const sittings: PaySitting[] = [];
+  let start = 0;
+  let last = 0;
+  let count = 0;
+  const close = () => {
+    if (count === 0) return;
+    sittings.push({
+      start: new Date(start).toISOString(),
+      end: new Date(last + MINUTE_MS).toISOString(),
+      minutes: count,
+    });
+  };
+  for (const t of times) {
+    if (count > 0 && t - last > SITTING_GAP_MINUTES * MINUTE_MS) {
+      close();
+      count = 0;
+    }
+    if (count === 0) start = t;
+    last = t;
+    count += 1;
+  }
+  close();
+  return sittings;
+}
+
 // Lives in a dependency-free module so the label queue can use it client-side.
 export { jobVideoSeconds };
 
 type PayJob = JobVideoSpan;
+
+type PayMatch = { player1_name: string | null; player2_name: string | null };
 
 type PublishedSessionRow = {
   id: string;
   published_at: string | null;
   checked_at: string | null;
   job: PayJob | null;
+  /** Many-to-one through `match_id`: one row or none. */
+  match: PayMatch | null;
 };
 
 /** Non-practice sessions first published inside `[fromIso, toIso)`, with the stamps pay reads. */
@@ -420,13 +492,14 @@ async function readPublishedSessions(
     publishedAt: string;
     checkedAt: string | null;
     job: PayJob | null;
+    match: string;
   }[]
 > {
   const rows = await readAllPages<PublishedSessionRow>(
     db
       .from("label_sessions")
       .select(
-        "id, published_at, checked_at, job:processing_jobs(start_time_seconds, end_time_seconds, billable_seconds)",
+        "id, published_at, checked_at, job:processing_jobs(start_time_seconds, end_time_seconds, billable_seconds), match:matches(player1_name, player2_name)",
       )
       .neq("kind", "practice")
       .gte("published_at", fromIso)
@@ -443,6 +516,7 @@ async function readPublishedSessions(
             publishedAt: row.published_at,
             checkedAt: row.checked_at,
             job: row.job,
+            match: `${row.match?.player1_name ?? "Player 1"} v ${row.match?.player2_name ?? "Player 2"}`,
           },
         ]
       : [],
@@ -457,9 +531,12 @@ async function readPublishedSessions(
  * published again is not paid twice. A session an admin published with no
  * submission has nobody to pay and is left out. It is `checked` once an admin
  * has passed it, else `published` (a sent-back one included); the two are
- * disjoint. Hours are the job's match video. Practice copies are never paid
- * hours: they are counted apart, as practice sets submitted in the range, on
- * the day of their first submission.
+ * disjoint. Hours are the job's match video.
+ *
+ * Time worked is the paid labeller's own `label_work_beats` minutes on each
+ * session, whenever they fell — anyone else's (an admin checking it) is not
+ * theirs. Practice sets are not in the report: every one so far was paid
+ * outside it.
  */
 export async function getLabelPayReport(
   range: { from: string; to: string },
@@ -478,32 +555,14 @@ export async function getLabelPayReport(
     submitted_at: string;
   };
   const SUBMISSION_COLUMNS = "id, session_id, submitted_by, submitted_at";
-  // Two reads, never the whole table: the sessions published in the range,
-  // and the submissions made in it (a practice set counts on the day of its
-  // first submission, so only a session submitted in the range can be one).
-  const [published, inRange] = await Promise.all([
-    readPublishedSessions(db, fromIso, toIso),
-    readAllPages<Pick<SubmissionRow, "session_id">>(
-      db
-        .from("label_submissions")
-        .select("session_id")
-        .gte("submitted_at", fromIso)
-        .lt("submitted_at", toIso)
-        .order("submitted_at")
-        .order("id"),
-      "Could not read submissions",
-    ),
-  ]);
-  // Then every submission of those sessions up to the end of the range: a
-  // session published in the range was first submitted before its publish,
-  // and a practice set whose first submission falls before `from` is not
-  // this range's to count. Chunked, since the ids travel in the URL.
-  const sessionIds = [
-    ...new Set([
-      ...published.map((session) => session.id),
-      ...inRange.map((row) => row.session_id),
-    ]),
-  ];
+  const published = await readPublishedSessions(db, fromIso, toIso);
+  if (published.length === 0) {
+    return { ok: true, from: range.from, to: range.to, rows: [], lines: [] };
+  }
+  // Every submission of those sessions up to the end of the range: a session
+  // published in the range was first submitted before its publish. Chunked,
+  // since the ids travel in the URL.
+  const sessionIds = published.map((session) => session.id);
   const submissions = (
     await Promise.all(
       idChunks(sessionIds).map((ids) =>
@@ -537,43 +596,44 @@ export async function getLabelPayReport(
     const who = first.get(session.id)?.submitted_by;
     return who ? [{ ...session, who }] : [];
   });
-  const practiceCandidates = [...first.values()].filter(
-    (row) => row.submitted_at >= fromIso && row.submitted_by,
-  );
-
-  type PracticeRow = { id: string; status: string };
-  const practice = (
-    await Promise.all(
-      idChunks(practiceCandidates.map((row) => row.session_id)).map((ids) =>
-        readAllPages<PracticeRow>(
-          db
-            .from("label_sessions")
-            .select("id, status")
-            .eq("kind", "practice")
-            .in("id", ids)
-            .order("id"),
-          "Could not read practice sets",
-        ),
-      ),
-    )
-  ).flat();
-  const practiceSets = practice.flatMap((session) => {
-    const who = first.get(session.id)?.submitted_by;
-    return session.status === "submitted" && who ? [who] : [];
-  });
-
-  const userIds = [...new Set([...paid.map((s) => s.who), ...practiceSets])];
-  if (userIds.length === 0) {
+  if (paid.length === 0) {
     return { ok: true, from: range.from, to: range.to, rows: [], lines: [] };
   }
-  const users = await readAllPages<DbUser>(
-    db
-      .from("users")
-      .select("id, email, first_name, last_name")
-      .in("id", userIds)
-      .order("id"),
-    "Could not read labellers",
-  );
+
+  type BeatRow = { session_id: string; user_id: string; minute: string };
+  const whoBySession = new Map(paid.map((s) => [s.id, s.who]));
+  const [beats, users] = await Promise.all([
+    Promise.all(
+      idChunks([...whoBySession.keys()]).map((ids) =>
+        readAllPages<BeatRow>(
+          db
+            .from("label_work_beats")
+            .select("session_id, user_id, minute")
+            .in("session_id", ids)
+            .order("session_id")
+            .order("user_id")
+            .order("minute")
+            .returns<BeatRow[]>(),
+          "Could not read label work minutes",
+        ),
+      ),
+    ).then((chunks) => chunks.flat()),
+    readAllPages<DbUser>(
+      db
+        .from("users")
+        .select("id, email, first_name, last_name")
+        .in("id", [...new Set(paid.map((s) => s.who))])
+        .order("id"),
+      "Could not read labellers",
+    ),
+  ]);
+  const minutesBySession = new Map<string, string[]>();
+  for (const beat of beats) {
+    if (beat.user_id !== whoBySession.get(beat.session_id)) continue;
+    const held = minutesBySession.get(beat.session_id);
+    if (held) held.push(beat.minute);
+    else minutesBySession.set(beat.session_id, [beat.minute]);
+  }
   const userById = new Map(users.map((u) => [u.id, u]));
 
   const rows = new Map<string, PayLabellerRow>();
@@ -589,7 +649,8 @@ export async function getLabelPayReport(
       publishedHours: 0,
       checkedSessions: 0,
       checkedHours: 0,
-      practiceSets: 0,
+      workedMinutes: 0,
+      untrackedSessions: 0,
     };
     rows.set(who, row);
     return row;
@@ -607,16 +668,22 @@ export async function getLabelPayReport(
       row.publishedSessions += 1;
       row.publishedHours += hours;
     }
+    const sittings = groupSittings(minutesBySession.get(session.id) ?? []);
+    const worked = sittings.reduce((n, s) => n + s.minutes, 0);
+    if (worked > 0) row.workedMinutes += worked;
+    else row.untrackedSessions += 1;
     lines.push({
       sessionId: session.id,
       labellerId: session.who,
       labellerName: row.name,
+      match: session.match,
       publishedAt: session.publishedAt,
       state,
       videoHours: hours,
+      workedMinutes: worked > 0 ? worked : null,
+      sittings,
     });
   }
-  for (const who of practiceSets) rowFor(who).practiceSets += 1;
 
   lines.sort(
     (a, b) =>

@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
+import { ChevronRight } from "lucide-react";
 import type {
   PayLabellerRow,
   PaySessionLine,
+  PaySitting,
 } from "@/lib/data/practice-server";
 import { AdminPage } from "@/components/admin/admin-page";
 import { InertButton } from "@/components/admin/inert-button";
@@ -15,21 +18,23 @@ import { cn } from "@/lib/utils";
 import { DownloadCsvButton } from "./download-csv-button";
 
 const GRID =
-  "grid grid-cols-[minmax(180px,1fr)_110px_110px_110px_110px_110px] items-center gap-x-4";
+  "grid grid-cols-[minmax(220px,1fr)_140px_140px] items-center gap-x-6";
 
 /** The table card, the loaded table's and its skeleton's. */
 const TABLE_CARD =
   "overflow-x-auto rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] shadow-[var(--shadow-card)]";
 
+const TABLE_INNER = "min-w-[640px] px-6 pb-3";
+
 /** The column labels; every column after Labeller is a number, flush right. */
-const PAY_COLUMNS = [
-  "Labeller",
-  "Published h",
-  "Checked h",
-  "Total h",
-  "Sessions",
-  "Practice sets",
-] as const;
+const PAY_COLUMNS = ["Labeller", "Paid video", "Time worked"] as const;
+
+/**
+ * A row that opens: the surface-muted wash on a rounded row inset 8px past
+ * its text (the table law's 8a row), held while it is open.
+ */
+const OPENING_ROW =
+  "-mx-2 block w-[calc(100%+16px)] cursor-pointer rounded-[var(--radius-element)] px-2 text-left transition-[background-color] duration-200 ease-[var(--ease-primary)] hover:bg-[var(--surface-subtle)] disabled:cursor-default disabled:hover:bg-transparent";
 
 /**
  * The page's title and what it counts. The page (`labels/pay/page.tsx`) and
@@ -39,10 +44,10 @@ export function PayReportHeading() {
   return (
     <div>
       <h1 className="text-display">Pay report</h1>
-      <p className="text-body-sm mt-[9px]">
-        Hours of match video each labeller published, counted once on the day it
-        was first published. Checked is what an admin has passed. Practice sets
-        are not paid hours.
+      <p className="text-body-sm mt-[9px] max-w-[620px]">
+        Hours of match video each labeller published, counted on the day it was
+        first published. Time worked is each labeller&rsquo;s own active minutes
+        on those matches.
       </p>
     </div>
   );
@@ -51,7 +56,7 @@ export function PayReportHeading() {
 function PayHeaderRow() {
   return (
     <div
-      className={`${GRID} border-b border-[var(--border-hairline)] pt-3.5 pb-2.5`}
+      className={`${GRID} mb-1.5 border-b border-[var(--border-hairline)] pt-4 pb-2.5`}
     >
       {PAY_COLUMNS.map((label, i) => (
         <span key={label} className={cn("eyebrow-sm", i > 0 && "text-right")}>
@@ -66,7 +71,45 @@ function hours(n: number): string {
   return n.toFixed(2);
 }
 
-/** Per-labeller hours for the range, with the per-session lines as a second CSV. */
+/** Minutes as "3h 11m", or "45m" under an hour. */
+function duration(minutes: number): string {
+  const whole = Math.round(minutes);
+  const h = Math.floor(whole / 60);
+  const m = whole % 60;
+  return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`;
+}
+
+// The report is in UTC days, so every stamp on it reads in UTC too.
+const DAY = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
+});
+const CLOCK = new Intl.DateTimeFormat("en-GB", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+  timeZone: "UTC",
+});
+
+function day(iso: string): string {
+  return DAY.format(new Date(iso));
+}
+
+function clock(iso: string): string {
+  return CLOCK.format(new Date(iso));
+}
+
+function sittingText(s: PaySitting): string {
+  return `${s.start.slice(0, 16)}Z–${s.end.slice(11, 16)}Z (${s.minutes}m)`;
+}
+
+function labellerWorked(row: PayLabellerRow): string {
+  if (row.workedMinutes === 0) return "—";
+  return duration(row.workedMinutes) + (row.untrackedSessions ? " +" : "");
+}
+
+/** Per-labeller hours for the range; a row opens to its sessions, a session to its sittings. */
 export function PayReportTable({
   from,
   to,
@@ -78,6 +121,9 @@ export function PayReportTable({
   rows: readonly PayLabellerRow[];
   lines: readonly PaySessionLine[];
 }) {
+  const [openLabeller, setOpenLabeller] = useState<string | null>(null);
+  const [openSession, setOpenSession] = useState<string | null>(null);
+
   const summary = [
     [
       "labeller",
@@ -87,7 +133,8 @@ export function PayReportTable({
       "checked_sessions",
       "checked_video_hours",
       "total_video_hours",
-      "practice_sets",
+      "worked_hours",
+      "sessions_without_time",
     ],
     ...rows.map((r) => [
       r.name,
@@ -97,19 +144,39 @@ export function PayReportTable({
       r.checkedSessions,
       hours(r.checkedHours),
       hours(r.publishedHours + r.checkedHours),
-      r.practiceSets,
+      hours(r.workedMinutes / 60),
+      r.untrackedSessions,
     ]),
   ];
   const detail = [
-    ["labeller", "session_id", "first_published_at", "state", "video_hours"],
+    [
+      "labeller",
+      "session_id",
+      "match",
+      "first_published_at",
+      "state",
+      "video_hours",
+      "worked_minutes",
+      "sittings",
+    ],
     ...lines.map((l) => [
       l.labellerName,
       l.sessionId,
+      l.match,
       l.publishedAt,
       l.state,
       hours(l.videoHours),
+      l.workedMinutes,
+      l.sittings.map(sittingText).join("; "),
     ]),
   ];
+
+  const linesBy = new Map<string, PaySessionLine[]>();
+  for (const line of lines) {
+    const held = linesBy.get(line.labellerId);
+    if (held) held.push(line);
+    else linesBy.set(line.labellerId, [line]);
+  }
 
   return (
     <section className="flex flex-col gap-3">
@@ -133,43 +200,138 @@ export function PayReportTable({
           </p>
         </div>
       ) : (
-        <div className={TABLE_CARD}>
-          <div className="min-w-[760px] px-6 pt-0.5 pb-1.5">
-            <PayHeaderRow />
-            {rows.map((r) => (
-              <div
-                key={r.labellerId}
-                className={`${GRID} h-[52px] border-b border-[var(--border-hairline)] text-[13px] tabular-nums last:border-b-0`}
-              >
-                <span className="min-w-0">
-                  <span className="block truncate text-[var(--ink-900)]">
-                    {r.name}
-                  </span>
-                  <span className="block truncate text-[12px] text-[var(--ink-500)]">
-                    {r.email}
-                  </span>
-                </span>
-                <span className="text-right text-[var(--ink-700)]">
-                  {hours(r.publishedHours)}
-                </span>
-                <span className="text-right text-[var(--ink-700)]">
-                  {hours(r.checkedHours)}
-                </span>
-                <span className="text-right text-[var(--ink-900)]">
-                  {hours(r.publishedHours + r.checkedHours)}
-                </span>
-                <span className="text-right text-[var(--ink-700)]">
-                  {r.publishedSessions + r.checkedSessions}
-                </span>
-                <span className="text-right text-[var(--ink-700)]">
-                  {r.practiceSets}
-                </span>
-              </div>
-            ))}
+        <>
+          <div className={TABLE_CARD}>
+            <div className={TABLE_INNER}>
+              <PayHeaderRow />
+              {rows.map((r) => {
+                const open = openLabeller === r.labellerId;
+                const panel = `pay-${r.labellerId}`;
+                return (
+                  <div key={r.labellerId}>
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      aria-controls={panel}
+                      onClick={() =>
+                        setOpenLabeller(open ? null : r.labellerId)
+                      }
+                      className={cn(
+                        OPENING_ROW,
+                        open && "bg-[var(--surface-muted)]",
+                      )}
+                    >
+                      <span
+                        className={`${GRID} h-[52px] text-[13px] tabular-nums`}
+                      >
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <ChevronRight
+                            aria-hidden
+                            className={cn(
+                              "size-3 shrink-0 text-[var(--ink-500)] transition-transform duration-200 ease-[var(--ease-primary)]",
+                              open && "rotate-90",
+                            )}
+                          />
+                          <span className="truncate text-[var(--ink-900)]">
+                            {r.name}
+                          </span>
+                        </span>
+                        <span className="text-right text-[var(--ink-900)]">
+                          {duration((r.publishedHours + r.checkedHours) * 60)}
+                        </span>
+                        <span className="text-right font-medium text-[var(--ink-900)]">
+                          {labellerWorked(r)}
+                        </span>
+                      </span>
+                    </button>
+                    {open ? (
+                      <div id={panel} className="pt-1 pb-3.5 pl-[22px]">
+                        {(linesBy.get(r.labellerId) ?? []).map((l) => (
+                          <SessionLine
+                            key={l.sessionId}
+                            line={l}
+                            open={openSession === l.sessionId}
+                            onToggle={() =>
+                              setOpenSession(
+                                openSession === l.sessionId
+                                  ? null
+                                  : l.sessionId,
+                              )
+                            }
+                          />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+          <p className="text-[11px] text-[var(--ink-600)]">
+            — means no active time was recorded for the session; a + on a total
+            means it leaves such sessions out. Times are UTC.
+          </p>
+        </>
       )}
     </section>
+  );
+}
+
+function SessionLine({
+  line,
+  open,
+  onToggle,
+}: {
+  line: PaySessionLine;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const tracked = line.workedMinutes !== null;
+  const panel = `pay-session-${line.sessionId}`;
+  return (
+    <div>
+      <button
+        type="button"
+        disabled={!tracked}
+        aria-expanded={tracked ? open : undefined}
+        aria-controls={tracked ? panel : undefined}
+        onClick={onToggle}
+        className={cn(OPENING_ROW, open && "bg-[var(--surface-muted)]")}
+      >
+        <span
+          className={`${GRID} h-10 text-[12px] text-[var(--ink-700)] tabular-nums`}
+        >
+          <span className="min-w-0 truncate">
+            <span className="text-[var(--ink-900)]">{line.match}</span>
+            {" · "}
+            {day(line.publishedAt)}
+            {" · "}
+            {line.state === "checked" ? "Checked" : "Published"}
+          </span>
+          <span className="text-right">{duration(line.videoHours * 60)}</span>
+          <span
+            className={cn("text-right", !tracked && "text-[var(--ink-400)]")}
+          >
+            {tracked ? duration(line.workedMinutes ?? 0) : "—"}
+          </span>
+        </span>
+      </button>
+      {open && tracked ? (
+        <ul
+          id={panel}
+          className="mt-0.5 mb-2.5 flex flex-col gap-1.5 pl-4 text-[12px] leading-[18px] text-[var(--ink-600)] tabular-nums"
+        >
+          {line.sittings.map((s) => (
+            <li key={s.start}>
+              {day(s.start)}, {clock(s.start)}–{clock(s.end)} —{" "}
+              <span className="text-[var(--ink-900)]">
+                {duration(s.minutes)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
@@ -209,21 +371,18 @@ export function PayReportPageSkeleton() {
           <PendingBar className="h-8 w-40 rounded-[var(--radius-button)]" />
         </div>
         <div className={TABLE_CARD}>
-          <div className="min-w-[760px] px-6 pt-0.5 pb-1.5">
+          <div className={TABLE_INNER}>
             <PayHeaderRow />
             <PendingRegion label="the pay report">
               {Array.from({ length: 4 }, (_, i) => (
-                <div
-                  key={i}
-                  className={`${GRID} h-[52px] border-b border-[var(--border-hairline)] last:border-b-0`}
-                >
-                  <span className="flex flex-col gap-1.5">
+                <div key={i} className={`${GRID} h-[52px]`}>
+                  <span className="flex items-center gap-2.5">
+                    <PendingBar className="size-3" />
                     <PendingBar className="h-3 w-32" />
-                    <PendingBar className="h-3 w-44" />
                   </span>
-                  {Array.from({ length: 5 }, (_, j) => (
+                  {Array.from({ length: 2 }, (_, j) => (
                     <span key={j} className="flex justify-end">
-                      <PendingBar className="h-3 w-10" />
+                      <PendingBar className="h-3 w-14" />
                     </span>
                   ))}
                 </div>
