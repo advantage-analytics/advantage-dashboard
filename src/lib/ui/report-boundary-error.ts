@@ -3,6 +3,13 @@ import { useEffect } from "react";
 import { isPostHogConfigured } from "@/lib/posthog-client";
 import { isClosedResponse, isFailedFetch } from "@/lib/ui/action-rejected";
 
+/** Whether an error boundary should send `error` to PostHog; see the hook. */
+export function isReportableBoundaryError(
+  error: Error & { digest?: string },
+): boolean {
+  return !error.digest && !isClosedResponse(error) && !isFailedFetch(error);
+}
+
 /**
  * Reports what a segment's `error.tsx` caught, when nothing else will have.
  *
@@ -17,12 +24,6 @@ import { isClosedResponse, isFailedFetch } from "@/lib/ui/action-rejected";
  *   response that died part-way through — is the reader's network, and
  *   nothing we can fix. Safari reports the first as `TypeError: Load failed`.
  */
-export function isReportableBoundaryError(
-  error: Error & { digest?: string },
-): boolean {
-  return !error.digest && !isClosedResponse(error) && !isFailedFetch(error);
-}
-
 export function useReportBoundaryError(
   error: Error & { digest?: string },
   source = "error_boundary",
