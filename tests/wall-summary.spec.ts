@@ -6,6 +6,7 @@ import {
 import { buildDefaultTiles } from "@/components/dashboard/matches/match-detail/shots/default-tiles";
 import {
   EMPTY_VIZ_FILTERS,
+  HAND_ASSUMED_NOTE,
   computeViz,
   computeVizStats,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
@@ -531,4 +532,72 @@ test("a subject with no net points gets an approaches tile counting 0, so the wa
   // Points elsewhere but no net points: the approaches tile alone is 0.
   const mixed = buildDefaultTiles(POINTS, SIDES, href, undefined, BANDS);
   expect(mixed.find((t) => t.key === "you:approaches")!.total).toBe(0);
+});
+
+/* ── Approaches: the assumed-hand caveat ─────────────────────────────────── */
+
+/** Both seats' hands on record: no approach's wing is assumed. */
+const KNOWN_HANDS = {
+  youIsPlayer1: true,
+  hands: { player1: "right" as const, player2: "left" as const },
+  errorSplitJudged: true,
+};
+
+const handSummaries = (
+  points: typeof APPROACH_MATCH,
+  matchCtx?: typeof KNOWN_HANDS,
+) => buildDefaultTiles(points, SIDES, href, matchCtx, BANDS);
+
+test("the approaches card says 'assumes right-handed' when a drawn approach's wing came from an assumed hand", () => {
+  // No context: neither seat's hand is recorded, so every wing is assumed.
+  const tiles = handSummaries(APPROACH_MATCH);
+  const tile = tiles.find((t) => t.key === "you:approaches")!;
+  expect(tile.dots.length).toBeGreaterThan(0);
+  expect(tile.dots.some((d) => d.meta?.handAssumed === true)).toBe(true);
+  expect(tile.summary!.handNote).toBe(HAND_ASSUMED_NOTE);
+  expect(HAND_ASSUMED_NOTE).toBe("assumes right-handed");
+  // Partly drawn keeps it: the drawn wings are still assumed.
+  const partly = handSummaries([
+    ...APPROACH_MATCH,
+    withoutLanding({ ...UNPLACED, id: "bare-hand" }),
+  ]).find((t) => t.key === "you:approaches")!;
+  expect(partly.summary!.notDrawn).toBe(1);
+  expect(partly.summary!.handNote).toBe(HAND_ASSUMED_NOTE);
+});
+
+test("the approaches card carries no hand note when every hand is known, or when nothing is drawn", () => {
+  const known = handSummaries(APPROACH_MATCH, KNOWN_HANDS).find(
+    (t) => t.key === "you:approaches",
+  )!;
+  expect(known.dots.length).toBeGreaterThan(0);
+  expect(known.dots.every((d) => d.meta?.handAssumed === false)).toBe(true);
+  expect(known.summary!.handNote).toBeNull();
+
+  // Every landing gone (T22): no wing segments, so no wing to qualify —
+  // though each approach's hand is still unknown.
+  const undrawn = handSummaries(APPROACH_MATCH.map(withoutLanding)).find(
+    (t) => t.key === "you:approaches",
+  )!;
+  expect(undrawn.summary!.segments).toEqual([]);
+  expect(undrawn.summary!.handNote).toBeNull();
+
+  // No approaches at all.
+  const none = handSummaries([BASELINE]).find(
+    (t) => t.key === "you:approaches",
+  )!;
+  expect(none.summary!.handNote).toBeNull();
+});
+
+test("no card but approaches ever carries the hand note", () => {
+  for (const points of [POINTS, APPROACH_MATCH]) {
+    for (const tile of handSummaries(points)) {
+      if (tile.cut === "approaches") continue;
+      expect(tile.summary!.handNote).toBeNull();
+    }
+  }
+  // A call without dots (a cut's count alone) says none either.
+  expect(
+    wallSummaryFor("approaches", { count: 0 }, statsOf("approach-to", []), [])
+      .handNote,
+  ).toBeNull();
 });

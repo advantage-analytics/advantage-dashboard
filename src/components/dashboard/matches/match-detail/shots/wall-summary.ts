@@ -18,11 +18,20 @@
  * is the cut's whole pool and the segments — the wing each approach went to —
  * hold only the ones with a placement. The rest are named on a note under the
  * count ("2 not drawn: no landing recorded") rather than letting the court
- * disagree with the number beside it.
+ * disagree with the number beside it. Its wings ("To backhand", "To
+ * forehand") rest on the opponent's hand; where a drawn approach had to
+ * assume it, the card says so (`handNote`, `HAND_ASSUMED_NOTE`) — the same
+ * rule and wording as the opened court's legend line.
  */
 
 import type { BandRow } from "@/lib/data/viz-bands";
-import type { Cut, StatRow, VizResult, VizStats } from "./viz-model";
+import {
+  HAND_ASSUMED_NOTE,
+  type Cut,
+  type StatRow,
+  type VizResult,
+  type VizStats,
+} from "./viz-model";
 
 export interface WallSegment {
   key: string;
@@ -98,6 +107,12 @@ export interface WallSummary {
   /** The line under the count that names them — "2 not drawn: no landing
    *  recorded" — or `null` when every point is drawn. */
   countNote: string | null;
+  /** The approaches card's caveat on its wings — `HAND_ASSUMED_NOTE`
+   *  ("assumes right-handed") when any drawn approach's wing was worked out
+   *  from an assumed hand (`VizDot.meta.handAssumed`), the opened court's
+   *  own rule. `null` when every hand is known, when nothing is drawn (no
+   *  wings named), and on every other card. */
+  handNote: string | null;
 }
 
 const SERVE_ZONES: { key: "t" | "body" | "wide"; label: string }[] = [
@@ -150,10 +165,15 @@ function groupRows(stats: VizStats, key: string): StatRow[] {
  * The wall card's footer for one of the six default cuts. `depthRows` is
  * `depthBandRows(bands, unit)` — the workspace's own band order (deep to
  * short), used only to order the rally card's segments.
+ *
+ * `result.dots` is what the card draws; the approaches card reads each dot's
+ * `meta.handAssumed` for `handNote`. Every wall card's caller (the Default
+ * wall, a saved view, a season card) passes its whole `VizResult`; a call
+ * without dots says no hand note.
  */
 export function wallSummaryFor(
   cut: Cut,
-  result: Pick<VizResult, "count">,
+  result: Pick<VizResult, "count"> & Partial<Pick<VizResult, "dots">>,
   stats: VizStats,
   depthRows: BandRow[],
 ): WallSummary {
@@ -186,6 +206,10 @@ export function wallSummaryFor(
     // segments; the note says why. A card with no approaches at all
     // (`total === 0`) keeps its three zero wings.
     const noWings = drawnCount === 0 && total > 0;
+    // A wing named from a hand the match does not hold: said on the card,
+    // as the opened court says it. No wing drawn, no caveat.
+    const handAssumed =
+      !noWings && (result.dots ?? []).some((d) => d.meta?.handAssumed === true);
     return {
       countLabel: wallCountLabel(cut, drawnCount, total),
       count: drawnCount,
@@ -197,6 +221,7 @@ export function wallSummaryFor(
       averagePct: pct(drawnWon, drawnCount),
       notDrawn,
       countNote: notDrawnNote(notDrawn),
+      handNote: handAssumed ? HAND_ASSUMED_NOTE : null,
     };
   } else if (cut === "serve") {
     const zones = groupRows(stats, "serve-zones");
@@ -249,6 +274,7 @@ export function wallSummaryFor(
     averagePct: share ? null : pct(won, count),
     notDrawn: 0,
     countNote: null,
+    handNote: null,
   };
 }
 

@@ -6,6 +6,7 @@ import { createLoader, marker } from "./fixtures/vm-modules";
 import { MATCH, withoutLanding } from "./fixtures/approach-points";
 import { buildDefaultTiles } from "@/components/dashboard/matches/match-detail/shots/default-tiles";
 import { vizStateQuery } from "@/components/dashboard/matches/match-detail/shots/viz-url";
+import { HAND_ASSUMED_NOTE } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 
@@ -39,8 +40,11 @@ const SIDES = {
 const href = (s: Parameters<typeof vizStateQuery>[1]) =>
   vizStateQuery(new URLSearchParams(), s);
 
-function renderApproachesCard(points: MatchPoint[]) {
-  const tile = buildDefaultTiles(points, SIDES, href, undefined, {
+function renderApproachesCard(
+  points: MatchPoint[],
+  matchCtx?: Parameters<typeof buildDefaultTiles>[3],
+) {
+  const tile = buildDefaultTiles(points, SIDES, href, matchCtx, {
     bands: DEFAULT_BANDS,
     unit: "ft",
   }).find((t) => t.key === "you:approaches")!;
@@ -109,4 +113,30 @@ test("approaches all drawn: the card keeps its split bar and all three wing keys
   for (const wing of WINGS) expect(html).toContain(wing);
   expect(html).not.toContain("not drawn");
   expect(ariaLabel(html)).toContain(summary.countLabel);
+});
+
+/** The `data-wall-hand-note` element's text, or `null` when there is none. */
+function handNoteText(html: string): string | null {
+  const m = /<p [^>]*data-wall-hand-note=""[^>]*>([^<]*)<\/p>/.exec(html);
+  return m ? m[1] : null;
+}
+
+test("unknown hands: the card says 'assumes right-handed' in its own element and its accessible label", () => {
+  // No context: the match records neither hand, so the wings are assumed.
+  const { html, summary } = renderApproachesCard(MATCH);
+  expect(summary.segments.length).toBeGreaterThan(0);
+  expect(HAND_ASSUMED_NOTE).toBe("assumes right-handed");
+  expect(handNoteText(html)).toBe(HAND_ASSUMED_NOTE);
+  expect(ariaLabel(html)).toContain(HAND_ASSUMED_NOTE);
+});
+
+test("known hands: no hand note on the card or in its accessible label", () => {
+  const { html } = renderApproachesCard(MATCH, {
+    youIsPlayer1: true,
+    hands: { player1: "right", player2: "left" },
+    errorSplitJudged: true,
+  });
+  expect(html).not.toContain("data-wall-hand-note");
+  expect(html).not.toContain(HAND_ASSUMED_NOTE);
+  expect(ariaLabel(html)).not.toContain(HAND_ASSUMED_NOTE);
 });

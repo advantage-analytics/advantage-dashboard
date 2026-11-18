@@ -133,7 +133,7 @@ export function WallCard({
 
   const label = `${name}, ${playerName}: ${summary.countLabel}${
     summary.countNote ? `, ${summary.countNote}` : ""
-  }`;
+  }${summary.handNote ? `, ${summary.handNote}` : ""}`;
   const courtProps = {
     cut,
     chart: "scatter",
@@ -252,6 +252,18 @@ export function WallCard({
             </span>
           ))}
         </div>
+        {summary.handNote !== null && (
+          // The wing keys above rest on the opponent's hand; where the
+          // match does not record it they read it as right-handed. Said
+          // under the keys it qualifies, in the count note's quiet voice.
+          <p
+            data-wall-hand-note=""
+            className="m-0 text-[11px]"
+            style={{ color: "var(--ink-500)" }}
+          >
+            {summary.handNote}
+          </p>
+        )}
       </div>
     </>
   );

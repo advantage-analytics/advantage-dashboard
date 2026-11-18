@@ -2696,6 +2696,37 @@ test.describe("the Approaches card over a season", () => {
     );
   });
 
+  test("the season's Approaches card says 'assumes right-handed' when a folded match has no opponent hand and a drawn approach, and not when every hand is known", () => {
+    const tile = (season: SeasonVizMatch[]) =>
+      buildSeasonCards(season, "you", BANDS).find(
+        (c) => c.key === "you:approaches",
+      )!;
+    // Both opponents' hands on record: every drawn wing is known.
+    const known = tile(SEASON);
+    expect(known.dots.length).toBeGreaterThan(0);
+    expect(known.summary.handNote).toBeNull();
+
+    // The lefty match gives no hand: its drawn approaches read right-handed,
+    // and the card says so — as the opened court does.
+    const season = [RIGHTY, { ...LEFTY, opponentHand: null }];
+    const unknown = tile(season);
+    expect(unknown.summary.handNote).toBe("assumes right-handed");
+    expect(
+      buildSeasonLightbox(season, approachState(), BANDS, NAMES)!.sentenceNote,
+    ).toBe(unknown.summary.handNote);
+
+    // A match with no hand whose only approach is not drawn: no drawn wing
+    // rests on an assumed hand, so no note.
+    const undrawnOnly: SeasonVizMatch = {
+      ...LEFTY,
+      matchId: "bare",
+      points: matchPoints("b", [WON_UNPLACED]),
+      opponentHand: null,
+    };
+    expect(tile([RIGHTY, undrawnOnly]).summary.notDrawn).toBeGreaterThan(0);
+    expect(tile([RIGHTY, undrawnOnly]).summary.handNote).toBeNull();
+  });
+
   test('Approaches picked from the View menu on another cut, or opened by a bare URL, holds the floor: no "How you came in: any"', () => {
     // The state `cut-menu.tsx`'s `selectCut` makes coming from Serve.
     const picked: VizState = {

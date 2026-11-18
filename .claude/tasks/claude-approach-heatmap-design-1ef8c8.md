@@ -354,7 +354,7 @@ ready).
 
 ## T25 · Say "assumes right-handed" on the Approaches wall card
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/wall-summary.ts` (`WallSummary`, `wallSummaryFor`'s `approaches` branch; its `result` argument is `Pick<VizResult, "count">` today); `shots/wall-card.tsx` (the `countNote` line ~214, the accessible label ~135); callers `shots/default-tiles.ts`, `shots/saved-views-band.tsx`, `src/lib/data/player-season-viz.ts` (~604); `tests/wall-summary.spec.ts`, `tests/wall-card-approaches.spec.ts`, `tests/player-season-viz.spec.ts`
 - **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`

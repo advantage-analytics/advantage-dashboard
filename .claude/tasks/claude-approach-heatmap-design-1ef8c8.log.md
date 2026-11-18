@@ -241,3 +241,13 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The season case uses `?landing=some`; a mixed-hands (`?hands=1`) case is not covered.
+
+## T25 · Say "assumes right-handed" on the Approaches wall card — done
+
+**gate:** mechanical PASS · completion-review pass
+
+**changed:** `WallSummary` gains `handNote`; `wallSummaryFor` takes the result's `dots` (optional) and sets `HAND_ASSUMED_NOTE` on the approaches cut when wings are drawn and any dot's hand was assumed. `wall-card.tsx` adds it to the accessible label and as a quiet line (`data-wall-hand-note`) under the key row. Default wall, saved-view tiles and season cards already pass the whole result. New cases in `wall-summary`, `wall-card-approaches` and `player-season-viz` specs.
+
+**follow-ups:**
+
+1. `dots` is optional only so existing `{ count: N }` test literals compile; a caller that omits it silently gets no hand note — consider making it required.
