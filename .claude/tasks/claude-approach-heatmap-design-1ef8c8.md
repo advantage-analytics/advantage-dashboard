@@ -199,7 +199,7 @@ ready).
 
 ## T14 · Map match hands to seats, not the viewer
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) `src/lib/data/match-detail-server.ts` (`transformDbMatchToMatch`, the hand block near line 263); doc comment in `src/components/dashboard/matches/player-hands.ts`; new `tests/match-hands-seat.spec.ts` (or cases beside the seat tests in `tests/insight-voice.spec.ts`, which already imports the transform)
 - **routes:** `/dashboard/matches/[matchId]`

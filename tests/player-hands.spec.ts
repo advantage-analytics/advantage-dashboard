@@ -76,8 +76,8 @@ test.describe("playerHands", () => {
 
   // The guardrail this helper exists to protect: `match.player1.hand` /
   // `match.player2.hand` are already seat-correct by the time the client
-  // holds a `Match` (`transformDbMatchToMatch` resolves them via
-  // `isUserPlayer1` server-side — see the doc comment on `playerHands`). This
+  // holds a `Match` (`transformDbMatchToMatch` reads the row's columns by
+  // seat server-side — see the doc comment on `playerHands`). This
   // asserts the client-side helper does not re-derive attribution from which
   // seat the account holds — it takes no `youIsPlayer1` at all, and each
   // seat's hand lands under that same seat regardless of which one is "you".

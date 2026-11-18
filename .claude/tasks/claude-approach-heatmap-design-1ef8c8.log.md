@@ -135,3 +135,12 @@ is the runner's. Newest entries at the bottom.
 1. The match report infers an unrecorded hand from strokes (`inferHand`); the season assumes right-handed and flags it, so a match with no stored hand can show different wings on the season than on its report.
 2. `SEASON_HAND_ASSUMED_NOTE` and `FLOOR_LOOSENED_LABEL` copy strings from the client-only `viz-lightbox.tsx`; a shared pure module would remove the copies.
 3. The season lightbox has no Points list, so `approachDetail` wording does not appear there.
+
+## T14 · Map match hands to seats, not the viewer — done
+
+**gate:** mechanical pass · completion pass
+**changed:** `transformDbMatchToMatch` (`match-detail-server.ts`) reads `player_hand` / `player_backhand` for seat one and `opponent_hand` / `opponent_backhand` for seat two whichever seat the report is turned to, each falling back to that seat's own profile; `playerHands` doc comment updated (and a stale comment in `tests/player-hands.spec.ts`). New `tests/match-hands-seat.spec.ts` covers seat one, seat two, neither seat and `pinnedSeat: "player2"`. `player-season-server.ts` and `labels-server.ts` untouched.
+**follow-ups:**
+
+1. The four legacy rows with only `player2_id` set now read differently on the report (by seat) and in the label console (`enteredHandsFor`, creator's hand on seat two); decide which is right and backfill or align. Stale comments: `labels-server.ts` ~123 and ~722, `services/labels/session.ts` ~481, `tests/label-entered-hands.spec.ts`.
+2. Reports turned to seat two now show the hands the other way round from before (the intended fix); worth an eyes-on of Approaches wings and Direction inside-out on such a report.

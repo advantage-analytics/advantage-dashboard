@@ -30,25 +30,18 @@ export function normalizePlayerHand(
  * the match filters' `ctx.hands` (see T3's `MatchFilters` plan).
  *
  * `match.player1.hand` and `match.player2.hand` are ALREADY seat-correct by
- * the time the client holds a `Match` — do not re-derive attribution from
- * `youIsPlayer1` here. `transformDbMatchToMatch`
- * (`src/lib/data/match-detail-server.ts` ~line 175) reads the match row's
- * `player_hand`/`opponent_hand` columns — `player_*` is the account holder
- * ("you", the uploader/creator), `opponent_*` the other side — and assigns
- * them onto `player1`/`player2` using that SAME request's `isUserPlayer1`:
+ * the time the client holds a `Match`, and they are the same for every
+ * viewer. `transformDbMatchToMatch` (`src/lib/data/match-detail-server.ts`)
+ * reads the match row's columns by seat — `player_hand` is seat one's,
+ * `opponent_hand` seat two's, as the wizard writes them — and falls back to
+ * that seat's own profile when the column is null. Which seat the report is
+ * turned to ("you") plays no part in it.
  *
- * ```
- * p1Hand = isUserPlayer1 ? userHand : oppHand
- * p2Hand = isUserPlayer1 ? oppHand  : userHand
- * ```
- *
- * So when the account is player2 (`youIsPlayer1 === false`),
- * `match.player2.hand` already IS the account's hand. Swapping again on the
- * client using `youIsPlayer1` would flip an already-correct answer back onto
- * the wrong player — the exact silent mis-attribution
- * `docs/ui-revamp-guardrails.md` warns about. No `youIsPlayer1` parameter
- * here: it plays no part in this function's own mapping, and the caller
- * already has it in scope for the filters' `{ youIsPlayer1, hands }` context.
+ * So there is no `youIsPlayer1` parameter here, and none may be added:
+ * swapping on it would move a correct hand onto the wrong player, the silent
+ * mis-attribution `docs/ui-revamp-guardrails.md` warns about. The caller
+ * already has `youIsPlayer1` in scope for the filters'
+ * `{ youIsPlayer1, hands }` context.
  */
 export function playerHands(match: Pick<Match, "player1" | "player2">): {
   player1: PlayerHand;
