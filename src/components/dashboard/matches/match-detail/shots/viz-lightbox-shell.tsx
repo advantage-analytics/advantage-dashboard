@@ -172,6 +172,10 @@ export interface VizLightboxShellProps {
   /** The strip's sentence for the filters (the shell adds the legend's and a
    *  Statistics row's pick). Empty: no strip unless a pick is on. */
   filterPhrases: string[];
+  /** A caveat that closes the strip's sentence whenever there is one
+   *  ("assumes right-handed"). Never a phrase of its own: it opens no strip,
+   *  and it stays out of the Watch hand-off's label. */
+  sentenceNote?: string;
   /** A filter beyond the baseline is on: the Filters trigger reads applied. */
   panelActive: boolean;
 
@@ -287,6 +291,7 @@ export function VizLightboxShell({
   notice,
   subtitle,
   filterPhrases,
+  sentenceNote,
   panelActive,
   onClose,
   onClearFilters,
@@ -1035,7 +1040,11 @@ export function VizLightboxShell({
 
                   {!isDraft && (
                     <LightboxFilterStrip
-                      phrases={phrases}
+                      phrases={
+                        sentenceNote && phrases.length > 0
+                          ? [...phrases, sentenceNote]
+                          : phrases
+                      }
                       shown={pointList ? matched.length : undefined}
                       total={pointList?.total}
                       statOnly={statOnly}

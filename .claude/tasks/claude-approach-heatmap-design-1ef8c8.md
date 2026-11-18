@@ -143,7 +143,7 @@ ready).
 
 ## T10 · Add approach filters to the panel and sentence
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5, T9
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/lightbox-filters.tsx`, `shots/viz-url.ts` (`activeFilterEntries`), `shots/viz-lightbox.tsx`; `tests/viz-url.spec.ts`, `tests/viz-lightbox-browser.spec.ts` or `tests/viz-lightbox-shell-browser.spec.ts`

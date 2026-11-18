@@ -1192,24 +1192,59 @@ test.describe("approaches cut URL state", () => {
     });
   });
 
-  test("applied tokens read the option labels", () => {
+  test("applied tokens: one labelled entry per ticked value of each group", () => {
+    const entries = activeFilterEntries({
+      cut: "approaches",
+      chart: "scatter",
+      viewId: null,
+      filters: {
+        ...EMPTY_VIZ_FILTERS,
+        // Every value ticked, in each group: one token apiece, the card's
+        // own `approach` included — the lightbox, not this list, leaves a
+        // card's baseline out of its sentence.
+        entry: ["approach", "serve-volley", "drawn-in"],
+        approachTo: ["backhand", "middle", "forehand"],
+        approachDir: ["Crosscourt", "Middle", "Down the Line"],
+      },
+    });
+    expect(
+      entries.map(({ key, value, label }) => ({ key, value, label })),
+    ).toEqual([
+      { key: "entry", value: "approach", label: "Approach" },
+      { key: "entry", value: "serve-volley", label: "Serve and volley" },
+      { key: "entry", value: "drawn-in", label: "Drawn in" },
+      // A destination in the sentence, so its Middle is not Direction's.
+      { key: "approachTo", value: "backhand", label: "To their backhand" },
+      { key: "approachTo", value: "middle", label: "To the middle" },
+      { key: "approachTo", value: "forehand", label: "To their forehand" },
+      { key: "approachDir", value: "Crosscourt", label: "Crosscourt" },
+      { key: "approachDir", value: "Middle", label: "Middle" },
+      { key: "approachDir", value: "Down the Line", label: "Down the line" },
+    ]);
+    // Entry and Direction tokens are the panel's own words.
+    expect(entries[1].label).toBe(OPTIONS.entry["serve-volley"]);
+    expect(entries[8].label).toBe(OPTIONS.approachDir["Down the Line"]);
+    // The two Middles never read alike.
+    const middles = entries.filter((e) => e.value.toLowerCase() === "middle");
+    expect(new Set(middles.map((e) => e.label)).size).toBe(2);
+
+    // One value ticked is one token; nothing ticked is none.
     expect(
       activeFilterEntries({
         cut: "approaches",
         chart: "scatter",
         viewId: null,
-        filters: {
-          ...EMPTY_VIZ_FILTERS,
-          entry: ["serve-volley"],
-          approachTo: ["backhand"],
-          approachDir: ["Down the Line"],
-        },
+        filters: { ...EMPTY_VIZ_FILTERS, approachTo: ["backhand"] },
       }).map((e) => e.label),
-    ).toEqual([
-      OPTIONS.entry["serve-volley"],
-      OPTIONS.approachTo.backhand,
-      OPTIONS.approachDir["Down the Line"],
-    ]);
+    ).toEqual(["To their backhand"]);
+    expect(
+      activeFilterEntries({
+        cut: "approaches",
+        chart: "scatter",
+        viewId: null,
+        filters: EMPTY_VIZ_FILTERS,
+      }),
+    ).toEqual([]);
   });
 
   test("the cut is a placement cut", () => {

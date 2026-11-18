@@ -56,8 +56,18 @@ const LOOSENED_LABEL: Partial<Record<keyof VizFilters, string>> = {
   rally: "Rally",
   game: "Game",
   error: "Error type",
+  entry: "How you came in",
+  approachTo: "Approach to",
+  approachDir: "Direction",
   match: "Advanced filters",
 };
+
+/**
+ * The applied sentence's last word on the Approaches cut: "Their backhand"
+ * and "Their forehand" are worked out from the opponent's hand, and where
+ * the match does not record it the court reads them as right-handed.
+ */
+const HAND_ASSUMED_NOTE = "assumes right-handed";
 
 /** Opens the Video tab on the points the lightbox shows, by point number,
  *  named by `label` in its strip. */
@@ -287,6 +297,20 @@ export function VizLightbox({
             view: null,
           }
         : null;
+  // The default card's floor (`DefaultCut.floor`): the filters that make the
+  // card what it is — Approaches is approach shots — which "Clear filter"
+  // always comes back to, even once loosened. A saved view has none: Clear
+  // goes back to the view itself.
+  const floor: Partial<VizFilters> =
+    baseline !== null && baseline.view === null
+      ? (defaultCut?.floor ?? {})
+      : {};
+  const floorFilters: VizFilters = {
+    ...EMPTY_VIZ_FILTERS,
+    ...floor,
+    player: state.filters.player,
+  };
+  const floorKeys = Object.keys(floor) as (keyof VizFilters)[];
   const cardFilters: VizFilters | null = baseline?.filters ?? null;
   const cardKeys = baseline?.keys ?? [];
   const onCard =
@@ -441,12 +465,12 @@ export function VizLightbox({
 
   // What "Clear filter" leaves: a saved view's own filters, always — Clear
   // goes back to the view; the card's while the title still names the card;
-  // otherwise nothing but the player. Exactly the filters the strip names
-  // are removed.
+  // otherwise nothing but the player and the card's floor (Approaches is
+  // approach shots again). Exactly the filters the strip names are removed.
   const clearTarget: VizFilters =
     baseline !== null && (onCard || baseline.view !== null)
       ? baseline.filters
-      : { ...EMPTY_VIZ_FILTERS, player: state.filters.player };
+      : floorFilters;
   // Back on the view's filters for the view's own player, the court IS the
   // view again: keep its id, so its title, Saved highlight and link return.
   const clearViewId =
@@ -490,9 +514,13 @@ export function VizLightbox({
   const names = { you: you.shortName, opponent: opp.shortName };
   const onView = baseline !== null && baseline.view !== null;
   const unchangedBaseKey = (key: keyof VizFilters) =>
-    cardFilters !== null &&
-    cardKeys.includes(key) &&
-    (onView ? sameFilterValue(key, liveFilters, cardFilters) : onCard);
+    (cardFilters !== null &&
+      cardKeys.includes(key) &&
+      (onView ? sameFilterValue(key, liveFilters, cardFilters) : onCard)) ||
+    // The card's floor, while the court still holds it, is never named:
+    // "To their backhand", not "Approach · To their backhand".
+    (floorKeys.includes(key) &&
+      sameFilterValue(key, liveFilters, floorFilters));
   const phrases = activeFilterEntries(state, names, {
     errorSplitJudged,
     bandLabels: bandLabelsOf(matchCtx),
@@ -506,6 +534,19 @@ export function VizLightbox({
         sameFilterValue(key, liveFilters, EMPTY_VIZ_FILTERS)
       )
         phrases.push(`${LOOSENED_LABEL[key] ?? "Filter"}: any`);
+  // The floor let go of entirely (every way to the net, say) is a change
+  // Clear undoes, so it is named too.
+  for (const key of floorKeys)
+    if (
+      !sameFilterValue(key, floorFilters, EMPTY_VIZ_FILTERS) &&
+      sameFilterValue(key, liveFilters, EMPTY_VIZ_FILTERS)
+    )
+      phrases.push(`${LOOSENED_LABEL[key] ?? "Filter"}: any`);
+  // Wing words ("To their backhand") rest on the opponent's hand; where any
+  // shown approach had to assume it, the sentence says so.
+  const sentenceNote = result.dots.some((d) => d.meta?.handAssumed === true)
+    ? HAND_ASSUMED_NOTE
+    : undefined;
 
   return (
     <VizLightboxShell
@@ -549,6 +590,7 @@ export function VizLightbox({
       }
       subtitle={subtitle}
       filterPhrases={phrases}
+      sentenceNote={sentenceNote}
       panelActive={panelActive}
       onClose={close}
       onClearFilters={clearFilters}

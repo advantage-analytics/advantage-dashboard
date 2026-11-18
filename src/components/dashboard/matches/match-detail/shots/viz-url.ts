@@ -403,6 +403,23 @@ export const OPTIONS = {
 } as const;
 
 /**
+ * Where an applied-strip token words an option differently from its panel
+ * row. "Approach to" reads as a destination in the sentence ("To their
+ * backhand · Crosscourt"), which also keeps its Middle apart from
+ * Direction's: "To the middle" is where the ball went, "Middle" the line it
+ * took. Every other option's token is its `OPTIONS` label.
+ */
+const APPLIED_LABELS: Partial<
+  Record<OptionKey, Readonly<Record<string, string>>>
+> = {
+  approachTo: {
+    backhand: "To their backhand",
+    middle: "To the middle",
+    forehand: "To their forehand",
+  },
+};
+
+/**
  * The few option values that travel in the URL under a shorter code than
  * their model value: an approach direction is `shots.zone`'s own words,
  * spaces and all, so "Down the Line" goes as `dtl` — the codes the stats
@@ -1148,7 +1165,12 @@ function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
   return filters;
 }
 
+/** An applied-strip token's words: `APPLIED_LABELS`, else `OPTIONS`. */
 function getLabel(key: OptionKey, value: string): string {
+  const applied = Object.hasOwn(APPLIED_LABELS, key)
+    ? APPLIED_LABELS[key]
+    : undefined;
+  if (applied && Object.hasOwn(applied, value)) return applied[value];
   const options = OPTIONS[key] as Record<string, string>;
   return options[value] || value;
 }

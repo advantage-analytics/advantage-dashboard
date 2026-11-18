@@ -33,7 +33,20 @@ import { matchesMenuValueLabel } from "./lightbox-matches-sheet";
 
 /* ── Filters panel ─────────────────────────────────────────────────────── */
 
-type PanelKey = "ball" | "court" | "set" | "zone" | "pressure" | "error";
+type PanelKey =
+  | "ball"
+  | "court"
+  | "set"
+  | "zone"
+  | "pressure"
+  | "error"
+  | "entry"
+  | "approachTo"
+  | "approachDir";
+
+type EntryValue = keyof typeof OPTIONS.entry;
+type ApproachToValue = keyof typeof OPTIONS.approachTo;
+type ApproachDirValue = keyof typeof OPTIONS.approachDir;
 
 /** One of a season's matches, as the Matches sheet lists it. */
 export interface SeasonSheetMatch {
@@ -132,7 +145,9 @@ export interface LightboxAdvancedFilters {
  * (`MatchesFilterPanel`, Data Table rule 6) over the cut's existing
  * `VizFilters` keys only — Serve, Court and Set as segmented rows, Zone,
  * Score and Error type as checklists with the count each option alone would
- * leave — applied live, with Clear and the live count in the footer. Only
+ * leave, and on the Approaches cut its own three groups (How you came in,
+ * Approach to, Direction) as checklists too (plan decision Q7: the model's
+ * groups are multi-select, so they are drawn as Zone is) — applied live, with Clear and the live count in the footer. Only
  * the keys `filterKeysFor(cut)` allows appear, so a pick can never be one the
  * court then ignores.
  */
@@ -189,6 +204,37 @@ export function LightboxFilterPanel({
   const errorOptions = errorOptionsFor(errorSplitJudged);
 
   const sections: FilterPanelSection<PanelKey>[] = [];
+  // The Approaches cut's own groups lead: they say what the court is.
+  if (keys.has("entry"))
+    sections.push({
+      label: "How you came in",
+      checklist: {
+        key: "entry",
+        values: Object.keys(OPTIONS.entry),
+        displayValue: (v) => OPTIONS.entry[v as EntryValue],
+        count: (v) => countWith({ entry: [v as EntryValue] }),
+      },
+    });
+  if (keys.has("approachTo"))
+    sections.push({
+      label: "Approach to",
+      checklist: {
+        key: "approachTo",
+        values: Object.keys(OPTIONS.approachTo),
+        displayValue: (v) => OPTIONS.approachTo[v as ApproachToValue],
+        count: (v) => countWith({ approachTo: [v as ApproachToValue] }),
+      },
+    });
+  if (keys.has("approachDir"))
+    sections.push({
+      label: "Direction",
+      checklist: {
+        key: "approachDir",
+        values: Object.keys(OPTIONS.approachDir),
+        displayValue: (v) => OPTIONS.approachDir[v as ApproachDirValue],
+        count: (v) => countWith({ approachDir: [v as ApproachDirValue] }),
+      },
+    });
   if (keys.has("ball"))
     sections.push({
       label: "Serve",

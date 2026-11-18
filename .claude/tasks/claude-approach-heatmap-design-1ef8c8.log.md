@@ -89,3 +89,12 @@ is the runner's. Newest entries at the bottom.
 1. T13: the season merge drops the KPI, so a season card's "Won x of n" counts wins among drawn approaches only while n counts all.
 2. The card's noun is always "approaches"; a saved view with another "How you came in" choice would want "times at the net" (`approachNoun` is not exported).
 3. On a wing-filtered saved view, the not-drawn number is capped at 0 rather than going negative; worth a proper fix when saved views of this cut are tested.
+
+## T10 · Add approach filters to the panel and sentence — done
+
+**gate:** mechanical pass · completion pass
+**changed:** The Approaches Filters panel leads with three checklist sections (How you came in, Approach to, Direction) with counts; no other cut shows them. `activeFilterEntries` lists every ticked value, with Approach to worded "To their backhand / To the middle / To their forehand". A new `DefaultCut.floor` keeps the card's `entry: ["approach"]` out of the strip and makes Clear return to it; the strip appends "Assumes right-handed" (new `sentenceNote` on `viz-lightbox-shell.tsx`) when a shown point assumed the hand. New harness `tests/viz-approach-filters-browser.spec.ts` (+ fixture) and an updated `viz-url.spec.ts` case. No new empty-state returns.
+**follow-ups:**
+
+1. The season lightbox (`player-season-viz.ts`) has its own copy of the baseline/Clear rule: it does not use `floor` yet and shows no hand note. Fold into T13 or a follow-up.
+2. `save-view-dialog.tsx` / `cut-menu.tsx` count `activeFilterEntries`, so the card's own `entry: ["approach"]` counts as a filter there; the save dialog may suggest "Approach" as a name.
