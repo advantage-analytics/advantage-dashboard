@@ -1374,16 +1374,12 @@ function frameFitZ(
 }
 
 /**
- * How much larger the Approaches court draws its words than every landing
- * cut does, on `stage`. The art's words are SVG `font-size`s in viewBox
- * units, so their on-screen size is size × zoom, and Approaches opens on the
- * whole length (`VIEWER_APPROACH_FRAME`) — about half the zoom the landing
- * cuts open at (`VIEWER_LANDING_FRAME`). Multiplying its type by the ratio of
- * the two frames' fits on the SAME stage opens its band labels at exactly
- * the size Returns opens its own at. A ratio, not one fixed multiplier,
- * because `frameFitZ` takes the smaller of the width and height fits: on a
- * tall, narrow stage both frames are width-bound and this is 1. Never below
- * 1 — the landing frame is the shorter of the two at the same width.
+ * How much larger the Approaches court draws its words than a landing cut
+ * does, on `stage`: the ratio of the two frames' fits. Its art's type is in
+ * viewBox units and it opens on the whole length, at about half the zoom the
+ * landing cuts open at, so this opens its labels at Returns' on-screen size.
+ * A ratio, not a constant, because `frameFitZ` is width-bound on a tall,
+ * narrow stage (then 1). Never below 1.
  */
 export function viewerApproachLabelScale(stage: Size): number {
   const landing = frameFitZ(VIEWER_LANDING_FRAME, stage);
