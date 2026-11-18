@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -51,8 +51,12 @@ export function ProgramIntakeForm({ programId }: { programId: string }) {
 
   // The end of the coach path. Sent before the action, as the player's finish
   // is: a saved intake redirects on the server, so nothing after the await is
-  // sure to run. Skip counts too — every answer here is optional.
+  // sure to run. Skip counts too — every answer here is optional. Once per
+  // visit: a refused save followed by a retry is still one coach finishing.
+  const tracked = useRef(false);
   function trackFinished(skipped: boolean) {
+    if (tracked.current) return;
+    tracked.current = true;
     track("onboarding_completed", {
       path: "claim",
       persona: "coach",
