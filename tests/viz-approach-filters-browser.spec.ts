@@ -502,3 +502,100 @@ test("the strip counts what the approaches cut counts — never points — and a
     /^\d+ of \d+ points?$/,
   );
 });
+
+/* ── The player switch is not a filter (T21) ─────────────────────────── */
+
+const stage = (dialog: Locator) => dialog.locator("[data-court-stage]");
+const statsEmpty = (dialog: Locator) => dialog.locator("[data-stats-empty]");
+
+/** Switches the opened court to the opponent with the player chip. */
+async function toOpponent(dialog: Locator) {
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
+  await expect(dialog).toContainText("Approaches · Rivera");
+}
+
+test("switched to an opponent who never came in, with no filter ticked, the stage says none are recorded — no Clear, no strip", async ({
+  page,
+}) => {
+  // Only you came in: you have approaches, the opponent has none.
+  const { dialog, errors } = await openApproaches(page, "&net=you");
+  await expect(courtMarks(dialog).first()).toBeVisible();
+  await toOpponent(dialog);
+
+  await expect(stage(dialog)).toContainText(
+    /No approaches recorded for .+ yet/,
+  );
+  await expect(dialog).not.toContainText("match these filters");
+  await expect(
+    stage(dialog).getByRole("button", { name: "Clear", exact: true }),
+  ).toHaveCount(0);
+  await expect(dialog.locator("[data-viz-filter-strip]")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("a ticked filter nothing matches still reads 'match these filters' with its Clear, on your court and on the opponent's", async ({
+  page,
+}) => {
+  // Your court: you never came in (the wall's card is no link then, so the
+  // URL opens it), and a wing is ticked.
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=approaches&net=never&hand=known`);
+  const yours = { dialog: page.getByRole("dialog", { name: "Approaches" }) };
+  await expect(yours.dialog).toBeVisible();
+  let panel = await openPanel(page);
+  await panel.getByRole("checkbox", { name: /^Their backhand\b/ }).click();
+  await page.keyboard.press("Escape");
+  await expect(stage(yours.dialog)).toContainText(
+    "No approaches match these filters",
+  );
+  await expect(
+    stage(yours.dialog).getByRole("button", { name: "Clear", exact: true }),
+  ).toHaveCount(1);
+  expect(errors).toEqual([]);
+
+  // The opponent's court: they never came in, and a wing is ticked.
+  const theirs = await openApproaches(page, "&net=you&hand=known");
+  await toOpponent(theirs.dialog);
+  panel = await openPanel(page);
+  await panel.getByRole("checkbox", { name: /^Their backhand\b/ }).click();
+  await page.keyboard.press("Escape");
+  await expect(stage(theirs.dialog)).toContainText(
+    "No approaches match these filters",
+  );
+  const clear = stage(theirs.dialog).getByRole("button", {
+    name: "Clear",
+    exact: true,
+  });
+  await expect(clear).toHaveCount(1);
+  // Clear keeps the player: the opponent's court, none recorded.
+  await clear.click();
+  await expect(stage(theirs.dialog)).toContainText(
+    /No approaches recorded for .+ yet/,
+  );
+  await expect(theirs.dialog).toContainText("Approaches · Rivera");
+  expect(theirs.errors).toEqual([]);
+});
+
+test("the Statistics pane of a player with no approaches says what the stage says: none recorded with no filter, none matching with one", async ({
+  page,
+}) => {
+  const { dialog, errors } = await openApproaches(page, "&net=you&hand=known");
+  await toOpponent(dialog);
+  await showStats(dialog);
+  const stageLine = await stage(dialog)
+    .getByText(/No approaches recorded for .+ yet/)
+    .textContent();
+  await expect(statsEmpty(dialog)).toHaveText(stageLine!.trim());
+  await expect(statsEmpty(dialog)).not.toContainText("match these filters");
+
+  const panel = await openPanel(page);
+  await panel.getByRole("checkbox", { name: /^Their backhand\b/ }).click();
+  await page.keyboard.press("Escape");
+  await expect(statsEmpty(dialog)).toHaveText(/^No .+ match these filters$/);
+  await expect(statsEmpty(dialog)).toHaveText(
+    "No approaches match these filters",
+  );
+  expect(errors).toEqual([]);
+});

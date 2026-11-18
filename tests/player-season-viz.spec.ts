@@ -2734,6 +2734,29 @@ test.describe("the Approaches card over a season", () => {
     ).toBe(false);
   });
 
+  test("the opponent's court with no approaches and no filter is none recorded: the player switch is not a filter", () => {
+    // `LEFTY` is all the player's own approaches: the opponent never came in.
+    const theirs = buildSeasonLightbox(
+      [LEFTY],
+      approachState({ player: "opponent" }),
+      BANDS,
+      NAMES,
+    )!;
+    expect(theirs.result.count).toBe(0);
+    expect(theirs.filterPhrases).toEqual([]);
+    expect(theirs.panelActive).toBe(false);
+    expect(theirs.hasFilters).toBe(false);
+    // A ticked filter on that court is still one.
+    expect(
+      buildSeasonLightbox(
+        [LEFTY],
+        approachState({ player: "opponent", approachTo: ["backhand"] }),
+        BANDS,
+        NAMES,
+      )!.hasFilters,
+    ).toBe(true);
+  });
+
   test("Clear comes back to approach shots (the card's floor), which the strip never names while the court holds it", () => {
     const onCard = buildSeasonLightbox(SEASON, approachState(), BANDS, NAMES)!;
     expect(onCard.title).toBe("Approaches");

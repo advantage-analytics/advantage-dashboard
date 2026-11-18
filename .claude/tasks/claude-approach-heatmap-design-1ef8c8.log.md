@@ -200,3 +200,12 @@ is the runner's. Newest entries at the bottom.
 
 1. The season's `mergeVizResults` drops `undrawn`, so the season legend counts only drawn approaches.
 2. Memoise the shell's `marks` / `matched` derivations if profiling shows a cost.
+
+## T21 · Stop the empty Approaches view claiming a filter — done
+
+**gate:** mechanical pass · completion pass
+**changed:** The player switch no longer counts as a filter: `stageHasFilters` (`viz-lightbox.tsx`) and the season's `buildSeasonLightbox` `hasFilters` skip the `player` entry (every cut; `useVizView().hasFilters` untouched). The shell builds one empty line ("No {noun} match these filters" with a filter on, else "No {noun} recorded for {subject} yet") for both the stage and `LightboxStats` (new `data-stats-empty`). New filters-harness option `?net=you`; three new browser cases and one season case.
+**follow-ups:**
+
+1. The Points pane's empty line still reads "No {noun} match these filters." whatever the filter state; it could use the same empty line.
+2. T15 follow-up 2 stands: with `ventry=any` and no net points the stage says "none recorded" while the strip names the loosened floor.

@@ -21,7 +21,9 @@ import {
  * You are player 1. `?hand=known` records both players as right-handed;
  * without it the opponent's hand is not on the match row, so the court's
  * wing words assume it (`handAssumed`). `?net=never` keeps only the points
- * you never came in on: a match with no approaches of yours to draw.
+ * you never came in on: a match with no approaches of yours to draw;
+ * `?net=you` drops `OPP_APPROACH`, so only you came in and the opponent's
+ * court has no approaches at all.
  * `?landing=none` takes every shot's landing off (real match 9e4d293e: the
  * approaches count, none can be drawn); `?landing=some` takes it off two of
  * your approaches only (`PASSED_DTL`, `LOBBED`), so the rest still draw.
@@ -33,8 +35,13 @@ const handKnown = params.get("hand") === "known";
 const landing = params.get("landing");
 const video = params.get("video") === "1";
 const NO_LANDING: ReadonlySet<string> = new Set([PASSED_DTL.id, LOBBED.id]);
+const net = params.get("net");
 const source = (
-  params.get("net") === "never" ? [BASELINE, OPP_APPROACH] : MATCH
+  net === "never"
+    ? [BASELINE, OPP_APPROACH]
+    : net === "you"
+      ? MATCH.filter((point) => point.id !== OPP_APPROACH.id)
+      : MATCH
 ).map((point) =>
   landing === "none" || (landing === "some" && NO_LANDING.has(point.id))
     ? withoutLanding(point)

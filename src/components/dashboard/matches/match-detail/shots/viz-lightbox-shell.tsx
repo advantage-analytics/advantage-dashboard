@@ -913,6 +913,13 @@ export function VizLightboxShell({
   const atFullCourt = sameT(fullT);
 
   const matched = isDraft || !points ? [] : pointsBehind(cut, marks, points);
+  // An empty court's one sentence, said alike by the stage and the
+  // Statistics pane: nothing matching only while a filter is in force (the
+  // card's held floor and the player switch are not filters), otherwise
+  // nothing recorded for whoever the court is about.
+  const emptyLine = hasFilters
+    ? `No ${result.noun} match these filters`
+    : `No ${result.noun} recorded for ${subjectName} yet`;
   // What the strip and the pane count: points, but on Approaches what the
   // cut counts ("times at the net"), the KPI's own noun.
   const listNoun =
@@ -1245,9 +1252,7 @@ export function VizLightboxShell({
                     ) : result.count === 0 ? (
                       <StageCard>
                         <p className="text-[12px] text-[var(--ink-600)]">
-                          {hasFilters
-                            ? `No ${result.noun} match these filters`
-                            : `No ${result.noun} recorded for ${subjectName} yet`}
+                          {emptyLine}
                         </p>
                         {hasFilters && !editing && (
                           <button
@@ -1425,6 +1430,7 @@ export function VizLightboxShell({
                         <LightboxStats
                           stats={stats}
                           cut={cut}
+                          emptyLine={emptyLine}
                           pick={activeStatPick}
                           onPick={(pick) => {
                             setSelectedMarkId(null);

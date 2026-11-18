@@ -298,7 +298,7 @@ ready).
 
 ## T21 · Stop the empty Approaches view claiming a filter
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/viz-lightbox.tsx` (`stageHasFilters` ~297), `src/lib/data/player-season-viz.ts` (`hasFilters` ~1365), `shots/lightbox-stats.tsx` (empty line ~168), `shots/viz-lightbox-shell.tsx` (passes the stage's `hasFilters`, noun and subject to `LightboxStats`); `tests/viz-approach-filters-browser.spec.ts` + its fixture, `tests/player-season-viz.spec.ts`
 - **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`

@@ -141,6 +141,7 @@ interface TipAnchor {
 export function LightboxStats({
   stats,
   cut,
+  emptyLine,
   pick,
   onPick,
   onHover,
@@ -148,6 +149,10 @@ export function LightboxStats({
 }: {
   stats: VizStats;
   cut: Cut;
+  /** What the column says when nothing is counted: the stage's own line
+   *  ("No approaches recorded for … yet", or "… match these filters" only
+   *  while a filter is in force), so the two never disagree. */
+  emptyLine: string;
   pick: StatPick | null;
   onPick: (pick: StatPick | null) => void;
   onHover: (pick: StatPick | null) => void;
@@ -164,8 +169,11 @@ export function LightboxStats({
   const [tipOpen, setTipOpen] = useState<string | null>(null);
   if (statsAreEmpty(stats)) {
     return (
-      <p className="py-5 text-[12px] leading-[1.6] text-[var(--ink-600)]">
-        No points match these filters
+      <p
+        data-stats-empty=""
+        className="py-5 text-[12px] leading-[1.6] text-[var(--ink-600)]"
+      >
+        {emptyLine}
       </p>
     );
   }

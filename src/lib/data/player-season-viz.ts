@@ -1361,10 +1361,13 @@ export function buildSeasonLightbox(
     subjectName,
     unit: bands.unit,
     // A held floor is the card, not a filter on it: an empty Approaches
-    // court has none recorded, not none matching.
+    // court has none recorded, not none matching. Nor is the player switch,
+    // which Clear keeps: the opponent's empty court has none recorded.
     hasFilters:
       seasonActive ||
-      activeFilterEntries(state).some((entry) => !floorHeld(entry.key)),
+      activeFilterEntries(state).some(
+        (entry) => entry.key !== "player" && !floorHeld(entry.key),
+      ),
     title: baseline !== null && onCard ? baseline.name : SEASON_CUT_LABEL[cut],
     subtitle: `${SEASON_CUT_LABEL[cut]} · ${subjectWord} · ${matches} ${matches === 1 ? "match" : "matches"} · ${lightboxCountLine(
       cut,

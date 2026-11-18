@@ -296,8 +296,14 @@ export function VizLightbox({
   // recorded rather than nothing matching.
   const floorHeld = (key: keyof VizFilters) =>
     floorKeys.includes(key) && sameFilterValue(key, liveFilters, floorFilters);
+  // Nor is the player switch: the opponent's court is the other side of the
+  // match, not a narrowing of it, and Clear keeps the player — an empty
+  // court there has none recorded, with nothing for Clear to remove.
   const stageHasFilters =
-    hasFilters && activeFilterEntries(state).some((e) => !floorHeld(e.key));
+    hasFilters &&
+    activeFilterEntries(state).some(
+      (e) => e.key !== "player" && !floorHeld(e.key),
+    );
   const cardFilters: VizFilters | null = baseline?.filters ?? null;
   const cardKeys = baseline?.keys ?? [];
   const onCard =
