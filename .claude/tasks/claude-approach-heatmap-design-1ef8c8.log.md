@@ -98,3 +98,12 @@ is the runner's. Newest entries at the bottom.
 
 1. The season lightbox (`player-season-viz.ts`) has its own copy of the baseline/Clear rule: it does not use `floor` yet and shows no hand note. Fold into T13 or a follow-up.
 2. `save-view-dialog.tsx` / `cut-menu.tsx` count `activeFilterEntries`, so the card's own `entry: ["approach"]` counts as a filter there; the save dialog may suggest "Approach" as a name.
+
+## T11 · Word the point list for approaches — done
+
+**gate:** mechanical pass · completion pass
+**changed:** New pure `approachDetail` in `match-filters/approach.ts` ("Forehand down the line, to their backhand"; "Serve and volley · " / "Drawn in · " prefixes; no dangling separator without a direction; a middle ball to the middle reads "down the middle"). `pointDetail`'s flag tail extracted into an exported `pointFlags` with unchanged output. `lightbox-point-list.tsx` shows the approach line plus the flags only on the approaches cut. New `approachDetail` cases in `tests/approach.spec.ts`.
+**follow-ups:**
+
+1. The season lightbox does not use `LightboxPointList`; for the same wording on the season card it needs its own hook-up to `approachDetail`.
+2. A point that is not an approach falls back to `pointDetail`'s line on the approaches cut (documented in code).

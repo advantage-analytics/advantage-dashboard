@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 
+import type { MatchPoint } from "@/lib/data/match-points-server";
 import {
+  approachDetail,
   approachLateralM,
   approachOf,
   laneOf,
@@ -234,5 +236,56 @@ test.describe("how it ended", () => {
     expect(approachOf(passedBy("none", null), true, LOBS, null)?.bucket).toBe(
       "passed-crosscourt",
     );
+  });
+});
+
+test.describe("approachDetail words the point list line", () => {
+  const withZone = (
+    point: MatchPoint,
+    shotNumber: number,
+    zone: string | null,
+  ) => ({
+    ...point,
+    shots: (point.shots ?? []).map((sh) =>
+      sh.shotNumber === shotNumber ? { ...sh, zone } : sh,
+    ),
+  });
+
+  test("an approach reads stroke, direction and wing, with no prefix", () => {
+    // The approach lands on the hitter's left: a left-hander's backhand.
+    const a = approachOf(PASSED_DTL, true, LOBS, "left");
+    expect(a?.entry).toBe("approach");
+    const line = approachDetail(a!);
+    expect(line).toBe("Forehand down the line, to their backhand");
+    expect(line).not.toMatch(/^(Serve and volley|Drawn in) · /);
+    // The same ball to a right-hander is their forehand.
+    expect(approachDetail(approachOf(PASSED_DTL, true, LOBS, "right")!)).toBe(
+      "Forehand down the line, to their forehand",
+    );
+  });
+
+  test("serve and volley and drawn in say so first", () => {
+    const sv = approachDetail(approachOf(SERVE_VOLLEY, true, LOBS, "right")!);
+    expect(sv.startsWith("Serve and volley · ")).toBe(true);
+    // A serve has no direction: no direction word and no comma.
+    expect(sv).toBe("Serve and volley · Serve to their backhand");
+
+    const drawn = approachDetail(approachOf(DRAWN_IN, true, LOBS, "right")!);
+    expect(drawn.startsWith("Drawn in · ")).toBe(true);
+    // Down the middle to the middle is said once.
+    expect(drawn).toBe("Drawn in · Forehand down the middle");
+  });
+
+  test("no direction: no direction word and no dangling separator", () => {
+    const point = withZone(PASSED_DTL, 4, null);
+    const a = approachOf(point, true, LOBS, "left")!;
+    expect(a.direction).toBeNull();
+    const line = approachDetail(a);
+    expect(line).toBe("Forehand to their backhand");
+    expect(line).not.toMatch(/crosscourt|down the|,|·/i);
+
+    // Neither direction nor wing: the stroke alone.
+    const bare = approachDetail({ ...a, wing: null });
+    expect(bare).toBe("Forehand");
   });
 });

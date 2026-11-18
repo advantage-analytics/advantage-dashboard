@@ -199,3 +199,60 @@ export function approachOf(
     direction: directionOf(shot),
   };
 }
+
+const ENTRY_PREFIX: Record<NetEntry, string> = {
+  approach: "",
+  "serve-volley": "Serve and volley · ",
+  "drawn-in": "Drawn in · ",
+};
+
+const DIRECTION_WORDS: Record<ApproachDirection, string> = {
+  Crosscourt: "crosscourt",
+  Middle: "down the middle",
+  "Down the Line": "down the line",
+};
+
+const WING_WORDS: Record<ApproachWing, string> = {
+  backhand: "to their backhand",
+  middle: "to the middle",
+  forehand: "to their forehand",
+};
+
+/** The approach shot's stroke: "Serve" for either serve, else its type. */
+function strokeWordOf(shot: Pick<MatchShot, "shotType">): string {
+  const type = shot.shotType?.trim() ?? "";
+  if (!type) return "Approach";
+  if (isServeShotType(type)) return "Serve";
+  return type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+}
+
+/**
+ * The Approaches cut's point-list line (the opened view's Points pane): the
+ * shot that took the side in, where it went and which wing of theirs that
+ * was — "Forehand down the line, to their backhand". A serve and volley or a
+ * drawn-in point says so first ("Serve and volley · Serve to their
+ * backhand"); a plain approach has no prefix. A missing direction (a serve,
+ * an unknown zone) or wing (unmeasured landing) is left out with its
+ * separator, so the line never dangles, and a ball down the middle to the
+ * middle says so once. "Their" is the side approached
+ * against, whichever seat the cut is turned to. Pure; beside `pointDetail`
+ * (`film/film-shots.ts`), which the Video tab and the label rows share and
+ * which this does not change.
+ */
+export function approachDetail(
+  approach: Pick<Approach, "entry" | "shot" | "wing" | "direction">,
+): string {
+  const direction = approach.direction
+    ? DIRECTION_WORDS[approach.direction]
+    : null;
+  // "Down the middle" already says where a middle ball went.
+  const wing =
+    approach.wing &&
+    !(approach.wing === "middle" && approach.direction === "Middle")
+      ? WING_WORDS[approach.wing]
+      : null;
+  let line = strokeWordOf(approach.shot);
+  if (direction) line += ` ${direction}`;
+  if (wing) line += `${direction ? "," : ""} ${wing}`;
+  return ENTRY_PREFIX[approach.entry] + line;
+}

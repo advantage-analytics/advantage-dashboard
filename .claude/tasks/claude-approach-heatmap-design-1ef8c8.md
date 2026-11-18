@@ -157,7 +157,7 @@ ready).
 
 ## T11 · Word the point list for approaches
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/lightbox-point-list.tsx`, `match-filters/approach.ts` or `film/film-shots.ts`; `tests/approach.spec.ts` or `tests/film-shots.spec.ts`
