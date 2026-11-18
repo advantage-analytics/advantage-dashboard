@@ -171,7 +171,7 @@ ready).
 
 ## T12 · Pass lob keys to the Visualizations tab
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/use-viz-view.ts` (`useVizFilterContext`), `shots/viz-wall.tsx`, `shots/saved-views-band.tsx`; reuses `film/use-ball-paths.ts`

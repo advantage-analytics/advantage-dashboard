@@ -17,7 +17,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Users } from "lucide-react";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
 import { useVizPoints } from "@/components/dashboard/matches/match-detail/shots/use-viz-points";
-import { useMatchFilters } from "../match-filters/provider";
+import { useVizFilterContext } from "./use-viz-view";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
 import {
@@ -132,7 +132,9 @@ export function SavedViewsBand({
   const points = useVizPoints(useMatchData());
   const { bands, unit } = useVizBands();
   const { you, opp } = useMatchSides();
-  const { context: matchCtx } = useMatchFilters();
+  // The lightbox's own context (bands, lob keys), so a saved card and the
+  // view it opens count the same points.
+  const matchCtx = useVizFilterContext();
   const { hrefFor } = useVizState();
   const [, startTransition] = useTransition();
 

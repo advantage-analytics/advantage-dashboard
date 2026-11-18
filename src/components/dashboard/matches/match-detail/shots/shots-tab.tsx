@@ -18,6 +18,7 @@ import {
   type SavedViewRequest,
 } from "@/components/dashboard/matches/match-detail/shots/saved-views-band";
 import { VizBandsProvider } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
+import { VizLobKeysProvider } from "@/components/dashboard/matches/match-detail/shots/viz-lob-keys";
 import { shotsWriteAccess } from "@/components/dashboard/matches/match-detail/shots/shots-write-access";
 import { VizEmpty } from "@/components/dashboard/matches/match-detail/shots/viz-empty";
 import { useMatchData } from "@/components/dashboard/matches/match-data-provider";
@@ -60,10 +61,14 @@ export function ShotsTab() {
   return (
     // `VizBandsProvider` sits inside the state provider and around both
     // surfaces: a band preset picked in the lightbox moves the bands and the
-    // percentages printed on them in the same frame.
+    // percentages printed on them in the same frame. `VizLobKeysProvider`
+    // reads the match's lob shots once for both surfaces, so the wall's
+    // Approaches card and its lightbox read the same answer.
     <VizStateProvider>
       <VizBandsProvider>
-        <ShotsTabBody />
+        <VizLobKeysProvider>
+          <ShotsTabBody />
+        </VizLobKeysProvider>
       </VizBandsProvider>
     </VizStateProvider>
   );

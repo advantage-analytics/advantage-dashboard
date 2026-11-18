@@ -7,7 +7,6 @@ import {
   pointResultLabel,
   type MatchFilterContext,
 } from "@/components/dashboard/matches/match-detail/match-filters/model";
-import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useOptionalWorkspace } from "@/components/dashboard/workspace-provider";
 import {
@@ -24,6 +23,7 @@ import {
   approachOf,
 } from "@/components/dashboard/matches/match-detail/match-filters/approach";
 import { scoreColumns } from "@/components/dashboard/matches/match-detail/film/film-score";
+import { useVizFilterContext } from "./use-viz-view";
 import { useVizState } from "./use-viz-state";
 import { subjectFor } from "./viz-model";
 
@@ -64,7 +64,9 @@ export const LightboxPointList = memo(function LightboxPointList({
   canWatch: (point: MatchPoint) => boolean;
 }) {
   const sides = useMatchSides();
-  const { context: labelContext } = useMatchFilters();
+  // The view's own context: an approach row reads the lob keys the court
+  // drew with, so a lobbed mark is never a "Passed or lobbed" row.
+  const labelContext = useVizFilterContext();
   const workspace = useOptionalWorkspace()?.active ?? null;
   const t = LIST_TONE.light;
   const youIsPlayer1 = sides.you.isPlayer1;

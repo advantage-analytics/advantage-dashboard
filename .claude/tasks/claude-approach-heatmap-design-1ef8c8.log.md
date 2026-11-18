@@ -107,3 +107,13 @@ is the runner's. Newest entries at the bottom.
 
 1. The season lightbox does not use `LightboxPointList`; for the same wording on the season card it needs its own hook-up to `approachDetail`.
 2. A point that is not an approach falls back to `pointDetail`'s line on the approaches cut (documented in code).
+
+## T12 · Pass lob keys to the Visualizations tab — done
+
+**gate:** mechanical pass · completion pass
+**changed:** New `VizLobKeysProvider` (`shots/viz-lob-keys.tsx`, context in `shots/viz-lob-keys-context.ts`) reads lob keys with `useBallPathsRoute` / `useLobShotKeys`, enabled only when `meta.isDerived && route.allowed` (null on share links, the sample and before load); `ShotsTab` mounts it once. `useVizFilterContext` merges `lobKeys` (plus the live bands) through a pure `vizFilterContext`; `viz-wall.tsx`, `saved-views-band.tsx` and `lightbox-point-list.tsx` now use it, as the lightbox already did. No new fetch or endpoint. New `tests/viz-lob-keys.spec.ts`; `tests/report-empty-states.spec.ts` stubs the provider. `use-viz-view.ts` imports `viz-bands-context` by its `@/` path so the gallery spec's bundle keeps its mock.
+**follow-ups:**
+
+1. A browser spec mounting `ShotsTab` on an Advantage Intelligence match with a stubbed ball-paths response, checking a "Lobbed" row on both the card and its lightbox (no current harness covers the loaded case).
+2. Confirm `film/use-film-filter-context.ts` (`sourceProvider === "splitstep"`) and this tab (`meta.isDerived`) cannot diverge.
+3. Wall and saved cards now read the live bands too: a saved view with a Contact or Landed-in filter buckets by the same bands as its lightbox (small behaviour change).
