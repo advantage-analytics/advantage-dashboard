@@ -1,7 +1,7 @@
 import posthog from "posthog-js";
 import { useEffect } from "react";
 import { isPostHogConfigured } from "@/lib/posthog-client";
-import { isClosedResponse } from "@/lib/ui/action-rejected";
+import { isClosedResponse, isFailedFetch } from "@/lib/ui/action-rejected";
 
 /**
  * Reports what a segment's `error.tsx` caught, when nothing else will have.
@@ -13,12 +13,22 @@ import { isClosedResponse } from "@/lib/ui/action-rejected";
  * - **A `digest` means the server threw.** `onRequestError` in
  *   `instrumentation.ts` has already captured it, with the route, and this would
  *   be the same failure counted twice.
- * - **A response that died part-way through** is the reader's connection, and
- *   nothing we can fix.
+ * - **A dropped connection** — a `fetch` that never got an answer, or a
+ *   response that died part-way through — is the reader's network, and
+ *   nothing we can fix. Safari reports the first as `TypeError: Load failed`.
  */
-export function useReportBoundaryError(error: Error & { digest?: string }) {
+export function isReportableBoundaryError(
+  error: Error & { digest?: string },
+): boolean {
+  return !error.digest && !isClosedResponse(error) && !isFailedFetch(error);
+}
+
+export function useReportBoundaryError(
+  error: Error & { digest?: string },
+  source = "error_boundary",
+) {
   useEffect(() => {
-    if (!isPostHogConfigured || error.digest || isClosedResponse(error)) return;
-    posthog.captureException(error, { source: "error_boundary" });
-  }, [error]);
+    if (!isPostHogConfigured || !isReportableBoundaryError(error)) return;
+    posthog.captureException(error, { source });
+  }, [error, source]);
 }

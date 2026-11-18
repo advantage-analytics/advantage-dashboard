@@ -28,6 +28,22 @@ function isDroppedConnection(error: unknown): boolean {
   return error instanceof TypeError || isClosedResponse(error);
 }
 
+/**
+ * `fetch`'s own rejection, by each engine's wording: Safari's `Load failed`,
+ * Chrome's `Failed to fetch`, Firefox's `NetworkError when attempting to fetch
+ * resource.` Matched on the message, not on `TypeError` alone, for a caller
+ * that also sees render crashes: `Cannot read properties of undefined` is a
+ * `TypeError` too, and a real bug.
+ */
+export function isFailedFetch(error: unknown): boolean {
+  return (
+    error instanceof TypeError &&
+    (error.message === "Load failed" ||
+      error.message === "Failed to fetch" ||
+      error.message.startsWith("NetworkError when attempting to fetch"))
+  );
+}
+
 /** A response that died part-way through, in dev's words or production's. */
 export function isClosedResponse(error: unknown): boolean {
   return (

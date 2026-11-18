@@ -56,6 +56,7 @@ export async function serveHarness(
             "@/lib/services/programs/admin-pilot-actions$": ACTIONS,
             "@/lib/data/admin-search-server$": ACTIONS,
             "@/app/admin/labels/actions$": ACTIONS,
+            "@/app/label/actions$": ACTIONS,
             "@/components/admin/teams-actions$": ACTIONS,
             "@/app/admin/seen-actions$": ACTIONS,
             "@/components/dashboard/settings/team-actions$": ACTIONS,
