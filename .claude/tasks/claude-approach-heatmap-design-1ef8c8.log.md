@@ -182,3 +182,12 @@ is the runner's. Newest entries at the bottom.
 1. The four live rows with this shape are seed data (`scripts/seed-ask-season.ts`, `meIsP1: false`), not old imports; no product writer produces the shape. Re-seeding them in the wizard's shape would let the exception retire.
 2. `edit-match-dialog.tsx` (~437) and `label-overview-server.ts` (~246) still read by seat without the guard on these four rows.
 3. A spec pinning `buildMatchData` to a non-null `player1_id` whenever `player2_id` is set would stop a future wizard change silently flipping into the legacy reading.
+
+## T19 · Say how many approaches the opened court does not draw — done
+
+**gate:** mechanical pass · completion pass
+**changed:** The opened Approaches court says "N not drawn: no landing recorded" (N = `result.count - result.dots.length`): inside the existing stage card when nothing is drawn, as a quiet line at the end of the legend row when some are. Both carry `data-viz-not-drawn`; other cuts never show it; the shell serves the report and the season page. The wall card and the shell share `notDrawnNote` (`wall-summary.ts`). Fixture options `?landing=none|some` (filters harness) and `?landing=some` (season harness), `withoutLanding()` in `approach-points.ts`.
+**follow-ups:**
+
+1. Stripping every landing drops the fixture's approach count from 5 to 4: the Net game's drawn-in rule reads the opponent's bounce, so missing landings move points between entries. Check how real coordinate-free matches (9e4d293e) classify.
+2. With nothing drawn, the "Won 0 / Lost 0" legend still shows under the stage card; consider muting it.

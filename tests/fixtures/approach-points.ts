@@ -198,3 +198,19 @@ export const MATCH = [
   OPP_APPROACH,
   BASELINE,
 ];
+
+/**
+ * `point` with no landing on any shot — as tracking that recorded where a
+ * shot was hit from, or nothing, but never where it bounced (real match
+ * 9e4d293e). Its approach still counts; it draws no mark.
+ */
+export function withoutLanding(point: MatchPoint): MatchPoint {
+  return {
+    ...point,
+    shots: point.shots?.map((shot) => ({
+      ...shot,
+      landingX: null,
+      landingY: null,
+    })),
+  };
+}

@@ -269,7 +269,7 @@ ready).
 
 ## T19 · Say how many approaches the opened court does not draw
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/viz-lightbox-shell.tsx` (the stage's `StageCard` block ~1196); `shots/wall-summary.ts` (share the "n not drawn: no landing recorded" wording); `tests/viz-approach-filters-browser.spec.ts` + `tests/fixtures/viz-approach-filters-harness.tsx` + `tests/fixtures/approach-points.ts`; `tests/season-viz-browser.spec.ts` + `tests/fixtures/season-viz-harness.tsx`
 - **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { startStyledHarness } from "./fixtures/viz-styled-harness-server";
 
 /**
@@ -231,4 +231,87 @@ test("the applied sentence says it assumes right-handed only where a shown appro
   await expect(knownStrip).toContainText("To their backhand");
   await expect(knownStrip).not.toContainText(/assumes right-handed/i);
   expect(known.errors).toEqual([]);
+});
+
+/** The Statistics column's approaches KPI tile: "6 approaches" → 6. */
+async function kpiCount(dialog: Locator): Promise<number> {
+  const label = await dialog
+    .locator("[data-stat-summary] p")
+    .first()
+    .locator(".sr-only")
+    .textContent();
+  const match = /^(\d+) .*approach/.exec(label?.trim() ?? "");
+  expect(match, `KPI tile reads "${label}"`).not.toBeNull();
+  return Number(match![1]);
+}
+
+const notDrawn = (dialog: Locator) => dialog.locator("[data-viz-not-drawn]");
+const courtMarks = (dialog: Locator) =>
+  dialog.locator("[data-court-stage] [data-viz-mark]");
+
+test("approaches with no landing anywhere: the stage says how many are not drawn — the Statistics count — never that none are recorded or filtered", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=approaches&landing=none`);
+  const dialog = page.getByRole("dialog", { name: "Approaches" });
+  await expect(dialog).toBeVisible();
+  await expect(courtMarks(dialog)).toHaveCount(0);
+  const n = await kpiCount(dialog);
+  expect(n).toBeGreaterThan(0);
+  await expect(notDrawn(dialog)).toHaveCount(1);
+  await expect(notDrawn(dialog)).toHaveText(
+    `${n} not drawn: no landing recorded`,
+  );
+  await expect(dialog).not.toContainText("No approaches recorded for");
+  await expect(dialog).not.toContainText("match these filters");
+  expect(errors).toEqual([]);
+});
+
+test("some approaches drawn, some not: the line names the undrawn ones beside the drawn marks, and is gone when every approach draws", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=approaches&landing=some`);
+  const some = page.getByRole("dialog", { name: "Approaches" });
+  await expect(some).toBeVisible();
+  // The fixture took the landing off two of your approaches.
+  await expect(notDrawn(some)).toHaveText("2 not drawn: no landing recorded");
+  await expect(notDrawn(some)).toBeVisible();
+  await expect(courtMarks(some).first()).toBeVisible();
+  const n = await kpiCount(some);
+  expect(n).toBeGreaterThan(2);
+  // Not the honest-zero card: the court has marks on it.
+  await expect(some).not.toContainText("No approaches recorded for");
+  await expect(some).not.toContainText("match these filters");
+
+  // Every counted approach drawn: no line at all.
+  await page.goto(`${origin}/?tab=shots&cut=approaches`);
+  const all = page.getByRole("dialog", { name: "Approaches" });
+  await expect(all).toBeVisible();
+  await expect(courtMarks(all).first()).toBeVisible();
+  await expect(notDrawn(all)).toHaveCount(0);
+  await expect(all).not.toContainText("not drawn");
+  expect(errors).toEqual([]);
+});
+
+test("another cut's opened court never carries the not-drawn line, even over a match with no landings", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  for (const cut of ["serve", "rallyPlacement", "errors"]) {
+    await page.goto(`${origin}/?tab=shots&cut=${cut}&landing=none`);
+    const dialog = page.getByRole("dialog").first();
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator("[data-court-stage]")).toBeVisible();
+    await expect(notDrawn(dialog)).toHaveCount(0);
+    await expect(dialog).not.toContainText("not drawn");
+  }
+  expect(errors).toEqual([]);
 });

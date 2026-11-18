@@ -1047,3 +1047,35 @@ test("a chart switch keeps the season's court exactly where it is — at 100%, a
   await page.mouse.up();
   await cycle(await read());
 });
+
+test("the season's opened Approaches court names the approaches it cannot draw: a season approach with no landing reads in the not-drawn line beside the drawn marks", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&cut=approaches&landing=some&delay=50`,
+  );
+  const dialog = page.getByRole("dialog", { name: "Approaches" });
+  await expect(dialog).toBeVisible({ timeout: 8_000 });
+  // The fixture took the landing off two of the player's approaches.
+  const line = dialog.locator("[data-viz-not-drawn]");
+  await expect(line).toHaveText("2 not drawn: no landing recorded", {
+    timeout: 5_000,
+  });
+  await expect(line).toBeVisible();
+  await expect(marks(dialog).first()).toBeVisible();
+  await expect(dialog).not.toContainText("No approaches recorded for");
+
+  // Another cut over the same season: no line.
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&cut=rallyPlacement&landing=some&delay=50`,
+  );
+  const rally = page.getByRole("dialog").first();
+  await expect(rally.locator("[data-court-stage]")).toBeVisible({
+    timeout: 8_000,
+  });
+  await expect(rally.locator("[data-viz-not-drawn]")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

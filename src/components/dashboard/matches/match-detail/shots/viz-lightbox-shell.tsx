@@ -94,6 +94,7 @@ import {
 import type { VizBandsOverlayProps } from "./viz-bands-overlay";
 import { legendItemsFor } from "./viz-labels";
 import { isMarkRovingKey } from "./viz-mark-roving";
+import { notDrawnNote } from "./wall-summary";
 import {
   bandStatRowsForDots,
   type Chart,
@@ -438,6 +439,16 @@ export function VizLightboxShell({
       ),
     [result, legendPick, pickIds],
   );
+
+  // Approaches count every approach, drawn or not (`computeApproachViz`):
+  // one with no landing counts in the Statistics but draws no mark, so the
+  // court names them — the wall card's own sentence (`notDrawnNote`) —
+  // rather than reading as fewer approaches, or as none. Off `result.dots`,
+  // not the legend-narrowed `dots`: a pick hides marks, it records nothing.
+  const notDrawnLine =
+    cut === "approaches"
+      ? notDrawnNote(result.count - result.dots.length)
+      : null;
 
   const visibleSelectedMarkId =
     selectedMarkId !== null && dots.some((dot) => dot.id === selectedMarkId)
@@ -1192,23 +1203,36 @@ export function VizLightboxShell({
                           Choose a view
                         </button>
                       </StageCard>
+                    ) : result.count === 0 ? (
+                      <StageCard>
+                        <p className="text-[12px] text-[var(--ink-600)]">
+                          {hasFilters
+                            ? `No ${result.noun} match these filters`
+                            : `No ${result.noun} recorded for ${subjectName} yet`}
+                        </p>
+                        {hasFilters && !editing && (
+                          <button
+                            type="button"
+                            onClick={clearFilters}
+                            className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </StageCard>
                     ) : (
-                      result.count === 0 && (
+                      // Every approach counted, none with a landing: the
+                      // stage says why the court is bare (the honest zero),
+                      // not "nothing happened".
+                      notDrawnLine !== null &&
+                      result.dots.length === 0 && (
                         <StageCard>
-                          <p className="text-[12px] text-[var(--ink-600)]">
-                            {hasFilters
-                              ? `No ${result.noun} match these filters`
-                              : `No ${result.noun} recorded for ${subjectName} yet`}
+                          <p
+                            data-viz-not-drawn=""
+                            className="text-[12px] text-[var(--ink-600)]"
+                          >
+                            {notDrawnLine}
                           </p>
-                          {hasFilters && !editing && (
-                            <button
-                              type="button"
-                              onClick={clearFilters}
-                              className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
-                            >
-                              Clear
-                            </button>
-                          )}
                         </StageCard>
                       )
                     )}
@@ -1250,7 +1274,7 @@ export function VizLightboxShell({
                   </div>
 
                   {!isDraft && (
-                    <div>
+                    <div className="flex items-center justify-between gap-3 [&>*:first-child]:min-w-0">
                       {chart === "scatter" ? (
                         <LegendFilter
                           items={legend}
@@ -1282,6 +1306,17 @@ export function VizLightboxShell({
                             ),
                           )}
                         </div>
+                      )}
+                      {/* Some approaches drawn, some not: the same sentence
+                          as a quiet line at the legend's end, so the marks
+                          on court never read as every approach counted. */}
+                      {notDrawnLine !== null && result.dots.length > 0 && (
+                        <p
+                          data-viz-not-drawn=""
+                          className="text-micro m-0 shrink-0 leading-6 text-[var(--ink-600)] tabular-nums"
+                        >
+                          {notDrawnLine}
+                        </p>
                       )}
                     </div>
                   )}

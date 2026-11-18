@@ -60,6 +60,17 @@ export function wallCountLabel(
   return `${count} of ${total} in`;
 }
 
+/**
+ * The sentence naming approaches that count but draw no mark — "2 not drawn:
+ * no landing recorded" — or `null` when every one is drawn. One wording for
+ * the wall card's note under its count and for the opened court's line
+ * (`viz-lightbox-shell.tsx`), so the two never describe the same approaches
+ * differently.
+ */
+export function notDrawnNote(notDrawn: number): string | null {
+  return notDrawn > 0 ? `${notDrawn} not drawn: no landing recorded` : null;
+}
+
 export interface WallSummary {
   /** The footer's count, with its unit: "27 of 31 in", "64 in", "14 total". */
   countLabel: string;
@@ -176,8 +187,7 @@ export function wallSummaryFor(
       segments,
       averagePct: pct(drawnWon, drawnCount),
       notDrawn,
-      countNote:
-        notDrawn > 0 ? `${notDrawn} not drawn: no landing recorded` : null,
+      countNote: notDrawnNote(notDrawn),
     };
   } else if (cut === "serve") {
     const zones = groupRows(stats, "serve-zones");

@@ -5,7 +5,14 @@ import { ShotsTab } from "@/components/dashboard/matches/match-detail/shots/shot
 import { MatchFiltersProvider } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import type { Match } from "@/lib/data/types";
-import { BASELINE, MATCH, OPP_APPROACH } from "./approach-points";
+import {
+  BASELINE,
+  LOBBED,
+  MATCH,
+  OPP_APPROACH,
+  PASSED_DTL,
+  withoutLanding,
+} from "./approach-points";
 
 /**
  * The Visualizations tab as the report mounts it — the real `ShotsTab`, its
@@ -15,10 +22,21 @@ import { BASELINE, MATCH, OPP_APPROACH } from "./approach-points";
  * without it the opponent's hand is not on the match row, so the court's
  * wing words assume it (`handAssumed`). `?net=never` keeps only the points
  * you never came in on: a match with no approaches of yours to draw.
+ * `?landing=none` takes every shot's landing off (real match 9e4d293e: the
+ * approaches count, none can be drawn); `?landing=some` takes it off two of
+ * your approaches only (`PASSED_DTL`, `LOBBED`), so the rest still draw.
  */
 const params = new URLSearchParams(window.location.search);
 const handKnown = params.get("hand") === "known";
-const source = params.get("net") === "never" ? [BASELINE, OPP_APPROACH] : MATCH;
+const landing = params.get("landing");
+const NO_LANDING: ReadonlySet<string> = new Set([PASSED_DTL.id, LOBBED.id]);
+const source = (
+  params.get("net") === "never" ? [BASELINE, OPP_APPROACH] : MATCH
+).map((point) =>
+  landing === "none" || (landing === "some" && NO_LANDING.has(point.id))
+    ? withoutLanding(point)
+    : point,
+);
 
 const match = {
   id: "fixture",

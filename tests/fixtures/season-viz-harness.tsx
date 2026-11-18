@@ -15,6 +15,7 @@ import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { SavedView } from "@/lib/data/saved-views-logic";
 import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/shots/viz-model";
+import { LOBBED, MATCH, PASSED_DTL, withoutLanding } from "./approach-points";
 import { RALLY_POINTS } from "./viz-rally-points";
 import { ASYMMETRIC_SERVES } from "./viz-serve-points";
 
@@ -36,7 +37,10 @@ import { ASYMMETRIC_SERVES } from "./viz-serve-points";
  * the season three matches, each the same points under its own ids, whose
  * opponents play right (Jordan Lee, Nov 3), left (Sam Ortiz, Oct 20) and
  * unknown (Riley Park, Oct 6) — the profile's "Opponent plays" and
- * "Matches" filters.
+ * "Matches" filters. `?landing=some` makes the season one match of net
+ * points (`approach-points.ts`) with the landing taken off two of the
+ * player's approaches (`PASSED_DTL`, `LOBBED`): they count, they draw no
+ * mark.
  *
  * The view sits in the page's own `WidgetBoundary`, and the navigation
  * mock's `router.refresh()` re-renders this harness the way a refresh
@@ -103,24 +107,41 @@ const HANDS_SEASON: SeasonVizMatch[] = [
     courtType: "Indoor Hard Court",
   },
 ];
+const NO_LANDING: ReadonlySet<string> = new Set([PASSED_DTL.id, LOBBED.id]);
+const SOME_LANDING_SEASON: SeasonVizMatch[] = [
+  {
+    matchId: "m-1",
+    points: MATCH.map((point, i) => ({
+      ...(NO_LANDING.has(point.id) ? withoutLanding(point) : point),
+      pointNumber: i + 1,
+    })),
+    isPlayer1: true,
+    isDerived: false,
+    errorSplitJudged: true,
+    date: "2026-11-03",
+    opponent: "Jordan Lee",
+  },
+];
 const SEASON: SeasonVizMatch[] = LOAD_PARAMS.has("empty")
   ? []
-  : LOAD_PARAMS.has("hands")
-    ? HANDS_SEASON
-    : [
-        {
-          matchId: "m-1",
-          points: LOAD_PARAMS.has("p1serves")
-            ? ALL_POINTS.filter((point) => point.serverIsPlayer1)
-            : ALL_POINTS,
-          isPlayer1: true,
-          isDerived: false,
-          errorSplitJudged: true,
-          date: "2026-11-03",
-          opponent: "Jordan Lee",
-          hasPlayableVideo: LOAD_PARAMS.has("video"),
-        },
-      ];
+  : LOAD_PARAMS.get("landing") === "some"
+    ? SOME_LANDING_SEASON
+    : LOAD_PARAMS.has("hands")
+      ? HANDS_SEASON
+      : [
+          {
+            matchId: "m-1",
+            points: LOAD_PARAMS.has("p1serves")
+              ? ALL_POINTS.filter((point) => point.serverIsPlayer1)
+              : ALL_POINTS,
+            isPlayer1: true,
+            isDerived: false,
+            errorSplitJudged: true,
+            date: "2026-11-03",
+            opponent: "Jordan Lee",
+            hasPlayableVideo: LOAD_PARAMS.has("video"),
+          },
+        ];
 const BANDS = { bands: DEFAULT_BANDS, unit: "ft" as const };
 const NAMES = { you: "Avery Kim", opponent: "Opponents" };
 const DELAY_MS = Number(LOAD_PARAMS.get("delay") ?? 400);
