@@ -1950,7 +1950,7 @@ export const LOOSENED_LABEL: Partial<Record<keyof VizFilters, string>> = {
   rally: "Rally",
   game: "Game",
   error: "Error type",
-  entry: "How you came in",
+  entry: "Way to the net",
   approachTo: "Approach to",
   approachDir: "Direction",
   match: "Advanced filters",

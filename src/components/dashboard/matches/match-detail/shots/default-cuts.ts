@@ -21,7 +21,7 @@ export interface DefaultCut {
    * The part of `filters` that defines the cut rather than narrowing it:
    * "Clear filter" always comes back to it, even once the reader has
    * loosened it, and the strip never names it while the court holds it —
-   * loosened, it reads "How you came in: any". Omitted, Clear on a loosened
+   * loosened, it reads "Way to the net: any". Omitted, Clear on a loosened
    * card goes to no filters at all ("All serves" loosened is every serve).
    */
   floor?: Partial<VizFilters>;
@@ -68,7 +68,7 @@ export const DEFAULT_CUTS: DefaultCut[] = [
     chart: "scatter",
     name: "Approaches",
     // Approach shots alone: the cut's baseline, not an applied filter —
-    // serve-and-volley and drawn-in points stay one "How you came in" pick
+    // serve-and-volley and drawn-in points stay one "Way to the net" pick
     // away.
     filters: { entry: ["approach"] },
     // Approaches is the card, so Clear after a "Serve and volley" tick is

@@ -3434,7 +3434,7 @@ test.describe("computeVizStats — approaches cut", () => {
       "Passed crosscourt: 1 17",
       "Lobbed: 1 17",
       "Won at the net: 2 33",
-      "Your error: 1 17",
+      "Error at the net: 1 17",
     ]);
     const ended = s.groups.find((g) => g.key === "approach-ended")!;
     expect(ended.rows.every((r) => r.share)).toBe(true);
@@ -3455,7 +3455,7 @@ test.describe("computeVizStats — approaches cut", () => {
       // The lob's reply was crosscourt, so it joins the crosscourt pass.
       "Passed or lobbed crosscourt: 2 33",
       "Won at the net: 2 33",
-      "Your error: 1 17",
+      "Error at the net: 1 17",
     ]);
     const ended = s.groups.find((g) => g.key === "approach-ended")!;
     expect(ended.rows).toHaveLength(4);
@@ -3481,7 +3481,7 @@ test.describe("computeVizStats — approaches cut", () => {
       "Passed crosscourt: 1 50",
       "Lobbed: 0 0",
       "Won at the net: 0 0",
-      "Your error: 0 0",
+      "Error at the net: 0 0",
     ]);
 
     // approachDir set: Direction keeps every direction; Approach to narrows.
@@ -3502,7 +3502,7 @@ test.describe("computeVizStats — approaches cut", () => {
       "Passed crosscourt: 0 0",
       "Lobbed: 1 100",
       "Won at the net: 0 0",
-      "Your error: 0 0",
+      "Error at the net: 0 0",
     ]);
   });
 

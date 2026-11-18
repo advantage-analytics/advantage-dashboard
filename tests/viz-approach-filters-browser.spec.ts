@@ -23,7 +23,7 @@ test.afterAll(async () => {
   await close?.();
 });
 
-const APPROACH_SECTIONS = ["How you came in", "Approach to", "Direction"];
+const APPROACH_SECTIONS = ["Way to the net", "Approach to", "Direction"];
 
 /** Opens the Approaches wall card, as a reader does. */
 async function openApproaches(page: Page, query = "") {
@@ -151,7 +151,7 @@ test("the card's baseline is not an applied filter; Serve and volley is, and Cle
   // Approach unticked (every way in): named, and Clear undoes it too.
   await panel.getByRole("checkbox", { name: /^Approach\b/ }).click();
   await page.keyboard.press("Escape");
-  await expect(strip).toContainText("How you came in: any");
+  await expect(strip).toContainText("Way to the net: any");
   await strip.getByRole("button", { name: "Clear filter" }).click();
   await expect(strip).toHaveCount(0);
   await expect(page).toHaveURL(/ventry=approach/);
@@ -186,7 +186,7 @@ test("opened by URL with no ventry, the cut is on its baseline: no strip, Filter
   await page.reload();
   const reloaded = page.getByRole("dialog", { name: "Approaches" });
   await expect(reloaded.locator("[data-viz-filter-strip]")).toContainText(
-    "How you came in: any",
+    "Way to the net: any",
   );
   expect(errors).toEqual([]);
 });
@@ -540,7 +540,7 @@ test("the strip counts what the approaches cut counts — never points — and a
     const dialog = page.getByRole("dialog", { name: "Approaches" });
     await expect(dialog).toBeVisible();
     const strip = dialog.locator("[data-viz-filter-strip]");
-    await expect(strip).toContainText("How you came in: any");
+    await expect(strip).toContainText("Way to the net: any");
     const n = await kpiN(dialog);
     expect(n).toBeGreaterThan(0);
     // Only the first number must agree with the KPI: the denominator is the

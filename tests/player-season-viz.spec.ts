@@ -2665,7 +2665,7 @@ test.describe("the Approaches card over a season", () => {
       // season does not read: it is a pass or a lob, crosscourt.
       ["passed-or-lobbed-crosscourt", "Passed or lobbed crosscourt", 2],
       ["won-at-net", "Won at the net", 1],
-      ["own-error", "Your error", 0],
+      ["own-error", "Error at the net", 0],
     ]);
     expect(
       LEFTY.points.some((p) => p.shots!.some((s) => s.videoTime === LOB_T)),
@@ -2774,7 +2774,7 @@ test.describe("the Approaches card over a season", () => {
     expect(tile([RIGHTY, undrawnOnly]).summary.handNote).toBeNull();
   });
 
-  test('Approaches picked from the View menu on another cut, or opened by a bare URL, holds the floor: no "How you came in: any"', () => {
+  test('Approaches picked from the View menu on another cut, or opened by a bare URL, holds the floor: no "Way to the net: any"', () => {
     // The state `cut-menu.tsx`'s `selectCut` makes coming from Serve.
     const picked: VizState = {
       cut: "approaches",
@@ -2861,7 +2861,7 @@ test.describe("the Approaches card over a season", () => {
       BANDS,
       NAMES,
     )!;
-    expect(any.filterPhrases).toEqual(["How you came in: any"]);
+    expect(any.filterPhrases).toEqual(["Way to the net: any"]);
     expect(any.clearFilters).toEqual(APPROACH_FILTERS);
     expect(any.panelActive).toBe(true);
 

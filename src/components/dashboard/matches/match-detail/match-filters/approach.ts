@@ -53,7 +53,7 @@ export const APPROACH_BUCKET_LABEL: Record<ApproachEndingBucket, string> = {
   "passed-or-lobbed-crosscourt": "Passed or lobbed crosscourt",
   lobbed: "Lobbed",
   "won-at-net": "Won at the net",
-  "own-error": "Your error",
+  "own-error": "Error at the net",
 };
 
 export interface Approach {

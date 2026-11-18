@@ -409,7 +409,7 @@ ready).
 
 ## T29 · Stop the Approaches copy saying "you": rename "Your error" and "How you came in"
 
-- **status:** doing
+- **status:** done
 - **model:** sonnet
 - **files:** (guess) `src/components/dashboard/matches/match-detail/match-filters/approach.ts` (`APPROACH_BUCKET_LABEL["own-error"]` ~56); `shots/viz-model.ts` (the `entry` filter phrase label ~1953); `shots/lightbox-filters.tsx` (section label ~210, comment ~148); `shots/default-cuts.ts` (comments ~24, ~71); `tests/viz-approach-filters-browser.spec.ts` (~26, 154, 189, 543); `tests/player-season-viz.spec.ts` (~2668, 2777, 2864); `tests/viz-model.spec.ts` (~3437, 3458, 3484, 3505)
 - **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`

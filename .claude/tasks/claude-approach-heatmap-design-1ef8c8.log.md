@@ -277,3 +277,9 @@ is the runner's. Newest entries at the bottom.
 **gate:** mechanical PASS · completion-review pass
 
 **changed:** The Points pane's empty sentence in `viz-lightbox-shell.tsx` is now the shell's shared `emptyLine` (none recorded with no filter, none matching with one), except the serve cut's "serves went out" sentence, which is unchanged. New case in `tests/viz-approach-filters-browser.spec.ts`; no existing assertion edited.
+
+## T29 · Stop the Approaches copy saying "you": rename "Your error" and "How you came in" — done
+
+**gate:** mechanical PASS · completion-review pass
+
+**changed:** `APPROACH_BUCKET_LABEL["own-error"]` reads "Error at the net"; the filter group heading, the `entry` filter phrase (`LOOSENED_LABEL.entry`) and the comments naming them read "Way to the net", so the loosened strip reads "Way to the net: any". The specs pinning the old strings assert the new ones in the same positions. String replacements only; no keys changed.

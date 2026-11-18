@@ -145,7 +145,7 @@ export interface LightboxAdvancedFilters {
  * (`MatchesFilterPanel`, Data Table rule 6) over the cut's existing
  * `VizFilters` keys only — Serve, Court and Set as segmented rows, Zone,
  * Score and Error type as checklists with the count each option alone would
- * leave, and on the Approaches cut its own three groups (How you came in,
+ * leave, and on the Approaches cut its own three groups (Way to the net,
  * Approach to, Direction) as checklists too (plan decision Q7: the model's
  * groups are multi-select, so they are drawn as Zone is) — applied live, with Clear and the live count in the footer. Only
  * the keys `filterKeysFor(cut)` allows appear, so a pick can never be one the
@@ -207,7 +207,7 @@ export function LightboxFilterPanel({
   // The Approaches cut's own groups lead: they say what the court is.
   if (keys.has("entry"))
     sections.push({
-      label: "How you came in",
+      label: "Way to the net",
       checklist: {
         key: "entry",
         values: Object.keys(OPTIONS.entry),
