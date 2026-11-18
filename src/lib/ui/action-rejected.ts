@@ -23,6 +23,10 @@ export const STALE_PAGE = "This page is out of date. Reload it and try again.";
  * production build. A throw from inside an action never reads as either,
  * because Flight rebuilds it on this side as a plain `Error` with a `digest`,
  * whatever it was on the server.
+ *
+ * Any `TypeError` is safe here because an action's promise only ever rejects
+ * with the transport's errors. An error boundary also sees render crashes,
+ * which can be `TypeError`s too, so it uses the narrower `isFailedFetch` below.
  */
 function isDroppedConnection(error: unknown): boolean {
   return error instanceof TypeError || isClosedResponse(error);
@@ -33,14 +37,23 @@ function isDroppedConnection(error: unknown): boolean {
  * Chrome's `Failed to fetch`, Firefox's `NetworkError when attempting to fetch
  * resource.` Matched on the message, not on `TypeError` alone, for a caller
  * that also sees render crashes: `Cannot read properties of undefined` is a
- * `TypeError` too, and a real bug.
+ * `TypeError` too, and a real bug. That is why this is not
+ * `isDroppedConnection`, which can take any `TypeError` because it only ever
+ * sees an action's rejection.
+ *
+ * Matched by prefix, since some builds add detail after the engine's words
+ * (`Failed to fetch (api.example.com)`).
  */
+const FAILED_FETCH_PREFIXES = [
+  "Load failed",
+  "Failed to fetch",
+  "NetworkError when attempting to fetch",
+];
+
 export function isFailedFetch(error: unknown): boolean {
   return (
     error instanceof TypeError &&
-    (error.message === "Load failed" ||
-      error.message === "Failed to fetch" ||
-      error.message.startsWith("NetworkError when attempting to fetch"))
+    FAILED_FETCH_PREFIXES.some((prefix) => error.message.startsWith(prefix))
   );
 }
 

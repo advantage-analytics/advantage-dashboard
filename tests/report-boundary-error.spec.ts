@@ -17,6 +17,8 @@ test.describe("isFailedFetch", () => {
     "Load failed",
     "Failed to fetch",
     "NetworkError when attempting to fetch resource.",
+    "Failed to fetch (api.example.com)",
+    "Load failed (example.com)",
   ]) {
     test(`TypeError: ${message} is a failed fetch`, () => {
       expect(isFailedFetch(new TypeError(message))).toBe(true);
