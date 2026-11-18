@@ -794,9 +794,10 @@ export function LightboxCourt({
 /**
  * The Approaches cut's apron words (`approach-map-v9.html`, the wall card's
  * `ApproachCourtArt` labels): "Placement" over the far half, the opponent's
- * wing over each third just past the far baseline — or the hitter's "Left ·
- * Middle · Right" where no one hand sides it (`approachLaneText`) —
- * "Contact" under the near half. Under the marks, and deaf to the pointer, so no word takes a hover.
+ * wing over each third just past the far baseline (the hitter's "Left ·
+ * Middle · Right" where no one hand sides it, `approachLaneText`), "Contact"
+ * under the near half. Under the marks, and deaf to the pointer, so no word
+ * takes a hover.
  */
 function ApproachApronLabels({
   leftIsForehand,

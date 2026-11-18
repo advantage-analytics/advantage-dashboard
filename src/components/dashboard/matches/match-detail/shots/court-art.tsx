@@ -806,8 +806,8 @@ function clampToCard(p: { x: number; y: number }): { x: number; y: number } {
  *
  * `labels` is the opened view: the roomier viewBox and, on the apron only,
  * "Placement" above the far baseline, "Contact" below the near one and the
- * opponent's wing over each third (`approachLeftLaneSide`). Without it (the wall card) the viewBox is
- * the tighter `cardViewBox` and no text is drawn.
+ * opponent's wing over each third (`approachLeftLaneSide`). Without it (the
+ * wall card) the viewBox is the tighter `cardViewBox` and no text is drawn.
  */
 function ApproachCourtArt({
   dots,

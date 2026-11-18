@@ -467,6 +467,7 @@ export function VizLightboxShell({
     cut === "approaches"
       ? notDrawnNote(result.count - result.dots.length)
       : null;
+  const showNotDrawn = notDrawnLine !== null && result.dots.length > 0;
 
   const visibleSelectedMarkId =
     selectedMarkId !== null && marks.some((dot) => dot.id === selectedMarkId)
@@ -1346,14 +1347,13 @@ export function VizLightboxShell({
                           )}
                         </div>
                       )}
-                      {((notDrawnLine !== null && result.dots.length > 0) ||
-                        sentenceNote) && (
+                      {(showNotDrawn || sentenceNote) && (
                         <div className="flex shrink-0 items-center gap-3">
                           {/* Some approaches drawn, some not: the same
                               sentence as a quiet line at the legend's end, so
                               the marks on court never read as every approach
                               counted. */}
-                          {notDrawnLine !== null && result.dots.length > 0 && (
+                          {showNotDrawn && (
                             <p
                               data-viz-not-drawn=""
                               className="text-micro m-0 leading-6 text-[var(--ink-600)] tabular-nums"

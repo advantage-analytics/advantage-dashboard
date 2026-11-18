@@ -48,6 +48,7 @@ import {
   shotMatchesNet,
   shotMatchesThen,
   finalShotOf,
+  handOf,
   lastShotOf,
   type MatchFilterContext,
   type MatchFilterKey,
@@ -1493,8 +1494,7 @@ function approachOpponentHand(
   subjectIsPlayer1: boolean,
   matchCtx: MatchFilterContext | undefined,
 ): Hand | null {
-  const hands = matchCtx?.hands;
-  return (subjectIsPlayer1 ? hands?.player2 : hands?.player1) ?? null;
+  return matchCtx ? handOf(!subjectIsPlayer1, matchCtx) : null;
 }
 
 interface PooledApproach {
@@ -1993,11 +1993,14 @@ function rowTieBreak(a: StatRow, b: StatRow): number {
  * on every filter change, and put the rows out of step with the court
  * beside them. */
 /** Groups whose rows keep the order they were built in, whatever the rates. */
-const FIXED_ORDER_GROUPS: ReadonlySet<string> = new Set([
-  "depth",
+const APPROACH_GROUP_KEYS = [
   "approach-to",
   "approach-direction",
   "approach-ended",
+] as const;
+const FIXED_ORDER_GROUPS: ReadonlySet<string> = new Set([
+  "depth",
+  ...APPROACH_GROUP_KEYS,
 ]);
 
 function sortRows(rows: StatRow[]): StatRow[] {
@@ -2030,10 +2033,7 @@ export function orderStatRows(rows: StatRow[], groupKey: string): StatRow[] {
 
 /** The Approaches cut's groups in the order `approachStats` builds them. */
 const APPROACH_GROUP_RANK: ReadonlyMap<string, number> = new Map(
-  ["approach-to", "approach-direction", "approach-ended"].map((key, i) => [
-    key,
-    i,
-  ]),
+  APPROACH_GROUP_KEYS.map((key, i) => [key, i]),
 );
 
 /**
