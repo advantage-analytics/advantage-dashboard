@@ -620,7 +620,7 @@ export async function POST(request: Request): Promise<Response> {
     // viewer pinned — the fourth service-role call, explained in
     // `examples.ts`. Only on a miss, and beside the reservation.
     const examplesRead = appHelp
-      ? null
+      ? undefined
       : retrieveAskExamples({
           service,
           viewerId: user.id,
@@ -669,7 +669,7 @@ export async function POST(request: Request): Promise<Response> {
       scope,
       pageSeats: getAskPageSeats,
       // In flight: the orchestrator awaits it after the "planning" status.
-      ...(examplesRead ? { examples: examplesRead } : {}),
+      examples: examplesRead,
       coach,
       // Agent mode (`ASK_AGENT=1`, `agent.ts`): the planner may look first,
       // through the connector's read tools bound to this question's scope.
