@@ -57,6 +57,7 @@ import {
   APPROACH_BUCKET_LABEL,
   approachLateralM,
   approachOf,
+  LATERAL_THIRD_M,
   type Approach,
   type ApproachDirection,
   type ApproachEndingBucket,
@@ -1895,8 +1896,31 @@ const ZONE_ROWS: { key: ZoneKey; label: string }[] = [
 // court; kept as a local constant here rather than imported, since that file
 // is a client-adjacent geometry/SVG module and this one stays plain.
 const REAL_SINGLES_HALF_M = 4.115;
-const LATERAL_THIRD_M = REAL_SINGLES_HALF_M / 3; // ≈1.372m
 const IN_COURT_EPS = 1e-6;
+
+/** A saved view's filter group, named when the reader loosens it to "any". */
+export const LOOSENED_LABEL: Partial<Record<keyof VizFilters, string>> = {
+  ball: "Serve",
+  court: "Court",
+  set: "Set",
+  zone: "Zone",
+  result: "Result",
+  pressure: "Score",
+  rally: "Rally",
+  game: "Game",
+  error: "Error type",
+  entry: "How you came in",
+  approachTo: "Approach to",
+  approachDir: "Direction",
+  match: "Advanced filters",
+};
+
+/**
+ * The applied sentence's last word on the Approaches cut: "Their backhand"
+ * and "Their forehand" are worked out from the opponent's hand, and where
+ * the match does not record it the court reads them as right-handed.
+ */
+export const HAND_ASSUMED_NOTE = "assumes right-handed";
 
 function makeRow(
   key: string,

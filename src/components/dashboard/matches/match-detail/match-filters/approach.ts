@@ -87,9 +87,9 @@ export interface Approach {
   direction: ApproachDirection | null;
 }
 
-/** Singles half-width over three, in metres (`viz-model.ts`'s `LATERAL_THIRD_M`). */
+/** Singles half-width over three, in metres — one lane of the court. */
 const SINGLES_HALF_M = 4.115;
-const LATERAL_THIRD_M = SINGLES_HALF_M / 3;
+export const LATERAL_THIRD_M = SINGLES_HALF_M / 3;
 
 /**
  * Where `shot` landed across the court, in metres to the hitter's RIGHT as

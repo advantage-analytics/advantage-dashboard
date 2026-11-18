@@ -25,6 +25,8 @@ import {
   approachNoun,
   computeVizStats,
   filterKeysFor,
+  HAND_ASSUMED_NOTE,
+  LOOSENED_LABEL,
   orderStatRows,
   subjectFor,
   type Chart,
@@ -1040,16 +1042,6 @@ export function toMillimetre(dot: VizDot): VizDot {
   };
 }
 
-/** The strip's caveat on Approaches (`viz-lightbox.tsx`'s
- *  `HAND_ASSUMED_NOTE`, a client module this one cannot import). */
-export const SEASON_HAND_ASSUMED_NOTE = "assumes right-handed";
-
-/** The strip's name for a floor filter let go of entirely
- *  (`viz-lightbox.tsx`'s `LOOSENED_LABEL`, for the keys a floor holds). */
-const FLOOR_LOOSENED_LABEL: Partial<Record<keyof VizFilters, string>> = {
-  entry: "How you came in",
-};
-
 /** One mark's `SeasonDotPoint`, read off its match's own point. */
 function dotPointOf(
   matchIndex: number,
@@ -1326,7 +1318,7 @@ export function buildSeasonLightbox(
       !sameFilterValue(key, floorFilters, EMPTY_VIZ_FILTERS) &&
       sameFilterValue(key, filters, EMPTY_VIZ_FILTERS)
     )
-      filterPhrases.push(`${FLOOR_LOOSENED_LABEL[key] ?? "Filter"}: any`);
+      filterPhrases.push(`${LOOSENED_LABEL[key] ?? "Filter"}: any`);
   // The season's own filters close the sentence: "Won · Lefties · Clay ·
   // 2 matches".
   if (applied.result != null)
@@ -1378,7 +1370,7 @@ export function buildSeasonLightbox(
     )}`,
     filterPhrases,
     sentenceNote: result.dots.some((d) => d.meta?.handAssumed === true)
-      ? SEASON_HAND_ASSUMED_NOTE
+      ? HAND_ASSUMED_NOTE
       : null,
     panelActive,
     clearFilters,

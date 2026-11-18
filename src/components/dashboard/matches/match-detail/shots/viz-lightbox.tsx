@@ -34,6 +34,8 @@ import {
   computeViz,
   errorsJudgedIn,
   filterKeysFor,
+  HAND_ASSUMED_NOTE,
+  LOOSENED_LABEL,
   type PlayerFilter,
   type VizDot,
   type VizFilters,
@@ -44,30 +46,6 @@ import {
   useFiltersPanelData,
 } from "../match-filters/provider";
 import { lightboxCountLine } from "./wall-summary";
-
-/** A saved view's filter group, named when the reader loosens it to "any". */
-const LOOSENED_LABEL: Partial<Record<keyof VizFilters, string>> = {
-  ball: "Serve",
-  court: "Court",
-  set: "Set",
-  zone: "Zone",
-  result: "Result",
-  pressure: "Score",
-  rally: "Rally",
-  game: "Game",
-  error: "Error type",
-  entry: "How you came in",
-  approachTo: "Approach to",
-  approachDir: "Direction",
-  match: "Advanced filters",
-};
-
-/**
- * The applied sentence's last word on the Approaches cut: "Their backhand"
- * and "Their forehand" are worked out from the opponent's hand, and where
- * the match does not record it the court reads them as right-handed.
- */
-const HAND_ASSUMED_NOTE = "assumes right-handed";
 
 /** Opens the Video tab on the points the lightbox shows, by point number,
  *  named by `label` in its strip. */
