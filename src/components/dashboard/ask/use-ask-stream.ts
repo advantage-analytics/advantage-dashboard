@@ -97,7 +97,7 @@ export interface AskAnswerError {
   /** `needs_clarification`: the answers the asker can pick. */
   options?: string[];
   /** `app_help`: the page that does what was asked. */
-  link?: { href: string; label: string };
+  link?: AskHelpLink;
 }
 
 export interface AskAnswerState {
@@ -416,25 +416,28 @@ function readSourceMatches(value: unknown): AskSourceMatch[] | null {
 }
 
 /**
- * One line of the stream as an `AskEvent`, or null for anything that is not
- * one — a blank line, broken JSON, an event type this build does not know, or
- * a known type missing a field it needs. Unknown is skipped rather than
- * thrown on, so a newer route can add an event without breaking an open tab.
- */
-/**
  * An `app_help` event's link, kept only when it stays inside the dashboard:
  * the stream is the server's, but a link the page renders is never trusted
  * to point anywhere else (a `//host` or `/dashboard/../` path is dropped).
  */
 function helpLinkOf(value: unknown): { link: AskHelpLink } | null {
   if (typeof value !== "object" || value === null) return null;
-  const { href, label } = value as Record<string, unknown>;
+  const { href, label, kind } = value as Record<string, unknown>;
   if (typeof href !== "string" || typeof label !== "string") return null;
   if (!href.startsWith("/dashboard/") || href.includes("..")) return null;
   if (label.trim() === "") return null;
-  return { link: { href, label } };
+  // A kind this build does not draw is dropped; the link still stands.
+  return {
+    link: { href, label, ...(kind === "upload" ? { kind } : {}) },
+  };
 }
 
+/**
+ * One line of the stream as an `AskEvent`, or null for anything that is not
+ * one — a blank line, broken JSON, an event type this build does not know, or
+ * a known type missing a field it needs. Unknown is skipped rather than
+ * thrown on, so a newer route can add an event without breaking an open tab.
+ */
 export function parseAskEvent(line: string): AskEvent | null {
   const text = line.trim();
   if (text === "") return null;

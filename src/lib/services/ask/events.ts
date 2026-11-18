@@ -504,10 +504,15 @@ export interface AskErrorEvent {
   link?: AskHelpLink;
 }
 
-/** A link an `app_help` answer carries. `href` is always an in-app path under `/dashboard/`. */
+/**
+ * A link an `app_help` answer carries. `href` is always an in-app path under
+ * `/dashboard/`; `kind` says what the page is for, so the answer can lead
+ * with its mark without reading the address.
+ */
 export interface AskHelpLink {
   href: string;
   label: string;
+  kind?: "upload";
 }
 
 export type AskEvent =

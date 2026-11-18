@@ -220,16 +220,8 @@ function AnswerQuestion({
           ))}
         </div>
       )}
-      <p className="text-body-sm text-[var(--ink-500)]">{fallback.detail}</p>
+      <p className="text-body-sm text-[var(--ink-600)]">{fallback.detail}</p>
     </div>
-  );
-}
-
-/** Whether a help link goes to an upload page, which leads with the upload mark. */
-function isUploadHref(href: string): boolean {
-  return (
-    href.startsWith("/dashboard/matches/new") ||
-    href.startsWith("/dashboard/team/upload")
   );
 }
 
@@ -248,7 +240,7 @@ function AnswerHelp({
   copy: AskCopy;
 }) {
   const fallback = errors.app_help;
-  const upload = error.link ? isUploadHref(error.link.href) : false;
+  const upload = error.link?.kind === "upload";
   return (
     <div data-ask-help="" className="flex flex-col gap-3">
       <p className="text-title">{error.message || fallback.title}</p>

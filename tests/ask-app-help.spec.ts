@@ -75,8 +75,11 @@ test.describe("readAppHelp", () => {
     expect(readAppHelp("I want to upload a match", PERSONAL_ASK_SCOPE)).toEqual(
       {
         message: "You add a match from the upload page.",
-        href: "/dashboard/matches/new?return=ask",
-        label: "Upload a match",
+        link: {
+          href: "/dashboard/matches/new?return=ask",
+          label: "Upload a match",
+          kind: "upload",
+        },
       },
     );
   });
@@ -85,9 +88,29 @@ test.describe("readAppHelp", () => {
     expect(readAppHelp("I want to upload a match", TEAM)).toEqual({
       message:
         "Match videos for ZZ Test Program are sent from the upload page.",
-      href: "/dashboard/team/upload",
-      label: "Send match video",
+      link: {
+        href: "/dashboard/team/upload",
+        label: "Send match video",
+        kind: "upload",
+      },
     });
+  });
+
+  test("a team viewer who may not upload gets the reason and no link", () => {
+    // The same rule the team Ask page hides its own upload button by.
+    const refusal =
+      "ZZ Test Program is still being confirmed. Video analysis opens as soon as it is.";
+    expect(readAppHelp("I want to upload a match", TEAM, refusal)).toEqual({
+      message: refusal,
+      link: null,
+    });
+  });
+
+  test("the refusal is a team matter: a personal question still gets the wizard", () => {
+    expect(
+      readAppHelp("upload a match", PERSONAL_ASK_SCOPE, "A refusal.")?.link
+        ?.href,
+    ).toBe("/dashboard/matches/new?return=ask");
   });
 
   test("a question about the matches reads nothing", () => {
@@ -99,6 +122,7 @@ test.describe("askQuestion with an upload question", () => {
   const USAGE_ID = "00000000-0000-4000-8000-0000000000bb";
 
   function run(question: string, scope: AskScope) {
+    const appHelp = readAppHelp(question, scope);
     const calls: string[] = [];
     const db: AskDatabase = {
       rpc: async (fn) => {
@@ -124,6 +148,7 @@ test.describe("askQuestion with an upload question", () => {
       conversation: [],
       conversationId: null,
       reservation: { usageId: USAGE_ID },
+      appHelp,
       scope,
     } as unknown as AskQuestionInput;
     return {
@@ -148,7 +173,11 @@ test.describe("askQuestion with an upload question", () => {
         code: "app_help",
         error:
           "Match videos for ZZ Test Program are sent from the upload page.",
-        link: { href: "/dashboard/team/upload", label: "Send match video" },
+        link: {
+          href: "/dashboard/team/upload",
+          label: "Send match video",
+          kind: "upload",
+        },
       },
     ]);
     expect(asked.modelCalls()).toBe(0);
@@ -165,12 +194,13 @@ test.describe("parseAskEvent with an app_help link", () => {
       link,
     });
 
-  test("keeps a dashboard link", () => {
+  test("keeps a dashboard link and its kind", () => {
     expect(
       parseAskEvent(
         line({
           href: "/dashboard/matches/new?return=ask",
           label: "Upload a match",
+          kind: "upload",
         }),
       ),
     ).toEqual({
@@ -180,7 +210,18 @@ test.describe("parseAskEvent with an app_help link", () => {
       link: {
         href: "/dashboard/matches/new?return=ask",
         label: "Upload a match",
+        kind: "upload",
       },
+    });
+  });
+
+  test("drops a kind it does not know, keeping the link", () => {
+    const event = parseAskEvent(
+      line({ href: "/dashboard/team/roster", label: "Open roster", kind: "x" }),
+    );
+    expect(event && "link" in event ? event.link : null).toEqual({
+      href: "/dashboard/team/roster",
+      label: "Open roster",
     });
   });
 

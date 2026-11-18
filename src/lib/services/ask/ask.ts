@@ -1,6 +1,6 @@
 import { isUuid, UUID_RE } from "@/lib/admin/validation";
 import type { ChatMessage } from "@/lib/llm/adapter";
-import { readAppHelp } from "@/lib/services/ask/app-help";
+import type { AskAppHelp } from "@/lib/services/ask/app-help";
 import {
   ASK_AGENT_BOUNDS,
   askAgentPromptAppendix,
@@ -317,8 +317,14 @@ export interface AskQuestionInput {
   previousPlan?: AskPreviousPlan | null;
   /** The conversation to append to, or null to start one. */
   conversationId: string | null;
-  /** From `reserveAskQuestion()`; null in mock mode. */
+  /** From `reserveAskQuestion()`; null in mock mode, and for an `appHelp` question. */
   reservation: AskReservation | null;
+  /**
+   * The route's `readAppHelp()` for this question, read before the cache and
+   * the reservation: when set, the question is answered with it and nothing
+   * else runs. Absent, the question is about the matches.
+   */
+  appHelp?: AskAppHelp | null;
   /** Whose matches the question is about; the route has already checked membership. */
   scope: AskScope;
   /**
@@ -944,17 +950,17 @@ export async function* askQuestion(
     yield { type: "status", stage: "planning" };
 
     // A question about using the app ("I want to upload a match") has no
-    // answer in the views, and the planner could only refuse it. It is
-    // answered with the page that does it, before any model call, and the
-    // question is given back.
-    const help = readAppHelp(input.question, scope);
+    // answer in the views, and the planner could only refuse it. The route
+    // read it before reserving (`app-help.ts`); it is answered with the page
+    // that does it, before any model call, and nothing is spent.
+    const help = input.appHelp ?? null;
     if (help) {
       await release();
       yield {
         type: "error",
         code: "app_help",
         error: help.message,
-        link: { href: help.href, label: help.label },
+        ...(help.link ? { link: help.link } : {}),
       };
       return;
     }

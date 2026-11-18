@@ -1,31 +1,30 @@
+import type { AskHelpLink } from "@/lib/services/ask/events";
 import type { AskScope } from "@/lib/services/ask/scope";
+import { WIZARD_FROM_ASK_HREF } from "@/lib/matches/new-match-visit";
 
 /**
  * Questions about using the app rather than about the matches: "I want to
  * upload a match", "how do I add a video". The planner can only refuse
  * these — no view records them, and its refusal may carry no suggestion — so
  * a new coach typing one into Ask met "the program's match data can't answer
- * that" and nothing to click. They are read here, before the planner runs,
- * and answered with the page that does it.
+ * that" and nothing to click. The route reads them before the cache, the
+ * example search and the question's reservation, so asking one is free even
+ * with no questions left, and answers with the page that does it.
  *
  * Deliberately narrow: the whole question has to be the request, so a
  * question that only mentions an upload or a video ("give me videos of
  * Rudy's aces", "how did my uploaded match go?") still goes to the planner.
  *
- * A leaf apart from the scope type: no model, no database.
+ * A leaf apart from types and one route constant: no model, no database.
  */
 
 export interface AskAppHelp {
   /** The sentence shown in the answer's place. */
   message: string;
-  /** Where the request is done. Always an in-app path. */
-  href: string;
-  /** The link's text. */
-  label: string;
+  /** Where the request is done, or null when this viewer cannot do it. */
+  link: AskHelpLink | null;
 }
 
-/** The personal wizard, with a way back to Ask (`WIZARD_FROM_ASK_HREF`). */
-const PERSONAL_UPLOAD_HREF = "/dashboard/matches/new?return=ask";
 /** The team wizard: staff pick a line, a player gets the wizard itself. */
 const TEAM_UPLOAD_HREF = "/dashboard/team/upload";
 
@@ -70,21 +69,35 @@ export function asksToUpload(question: string): boolean {
   return UPLOAD_WITH_OBJECT.test(text) || UPLOAD_ALONE.test(text);
 }
 
-/** The page a question about using the app is answered with, or null for a question about the matches. */
+/**
+ * The page a question about using the app is answered with, or null for a
+ * question about the matches.
+ *
+ * `uploadRefusal` is `explainVideoRefusal()` for the team workspace — the
+ * rule the team Ask page already uses to hide its own upload button. When it
+ * refuses, the answer is that sentence and no link: a player in a program
+ * that limits uploads to staff, or a program still being confirmed, is never
+ * sent to a page that turns them away.
+ */
 export function readAppHelp(
   question: string,
   scope: AskScope,
+  uploadRefusal: string | null = null,
 ): AskAppHelp | null {
   if (!asksToUpload(question)) return null;
-  return scope.kind === "team"
-    ? {
-        message: `Match videos for ${scope.programName} are sent from the upload page.`,
-        href: TEAM_UPLOAD_HREF,
-        label: "Send match video",
-      }
-    : {
-        message: "You add a match from the upload page.",
-        href: PERSONAL_UPLOAD_HREF,
+  if (scope.kind === "personal") {
+    return {
+      message: "You add a match from the upload page.",
+      link: {
+        href: WIZARD_FROM_ASK_HREF,
         label: "Upload a match",
-      };
+        kind: "upload",
+      },
+    };
+  }
+  if (uploadRefusal) return { message: uploadRefusal, link: null };
+  return {
+    message: `Match videos for ${scope.programName} are sent from the upload page.`,
+    link: { href: TEAM_UPLOAD_HREF, label: "Send match video", kind: "upload" },
+  };
 }
