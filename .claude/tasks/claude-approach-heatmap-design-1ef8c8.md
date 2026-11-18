@@ -337,3 +337,72 @@ ready).
   - [ ] The existing cases that pin every contact and placement on the stage at open (`tests/viz-approach-lightbox-browser.spec.ts`, `tests/court-geometry.spec.ts`) pass unedited, or the diff changes only their expected frame numbers and the report says why
   - [ ] The label sizes on every other cut's opened court are unchanged: no existing assertion in `tests/viz-lightbox-browser.spec.ts` or `tests/viz-lightbox-framing.spec.ts` is edited, and the wall card's `ApproachCourtArt` label sizes are not changed
 - **notes:** From /pr-check eyes-on (receipt 9d9c045 not-ready). The labels are SVG `font-size` attributes in viewBox units, so their on-screen size is size × the opening zoom. `VIEWER_APPROACH_FRAME` (both baselines plus 32 units of apron) is about twice as tall as `VIEWER_LANDING_FRAME`, so `frameFitZ` opens Approaches at roughly half the Returns zoom and the 5.6 to 7.4 unit text lands at about 6px. `frameFitZ` takes the smaller of the width fit and the height fit, so the ratio between the two cuts depends on the stage's shape; derive the scale from the two frames' fit on the actual stage, not one hard-coded multiplier. At the larger size the wing line (baseline − 8) and "Placement" (baseline − 20) no longer clear each other inside a 32-unit apron, so the label Ys, and possibly the apron, must move. Growing the apron lowers the zoom again, and T16's follow-up says the apron reaches "Full court" at 43 units. Whether the labels keep scaling with zoom after the opening frame, as on every other cut, is the runner's call; say which in the report. Before writing the band-label case, check how the bands come to be drawn on the Approaches court (`bandOverlay` in `viz-lightbox-shell.tsx` ~653) and give the harness an option that turns them on for both cuts. `court-art.tsx`'s `APPROACH_*_SIZE` constants are shared with the wall card, which must not change. The shell serves the season page too (`season-viz-lightbox.tsx`).
+
+## T24 · Show the assumed-hand caveat beside the opened Approaches legend
+
+- **status:** todo
+- **model:** opus
+- **files:** (guess) `src/components/dashboard/matches/match-detail/shots/viz-lightbox-shell.tsx` (the strip's `sentenceNote && phrases.length > 0` ~1136; the legend row's `data-viz-not-drawn` line ~1355); `shots/viz-lightbox.tsx` (`sentenceNote` ~539) and `src/lib/data/player-season-viz.ts` (~1379) only if the condition changes; `tests/viz-approach-filters-browser.spec.ts` (~209) + `tests/fixtures/viz-approach-filters-harness.tsx`; `tests/season-viz-browser.spec.ts` + `tests/fixtures/season-viz-harness.tsx`
+- **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`
+- **done when:**
+  - [ ] The filters harness spec opens Approaches with the opponent's hand unknown and no filter ticked (the card's floor only, no filter strip) and asserts a line in the legend row, carrying its own data attribute, reads "assumes right-handed"
+  - [ ] The spec asserts the line is absent with `?hand=known`, absent on another cut's opened court, and absent with `?landing=none` (no drawn approach, so no wing was worked out)
+  - [ ] The spec asserts that with a filter ticked and the hand unknown the dialog contains "assumes right-handed" exactly once, in the legend-row line and not in the filter strip
+  - [ ] `tests/season-viz-browser.spec.ts` asserts the season's opened Approaches court shows the same line when a folded match has no opponent hand, with no filter ticked
+  - [ ] The line's text comes from `HAND_ASSUMED_NOTE`; the only existing assertion edited is the "applied sentence says it assumes right-handed" case in `tests/viz-approach-filters-browser.spec.ts`; the diff adds no raw hex colour
+- **notes:** From /pr-check receipt 38059d5 not-ready. The caveat reaches the shell as `sentenceNote` (match: `viz-lightbox.tsx`; season: `buildSeasonLightbox`), but the shell only appends it to the filter strip when another phrase is present, so on the default view (floor held, no phrases, no strip) it never shows. Draw it like T19's "N not drawn" line (`data-viz-not-drawn`): a quiet line in the legend row, which can sit beside that line when both apply. The line replaces the strip's appended phrase so the caveat is said once. `sentenceNote` is already `result.dots.some(handAssumed)`, drawn approaches only, which is right: an undrawn approach has no wing. The season harness's default season has no `opponentHand`; `?hands=1` has right, left and null. Read `.skills/advantage-analytics-design/SKILL.md` first.
+
+## T25 · Say "assumes right-handed" on the Approaches wall card
+
+- **status:** todo
+- **model:** opus
+- **files:** (guess) `src/components/dashboard/matches/match-detail/shots/wall-summary.ts` (`WallSummary`, `wallSummaryFor`'s `approaches` branch; its `result` argument is `Pick<VizResult, "count">` today); `shots/wall-card.tsx` (the `countNote` line ~214, the accessible label ~135); callers `shots/default-tiles.ts`, `shots/saved-views-band.tsx`, `src/lib/data/player-season-viz.ts` (~604); `tests/wall-summary.spec.ts`, `tests/wall-card-approaches.spec.ts`, `tests/player-season-viz.spec.ts`
+- **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`
+- **done when:**
+  - [ ] `tests/wall-summary.spec.ts` asserts the approaches summary carries the hand note ("assumes right-handed") when a drawn approach's wing came from an assumed hand, and carries none when every hand is known, when no approach is drawn (no wing segments), and on every other cut
+  - [ ] `tests/wall-card-approaches.spec.ts` renders the card on the unknown-hand fixture and asserts its markup contains "assumes right-handed" in an element with its own data attribute and that the card's accessible label carries it; with known hands neither does
+  - [ ] `tests/player-season-viz.spec.ts` asserts the season's Approaches tile summary carries the note when a folded match has no opponent hand and a drawn approach, and not when every folded match's hand is known
+  - [ ] The card's wording is `HAND_ASSUMED_NOTE` (`viz-model.ts`), the same constant the lightbox uses; the diff adds no raw hex colour
+  - [ ] Existing non-approaches cases in `tests/wall-summary.spec.ts` and the two existing cases in `tests/wall-card-approaches.spec.ts` pass unedited
+- **notes:** From /pr-check receipt 38059d5. The card names "To backhand / To forehand" wings worked out from a hand the match does not record and never says so. `wallSummaryFor` sees only the count and the stats rows today, so it cannot know a hand was assumed; how the flag reaches it (widen the `result` pick to the dots, a field on `VizStats`) is the runner's call, but the season card and saved-view tiles go through the same function and must get the same answer. The season's merged result keeps each dot's own `handAssumed`. An all-undrawn card (T22: no segments) shows no caveat. Place it as a quiet line like `countNote`; say where in the report. Read `.skills/advantage-analytics-design/SKILL.md` first.
+
+## T26 · Label the apron lanes Left · Middle · Right when opponents' hands differ
+
+- **status:** todo
+- **model:** opus
+- **files:** (guess) `src/components/dashboard/matches/match-detail/shots/court-art.tsx` (`leftLaneIsForehand` ~747, `approachLaneText` ~732, `ApproachCourtArt` ~803); `shots/lightbox-court.tsx` (the `opponentHand !== undefined ? … : leftLaneIsForehand(dots)` fallback ~656, `ApproachApronLabels` ~800); `tests/season-viz-browser.spec.ts` + `tests/fixtures/season-viz-harness.tsx` (`HANDS_SEASON`); `tests/viz-approach-court-browser.spec.ts` + `tests/fixtures/viz-approach-court-harness.tsx`; a unit spec for the lane decision (new, or in `tests/approach.spec.ts`)
+- **routes:** `/dashboard/team/roster/[playerId]`
+- **done when:**
+  - [ ] A committed unit spec asserts the lane words read off a court's dots: every dot from one known hand gives "Their FH · Middle · Their BH" for a right-hander and the reverse for a left-hander; dots from a known right-hander and a known left-hander together give "Left · Middle · Right"; any dot whose hand was assumed gives "Left · Middle · Right"
+  - [ ] `tests/season-viz-browser.spec.ts` opens the season's Approaches court over opponents of different hands and asserts the three `data-approach-lane` words read "Left", "Middle", "Right", and over a season whose opponents all share one known hand asserts they read "Their FH" / "Their BH" on the sides that hand gives
+  - [ ] The same spec asserts the mixed-hand season's Statistics pane still lists the "Their backhand" and "Their forehand" rows
+  - [ ] The match lightbox is unchanged: every existing case in `tests/viz-approach-lightbox-browser.spec.ts` passes unedited (a court handed `opponentHand`, including `null`, keeps "Their FH" / "Their BH")
+  - [ ] No label size, position or colour constant changes; any existing assertion edited is in `tests/viz-approach-court-browser.spec.ts` only, and the report says why
+- **notes:** From /pr-check receipt 38059d5; T17 follow-up 1. The season court spans many opponents and passes no `opponentHand`, so `lightbox-court.tsx` falls back to `leftLaneIsForehand(dots)`, which stops at the first known-hand dot and labels the whole apron from that one opponent. Approved rule: where the hand is read off the dots and they do not share one known hand (mixed, or any assumed), name the lanes from the hitter's side as "Left · Middle · Right". Per-wing Statistics rows are computed per match and stay. A middle-lane dot says nothing about the hand, so the decision may need each dot's hand rather than lane against wing; how is the runner's call (the season builder could pass an explicit value instead). What an empty court shows is the runner's call; say which. The wall card's small court draws no lane words; `ApproachCourtArt` with `labels` uses the same fallback and takes the same rule, and its harness's default dots are `handAssumed: true`, so those lane-word cases will change. `HANDS_SEASON` (`?hands=1`) already has right, left and null opponents; a same-hand season needs a new option.
+
+## T27 · Drop the Approach to group when no approach has a wing
+
+- **status:** todo
+- **model:** opus
+- **files:** (guess) `src/components/dashboard/matches/match-detail/shots/viz-model.ts` (`approachStats` ~2621, the `wingGroup` built unconditionally ~2661); `src/lib/data/player-season-viz.ts` (`mergeVizStats` ~406, group order); `tests/viz-model.spec.ts`, `tests/player-season-viz.spec.ts`, `tests/viz-approach-filters-browser.spec.ts` (the `?landing=none` option already exists)
+- **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`
+- **done when:**
+  - [ ] `tests/viz-model.spec.ts` asserts that on a fixture whose approaches all lack a landing, `computeVizStats` for the approaches cut has no `approach-to` group, while the KPI count is N > 0 and the "How it ended" rows still sum to N
+  - [ ] The spec asserts that with some approaches drawn and some not the Approach to group is present with its three rows, their counts summing to the drawn number, and that it keeps all three rows with an `approachTo` filter ticked (existing Approach to and Direction cases unedited)
+  - [ ] `tests/player-season-viz.spec.ts` asserts `mergeVizStats` over one match with wings and one without lists Approach to before How it ended with the first match's wing counts, whichever match comes first, and that with no match having a wing the merged stats have no `approach-to` group
+  - [ ] The filters harness spec opens Approaches with `?landing=none` and asserts the Statistics pane shows the KPI count and "How it ended" and contains none of "Approach to", "Their backhand", "Their forehand"
+  - [ ] `tests/wall-summary.spec.ts` and `tests/wall-card-approaches.spec.ts` pass unedited
+- **notes:** From /pr-check receipt 38059d5. On a match with no coordinates the opened Statistics pane shows Their backhand / Middle / Their forehand as "0 of 0 —" under a KPI of N approaches, while the wall card (T22) now hides the wings; same rule here. Decide from the pool, not the filtered rows, so the group still ignores its own filter. Direction already has this rule (`pool.some(direction !== null)`); leave it. `wallSummaryFor` reads the `approach-to` rows and falls to zero counts when the group is missing, which is T22's no-wings case already. `mergeVizStats` unites groups in first-seen order, so a season whose first match has no wings would put How it ended above Approach to unless the order is fixed (Direction has the same exposure today). The filter panel's "Approach to" options are out of scope. An empty pool (no approaches at all) shows the empty line either way.
+
+## T28 · Give the Points pane the shared empty sentence
+
+- **status:** todo
+- **model:** sonnet
+- **files:** (guess) `src/components/dashboard/matches/match-detail/shots/viz-lightbox-shell.tsx` (the `emptyLine:` handed to `pointList.render` ~1417; the shared `emptyLine` ~920); `tests/viz-approach-filters-browser.spec.ts` (the `?net=you` option exists)
+- **routes:** `/dashboard/matches/[matchId]`
+- **done when:**
+  - [ ] The Points pane's empty sentence is the shell's shared `emptyLine` (the one the stage and `LightboxStats` print) in every case except the serve cut's "serves went out" sentence, which is unchanged
+  - [ ] The filters harness spec opens Approaches with `?net=you`, switches to the opponent with no filter ticked, opens the Points pane and asserts it reads "No approaches recorded for … yet" and does not contain "match these filters"
+  - [ ] The spec asserts that with a filter ticked that nothing matches the Points pane reads "No approaches match these filters"
+  - [ ] No existing assertion in `tests/viz-approach-filters-browser.spec.ts`, `tests/viz-lightbox-browser.spec.ts` or `tests/lightbox-points.spec.ts` is edited
+- **notes:** From /pr-check receipt 38059d5; T21 follow-up 1. The pane builds its own `No ${result.noun} match these filters.` whatever the filter state, so a subject with no approaches reads "No points to play / No approaches match these filters." beside a stage and Statistics pane that say "No approaches recorded for … yet". The fix is in the shell, not `lightbox-point-list.tsx`, which only prints what it is handed. The "No points to play" heading stays. The shared line has no trailing full stop; the pane's had one. Model the two cases on T21's `?net=you` cases in the same spec.
