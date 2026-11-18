@@ -7,12 +7,12 @@ import type { AdminClient } from "@/lib/supabase/admin";
 
 /**
  * The label pay report (`/admin/labels/pay`, T39): a non-practice session is
- * paid once, on the UTC day it was first published, to whoever made its first
- * submission; it reads "checked" once an admin has passed it. Time worked is
- * that labeller's own work minutes on it, folded into sittings. Practice sets
- * are not in the report. Offline — the
- * loader runs on an injected admin client that filters in-memory rows the way
- * PostgREST would.
+ * paid once, in the range an admin FIRST checked it (`first_checked_at`), to
+ * whoever made its first submission. Sessions published and not checked yet
+ * are listed as outstanding, outside every total. Time worked is the payee's
+ * own work minutes, folded into sittings. Practice sets are not in the
+ * report. Offline — the loader runs on an injected admin client that filters
+ * in-memory rows the way PostgREST would.
  */
 
 const ANA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -35,6 +35,7 @@ interface SessionFixture {
   completed_at: string | null;
   published_at: string | null;
   checked_at: string | null;
+  first_checked_at: string | null;
   job: typeof HOUR_JOB | null;
   match: { player1_name: string | null; player2_name: string | null } | null;
 }
@@ -48,6 +49,7 @@ function session(
     completed_at: null,
     published_at: null,
     checked_at: null,
+    first_checked_at: null,
     job: HOUR_JOB,
     match: { player1_name: "Reyes", player2_name: "Okafor" },
     ...over,
@@ -109,6 +111,10 @@ function fakeDb(
           );
           return builder;
         },
+        is(column: string, value: null) {
+          rows = rows.filter((r) => (r[column] ?? null) === value);
+          return builder;
+        },
         in(column: string, values: unknown[]) {
           filters.push(`${column} in`);
           rows = rows.filter((r) => values.includes(r[column]));
@@ -158,36 +164,47 @@ async function report(
   return result;
 }
 
+/** A session published at `published` and first checked at `checked` (both ISO). */
+function checkedSession(
+  id: string,
+  published: string,
+  checked: string,
+  over: Partial<SessionFixture> = {},
+): SessionFixture {
+  return session({
+    id,
+    completed_at: published,
+    published_at: published,
+    checked_at: checked,
+    first_checked_at: checked,
+    ...over,
+  });
+}
+
 test.describe("label pay report", () => {
-  test("a session published inside the range is counted, one published before it is not", async () => {
+  test("a session first checked inside the range is paid; one checked before it is not", async () => {
     const result = await report({
       label_sessions: [
-        session({
-          id: "s-in",
-          completed_at: "2026-11-10T09:00:00Z",
-          published_at: "2026-11-10T09:00:00Z",
-        }),
-        // Submitted and last published in range, but first published in
-        // October: October already paid for it.
-        session({
-          id: "s-before",
-          completed_at: "2026-11-05T09:00:00Z",
-          published_at: "2026-10-30T09:00:00Z",
-        }),
+        checkedSession("s-in", "2026-11-10T09:00:00Z", "2026-11-11T09:00:00Z"),
+        checkedSession(
+          "s-before",
+          "2026-10-20T09:00:00Z",
+          "2026-10-21T09:00:00Z",
+        ),
       ],
       label_submissions: [
         submission("s-in", ANA, "2026-11-10T08:59:00Z"),
-        submission("s-before", ANA, "2026-10-30T08:59:00Z"),
-        submission("s-before", ANA, "2026-11-05T08:59:00Z"),
+        submission("s-before", ANA, "2026-10-20T08:59:00Z"),
       ],
       users,
     });
 
     expect(result.lines.map((l) => l.sessionId)).toEqual(["s-in"]);
     expect(result.lines[0]).toMatchObject({
+      state: "checked",
       publishedAt: "2026-11-10T09:00:00Z",
-      state: "published",
-      videoHours: 1,
+      firstCheckedAt: "2026-11-11T09:00:00Z",
+      videoMinutes: 60,
       match: "Reyes v Okafor",
       workedMinutes: null,
       sittings: [],
@@ -197,25 +214,123 @@ test.describe("label pay report", () => {
         labellerId: ANA,
         name: expect.any(String),
         email: "ana@labellers.test",
-        publishedSessions: 1,
-        publishedHours: 1,
-        checkedSessions: 0,
-        checkedHours: 0,
+        paidSessions: 1,
+        paidVideoMinutes: 60,
         workedMinutes: 0,
         untrackedSessions: 1,
+        outstandingSessions: 0,
+        outstandingVideoMinutes: 0,
       },
     ]);
   });
 
-  test("credit goes to the first submitter, and a checked session counts as checked", async () => {
+  test("published in one month and checked in the next, a session is paid in the month it was checked", async () => {
+    const tables = {
+      label_sessions: [
+        checkedSession(
+          "s-late",
+          "2026-10-31T20:00:00Z",
+          "2026-11-02T09:00:00Z",
+        ),
+      ],
+      label_submissions: [submission("s-late", ANA, "2026-10-31T19:00:00Z")],
+      users,
+    };
+    const november = await report(tables);
+    expect(november.rows[0]).toMatchObject({
+      paidSessions: 1,
+      paidVideoMinutes: 60,
+    });
+    const october = await getLabelPayReport(
+      { from: "2026-10-01", to: "2026-10-31" },
+      {
+        requireAdmin: async () => ({ id: ADMIN }),
+        createAdminClient: () => fakeDb(tables),
+      },
+    );
+    if (!october.ok) throw new Error("expected a report");
+    // Checked since, so October no longer lists it at all.
+    expect(october.lines).toEqual([]);
+  });
+
+  test("a session checked, sent back and checked again is paid in its first check's range only", async () => {
     const result = await report({
       label_sessions: [
+        // First checked in October; the re-check stamped checked_at in
+        // November, but first_checked_at never moves.
+        checkedSession(
+          "s-rechecked",
+          "2026-10-10T09:00:00Z",
+          "2026-10-11T09:00:00Z",
+          { checked_at: "2026-11-05T09:00:00Z" },
+        ),
+      ],
+      label_submissions: [
+        submission("s-rechecked", ANA, "2026-10-10T08:00:00Z"),
+      ],
+      users,
+    });
+    expect(result.lines).toEqual([]);
+    expect(result.rows).toEqual([]);
+  });
+
+  test("outstanding sessions are listed but never counted: awaiting check, and sent back", async () => {
+    const result = await report({
+      label_sessions: [
+        checkedSession(
+          "s-paid",
+          "2026-11-03T09:00:00Z",
+          "2026-11-04T09:00:00Z",
+        ),
+        // Published in October, still not checked: outstanding in November.
         session({
-          id: "s-shared",
-          completed_at: "2026-11-12T10:00:00Z",
-          published_at: "2026-11-12T10:00:00Z",
-          checked_at: "2026-11-13T10:00:00Z",
+          id: "s-awaiting",
+          status: "complete",
+          published_at: "2026-10-28T09:00:00Z",
         }),
+        session({
+          id: "s-back",
+          status: "labelling",
+          published_at: "2026-11-08T10:00:00Z",
+        }),
+        // Published after the range: not this range's at all.
+        session({
+          id: "s-december",
+          status: "complete",
+          published_at: "2026-12-02T10:00:00Z",
+        }),
+      ],
+      label_submissions: [
+        submission("s-paid", ANA, "2026-11-03T08:00:00Z"),
+        submission("s-awaiting", ANA, "2026-10-28T08:00:00Z"),
+        submission("s-back", ANA, "2026-11-08T09:00:00Z"),
+        submission("s-december", ANA, "2026-12-02T09:00:00Z"),
+      ],
+      users,
+    });
+
+    expect(result.lines.map((l) => [l.sessionId, l.state])).toEqual([
+      ["s-paid", "checked"],
+      ["s-awaiting", "awaiting"],
+      ["s-back", "sent-back"],
+    ]);
+    expect(result.rows[0]).toMatchObject({
+      paidSessions: 1,
+      paidVideoMinutes: 60,
+      untrackedSessions: 1,
+      outstandingSessions: 2,
+      outstandingVideoMinutes: 120,
+    });
+  });
+
+  test("credit goes to the first submitter", async () => {
+    const result = await report({
+      label_sessions: [
+        checkedSession(
+          "s-shared",
+          "2026-11-12T10:00:00Z",
+          "2026-11-13T10:00:00Z",
+        ),
       ],
       label_submissions: [
         submission("s-shared", BEN, "2026-11-12T09:00:00Z"),
@@ -230,46 +345,16 @@ test.describe("label pay report", () => {
       state: "checked",
     });
     expect(result.rows.map((r) => r.labellerId)).toEqual([BEN]);
-    expect(result.rows[0]).toMatchObject({
-      publishedSessions: 0,
-      checkedSessions: 1,
-      checkedHours: 1,
-    });
-  });
-
-  test("a sent-back session counts as published", async () => {
-    const result = await report({
-      label_sessions: [
-        session({
-          id: "s-back",
-          status: "labelling",
-          completed_at: "2026-11-08T10:00:00Z",
-          published_at: "2026-11-08T10:00:00Z",
-          checked_at: null,
-        }),
-      ],
-      label_submissions: [submission("s-back", ANA, "2026-11-08T09:00:00Z")],
-      users,
-    });
-
-    expect(result.lines).toEqual([
-      expect.objectContaining({ sessionId: "s-back", state: "published" }),
-    ]);
-    expect(result.rows[0]).toMatchObject({
-      publishedSessions: 1,
-      checkedSessions: 0,
-    });
   });
 
   test("a session the admin published with no submission is not counted", async () => {
     const result = await report({
       label_sessions: [
-        session({
-          id: "s-admin",
-          completed_at: "2026-11-09T10:00:00Z",
-          published_at: "2026-11-09T10:00:00Z",
-          checked_at: "2026-11-09T10:00:00Z",
-        }),
+        checkedSession(
+          "s-admin",
+          "2026-11-09T10:00:00Z",
+          "2026-11-09T10:00:00Z",
+        ),
       ],
       label_submissions: [],
       users,
@@ -279,22 +364,22 @@ test.describe("label pay report", () => {
     expect(result.rows).toEqual([]);
   });
 
-  test("never reads label_submissions whole: only the range, and the sessions it names", async () => {
+  test("never reads label_submissions whole, and practice sets are not in the report", async () => {
     const reads: string[][] = [];
     const result = await report(
       {
         label_sessions: [
-          session({
-            id: "s-in",
-            completed_at: "2026-11-10T09:00:00Z",
-            published_at: "2026-11-10T09:00:00Z",
-          }),
+          checkedSession(
+            "s-in",
+            "2026-11-10T09:00:00Z",
+            "2026-11-10T10:00:00Z",
+          ),
           session({ id: "p-in", kind: "practice", status: "submitted" }),
           // Submitted in October and never published: nothing to read.
           session({ id: "s-old", status: "labelling" }),
         ],
         label_submissions: [
-          // First submitted before the range, published inside it.
+          // First submitted before the range, checked inside it.
           submission("s-in", ANA, "2026-10-29T09:00:00Z"),
           submission("p-in", BEN, "2026-11-03T09:00:00Z"),
           submission("s-old", ANA, "2026-10-02T09:00:00Z"),
@@ -306,14 +391,9 @@ test.describe("label pay report", () => {
     expect(result.lines).toEqual([
       expect.objectContaining({ sessionId: "s-in", labellerId: ANA }),
     ]);
-    // Practice sets are not in the report at all.
     expect(result.rows.map((r) => r.labellerId)).toEqual([ANA]);
     for (const filters of reads) {
-      expect(
-        filters.includes("submitted_at gte") ||
-          filters.includes("session_id in"),
-        filters.join(", "),
-      ).toBe(true);
+      expect(filters.includes("session_id in"), filters.join(", ")).toBe(true);
     }
   });
 
@@ -325,16 +405,27 @@ test.describe("label pay report", () => {
     });
     const result = await report({
       label_sessions: [
+        checkedSession(
+          "s-worked",
+          "2026-11-17T15:00:00Z",
+          "2026-11-18T09:00:00Z",
+        ),
+        checkedSession(
+          "s-none",
+          "2026-11-16T15:00:00Z",
+          "2026-11-16T16:00:00Z",
+        ),
+        // Outstanding: its minutes show on its line but join no total.
         session({
-          id: "s-worked",
-          published_at: "2026-11-17T15:00:00Z",
-          checked_at: "2026-11-18T09:00:00Z",
+          id: "s-open",
+          status: "complete",
+          published_at: "2026-11-20T10:00:00Z",
         }),
-        session({ id: "s-none", published_at: "2026-11-16T15:00:00Z" }),
       ],
       label_submissions: [
         submission("s-worked", ANA, "2026-11-17T14:00:00Z"),
         submission("s-none", ANA, "2026-11-16T14:00:00Z"),
+        submission("s-open", ANA, "2026-11-20T09:00:00Z"),
       ],
       label_work_beats: [
         // Ana's two sittings: 07:04–07:07 (a 2-minute pause inside it),
@@ -342,21 +433,17 @@ test.describe("label pay report", () => {
         beat("s-worked", ANA, "2026-11-16T07:04:00Z"),
         beat("s-worked", ANA, "2026-11-16T07:06:00Z"),
         beat("s-worked", ANA, "2026-11-16T09:00:00Z"),
-        // Before the publish, but still Ana's work on this session.
-        // Someone else checking it is not.
+        // Someone else's minutes on it are not hers.
         beat("s-worked", ADMIN, "2026-11-18T08:59:00Z"),
         beat("s-worked", BEN, "2026-11-17T10:00:00Z"),
-        // Reworked after the range closed (sent back in December): never
-        // changes November's figure.
+        // After the range closed: never changes November's figure.
         beat("s-worked", ANA, "2026-12-03T10:00:00Z"),
+        beat("s-open", ANA, "2026-11-20T08:00:00Z"),
       ],
       users,
     });
 
-    const worked = result.lines.find((l) => l.sessionId === "s-worked");
-    expect(worked).toMatchObject({
-      match: "Reyes v Okafor",
-      state: "checked",
+    expect(result.lines.find((l) => l.sessionId === "s-worked")).toMatchObject({
       workedMinutes: 3,
       sittings: [
         {
@@ -375,11 +462,16 @@ test.describe("label pay report", () => {
       workedMinutes: null,
       sittings: [],
     });
+    expect(result.lines.find((l) => l.sessionId === "s-open")).toMatchObject({
+      state: "awaiting",
+      workedMinutes: 1,
+    });
     expect(result.rows).toEqual([
       expect.objectContaining({
         labellerId: ANA,
         workedMinutes: 3,
         untrackedSessions: 1,
+        outstandingSessions: 1,
       }),
     ]);
   });
@@ -397,7 +489,7 @@ test.describe("label pay report", () => {
     expect(groupSittings([])).toEqual([]);
   });
 
-  test("the table says Checked and Awaiting check, never Submitted or Approved, and pays checked video only", () => {
+  test("the page and table never say Submitted or Approved, and name every state", () => {
     for (const file of [
       "src/app/admin/labels/pay/page.tsx",
       "src/components/admin/labels-practice/pay-report-table.tsx",
@@ -412,10 +504,8 @@ test.describe("label pay report", () => {
       ),
       "utf8",
     );
-    expect(table).toContain('"Checked"');
-    expect(table).toContain('"Awaiting check"');
-    // Paid video is finished matches only: a session awaiting check is left
-    // out of the labeller's total.
-    expect(table).toMatch(/l\.state === "checked"\s*\?\s*n \+/);
+    expect(table).toContain('checked: "Checked"');
+    expect(table).toContain("Awaiting check");
+    expect(table).toContain("Sent back");
   });
 });

@@ -6,6 +6,7 @@ import type {
   PayLabellerRow,
   PaySessionLine,
   PaySitting,
+  PayState,
 } from "@/lib/data/practice-server";
 import { AdminPage } from "@/components/admin/admin-page";
 import { InertButton } from "@/components/admin/inert-button";
@@ -46,9 +47,9 @@ export function PayReportHeading() {
     <div>
       <h1 className="text-display">Pay report</h1>
       <p className="text-body-sm mt-[9px] max-w-[620px]">
-        Paid video is the match video each labeller finished: published and
-        checked by an admin, counted on the day it was first published. Time
-        worked is each labeller&rsquo;s own active minutes on those matches.
+        Paid video is the match video an admin first checked in this range,
+        credited to the labeller who first published it. Time worked is that
+        labeller&rsquo;s own active minutes on those matches.
       </p>
     </div>
   );
@@ -111,6 +112,13 @@ function sittingText(s: PaySitting): string {
   return `${s.start}/${s.end} (${s.minutes}m)`;
 }
 
+/** Each line's state, then the day it took it: checked, or published. */
+const STATE_LABEL: Record<PayState, string> = {
+  checked: "Checked",
+  awaiting: "Awaiting check · published",
+  "sent-back": "Sent back · published",
+};
+
 function labellerWorked(row: PayLabellerRow): string {
   if (row.workedMinutes === 0) return "—";
   return duration(row.workedMinutes) + (row.untrackedSessions ? " +" : "");
@@ -135,26 +143,22 @@ export function PayReportTable({
     [
       "labeller",
       "email",
-      "published_sessions",
-      "published_video_hours",
-      "checked_sessions",
-      "checked_video_hours",
+      "paid_sessions",
       "paid_video_hours",
-      "total_video_hours",
       "worked_hours",
-      "sessions_without_time",
+      "paid_sessions_without_time",
+      "outstanding_sessions",
+      "outstanding_video_hours",
     ],
     ...rows.map((r) => [
       r.name,
       r.email,
-      r.publishedSessions,
-      hours(r.publishedHours),
-      r.checkedSessions,
-      hours(r.checkedHours),
-      hours(r.checkedHours),
-      hours(r.publishedHours + r.checkedHours),
+      r.paidSessions,
+      hours(r.paidVideoMinutes / 60),
       hours(r.workedMinutes / 60),
       r.untrackedSessions,
+      r.outstandingSessions,
+      hours(r.outstandingVideoMinutes / 60),
     ]),
   ];
   const detail = [
@@ -162,8 +166,9 @@ export function PayReportTable({
       "labeller",
       "session_id",
       "match",
-      "first_published_at",
       "state",
+      "first_published_at",
+      "first_checked_at",
       "video_hours",
       "worked_minutes",
       "sittings",
@@ -172,9 +177,10 @@ export function PayReportTable({
       l.labellerName,
       l.sessionId,
       l.match,
-      l.publishedAt,
       l.state,
-      hours(l.videoHours),
+      l.publishedAt,
+      l.firstCheckedAt,
+      hours(l.videoMinutes / 60),
       l.workedMinutes,
       l.sittings.map(sittingText).join("; "),
     ]),
@@ -205,7 +211,8 @@ export function PayReportTable({
       {rows.length === 0 ? (
         <div className="rounded-[var(--radius-card)] border border-[var(--border-card)] bg-[var(--surface-card)] px-6 py-12 text-center shadow-[var(--shadow-card)]">
           <p className="text-[13px] text-[var(--ink-900)]">
-            Nothing was published in this range.
+            Nothing was checked in this range, and nothing is waiting for a
+            check.
           </p>
         </div>
       ) : (
@@ -246,18 +253,7 @@ export function PayReportTable({
                           </span>
                         </span>
                         <span className="text-right text-[var(--ink-900)]">
-                          {duration(
-                            // Finished matches only (published and checked),
-                            // summed as their session lines print, so the
-                            // total never differs from them by a rounding.
-                            (linesBy.get(r.labellerId) ?? []).reduce(
-                              (n, l) =>
-                                l.state === "checked"
-                                  ? n + Math.round(l.videoHours * 60)
-                                  : n,
-                              0,
-                            ),
-                          )}
+                          {duration(r.paidVideoMinutes)}
                         </span>
                         <span className="text-right font-medium text-[var(--ink-900)]">
                           {labellerWorked(r)}
@@ -287,10 +283,10 @@ export function PayReportTable({
               })}
             </div>
           </div>
-          {rows.some((r) => r.publishedSessions > 0) ? (
+          {rows.some((r) => r.outstandingSessions > 0) ? (
             <p className="text-[11px] text-[var(--ink-600)]">
-              A session awaiting check is not in Paid video until an admin
-              checks it.
+              Greyed sessions are not checked yet. They count in the range an
+              admin first checks them.
             </p>
           ) : null}
           {rows.some((r) => r.untrackedSessions > 0) ? (
@@ -334,17 +330,19 @@ function SessionLine({
           <span className="min-w-0 truncate">
             <span className="text-[var(--ink-900)]">{line.match}</span>
             {" · "}
-            {day(line.publishedAt)}
-            {" · "}
-            {checked ? "Checked" : "Awaiting check"}
+            {STATE_LABEL[line.state]}{" "}
+            {day(line.firstCheckedAt ?? line.publishedAt)}
           </span>
           <span
             className={cn("text-right", !checked && "text-[var(--ink-400)]")}
           >
-            {duration(line.videoHours * 60)}
+            {duration(line.videoMinutes)}
           </span>
           <span
-            className={cn("text-right", !tracked && "text-[var(--ink-400)]")}
+            className={cn(
+              "text-right",
+              (!tracked || !checked) && "text-[var(--ink-400)]",
+            )}
           >
             {worked === null ? "—" : duration(worked)}
           </span>
