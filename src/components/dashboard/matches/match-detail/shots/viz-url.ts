@@ -20,6 +20,7 @@ import {
   type PlayerFilter,
   type VizFilters,
 } from "./viz-model";
+import { DEFAULT_CUTS } from "./default-cuts";
 import {
   appliedValues,
   capitalizeFirst,
@@ -527,6 +528,39 @@ export function paramFor(key: string): string {
   return Object.hasOwn(NAMESPACED_PARAMS, key) ? NAMESPACED_PARAMS[key] : key;
 }
 
+/**
+ * How the URL says a cut's floor was let go of: `cut=approaches&ventry=any`
+ * is every way to the net. A bare `cut=approaches` is the cut on its floor
+ * (approach shots only), so "nothing ticked" cannot go unsaid as it does for
+ * every other group. Never a model value: it parses to an empty group.
+ */
+export const FLOOR_LOOSENED_WORD = "any";
+
+/**
+ * A cut's floor (`DefaultCut.floor`): the filters it opens on because they
+ * are what the cut is — Approaches is approach shots. The same on a judged
+ * and an unjudged match, so `DEFAULT_CUTS` is read directly.
+ */
+export function cutFloor(cut: Cut): Partial<VizFilters> {
+  return DEFAULT_CUTS.find((c) => c.cut === cut)?.floor ?? {};
+}
+
+/**
+ * The filters a court lands on when a menu picks `cut` while `prevCut` is
+ * showing: what `carryFilters` keeps, then — only when the cut really
+ * changes — the new cut's floor, so Approaches picked from another cut opens
+ * on approach shots, as its card does. Picking the cut already showing
+ * leaves a loosened floor alone: the reader's untick is theirs.
+ */
+export function filtersForCut(
+  filters: VizFilters,
+  prevCut: Cut | null,
+  cut: Cut,
+): VizFilters {
+  const carried = carryFilters(filters, cut);
+  return cut === prevCut ? carried : { ...carried, ...cutFloor(cut) };
+}
+
 // `set` (bare) is NOT a viz key: the match report already owns it
 // (`set-scope.tsx`'s `SET_PARAM`), dormant today but a silent clobber the day
 // it's re-enabled. The viz filter's set value is namespaced to `vset` in the
@@ -701,6 +735,13 @@ export interface VizParseMatch {
  * chart. Omitted (saved-view validation, `saved-views-logic.ts`), the values
  * parse exactly as written: a saved view's `error` array is read, never
  * rewritten.
+ *
+ * With `match`, a cut that has a floor (`cutFloor`) also opens on it: a bare
+ * `cut=approaches` is approach shots only — the card's own state, so no
+ * filter reads as applied — and "every way in" is spelled out as
+ * `ventry=any` (`FLOOR_LOOSENED_WORD`). A `ventry` naming a way in is read
+ * as written. Without `match` nothing is filled in: a saved view stored with
+ * an empty `entry` stays every way in.
  */
 export function parseVizState(
   params: URLSearchParams,
@@ -751,7 +792,7 @@ export function parseVizState(
     match === undefined
       ? carried
       : {
-          ...carried,
+          ...withUnsaidFloor(carried, cut, params),
           error: collapseErrorFilter(carried.error, match.errorSplitJudged),
         };
 
@@ -825,6 +866,7 @@ export function vizStateQuery(
 
   // Serialize filters: only non-default keys that are in filterKeysFor(cut)
   const allowedKeys = new Set(filterKeysFor(state.cut));
+  const floor = cutFloor(state.cut);
 
   if (allowedKeys.has("set")) {
     for (const setNumber of state.filters.set) {
@@ -845,6 +887,11 @@ export function vizStateQuery(
     const values = state.filters[key] as readonly string[];
     for (const value of values) {
       next.append(paramFor(key), urlValueFor(key, value));
+    }
+    // A floor group with nothing ticked is said out loud: left off, the
+    // reader's "every way in" would read back as the floor (`parseVizState`).
+    if (values.length === 0 && Object.hasOwn(floor, key)) {
+      next.append(paramFor(key), FLOOR_LOOSENED_WORD);
     }
   }
 
@@ -1121,6 +1168,27 @@ export function activeFilterEntries(
 }
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
+
+/**
+ * `filters` with `cut`'s floor filled into each floor group the URL left
+ * unsaid: empty after parsing, and not let go of by name
+ * (`FLOOR_LOOSENED_WORD`). The wall (`cut === null`) has no floor.
+ */
+function withUnsaidFloor(
+  filters: VizFilters,
+  cut: Cut | null,
+  params: URLSearchParams,
+): VizFilters {
+  if (cut === null) return filters;
+  let next = filters;
+  for (const [key, value] of Object.entries(cutFloor(cut))) {
+    const held = filters[key as keyof VizFilters];
+    if (!Array.isArray(held) || held.length > 0) continue;
+    if (params.getAll(paramFor(key)).includes(FLOOR_LOOSENED_WORD)) continue;
+    next = { ...next, [key]: value };
+  }
+  return next;
+}
 
 function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
   // Start with defaults from EMPTY_VIZ_FILTERS

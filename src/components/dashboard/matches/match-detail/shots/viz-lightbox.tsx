@@ -289,6 +289,13 @@ export function VizLightbox({
     player: state.filters.player,
   };
   const floorKeys = Object.keys(floor) as (keyof VizFilters)[];
+  // The floor, while the court still holds it, is the card and not a filter
+  // on it: the strip never names it, and an empty court under it has nothing
+  // recorded rather than nothing matching.
+  const floorHeld = (key: keyof VizFilters) =>
+    floorKeys.includes(key) && sameFilterValue(key, liveFilters, floorFilters);
+  const stageHasFilters =
+    hasFilters && activeFilterEntries(state).some((e) => !floorHeld(e.key));
   const cardFilters: VizFilters | null = baseline?.filters ?? null;
   const cardKeys = baseline?.keys ?? [];
   const onCard =
@@ -497,8 +504,7 @@ export function VizLightbox({
       (onView ? sameFilterValue(key, liveFilters, cardFilters) : onCard)) ||
     // The card's floor, while the court still holds it, is never named:
     // "To their backhand", not "Approach · To their backhand".
-    (floorKeys.includes(key) &&
-      sameFilterValue(key, liveFilters, floorFilters));
+    floorHeld(key);
   const phrases = activeFilterEntries(state, names, {
     errorSplitJudged,
     bandLabels: bandLabelsOf(matchCtx),
@@ -536,7 +542,7 @@ export function VizLightbox({
       subjectName={subjectName}
       unit={unit}
       bandZones={bandZones}
-      hasFilters={hasFilters}
+      hasFilters={stageHasFilters}
       statRowDots={statRowDots}
       whereFor={whereFor}
       watch={{

@@ -865,7 +865,8 @@ export interface SeasonLightboxData {
   bands: BandSettings;
   subjectName: string;
   unit: DistanceUnit;
-  /** Any filter beyond the defaults is on (`activeFilterEntries`). */
+  /** Any filter beyond the defaults and the card's held floor is on
+   *  (`activeFilterEntries`). */
   hasFilters: boolean;
   title: string;
   subtitle: string;
@@ -1360,7 +1361,17 @@ export function buildSeasonLightbox(
     bands: bands.bands,
     subjectName,
     unit: bands.unit,
-    hasFilters: seasonActive || activeFilterEntries(state).length > 0,
+    // A held floor is the card, not a filter on it: an empty Approaches
+    // court has none recorded, not none matching.
+    hasFilters:
+      seasonActive ||
+      activeFilterEntries(state).some(
+        (entry) =>
+          !(
+            floorKeys.includes(entry.key) &&
+            sameFilterValue(entry.key, filters, floorFilters)
+          ),
+      ),
     title: baseline !== null && onCard ? baseline.name : SEASON_CUT_LABEL[cut],
     subtitle: `${SEASON_CUT_LABEL[cut]} · ${subjectWord} · ${matches} ${matches === 1 ? "match" : "matches"} · ${lightboxCountLine(
       cut,

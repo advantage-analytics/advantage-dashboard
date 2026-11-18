@@ -213,7 +213,7 @@ ready).
 
 ## T15 · Open Approaches on its baseline without the card
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/viz-url.ts` (`parseVizState`, `vizStateQuery`), `shots/cut-menu.tsx` (`selectCut`), `shots/default-cuts.ts` (`floor`); `src/lib/data/player-season-viz.ts` (`parseSeasonVizState`); `tests/viz-url.spec.ts`, `tests/viz-approach-filters-browser.spec.ts` + `tests/fixtures/viz-approach-filters-harness.tsx`
 - **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`

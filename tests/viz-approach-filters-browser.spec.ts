@@ -158,6 +158,54 @@ test("the card's baseline is not an applied filter; Serve and volley is, and Cle
   expect(errors).toEqual([]);
 });
 
+test("opened by URL with no ventry, the cut is on its baseline: no strip, Filters not engaged, Approach ticked", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=approaches&hand=known`);
+  const dialog = page.getByRole("dialog", { name: "Approaches" });
+  await expect(dialog).toBeVisible();
+  await expect(page).not.toHaveURL(/ventry=/);
+  await expect(dialog.locator("[data-viz-filter-strip]")).toHaveCount(0);
+  await expect(
+    dialog.getByRole("button", { name: "Filters" }),
+  ).not.toHaveAttribute("data-engaged", "true");
+  const panel = await openPanel(page);
+  await expect(
+    panel.getByRole("checkbox", { name: /^Approach\b/ }),
+  ).toHaveAttribute("aria-checked", "true");
+  await expect(
+    panel.getByRole("checkbox", { name: /^Serve and volley\b/ }),
+  ).toHaveAttribute("aria-checked", "false");
+
+  // Every way in survives a reload under its own spelling.
+  await panel.getByRole("checkbox", { name: /^Approach\b/ }).click();
+  await expect(page).toHaveURL(/ventry=any/);
+  await page.reload();
+  const reloaded = page.getByRole("dialog", { name: "Approaches" });
+  await expect(reloaded.locator("[data-viz-filter-strip]")).toContainText(
+    "How you came in: any",
+  );
+  expect(errors).toEqual([]);
+});
+
+test("opened by URL for a player with no approaches, the stage says none are recorded, not that filters hid them", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=approaches&net=never`);
+  const dialog = page.getByRole("dialog", { name: "Approaches" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(/No approaches recorded for .+ yet/);
+  await expect(dialog).not.toContainText("No approaches match these filters");
+  await expect(dialog.locator("[data-viz-filter-strip]")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
 test("the applied sentence says it assumes right-handed only where a shown approach assumed the hand", async ({
   page,
 }) => {

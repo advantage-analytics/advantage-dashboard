@@ -52,6 +52,7 @@ import {
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import { vizPoints } from "@/components/dashboard/matches/match-detail/shots/viz-points";
 import {
+  filtersForCut,
   parseVizState,
   vizStateQuery,
   type VizState,
@@ -2693,6 +2694,44 @@ test.describe("the Approaches card over a season", () => {
       approachPart(LEFTY, approachState({ approachTo: ["backhand"] }).filters)
         .stats.kpi,
     );
+  });
+
+  test('Approaches picked from the View menu on another cut, or opened by a bare URL, holds the floor: no "How you came in: any"', () => {
+    // The state `cut-menu.tsx`'s `selectCut` makes coming from Serve.
+    const picked: VizState = {
+      cut: "approaches",
+      chart: "scatter",
+      filters: filtersForCut(
+        { ...EMPTY_VIZ_FILTERS, zone: ["t"] },
+        "serve",
+        "approaches",
+      ),
+      viewId: null,
+    };
+    expect(picked.filters.entry).toEqual(["approach"]);
+    for (const state of [
+      picked,
+      parseSeasonVizState({ cut: "approaches" }, true),
+    ]) {
+      const data = buildSeasonLightbox(SEASON, state, BANDS, NAMES)!;
+      expect(data.filterPhrases).toEqual([]);
+      expect(data.panelActive).toBe(false);
+      // An empty court under the held floor has none recorded, not none
+      // matching.
+      expect(data.hasFilters).toBe(false);
+    }
+    expect(
+      buildSeasonLightbox(
+        SEASON,
+        approachState({ entry: ["serve-volley"] }),
+        BANDS,
+        NAMES,
+      )!.hasFilters,
+    ).toBe(true);
+    expect(
+      buildSeasonLightbox(SEASON, approachState({ entry: [] }), BANDS, NAMES)!
+        .hasFilters,
+    ).toBe(false);
   });
 
   test("Clear comes back to approach shots (the card's floor), which the strip never names while the court holds it", () => {

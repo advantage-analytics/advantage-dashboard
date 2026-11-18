@@ -5,7 +5,7 @@ import { ShotsTab } from "@/components/dashboard/matches/match-detail/shots/shot
 import { MatchFiltersProvider } from "@/components/dashboard/matches/match-detail/match-filters/provider";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import type { Match } from "@/lib/data/types";
-import { MATCH } from "./approach-points";
+import { BASELINE, MATCH, OPP_APPROACH } from "./approach-points";
 
 /**
  * The Visualizations tab as the report mounts it — the real `ShotsTab`, its
@@ -13,10 +13,12 @@ import { MATCH } from "./approach-points";
  * (`approach-points.ts`): approaches, a serve and volley, a time drawn in.
  * You are player 1. `?hand=known` records both players as right-handed;
  * without it the opponent's hand is not on the match row, so the court's
- * wing words assume it (`handAssumed`).
+ * wing words assume it (`handAssumed`). `?net=never` keeps only the points
+ * you never came in on: a match with no approaches of yours to draw.
  */
 const params = new URLSearchParams(window.location.search);
 const handKnown = params.get("hand") === "known";
+const source = params.get("net") === "never" ? [BASELINE, OPP_APPROACH] : MATCH;
 
 const match = {
   id: "fixture",
@@ -43,7 +45,7 @@ const match = {
 } as Match;
 
 // One number per point, as a real match has.
-const points = MATCH.map((point, i) => ({ ...point, pointNumber: i + 1 }));
+const points = source.map((point, i) => ({ ...point, pointNumber: i + 1 }));
 
 createRoot(document.getElementById("root")!).render(
   <MatchDataProvider match={match} statsResult={null} points={points}>

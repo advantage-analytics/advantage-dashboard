@@ -144,3 +144,14 @@ is the runner's. Newest entries at the bottom.
 
 1. The four legacy rows with only `player2_id` set now read differently on the report (by seat) and in the label console (`enteredHandsFor`, creator's hand on seat two); decide which is right and backfill or align. Stale comments: `labels-server.ts` ~123 and ~722, `services/labels/session.ts` ~481, `tests/label-entered-hands.spec.ts`.
 2. Reports turned to seat two now show the hands the other way round from before (the intended fix); worth an eyes-on of Approaches wings and Direction inside-out on such a report.
+
+## T15 · Open Approaches on its baseline without the card — done
+
+**gate:** mechanical pass · completion pass
+**changed:** A bare `cut=approaches` now reads `entry: ["approach"]` on the report and the season page (`parseVizState` fills the floor only when its `match` argument is passed, so the saved-view validator's read is unchanged); "every way in" is spelled `ventry=any`. New `filtersForCut` (carryFilters plus the floor only when the cut changes) drives `cut-menu.tsx` `selectCut`. The stage's `hasFilters` no longer counts a held floor (`viz-lightbox.tsx`, `player-season-viz.ts`), so an empty Approaches court reads "No approaches recorded for … yet". Specs in `viz-url.spec.ts`, `player-season-viz.spec.ts` and the filters harness (new `?net=never`).
+**follow-ups:**
+
+1. The View menu has no Approaches item; `filtersForCut` lands it on the floor if one is added.
+2. With `ventry=any` and no net points, the stage reads "none recorded" while the strip says "How you came in: any", with no Clear link on the stage.
+3. The Unforced errors card has filters but no `floor`, so an empty one opened from the wall still reads "No errors match these filters".
+4. Check MCP `open_visualization` and any other `cut=approaches` link builder now that a bare cut means approaches only.
