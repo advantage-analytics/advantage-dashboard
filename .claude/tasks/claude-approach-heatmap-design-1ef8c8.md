@@ -240,7 +240,7 @@ ready).
 
 ## T17 · Draw the apron labels in the opened Approaches court
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T16
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/lightbox-court.tsx`; `shots/court-art.tsx` only to share the label constants; `tests/viz-approach-lightbox-browser.spec.ts` + `tests/fixtures/viz-approach-lightbox-harness.tsx`

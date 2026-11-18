@@ -287,3 +287,100 @@ test("a pair selected from a zoomed-in court is zoomed back out until both its m
     .toEqual([true, true]);
   expect(errors).toEqual([]);
 });
+
+/* ── T17: the apron's words on the opened Approaches court ─────────────── */
+
+/** The dialog at its opening frame (`openAtHome`), from `query`. */
+async function openWith(page: Page, query: string) {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?${query}`);
+  const dialog = page.getByRole("dialog", { name: "Approaches" });
+  await expect(dialog).toBeVisible();
+  const stage = dialog.locator("[data-court-stage]");
+  await expect(stage.locator("[data-viz-mark]")).toHaveCount(4);
+  return { stage, errors };
+}
+
+/** The apron's words, each with its box, the wing names sorted left to right. */
+async function apronLabels(stage: ReturnType<Page["locator"]>) {
+  const labels = stage.locator("[data-approach-labels] text");
+  const n = await labels.count();
+  const out: { text: string; lane: string | null; box: Box }[] = [];
+  for (let i = 0; i < n; i++) {
+    const label = labels.nth(i);
+    out.push({
+      text: (await label.evaluate((node) => node.textContent ?? "")).trim(),
+      lane: await label.getAttribute("data-approach-lane"),
+      box: (await label.boundingBox())!,
+    });
+  }
+  const lanes = out
+    .filter((l) => l.lane !== null)
+    .sort((a, b) => a.box.x - b.box.x)
+    .map((l) => l.text);
+  return { all: out, lanes };
+}
+
+for (const hand of ["right", "unknown"] as const) {
+  test(`the opened court names its apron, Their FH on the left, when the opponent's hand is ${hand}`, async ({
+    page,
+  }) => {
+    const { stage, errors } = await openWith(page, `hand=${hand}`);
+    const { all, lanes } = await apronLabels(stage);
+    expect(all.map((l) => l.text)).toEqual(
+      expect.arrayContaining(["Placement", "Contact"]),
+    );
+    expect(all).toHaveLength(5);
+    expect(lanes).toEqual(["Their FH", "Middle", "Their BH"]);
+    // Set in the mono face, in an existing token's ink.
+    const group = stage.locator("[data-approach-labels]");
+    await expect(group).toHaveAttribute("font-family", "var(--font-mono)");
+    await expect(group).toHaveAttribute("fill", "var(--surface-dark)");
+    expect(errors).toEqual([]);
+  });
+}
+
+test("a known left-handed opponent swaps the outer wing names", async ({
+  page,
+}) => {
+  const { stage, errors } = await openWith(page, "hand=left");
+  const { lanes } = await apronLabels(stage);
+  expect(lanes).toEqual(["Their BH", "Middle", "Their FH"]);
+  expect(errors).toEqual([]);
+});
+
+test("every apron word lies inside the stage at the opening frame", async ({
+  page,
+}) => {
+  const { stage, errors } = await openWith(page, "hand=right");
+  const stageBox = (await stage.boundingBox())!;
+  const { all } = await apronLabels(stage);
+  expect(all).toHaveLength(5);
+  for (const label of all) {
+    expect(
+      { text: label.text, inside: inside(label.box, stageBox) },
+      label.text,
+    ).toEqual({ text: label.text, inside: true });
+  }
+  // On the apron, never on the court: "Placement" and the wings above the
+  // far baseline's marks, "Contact" below every contact.
+  const placement = all.find((l) => l.text === "Placement")!.box;
+  const contact = all.find((l) => l.text === "Contact")!.box;
+  expect(placement.y).toBeLessThan(contact.y);
+  expect(errors).toEqual([]);
+});
+
+test("another cut's opened court draws no apron words", async ({ page }) => {
+  const { stage, errors } = await openWith(
+    page,
+    "hand=right&cut=rallyPlacement",
+  );
+  await expect(stage.locator("[data-approach-labels]")).toHaveCount(0);
+  for (const word of ["Placement", "Contact", "Their FH", "Their BH"]) {
+    await expect(stage.locator("svg text", { hasText: word })).toHaveCount(0);
+  }
+  expect(errors).toEqual([]);
+});

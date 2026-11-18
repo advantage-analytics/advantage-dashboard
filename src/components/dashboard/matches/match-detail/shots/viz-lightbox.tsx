@@ -545,6 +545,13 @@ export function VizLightbox({
       hasFilters={stageHasFilters}
       statRowDots={statRowDots}
       whereFor={whereFor}
+      // The apron's "Their FH" / "Their BH" follow the hand of whoever the
+      // court is NOT about: the opponent's, or the player's on the
+      // opponent's court. `ctx.hands` is seat-correct (`playerHands`).
+      opponentHand={
+        (subjectIsPlayer1 ? matchCtx.hands.player2 : matchCtx.hands.player1) ??
+        null
+      }
       watch={{
         canWatch: canWatchDot,
         onWatch: (dot, sentence) => {

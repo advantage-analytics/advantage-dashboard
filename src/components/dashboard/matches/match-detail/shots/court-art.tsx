@@ -719,13 +719,23 @@ function ReturnCourtLines() {
 // Apron labels on the Approaches frame (`approach-map-v9.html`): Roboto Mono,
 // capitals, dark ink. `--surface-dark` rather than `--ink-900`, because the
 // apron is the same green in both themes and `--ink-900` turns light in dark
-// mode.
-const APPROACH_LABEL_INK = "var(--surface-dark)";
-const APPROACH_SIDE_LABEL_SIZE = 7.4;
-const APPROACH_SIDE_LABEL_OPACITY = 0.72;
-const APPROACH_LANE_LABEL_SIZE = 6.8;
-const APPROACH_LANE_LABEL_OPACITY = 0.5;
-const APPROACH_LABEL_TRACKING = 0.9;
+// mode. Exported for the opened court (`lightbox-court.tsx`), which draws
+// the same words on its own `VIEWER_COURT` apron.
+export const APPROACH_LABEL_INK = "var(--surface-dark)";
+export const APPROACH_SIDE_LABEL_SIZE = 7.4;
+export const APPROACH_SIDE_LABEL_OPACITY = 0.72;
+export const APPROACH_LANE_LABEL_SIZE = 6.8;
+export const APPROACH_LANE_LABEL_OPACITY = 0.5;
+export const APPROACH_LABEL_TRACKING = 0.9;
+
+/** The wing name over each hitter's-view third, left to right. */
+export function approachLaneText(leftIsForehand: boolean) {
+  return {
+    left: leftIsForehand ? "Their FH" : "Their BH",
+    middle: "Middle",
+    right: leftIsForehand ? "Their BH" : "Their FH",
+  } as const;
+}
 
 /**
  * Whether the hitter's LEFT third faces the opponent's forehand — true for a
@@ -734,7 +744,7 @@ const APPROACH_LABEL_TRACKING = 0.9;
  * sits in an outer third settles it. With no such dot the hand is unknown and,
  * as everywhere else in the cut, a right-hander is assumed.
  */
-function leftLaneIsForehand(dots: VizDot[]): boolean {
+export function leftLaneIsForehand(dots: VizDot[]): boolean {
   for (const d of dots) {
     const wing = d.meta?.wing;
     if (d.meta?.handAssumed !== false || !wing || wing === "middle") continue;
@@ -790,12 +800,7 @@ function ApproachCourtArt({
   const box = labels
     ? FULL_COURT_VERTICAL.viewBox
     : FULL_COURT_VERTICAL.cardViewBox;
-  const leftIsForehand = leftLaneIsForehand(dots);
-  const laneText = {
-    left: leftIsForehand ? "Their FH" : "Their BH",
-    middle: "Middle",
-    right: leftIsForehand ? "Their BH" : "Their FH",
-  } as const;
+  const laneText = approachLaneText(leftLaneIsForehand(dots));
   const place = labels ? (p: { x: number; y: number }) => p : clampToCard;
   return (
     <svg

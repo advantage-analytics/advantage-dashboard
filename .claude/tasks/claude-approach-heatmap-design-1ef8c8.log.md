@@ -164,3 +164,11 @@ is the runner's. Newest entries at the bottom.
 
 1. `viewerLandingHalf("approaches")` still returns `"far"`; return `null` or document the exception.
 2. Contacts more than about 1.9 m behind the baseline start just off the stage; the apron can grow to 43 units before it equals "Full court".
+
+## T17 · Draw the apron labels in the opened Approaches court — done
+
+**gate:** mechanical pass · completion pass
+**changed:** New `ApproachApronLabels` in `lightbox-court.tsx`, on the approaches cut only: wing names and "Placement" above the far baseline, "Contact" below the near one, inside T16's 32-unit apron, in `var(--font-mono)` and `var(--surface-dark)`, pointer-transparent. A new optional `opponentHand` prop (threaded through `viz-lightbox-shell.tsx`, supplied by `viz-lightbox.tsx` from `matchCtx.hands` for whoever the court is not about) sets which side is "Their FH"; without it the court reads the hand off the dots. `court-art.tsx` exports its label constants, `leftLaneIsForehand` and a shared `approachLaneText()` that the wall card now uses (unchanged output). Five new harness cases; the fixture gains `?hand=` and `?cut=`.
+**follow-ups:**
+
+1. The season lightbox passes no hand, so with mixed-hand opponents in a season the wing labels follow whichever dot has a known hand first; consider hiding wing names there or showing them only when every opponent's hand agrees.

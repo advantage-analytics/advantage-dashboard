@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { VizLightboxShell } from "@/components/dashboard/matches/match-detail/shots/viz-lightbox-shell";
+import type { Hand } from "@/components/dashboard/matches/match-detail/match-filters/shot-geometry";
 import {
   EMPTY_VIZ_FILTERS,
+  type Cut,
   computeVizStats,
   type VizDot,
   type VizDotMeta,
@@ -16,7 +18,21 @@ import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
  * contact/placement pairs and one approach whose contact went unmeasured
  * (a placement alone). No points, no model run — the court is exactly these
  * dots, so the spec can find each pair by id.
+ *
+ * Query: `?hand=left|right|unknown` hands the shell the opponent's hand (the
+ * apron's wing names); without it the shell gets none, as on the season's
+ * court. `?cut=<cut>` opens the same dots on another cut instead.
  */
+
+const params = new URLSearchParams(window.location.search);
+const HAND_PARAM = params.get("hand");
+const OPPONENT_HAND: Hand | null | undefined =
+  HAND_PARAM === "left" || HAND_PARAM === "right"
+    ? HAND_PARAM
+    : HAND_PARAM === "unknown"
+      ? null
+      : undefined;
+const CUT = (params.get("cut") ?? "approaches") as Cut;
 
 function meta(extra: Partial<VizDotMeta>): VizDotMeta {
   return {
@@ -92,22 +108,14 @@ function Approaches() {
     [],
   );
   const stats = useMemo(
-    () =>
-      computeVizStats(
-        [],
-        "approaches",
-        filters,
-        true,
-        result,
-        DEFAULT_BANDS,
-        "ft",
-      ),
+    () => computeVizStats([], CUT, filters, true, result, DEFAULT_BANDS, "ft"),
     [filters, result],
   );
   return (
     <VizLightboxShell
-      cut="approaches"
+      cut={CUT}
       chart="scatter"
+      opponentHand={OPPONENT_HAND}
       filters={filters}
       result={result}
       stats={stats}

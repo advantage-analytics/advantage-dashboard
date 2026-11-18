@@ -10,7 +10,15 @@ import {
 import {
   ACE_STAR_FILL,
   ACE_STAR_RADIUS_RATIO,
+  APPROACH_LABEL_INK,
+  APPROACH_LABEL_TRACKING,
+  APPROACH_LANE_LABEL_OPACITY,
+  APPROACH_LANE_LABEL_SIZE,
+  APPROACH_SIDE_LABEL_OPACITY,
+  APPROACH_SIDE_LABEL_SIZE,
   APRON_FILL,
+  approachLaneText,
+  leftLaneIsForehand,
   COURT_FILL,
   HEAT_APRON_FILL,
   HEAT_COURT_FILL,
@@ -48,6 +56,7 @@ import {
 } from "./viz-readout";
 import { nextMarkIndex } from "./viz-mark-roving";
 import { isPlacementCut } from "./cut-kinds";
+import type { Hand } from "../match-filters/shot-geometry";
 import {
   type Chart,
   type Cut,
@@ -123,6 +132,24 @@ const ZONE_COUNT_Y = VIEWER_COURT.netY + 21;
 // The two service boxes' own centres — the frame's hand-entered 213 / 307.
 const DEUCE_LABEL_X = (VIEWER_COURT.singlesLeft + VIEWER_COURT.centreX) / 2;
 const AD_LABEL_X = (VIEWER_COURT.centreX + VIEWER_COURT.singlesRight) / 2;
+
+// The Approaches apron (`VIEWER_APPROACH_FRAME`, 32 units past each
+// baseline): "Placement" and the wing names above the far baseline, "Contact"
+// below the near one — on the apron only, never on the court. Baselines
+// measured so each line's capitals clear the one below by ~6 units and the
+// top line clears the frame's edge by about as much.
+const APPROACH_LANE_LABEL_Y = VIEWER_COURT.farBaselineY - 8;
+const APPROACH_PLACEMENT_LABEL_Y = VIEWER_COURT.farBaselineY - 20;
+const APPROACH_CONTACT_LABEL_Y = VIEWER_COURT.nearBaselineY + 20;
+/** Centre of each hitter's-view third of the singles court (`laneOf`). */
+const APPROACH_LANE_X = (() => {
+  const third = (VIEWER_COURT.singlesRight - VIEWER_COURT.singlesLeft) / 3;
+  return {
+    left: VIEWER_COURT.singlesLeft + third / 2,
+    middle: VIEWER_COURT.centreX,
+    right: VIEWER_COURT.singlesRight - third / 2,
+  } as const;
+})();
 
 /** P2m: while the band editor is open the marks (and heat) sit back at 35%
  *  so the dividers and their labels read first. */
@@ -245,6 +272,7 @@ export function LightboxCourt({
   matchFor,
   canWatchMark,
   focusIds = null,
+  opponentHand,
   outline = null,
   onReadoutEnter,
   onReadoutLeave,
@@ -298,6 +326,14 @@ export function LightboxCourt({
   canWatchMark?: (dot: VizDot) => boolean;
   /** A hovered Statistics row's marks: the rest sit back at 40%. */
   focusIds?: ReadonlySet<string> | null;
+  /**
+   * Approaches: the hand of whoever is NOT the court's subject, which sides
+   * the apron's "Their FH" / "Their BH". `null` is a known-unknown hand, read
+   * as right-handed like the rest of the cut. Omitted (a court over several
+   * opponents, the season's), it is read off the dots as the wall card does
+   * (`leftLaneIsForehand`).
+   */
+  opponentHand?: Hand | null;
   /** The hovered or chosen Statistics row's zone or band, outlined dashed white. */
   outline?: CourtOutline | null;
   onReadoutEnter?: () => void;
@@ -576,6 +612,16 @@ export function LightboxCourt({
             </text>
           )}
 
+          {cut === "approaches" && (
+            <ApproachApronLabels
+              leftIsForehand={
+                opponentHand !== undefined
+                  ? opponentHand !== "left"
+                  : leftLaneIsForehand(dots)
+              }
+            />
+          )}
+
           {cut === "serve" && (
             <ServeBoxLabels
               zoneStats={zoneStats}
@@ -705,6 +751,58 @@ export function LightboxCourt({
           </div>
         )}
     </>
+  );
+}
+
+/**
+ * The Approaches cut's apron words (`approach-map-v9.html`, the wall card's
+ * `ApproachCourtArt` labels): "Placement" over the far half, the opponent's
+ * wing over each third just past the far baseline, "Contact" under the near
+ * half. Under the marks, and deaf to the pointer, so no word takes a hover.
+ */
+function ApproachApronLabels({ leftIsForehand }: { leftIsForehand: boolean }) {
+  const laneText = approachLaneText(leftIsForehand);
+  return (
+    <g
+      data-approach-labels=""
+      aria-hidden="true"
+      fill={APPROACH_LABEL_INK}
+      fontFamily="var(--font-mono)"
+      letterSpacing={APPROACH_LABEL_TRACKING}
+      textAnchor="middle"
+      style={{ textTransform: "uppercase", pointerEvents: "none" }}
+    >
+      <text
+        data-approach-label="placement"
+        x={VIEWER_COURT.centreX}
+        y={APPROACH_PLACEMENT_LABEL_Y}
+        fontSize={APPROACH_SIDE_LABEL_SIZE}
+        fillOpacity={APPROACH_SIDE_LABEL_OPACITY}
+      >
+        Placement
+      </text>
+      <text
+        data-approach-label="contact"
+        x={VIEWER_COURT.centreX}
+        y={APPROACH_CONTACT_LABEL_Y}
+        fontSize={APPROACH_SIDE_LABEL_SIZE}
+        fillOpacity={APPROACH_SIDE_LABEL_OPACITY}
+      >
+        Contact
+      </text>
+      {(["left", "middle", "right"] as const).map((lane) => (
+        <text
+          key={lane}
+          data-approach-lane={lane}
+          x={APPROACH_LANE_X[lane]}
+          y={APPROACH_LANE_LABEL_Y}
+          fontSize={APPROACH_LANE_LABEL_SIZE}
+          fillOpacity={APPROACH_LANE_LABEL_OPACITY}
+        >
+          {laneText[lane]}
+        </text>
+      ))}
+    </g>
   );
 }
 

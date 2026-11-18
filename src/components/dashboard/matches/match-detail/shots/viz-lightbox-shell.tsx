@@ -52,6 +52,7 @@ import { LifecycleChip } from "./lifecycle-chip";
 import type { PlayerChipLabels } from "./player-chip-labels";
 import { PlayerChips } from "./player-chips";
 import { filterRailReducer } from "../match-filters/rail-state";
+import type { Hand } from "../match-filters/shot-geometry";
 import { LightboxAdvancedDrawer } from "./lightbox-advanced-drawer";
 import { LightboxMatchesSheet } from "./lightbox-matches-sheet";
 import {
@@ -150,6 +151,10 @@ export interface VizLightboxShellProps {
   /** "vs Lee · Nov 3": which match a mark is from, on a court drawn over
    *  several (the season's). Omitted on one match's court. */
   matchFor?: (dot: VizDot) => string | null;
+  /** Approaches: the hand of whoever is not the subject, which sides the
+   *  apron's wing names (`LightboxCourt`). `null`: unknown, read as right.
+   *  Omitted (the season's court, several opponents): read off the dots. */
+  opponentHand?: Hand | null;
   /**
    * The second click. A click (or Enter) on the SELECTED mark, or on its
    * Points row, watches that one point when `canWatch` says it can; the
@@ -292,6 +297,7 @@ export function VizLightboxShell({
   statRowDots,
   whereFor,
   matchFor,
+  opponentHand,
   watch,
   title,
   headerAction,
@@ -1149,6 +1155,7 @@ export function VizLightboxShell({
                       onSelect={selectMark}
                       whereFor={whereFor}
                       matchFor={matchFor}
+                      opponentHand={opponentHand}
                       canWatchMark={canWatchMark}
                       focusIds={statHover !== null ? hoverIds : null}
                       outline={outline}
