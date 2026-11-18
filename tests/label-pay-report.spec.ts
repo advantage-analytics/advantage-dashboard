@@ -397,7 +397,7 @@ test.describe("label pay report", () => {
     expect(groupSittings([])).toEqual([]);
   });
 
-  test("the page and table say Published and Checked, never Submitted or Approved", () => {
+  test("the table says Checked and Awaiting check, never Submitted or Approved, and pays checked video only", () => {
     for (const file of [
       "src/app/admin/labels/pay/page.tsx",
       "src/components/admin/labels-practice/pay-report-table.tsx",
@@ -412,7 +412,10 @@ test.describe("label pay report", () => {
       ),
       "utf8",
     );
-    expect(table).toContain('"Published"');
     expect(table).toContain('"Checked"');
+    expect(table).toContain('"Awaiting check"');
+    // Paid video is finished matches only: a session awaiting check is left
+    // out of the labeller's total.
+    expect(table).toMatch(/l\.state === "checked"\s*\?\s*n \+/);
   });
 });

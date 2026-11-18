@@ -46,9 +46,9 @@ export function PayReportHeading() {
     <div>
       <h1 className="text-display">Pay report</h1>
       <p className="text-body-sm mt-[9px] max-w-[620px]">
-        Hours of match video each labeller published, counted on the day it was
-        first published. Time worked is each labeller&rsquo;s own active minutes
-        on those matches.
+        Paid video is the match video each labeller finished: published and
+        checked by an admin, counted on the day it was first published. Time
+        worked is each labeller&rsquo;s own active minutes on those matches.
       </p>
     </div>
   );
@@ -139,6 +139,7 @@ export function PayReportTable({
       "published_video_hours",
       "checked_sessions",
       "checked_video_hours",
+      "paid_video_hours",
       "total_video_hours",
       "worked_hours",
       "sessions_without_time",
@@ -149,6 +150,7 @@ export function PayReportTable({
       r.publishedSessions,
       hours(r.publishedHours),
       r.checkedSessions,
+      hours(r.checkedHours),
       hours(r.checkedHours),
       hours(r.publishedHours + r.checkedHours),
       hours(r.workedMinutes / 60),
@@ -245,10 +247,14 @@ export function PayReportTable({
                         </span>
                         <span className="text-right text-[var(--ink-900)]">
                           {duration(
-                            // The sum of the session lines as they print, so
-                            // the total never differs from them by a rounding.
+                            // Finished matches only (published and checked),
+                            // summed as their session lines print, so the
+                            // total never differs from them by a rounding.
                             (linesBy.get(r.labellerId) ?? []).reduce(
-                              (n, l) => n + Math.round(l.videoHours * 60),
+                              (n, l) =>
+                                l.state === "checked"
+                                  ? n + Math.round(l.videoHours * 60)
+                                  : n,
                               0,
                             ),
                           )}
@@ -281,6 +287,12 @@ export function PayReportTable({
               })}
             </div>
           </div>
+          {rows.some((r) => r.publishedSessions > 0) ? (
+            <p className="text-[11px] text-[var(--ink-600)]">
+              A session awaiting check is not in Paid video until an admin
+              checks it.
+            </p>
+          ) : null}
           {rows.some((r) => r.untrackedSessions > 0) ? (
             <p className="text-[11px] text-[var(--ink-600)]">
               — means no active time was recorded for the session; a + on a
@@ -304,6 +316,7 @@ function SessionLine({
 }) {
   const worked = line.workedMinutes;
   const tracked = worked !== null;
+  const checked = line.state === "checked";
   const panel = `pay-session-${line.sessionId}`;
   return (
     <div>
@@ -323,9 +336,13 @@ function SessionLine({
             {" · "}
             {day(line.publishedAt)}
             {" · "}
-            {line.state === "checked" ? "Checked" : "Published"}
+            {checked ? "Checked" : "Awaiting check"}
           </span>
-          <span className="text-right">{duration(line.videoHours * 60)}</span>
+          <span
+            className={cn("text-right", !checked && "text-[var(--ink-400)]")}
+          >
+            {duration(line.videoHours * 60)}
+          </span>
           <span
             className={cn("text-right", !tracked && "text-[var(--ink-400)]")}
           >
