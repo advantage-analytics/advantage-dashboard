@@ -49,7 +49,10 @@ import {
 } from "@/lib/data/player-season";
 import type { SeasonVizMatch } from "@/lib/data/player-season-viz";
 import { isPracticeMatch } from "@/lib/matches/match-type";
-import { normalizePlayerHand } from "@/components/dashboard/matches/player-hands";
+import {
+  normalizePlayerHand,
+  rowHandsBySeat,
+} from "@/components/dashboard/matches/player-hands";
 import type { H2HStats } from "@/components/dashboard/matches/match-detail/head-to-head-rows";
 import { parseBallPathsFile } from "@/components/dashboard/matches/match-detail/film/film-ball";
 import { isDerivedMatch } from "@/components/dashboard/matches/match-detail/match-filters/model";
@@ -419,6 +422,7 @@ async function readAnalyzedMatches(
   candidates.forEach(({ match, isPlayer1 }, i) => {
     const [points, lobKeys] = reads[i];
     if (points.length === 0) return;
+    const seatHands = rowHandsBySeat(match);
     perMatch.push({
       matchId: match.id,
       // The calendar day, not the stored moment (`match-day.ts`), so what
@@ -428,16 +432,18 @@ async function readAnalyzedMatches(
         (isPlayer1 ? match.player2_name : match.player1_name)?.trim() ||
         UNKNOWN_OPPONENT_NAME,
       // The opponent's hand, read for the opponent's SEAT once, here
-      // (guardrails §4): the wizard writes `player_hand` for seat one and
-      // `opponent_hand` for seat two, so a player in seat two faced the
-      // `player_hand`. Unvalidated text, normalised; anything else is null.
+      // (guardrails §4). `rowHandsBySeat` places the row's columns on their
+      // seats — `player_hand` seat one's and `opponent_hand` seat two's as
+      // the wizard writes them, the other way round on a legacy seat-two
+      // row — so a player in the wizard's seat two faced the `player_hand`.
+      // Unvalidated text, normalised; anything else is null.
       opponentHand: normalizePlayerHand(
-        isPlayer1 ? match.opponent_hand : match.player_hand,
+        seatHands[isPlayer1 ? "player2" : "player1"].hand,
       ),
       // The player's own hand, for the player's seat the same way — the
       // Approaches cut's opponent court reads it.
       playerHand: normalizePlayerHand(
-        isPlayer1 ? match.player_hand : match.opponent_hand,
+        seatHands[isPlayer1 ? "player1" : "player2"].hand,
       ),
       // The Matches sheet's row and its Result / Surface menus, from the
       // player's seat (guardrails §4).

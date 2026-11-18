@@ -255,7 +255,7 @@ ready).
 
 ## T18 · Read legacy seat-two rows' hands for seat two
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) `src/lib/data/match-detail-server.ts` (`transformDbMatchToMatch`, hand block ~262-272); `src/lib/data/player-season-server.ts` (~431-441); a small pure helper both call (beside `enteredSeats` in `src/lib/data/labels-server.ts`, or in `src/components/dashboard/matches/player-hands.ts`); `tests/match-hands-seat.spec.ts`, `tests/player-season-loader.spec.ts`; `tests/label-entered-hands.spec.ts` read only
 - **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`

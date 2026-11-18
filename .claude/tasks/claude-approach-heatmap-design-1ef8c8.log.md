@@ -172,3 +172,13 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The season lightbox passes no hand, so with mixed-hand opponents in a season the wing labels follow whichever dot has a known hand first; consider hiding wing names there or showing them only when every opponent's hand agrees.
+
+## T18 · Read legacy seat-two rows' hands for seat two — done
+
+**gate:** mechanical pass · completion pass
+**changed:** One shared guard in `player-hands.ts` (`playerColumnsSeat` / `rowHandsBySeat`): a row with `player1_id` null and `player2_id` set reads `player_*` as seat two's. `transformDbMatchToMatch`, the season loader and `labels-server.ts` `enteredSeats` all call it (`enteredHandsFor`'s output unchanged), so the report, the season and the label console agree. Specs in `match-hands-seat.spec.ts` (three legacy orientations, agreement with `enteredHandsFor`, other shapes still seat one) and `player-season-loader.spec.ts`; `player-profile-server.ts` comment only.
+**follow-ups:**
+
+1. The four live rows with this shape are seed data (`scripts/seed-ask-season.ts`, `meIsP1: false`), not old imports; no product writer produces the shape. Re-seeding them in the wizard's shape would let the exception retire.
+2. `edit-match-dialog.tsx` (~437) and `label-overview-server.ts` (~246) still read by seat without the guard on these four rows.
+3. A spec pinning `buildMatchData` to a non-null `player1_id` whenever `player2_id` is set would stop a future wizard change silently flipping into the legacy reading.

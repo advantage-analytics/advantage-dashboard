@@ -25,6 +25,7 @@ import { errorSplitJudged } from "@/lib/data/error-split";
 import { seatCrestUrls, type MatchCrestEmbeds } from "@/lib/data/match-crests";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import { isPracticeMatch } from "@/lib/matches/match-type";
+import { rowHandsBySeat } from "@/components/dashboard/matches/player-hands";
 
 export interface DbMatch extends MatchCrestEmbeds {
   id: string;
@@ -266,10 +267,15 @@ export function transformDbMatchToMatch(
   // writes `player_*` for seat one and `opponent_*` for seat two
   // (`buildMatchData`), so the same row gives every reader the same hands,
   // whichever seat the report is turned to. Do not swap on `isUserPlayer1`.
-  const p1Hand = row.player_hand ?? undefined;
-  const p1Backhand = row.player_backhand ?? undefined;
-  const p2Hand = row.opponent_hand ?? undefined;
-  const p2Backhand = row.opponent_backhand ?? undefined;
+  // The legacy exception: a row with no `player1_id` and a `player2_id`
+  // seats the account holder second, and its `player_*` columns are theirs,
+  // so seat two's. `rowHandsBySeat` (`playerColumnsSeat`) owns that rule,
+  // shared with the season loader and the label console's `enteredHandsFor`.
+  const seatHands = rowHandsBySeat(row);
+  const p1Hand = seatHands.player1.hand ?? undefined;
+  const p1Backhand = seatHands.player1.backhand ?? undefined;
+  const p2Hand = seatHands.player2.hand ?? undefined;
+  const p2Backhand = seatHands.player2.backhand ?? undefined;
 
   return {
     id: row.id,
