@@ -120,6 +120,8 @@ const STATE_LABEL: Record<PayState, string> = {
 };
 
 function labellerWorked(row: PayLabellerRow): string {
+  // Nothing paid yet reads as no time, not as "no time recorded".
+  if (row.paidSessions === 0) return duration(0);
   if (row.workedMinutes === 0) return "—";
   return duration(row.workedMinutes) + (row.untrackedSessions ? " +" : "");
 }

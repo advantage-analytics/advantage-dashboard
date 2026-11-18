@@ -636,15 +636,15 @@ export async function getLabelPayReport(
       first.set(row.session_id, row);
   }
 
-  const paid = listed.flatMap((session) => {
+  const credited = listed.flatMap((session) => {
     const who = first.get(session.id)?.submitted_by;
     return who ? [{ ...session, who }] : [];
   });
-  if (paid.length === 0) return empty;
+  if (credited.length === 0) return empty;
 
   type BeatRow = { session_id: string; user_id: string; minute: string };
-  const whoBySession = new Map(paid.map((s) => [s.id, s.who]));
-  const payees = [...new Set(paid.map((s) => s.who))];
+  const whoBySession = new Map(credited.map((s) => [s.id, s.who]));
+  const payees = [...new Set(credited.map((s) => s.who))];
   const [beats, users] = await Promise.all([
     Promise.all(
       idChunks([...whoBySession.keys()]).map((ids) =>
@@ -667,7 +667,7 @@ export async function getLabelPayReport(
       db
         .from("users")
         .select("id, email, first_name, last_name")
-        .in("id", [...new Set(paid.map((s) => s.who))])
+        .in("id", payees)
         .order("id"),
       "Could not read labellers",
     ),
@@ -702,7 +702,7 @@ export async function getLabelPayReport(
   };
 
   const lines: PaySessionLine[] = [];
-  for (const session of paid) {
+  for (const session of credited) {
     const row = rowFor(session.who);
     const videoMinutes = session.job
       ? Math.round(jobVideoSeconds(session.job) / 60)

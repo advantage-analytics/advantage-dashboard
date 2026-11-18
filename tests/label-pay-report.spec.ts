@@ -155,8 +155,9 @@ function submission(sessionId: string, by: string, at: string): Row {
 async function report(
   tables: Parameters<typeof fakeDb>[0],
   reads?: string[][],
+  range = RANGE,
 ) {
-  const result = await getLabelPayReport(RANGE, {
+  const result = await getLabelPayReport(range, {
     requireAdmin: async () => ({ id: ADMIN }),
     createAdminClient: () => fakeDb(tables, reads),
   });
@@ -241,14 +242,10 @@ test.describe("label pay report", () => {
       paidSessions: 1,
       paidVideoMinutes: 60,
     });
-    const october = await getLabelPayReport(
-      { from: "2026-10-01", to: "2026-10-31" },
-      {
-        requireAdmin: async () => ({ id: ADMIN }),
-        createAdminClient: () => fakeDb(tables),
-      },
-    );
-    if (!october.ok) throw new Error("expected a report");
+    const october = await report(tables, undefined, {
+      from: "2026-10-01",
+      to: "2026-10-31",
+    });
     // Checked since, so October no longer lists it at all.
     expect(october.lines).toEqual([]);
   });
