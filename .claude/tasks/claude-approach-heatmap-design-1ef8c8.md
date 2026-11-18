@@ -129,7 +129,7 @@ ready).
 
 ## T9 · Add the Approaches wall card
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T3, T4, T7
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/default-cuts.ts`, `shots/default-tiles.ts`, `shots/wall-summary.ts`; `tests/wall-summary.spec.ts`; card-count assertions in `tests/player-season-viz.spec.ts`

@@ -79,3 +79,13 @@ is the runner's. Newest entries at the bottom.
 1. The lightbox opens framed on the far half (as for every landing cut), so approach contacts start below the stage until "Full court" is pressed; selecting a pair centres on the placement and can push the contact off-screen. Fix in `viewerInitialTransform` (`court-geometry.ts`); no queued task covers it.
 2. The opened court has no Contact / Placement / wing labels: T7 added them to `CourtArt` only, and the lightbox draws its own court. No queued task covers it.
 3. The raised copy's hover scale (1.4) repeats a value in `globals.css`; keep them in step.
+
+## T9 · Add the Approaches wall card — done
+
+**gate:** mechanical pass · completion pass
+**changed:** `DEFAULT_CUTS` gains the Approaches cut after Rally shots (`entry: ["approach"]`, pills `["Approaches"]`), in the judged and unjudged lists; the wall has six cards per player. `wallSummaryFor("approaches")` gives To backhand / Middle / To forehand segments and "Won x of n" (from the KPI, so unplaced approaches count), plus a `countNote` "n not drawn: no landing recorded"; `wall-card.tsx` shows that note and adds it to the aria-label; `lightboxCountLine` reads won from the KPI for this cut. Specs: wall-summary (cuts, tiles, segments, not-drawn line, zero-net-points tile); tile and card counts updated in `viz-rally-placement.spec.ts` and `player-season-viz.spec.ts`.
+**follow-ups:**
+
+1. T13: the season merge drops the KPI, so a season card's "Won x of n" counts wins among drawn approaches only while n counts all.
+2. The card's noun is always "approaches"; a saved view with another "How you came in" choice would want "times at the net" (`approachNoun` is not exported).
+3. On a wing-filtered saved view, the not-drawn number is capped at 0 rather than going negative; worth a proper fix when saved views of this cut are tested.

@@ -314,9 +314,11 @@ test.describe("buildSeasonCards", () => {
               ? `${card.summary.count} total`
               : card.cut === "returnContact"
                 ? `${card.summary.count} ${card.summary.count === 1 ? "return" : "returns"}`
-                : card.summary.count === card.summary.total
-                  ? `${card.summary.count} in`
-                  : `${card.summary.count} of ${card.summary.total} in`,
+                : card.cut === "approaches"
+                  ? `${card.summary.total} ${card.summary.total === 1 ? "approach" : "approaches"}`
+                  : card.summary.count === card.summary.total
+                    ? `${card.summary.count} in`
+                    : `${card.summary.count} of ${card.summary.total} in`,
           );
           // What opening the card asks the URL for: the default cut, this side.
           const cut = defaultCutsFor(judged).find((c) => c.cut === card.cut)!;
@@ -403,9 +405,9 @@ test.describe("buildSeasonCards", () => {
     );
   });
 
-  test("no analyzed matches: five cards, every total 0, nothing counted", () => {
+  test("no analyzed matches: six cards, every total 0, nothing counted", () => {
     const cards = buildSeasonCards([], "you", BANDS);
-    expect(cards).toHaveLength(5);
+    expect(cards).toHaveLength(6);
     for (const card of cards) {
       expect(card.total).toBe(0);
       expect(card.dots).toEqual([]);

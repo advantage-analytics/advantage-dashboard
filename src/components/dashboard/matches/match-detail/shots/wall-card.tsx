@@ -131,7 +131,9 @@ export function WallCard({
     setState(navigateState);
   }
 
-  const label = `${name}, ${playerName}: ${summary.countLabel}`;
+  const label = `${name}, ${playerName}: ${summary.countLabel}${
+    summary.countNote ? `, ${summary.countNote}` : ""
+  }`;
   const courtProps = {
     cut,
     chart: "scatter",
@@ -209,6 +211,17 @@ export function WallCard({
             )}
           </span>
         </div>
+        {summary.countNote !== null && (
+          // The approaches card's points with no landing: counted beside
+          // the name, drawn nowhere — said here so the court can't read as
+          // disagreeing with the count.
+          <p
+            className="m-0 text-right text-[11px] tabular-nums"
+            style={{ color: "var(--ink-500)" }}
+          >
+            {summary.countNote}
+          </p>
+        )}
         <SplitBar
           summary={summary}
           possessive={possessive}

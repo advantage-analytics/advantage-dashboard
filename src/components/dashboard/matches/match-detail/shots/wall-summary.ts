@@ -12,6 +12,13 @@
  * deuce and ad rows of each zone are summed. That is the same set of points
  * the existing Zone filter (`VizFilters.zone`) selects — pinned by
  * `tests/wall-summary.spec.ts`.
+ *
+ * The approaches card counts differently: every approach counts, drawn or
+ * not (the statistics are about the approach, not its landing), so its count
+ * is the cut's whole pool and the segments — the wing each approach went to —
+ * hold only the ones with a placement. The rest are named on a note under the
+ * count ("2 not drawn: no landing recorded") rather than letting the court
+ * disagree with the number beside it.
  */
 
 import type { BandRow } from "@/lib/data/viz-bands";
@@ -43,6 +50,9 @@ export function wallCountLabel(
   // (Net, Long, Wide, and Landed in when any read in), so "N total" and the
   // segments can never disagree.
   if (cut === "errors") return `${count} total`;
+  // Every approach counts, drawn or not: the whole pool, never "in".
+  if (cut === "approaches")
+    return `${total} ${total === 1 ? "approach" : "approaches"}`;
   // Every return has a contact point, in or not: a count, never "in".
   if (cut === "returnContact")
     return `${count} ${count === 1 ? "return" : "returns"}`;
@@ -57,7 +67,8 @@ export interface WallSummary {
   count: number;
   /** The cut's whole drawable pool (`VizResult.count`). */
   total: number;
-  /** The key's lead word: Landed / Went / Missed. */
+  /** The key's lead word: Landed / Went / Missed — or the approaches card's
+   *  "Won x of n". */
   keyLead: string;
   /** The readout's noun for one segment: "12 in play", "22 returns". */
   unit: string;
@@ -67,6 +78,12 @@ export interface WallSummary {
   /** Won of every segment together, rounded — the readout's "Average N%".
    *  `null` on the errors card and when nothing landed in. */
   averagePct: number | null;
+  /** The approaches card's points with no placement: counted in `total`,
+   *  in no segment, drawn nowhere. `0` on every other card. */
+  notDrawn: number;
+  /** The line under the count that names them — "2 not drawn: no landing
+   *  recorded" — or `null` when every point is drawn. */
+  countNote: string | null;
 }
 
 const SERVE_ZONES: { key: "t" | "body" | "wide"; label: string }[] = [
@@ -76,6 +93,14 @@ const SERVE_ZONES: { key: "t" | "body" | "wide"; label: string }[] = [
 ];
 
 const DIRECTION_ORDER = ["crosscourt", "middle", "dtl"];
+
+/** The approaches card's segments: the opponent's wing, left to right as the
+ *  design reads them, with the card's own wording. */
+const APPROACH_WINGS: { key: string; label: string }[] = [
+  { key: "backhand", label: "To backhand" },
+  { key: "middle", label: "Middle" },
+  { key: "forehand", label: "To forehand" },
+];
 const MISS_ORDER = ["net", "long", "wide", "in"];
 
 function pct(part: number, whole: number): number | null {
@@ -108,7 +133,7 @@ function groupRows(stats: VizStats, key: string): StatRow[] {
 }
 
 /**
- * The wall card's footer for one of the five default cuts. `depthRows` is
+ * The wall card's footer for one of the six default cuts. `depthRows` is
  * `depthBandRows(bands, unit)` — the workspace's own band order (deep to
  * short), used only to order the rally card's segments.
  */
@@ -124,7 +149,37 @@ export function wallSummaryFor(
   let unit: string;
   let share = false;
 
-  if (cut === "serve") {
+  if (cut === "approaches") {
+    // The Approach to group: one row per wing, only approaches with a
+    // placement (a wing needs a landing), so the bar draws what the court
+    // does. The lead is the KPI's own won-of-shown — every approach, drawn
+    // or not — falling back to the drawn ones where no KPI travels (a
+    // merged season).
+    const wings = groupRows(stats, "approach-to");
+    segments = APPROACH_WINGS.map(({ key, label }) => {
+      const row = wings.find((r) => r.key === key);
+      const count = row?.count ?? 0;
+      const won = row?.won ?? 0;
+      return { key, label, count, won, pct: pct(won, count) };
+    });
+    const drawnCount = segments.reduce((n, s) => n + s.count, 0);
+    const drawnWon = segments.reduce((n, s) => n + s.won, 0);
+    const notDrawn = Math.max(0, total - drawnCount);
+    const wonAll = stats.kpi?.won ?? drawnWon;
+    return {
+      countLabel: wallCountLabel(cut, drawnCount, total),
+      count: drawnCount,
+      total,
+      keyLead: `Won ${wonAll} of ${total}`,
+      unit: "approaches",
+      share: false,
+      segments,
+      averagePct: pct(drawnWon, drawnCount),
+      notDrawn,
+      countNote:
+        notDrawn > 0 ? `${notDrawn} not drawn: no landing recorded` : null,
+    };
+  } else if (cut === "serve") {
     const zones = groupRows(stats, "serve-zones");
     segments = SERVE_ZONES.map(({ key, label }) => {
       const rows = zones.filter((r) => r.key.endsWith(`-${key}`));
@@ -173,6 +228,8 @@ export function wallSummaryFor(
     share,
     segments,
     averagePct: share ? null : pct(won, count),
+    notDrawn: 0,
+    countNote: null,
   };
 }
 
@@ -234,7 +291,11 @@ export function lightboxCountLine(
     const won = summary.segments.reduce((n, s) => n + s.won, 0);
     return `${summary.countLabel}, ${won} of those ${summary.count} won`;
   }
-  const rows = groupRows(stats, "depth");
-  const won = rows.reduce((n, r) => n + r.won, 0);
+  // Approaches has no Depth group: its KPI holds the won count, over every
+  // approach shown, drawn or not.
+  const won =
+    cut === "approaches"
+      ? (stats.kpi?.won ?? 0)
+      : groupRows(stats, "depth").reduce((n, r) => n + r.won, 0);
   return `${result.count} ${result.noun}, ${won} won`;
 }
