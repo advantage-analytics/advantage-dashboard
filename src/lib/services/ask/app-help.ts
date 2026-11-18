@@ -1,6 +1,12 @@
 import type { AskHelpLink } from "@/lib/services/ask/events";
 import type { AskScope } from "@/lib/services/ask/scope";
 import { WIZARD_FROM_ASK_HREF } from "@/lib/matches/new-match-visit";
+import {
+  canUploadForProgram,
+  isProgramStaff,
+  uploadPolicyLabel,
+  type Workspace,
+} from "@/lib/workspace/types";
 
 /**
  * Questions about using the app rather than about the matches: "I want to
@@ -15,7 +21,7 @@ import { WIZARD_FROM_ASK_HREF } from "@/lib/matches/new-match-visit";
  * question that only mentions an upload or a video ("give me videos of
  * Rudy's aces", "how did my uploaded match go?") still goes to the planner.
  *
- * A leaf apart from types and one route constant: no model, no database.
+ * No model and no database: the workspace it reads is the route's own.
  */
 
 export interface AskAppHelp {
@@ -70,19 +76,58 @@ export function asksToUpload(question: string): boolean {
 }
 
 /**
+ * What this viewer may do on the team upload page, as `readAppHelp()` needs
+ * it — read by the route off the membership-checked workspace
+ * (`askUploadAccess()`), never off the request.
+ *
+ * - `allowed` — the page opens and video can be sent.
+ * - `pending` — the program is still being confirmed: the page opens, but
+ *   only SwingVision imports go through until it is (`canSubmitVideo`).
+ * - `policy` — the program's upload policy keeps this member out
+ *   (`canUploadForProgram()`): the page turns them away. `limitedTo` is the
+ *   policy's label in a sentence ("owner and coaches"), or null when uploads
+ *   are open to everyone and only this player's own grant is off; `staff`
+ *   decides who can change it.
+ */
+export type AskUploadAccess =
+  | { kind: "allowed" }
+  | { kind: "pending" }
+  | { kind: "policy"; limitedTo: string | null; staff: boolean };
+
+const ALLOWED: AskUploadAccess = { kind: "allowed" };
+
+/**
+ * A team workspace's `AskUploadAccess`, in the order the team upload page
+ * asks: the policy first (it decides whether the page opens at all), then
+ * the claim state (it holds video back on a page that did open).
+ */
+export function askUploadAccess(workspace: Workspace): AskUploadAccess {
+  if (!canUploadForProgram(workspace)) {
+    return {
+      kind: "policy",
+      limitedTo:
+        workspace.uploadPolicy === "everyone"
+          ? null
+          : uploadPolicyLabel(workspace.uploadPolicy).toLowerCase(),
+      staff: isProgramStaff(workspace),
+    };
+  }
+  return workspace.canSubmitVideo ? ALLOWED : { kind: "pending" };
+}
+
+/**
  * The page a question about using the app is answered with, or null for a
  * question about the matches.
  *
- * `uploadRefusal` is `explainVideoRefusal()` for the team workspace — the
- * rule the team Ask page already uses to hide its own upload button. When it
- * refuses, the answer is that sentence and no link: a player in a program
- * that limits uploads to staff, or a program still being confirmed, is never
- * sent to a page that turns them away.
+ * A team answer follows `access`, the same rule the team Ask page hides its
+ * own upload button by, so nobody is sent to a page that turns them away. Its
+ * sentences are Ask's own: the upload wizard's refusals talk about "this
+ * match", and here no match has been chosen.
  */
 export function readAppHelp(
   question: string,
   scope: AskScope,
-  uploadRefusal: string | null = null,
+  access: AskUploadAccess = ALLOWED,
 ): AskAppHelp | null {
   if (!asksToUpload(question)) return null;
   if (scope.kind === "personal") {
@@ -95,9 +140,37 @@ export function readAppHelp(
       },
     };
   }
-  if (uploadRefusal) return { message: uploadRefusal, link: null };
-  return {
-    message: `Match videos for ${scope.programName} are sent from the upload page.`,
-    link: { href: TEAM_UPLOAD_HREF, label: "Send match video", kind: "upload" },
-  };
+  const name = scope.programName;
+  switch (access.kind) {
+    case "allowed":
+      return {
+        message: `Match videos for ${name} are sent from the upload page.`,
+        link: {
+          href: TEAM_UPLOAD_HREF,
+          label: "Send match video",
+          kind: "upload",
+        },
+      };
+    case "pending":
+      // The page still opens: only video waits for the confirmation.
+      return {
+        message: `${name} is still being confirmed, so match video can't be sent yet. SwingVision imports work now.`,
+        link: {
+          href: TEAM_UPLOAD_HREF,
+          label: "Import from SwingVision",
+          kind: "upload",
+        },
+      };
+    case "policy":
+      return {
+        message:
+          access.limitedTo === null
+            ? `${name} turns uploads on player by player, and yours isn't on yet. A coach can send the match or turn uploads on for you.`
+            : `${name} limits match uploads to ${access.limitedTo}, so your account can't add one. ` +
+              (access.staff
+                ? "The owner can widen it in Team settings."
+                : "A coach can send the match."),
+        link: null,
+      };
+  }
 }

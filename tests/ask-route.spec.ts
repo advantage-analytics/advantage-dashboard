@@ -936,8 +936,19 @@ test.describe("POST /api/ask · the question limit", () => {
         },
       },
     ]);
-    // No cache read, no reservation, no release, no provider: only the run.
+    // No cache read, no reservation, no release, no provider: only the run,
+    // which names no model since none was called.
     expect(rpcNames(calls)).toEqual(["ask_record_run"]);
+    expect(calls.rpc[0]).toMatchObject({
+      args: {
+        p_run: expect.objectContaining({
+          outcome: "app_help",
+          plan_model: null,
+          answer_model: null,
+          model_calls: 0,
+        }),
+      },
+    });
     expect(calls.llm).toBe(0);
   });
 

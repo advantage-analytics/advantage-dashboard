@@ -104,7 +104,11 @@ import {
 } from "@/lib/services/ask/cache";
 import { isAskAgentEnabled } from "@/lib/services/ask/agent";
 import { askCoachMode, isAskCoachModeEnabled } from "@/lib/services/ask/coach";
-import { readAppHelp } from "@/lib/services/ask/app-help";
+import {
+  askUploadAccess,
+  asksToUpload,
+  readAppHelp,
+} from "@/lib/services/ask/app-help";
 import { retrieveAskExamples } from "@/lib/services/ask/examples";
 import { askAdapterModel, askStageModels } from "@/lib/services/ask/model";
 import {
@@ -142,7 +146,7 @@ import { siteUrl } from "@/lib/site-url";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { explainVideoRefusal } from "@/lib/workspace/types";
+import type { Workspace } from "@/lib/workspace/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -370,9 +374,9 @@ export async function POST(request: Request): Promise<Response> {
   // Coach mode: the flag, a team scope and the viewer's role in the program,
   // the last read off the same workspace list as the membership (`coach.ts`).
   let coach = false;
-  // Team scope: why this viewer may not send the program's match video, or
-  // null when they may — what an upload question is answered with.
-  let uploadRefusal: string | null = null;
+  // Team scope: the membership-checked workspace, for what this viewer may do
+  // on the program's upload page if the question asks (`app-help.ts`).
+  let teamWorkspace: Workspace | null = null;
   if (body.programId !== null) {
     // A read that failed is not an answer. Only a list that was read and
     // does not hold the program says "not a member"; a thrown read — or one
@@ -419,7 +423,7 @@ export async function POST(request: Request): Promise<Response> {
       scope,
       role: program.role,
     });
-    uploadRefusal = explainVideoRefusal(program);
+    teamWorkspace = program;
   }
   const team = scope.kind === "team";
 
@@ -427,7 +431,14 @@ export async function POST(request: Request): Promise<Response> {
   // with the page that does it (`app-help.ts`). Read here, before the
   // embedding, the cache and the reservation: it needs none of them, and a
   // viewer with no questions left still gets the link.
-  const appHelp = readAppHelp(body.question, scope, uploadRefusal);
+  // The upload rules are read only for a question that asks to upload.
+  const appHelp = asksToUpload(body.question)
+    ? readAppHelp(
+        body.question,
+        scope,
+        teamWorkspace ? askUploadAccess(teamWorkspace) : undefined,
+      )
+    : null;
 
   // The question's embedding, for the nearest rated examples (`examples.ts`).
   // Started here, beside the reads, since it needs nothing but the question;
@@ -685,8 +696,9 @@ export async function POST(request: Request): Promise<Response> {
     const recorded = (run: AskQuestionInput) =>
       recordAskRun(run, {
         preStreamMs: Date.now() - started,
-        planModel: stageModels.plan,
-        answerModel: stageModels.answer,
+        // A help answer calls no model, so its run names none.
+        planModel: appHelp ? null : stageModels.plan,
+        answerModel: appHelp ? null : stageModels.answer,
         onRun,
       });
     events = dataVersion
