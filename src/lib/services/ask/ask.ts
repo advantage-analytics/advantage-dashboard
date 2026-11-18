@@ -1,5 +1,6 @@
 import { isUuid, UUID_RE } from "@/lib/admin/validation";
 import type { ChatMessage } from "@/lib/llm/adapter";
+import { readAppHelp } from "@/lib/services/ask/app-help";
 import {
   ASK_AGENT_BOUNDS,
   askAgentPromptAppendix,
@@ -941,6 +942,22 @@ export async function* askQuestion(
 
   try {
     yield { type: "status", stage: "planning" };
+
+    // A question about using the app ("I want to upload a match") has no
+    // answer in the views, and the planner could only refuse it. It is
+    // answered with the page that does it, before any model call, and the
+    // question is given back.
+    const help = readAppHelp(input.question, scope);
+    if (help) {
+      await release();
+      yield {
+        type: "error",
+        code: "app_help",
+        error: help.message,
+        link: { href: help.href, label: help.label },
+      };
+      return;
+    }
 
     // ── Plan, guard, run — with one retry ──────────────────────────────────
     // A plan the guard refuses, a reply that is not a plan, or a query the

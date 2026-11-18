@@ -39,7 +39,13 @@ export type AskErrorCode =
   | "llm_unavailable"
   | "answer_failed"
   /** Not a failure: Ask asks which was meant (`error` is the question, `options` the choices). */
-  | "needs_clarification";
+  | "needs_clarification"
+  /**
+   * Not a failure: the question asked how to use the app ("I want to upload
+   * a match"), which no match records. `error` says where that is done and
+   * `link` goes there (`app-help.ts`).
+   */
+  | "app_help";
 
 /**
  * One match an answer was computed from, as the `ask.matches` view states it.
@@ -494,6 +500,14 @@ export interface AskErrorEvent {
    * holds, never from free model text beyond a short label.
    */
   options?: string[];
+  /** `app_help` only: the in-app page that does what was asked. */
+  link?: AskHelpLink;
+}
+
+/** A link an `app_help` answer carries. `href` is always an in-app path under `/dashboard/`. */
+export interface AskHelpLink {
+  href: string;
+  label: string;
 }
 
 export type AskEvent =
