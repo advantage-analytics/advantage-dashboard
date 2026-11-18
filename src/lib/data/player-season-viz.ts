@@ -22,14 +22,19 @@ import {
   bandZonesFor,
   collapseErrorFilter,
   computeViz,
+  approachNoun,
   computeVizStats,
   filterKeysFor,
+  HAND_ASSUMED_NOTE,
+  LOOSENED_LABEL,
+  orderStatGroups,
   orderStatRows,
   subjectFor,
   type Chart,
   type Cut,
   type PlayerFilter,
   type StatGroup,
+  type StatKpi,
   type StatRow,
   type VizBandZones,
   type VizDot,
@@ -121,6 +126,11 @@ export interface SeasonVizMatch {
    *  null / omitted when the match does not say — "Opponent plays" reads it
    *  as Unknown. */
   opponentHand?: "right" | "left" | null;
+  /** The PLAYER's own hand that day, read off the match row for the player's
+   *  seat by the loader, or null / omitted when the match does not say. The
+   *  Approaches cut reads it for the opponent's court, where the wing the
+   *  approach went to is the player's. */
+  playerHand?: "right" | "left" | null;
   /** Won from the player's seat, null / omitted where the score cannot say
    *  — the Matches sheet's Result reads it, and its row's mark. */
   won?: boolean | null;
@@ -145,17 +155,43 @@ export interface SeasonVizNames {
   opponent: string;
 }
 
-/** The filter context one match is computed under: its own seat for "you",
- *  its own judged and derived flags; hands unknown (Custom › Direction's
- *  inside-out never matches — the season's Filters panel does not offer it). */
+/**
+ * The filter context one match is computed under: its own seat for "you",
+ * its own judged and derived flags.
+ *
+ * Hands: unknown on every cut but Approaches (Custom › Direction's
+ * inside-out never matches — the season's Filters panel does not offer it).
+ * On Approaches (`cut`) each SEAT gets the hand THIS match's row gives it —
+ * the opponent's (`opponentHand`) in the seat the player did not sit in, the
+ * player's (`playerHand`) in their own; nothing is swapped to a common seat
+ * (guardrails §4) — so "their backhand" is the right side of the court
+ * against a left-hander too. A hand the row does not give stays null, and
+ * the cut reads it as right-handed and says so (`handAssumed`).
+ *
+ * No `lobKeys`: the season's courts load no lob files (plan decision Q8), so
+ * an approach's ending reads "Passed or lobbed …" and never "Lobbed".
+ */
 export function seasonMatchContext(
-  m: Pick<SeasonVizMatch, "isPlayer1" | "isDerived" | "errorSplitJudged">,
+  m: Pick<
+    SeasonVizMatch,
+    | "isPlayer1"
+    | "isDerived"
+    | "errorSplitJudged"
+    | "opponentHand"
+    | "playerHand"
+  >,
   /** The viewer's bands, which Contact and Landed in bucket by. */
   bands?: SeasonVizBands,
+  /** The cut being computed; only Approaches reads the hands. */
+  cut?: Cut,
 ): MatchFilterContext {
+  const playerHand = cut === "approaches" ? (m.playerHand ?? null) : null;
+  const opponentHand = cut === "approaches" ? (m.opponentHand ?? null) : null;
   return {
     youIsPlayer1: m.isPlayer1,
-    hands: { player1: null, player2: null },
+    hands: m.isPlayer1
+      ? { player1: playerHand, player2: opponentHand }
+      : { player1: opponentHand, player2: playerHand },
     isDerived: m.isDerived,
     errorSplitJudged: m.errorSplitJudged,
     bands: bands?.bands,
@@ -172,6 +208,10 @@ interface SeasonPart {
   subjectIsPlayer1: boolean;
   result: VizResult;
   stats: VizStats;
+  /** Approaches cut only: this match's approaches under the cut's `entry`
+   *  choice alone — what its KPI count reads "of" once a filter narrows it
+   *  (`approachStats`' `entryTotal`). */
+  approachesOf?: number;
 }
 
 /**
@@ -209,6 +249,8 @@ function seasonPart(
     filters,
     bands.bands,
     bands.unit,
+    // The hands the Approaches cut reads (`seasonMatchContext`).
+    cut === "approaches" ? [m.opponentHand ?? null, m.playerHand ?? null] : 0,
   ]);
   let memo = seasonPartMemo.get(m.points);
   const hit = memo?.get(key);
@@ -234,7 +276,7 @@ function computeSeasonPart(
   { bands, unit }: SeasonVizBands,
 ): SeasonPart {
   const points = vizPoints(m.points, m.isDerived);
-  const ctx = seasonMatchContext(m, { bands, unit });
+  const ctx = seasonMatchContext(m, { bands, unit }, cut);
   const subjectIsPlayer1 = subjectFor(filters, m.isPlayer1);
   const result = computeViz(points, cut, filters, subjectIsPlayer1, chart, ctx);
   const stats = computeVizStats(
@@ -247,7 +289,18 @@ function computeSeasonPart(
     unit,
     ctx,
   );
-  return { points, ctx, subjectIsPlayer1, result, stats };
+  if (cut !== "approaches")
+    return { points, ctx, subjectIsPlayer1, result, stats };
+  // The cut's own pool: the court under `entry` and nothing else.
+  const approachesOf = computeViz(
+    points,
+    cut,
+    { ...EMPTY_VIZ_FILTERS, player: filters.player, entry: filters.entry },
+    subjectIsPlayer1,
+    chart,
+    ctx,
+  ).count;
+  return { points, ctx, subjectIsPlayer1, result, stats, approachesOf };
 }
 
 /* ── Merging ────────────────────────────────────────────────────────────── */
@@ -258,6 +311,7 @@ export function cutNoun(cut: Cut): VizResult["noun"] {
   if (cut === "serve") return "serves";
   if (cut === "errors") return "errors";
   if (cut === "returnPlacement" || cut === "returnContact") return "returns";
+  if (cut === "approaches") return "approaches";
   return "shots";
 }
 
@@ -344,7 +398,9 @@ export function mergeVizResults(
  * stroke nobody hit that day — is kept), count and won summed, the
  * percentage divided once — won of count for a points row, count of every
  * mark shown (`shareTotal`, the merged result's marks) for a share row — and
- * each group put back in `computeVizStats`' own order (`orderStatRows`).
+ * each group put back in `computeVizStats`' own order (`orderStatRows`), and
+ * the groups too (`orderStatGroups`: a match with no wing has no "Approach
+ * to", so first-seen order alone could list it below "How it ended").
  *
  * `title` is the cut's (the same on every part). `subtitle` and `sentence`
  * are per-match prose the shell does not print; the season says how many
@@ -405,9 +461,69 @@ export function mergeVizStats(
   return {
     title: parts[0]?.title ?? "",
     subtitle: `Over ${matches} ${matches === 1 ? "match" : "matches"}`,
-    groups: merged,
+    groups: orderStatGroups(merged),
     sentence: null,
     total: parts.reduce((n, p) => n + p.total, 0),
+  };
+}
+
+/**
+ * Several matches' Approaches KPI (`VizStats.kpi`) as one: the approaches
+ * shown and the ones won summed, the percentage divided once, and the count's
+ * label rebuilt by `approachStats`' own rule — the noun for `entry`, "of N …"
+ * once the count is short of the cut's own pool (`of`, each match's
+ * approaches under `entry` alone, summed).
+ */
+export function mergeApproachKpi(
+  entry: VizFilters["entry"],
+  parts: readonly { kpi?: StatKpi; of: number }[],
+): StatKpi {
+  const count = parts.reduce((n, p) => n + (p.kpi?.count ?? 0), 0);
+  const won = parts.reduce((n, p) => n + (p.kpi?.won ?? 0), 0);
+  const of = parts.reduce((n, p) => n + p.of, 0);
+  return {
+    count,
+    countLabel:
+      count === of
+        ? approachNoun(entry, count)
+        : `of ${of} ${approachNoun(entry, of)}`,
+    won,
+    winPct: count === 0 ? null : Math.round((won / count) * 100),
+  };
+}
+
+/**
+ * The one fold behind a wall card and the opened card: the parts' results
+ * and statistics merged. On Approaches the KPI is merged too
+ * (`mergeApproachKpi` — `mergeVizStats` folds rows, and a KPI is not one),
+ * and "How it ended" is a share of every approach shown (`result.count`),
+ * drawn or not, as `approachStats` divides it — not of the marks.
+ */
+function foldSeasonParts(
+  cut: Cut,
+  filters: VizFilters,
+  parts: readonly SeasonPart[],
+  matches: number,
+): { result: VizResult; stats: VizStats } {
+  const result = mergeVizResults(
+    cut,
+    parts.map((p) => p.result),
+  );
+  const stats = mergeVizStats(
+    parts.map((p) => p.stats),
+    cut === "approaches" ? result.count : result.dots.length,
+    matches,
+  );
+  if (cut !== "approaches") return { result, stats };
+  return {
+    result,
+    stats: {
+      ...stats,
+      kpi: mergeApproachKpi(
+        filters.entry,
+        parts.map((p) => ({ kpi: p.stats.kpi, of: p.approachesOf ?? 0 })),
+      ),
+    },
   };
 }
 
@@ -425,8 +541,8 @@ export interface SeasonCard {
   name: string;
   subject: PlayerFilter;
   /** The court's marks, every match's together. Without `meta`: the card
-   *  draws shape, outcome and position only, and a season's readouts would
-   *  be most of the payload. */
+   *  draws shape, outcome and position only (an approach's contact, `pair`,
+   *  is a position), and a season's readouts would be most of the payload. */
   dots: VizDot[];
   /** The footer (`wallSummaryFor` over the summed rows). */
   summary: WallSummary;
@@ -444,9 +560,18 @@ function wallDot({
   lateralM,
   depthM,
   atNet,
+  pair,
 }: VizDot): VizDot {
   // To the millimetre, as the opened card's marks travel (`toMillimetre`).
-  return toMillimetre({ id, outcome, shape, lateralM, depthM, atNet });
+  return toMillimetre({
+    id,
+    outcome,
+    shape,
+    lateralM,
+    depthM,
+    atNet,
+    ...(pair ? { pair } : {}),
+  });
 }
 
 /** One card over the season: each match computed with its own seat and
@@ -466,13 +591,10 @@ function seasonCard(
   const parts = perMatch.map((m) =>
     seasonPart(m, card.cut, card.filters, card.chart, bands),
   );
-  const result = mergeVizResults(
+  const { result, stats } = foldSeasonParts(
     card.cut,
-    parts.map((p) => p.result),
-  );
-  const stats = mergeVizStats(
-    parts.map((p) => p.stats),
-    result.dots.length,
+    card.filters,
+    parts,
     perMatch.length,
   );
   return {
@@ -585,6 +707,7 @@ export const SEASON_CUT_LABEL: Record<Cut, string> = {
   rallyPosition: "Rally position",
   rallyPlacement: "Rally placement",
   errors: "Errors",
+  approaches: "Approaches",
 };
 
 /** The lookup key for a Statistics row's marks (`statRowDots`). On serve
@@ -745,16 +868,23 @@ export interface SeasonLightboxData {
   bands: BandSettings;
   subjectName: string;
   unit: DistanceUnit;
-  /** Any filter beyond the defaults is on (`activeFilterEntries`). */
+  /** Any filter beyond the defaults and the card's held floor is on
+   *  (`activeFilterEntries`). */
   hasFilters: boolean;
   title: string;
   subtitle: string;
   /** The strip's sentence for the filters beyond the card's own. */
   filterPhrases: string[];
+  /** A caveat that closes the strip's sentence, or null: on Approaches,
+   *  "assumes right-handed" when a mark's wing rests on a hand its match
+   *  does not give (`VizDot.meta.handAssumed`), as the report's lightbox
+   *  says it. */
+  sentenceNote: string | null;
   /** A filter beyond "Clear filter"'s target is on. */
   panelActive: boolean;
   /** What "Clear filter" leaves: the card's own filters while the title
-   *  still names the card, else the player alone. */
+   *  still names the card, else the player and the default card's floor
+   *  (`DefaultCut.floor` — Approaches comes back to approach shots). */
   clearFilters: VizFilters;
   /** The sets there are to pick, across the season. */
   sets: number[];
@@ -886,17 +1016,33 @@ function seasonMatchPasses(
   return true;
 }
 
+const mm = (metres: number) => Math.round(metres * 1000) / 1000;
+
 /**
  * A mark's metres to the millimetre for the trip to the browser. Tracked
  * positions arrive with 15–17 significant digits; the opened card ships every
  * mark of the season on every filter click, and a millimetre is far under a
  * pixel at any zoom the court allows.
+ *
+ * This is the season's whole encoding of a mark's positions: an approach's
+ * contact travels on the mark itself (`VizDot.pair`), rounded as the
+ * placement is, and the browser reads it back off `result.dots` with no
+ * decode step. `SeasonDotPoint` stays a point reference — one per mark, in
+ * the marks' order — and holds no position.
  */
-function toMillimetre(dot: VizDot): VizDot {
+export function toMillimetre(dot: VizDot): VizDot {
   return {
     ...dot,
-    lateralM: Math.round(dot.lateralM * 1000) / 1000,
-    depthM: Math.round(dot.depthM * 1000) / 1000,
+    lateralM: mm(dot.lateralM),
+    depthM: mm(dot.depthM),
+    ...(dot.pair
+      ? {
+          pair: {
+            lateralM: mm(dot.pair.lateralM),
+            depthM: mm(dot.pair.depthM),
+          },
+        }
+      : {}),
   };
 }
 
@@ -1022,13 +1168,10 @@ export function buildSeasonLightbox(
     seasonMatchPasses(m, applied) ? [i] : [],
   );
   const parts = included.map((i) => allParts[i]);
-  const result = mergeVizResults(
+  const { result, stats: merged } = foldSeasonParts(
     cut,
-    parts.map((p) => p.result),
-  );
-  const merged = mergeVizStats(
-    parts.map((p) => p.stats),
-    result.dots.length,
+    filters,
+    parts,
     included.length,
   );
   const stats = merged.title
@@ -1138,10 +1281,23 @@ export function buildSeasonLightbox(
     baseline.keys.every((key) =>
       sameFilterValue(key, filters, baseline.filters),
     );
+  // The default card's floor (`DefaultCut.floor`), as the report's lightbox
+  // reads it: the filters that make the card what it is — Approaches is
+  // approach shots — which "Clear filter" comes back to even once loosened,
+  // and which the strip never names while the court holds them. A saved
+  // view has none.
+  const floor: Partial<VizFilters> =
+    baseline !== null && baseView === null ? (defaultCut?.floor ?? {}) : {};
+  const floorFilters: VizFilters = {
+    ...EMPTY_VIZ_FILTERS,
+    ...floor,
+    player: filters.player,
+  };
+  const floorKeys = Object.keys(floor) as (keyof VizFilters)[];
+  const floorHeld = (key: keyof VizFilters) =>
+    floorKeys.includes(key) && sameFilterValue(key, filters, floorFilters);
   const clearFilters: VizFilters =
-    baseline !== null && onCard
-      ? baseline.filters
-      : { ...EMPTY_VIZ_FILTERS, player: filters.player };
+    baseline !== null && onCard ? baseline.filters : floorFilters;
   const panelActive =
     seasonActive ||
     filterKeysFor(cut).some(
@@ -1154,9 +1310,18 @@ export function buildSeasonLightbox(
     .filter(
       (entry) =>
         entry.key !== "player" &&
-        !(onCard && baseline !== null && baseline.keys.includes(entry.key)),
+        !(onCard && baseline !== null && baseline.keys.includes(entry.key)) &&
+        !floorHeld(entry.key),
     )
     .map((entry) => entry.label);
+  // The floor let go of entirely (every way to the net) is a change Clear
+  // undoes, so it is named too.
+  for (const key of floorKeys)
+    if (
+      !sameFilterValue(key, floorFilters, EMPTY_VIZ_FILTERS) &&
+      sameFilterValue(key, filters, EMPTY_VIZ_FILTERS)
+    )
+      filterPhrases.push(`${LOOSENED_LABEL[key] ?? "Filter"}: any`);
   // The season's own filters close the sentence: "Won · Lefties · Clay ·
   // 2 matches".
   if (applied.result != null)
@@ -1198,7 +1363,14 @@ export function buildSeasonLightbox(
     bands: bands.bands,
     subjectName,
     unit: bands.unit,
-    hasFilters: seasonActive || activeFilterEntries(state).length > 0,
+    // A held floor is the card, not a filter on it: an empty Approaches
+    // court has none recorded, not none matching. Nor is the player switch,
+    // which Clear keeps: the opponent's empty court has none recorded.
+    hasFilters:
+      seasonActive ||
+      activeFilterEntries(state).some(
+        (entry) => entry.key !== "player" && !floorHeld(entry.key),
+      ),
     title: baseline !== null && onCard ? baseline.name : SEASON_CUT_LABEL[cut],
     subtitle: `${SEASON_CUT_LABEL[cut]} · ${subjectWord} · ${matches} ${matches === 1 ? "match" : "matches"} · ${lightboxCountLine(
       cut,
@@ -1207,6 +1379,9 @@ export function buildSeasonLightbox(
       depthBandRows(bands.bands, bands.unit),
     )}`,
     filterPhrases,
+    sentenceNote: result.dots.some((d) => d.meta?.handAssumed === true)
+      ? HAND_ASSUMED_NOTE
+      : null,
     panelActive,
     clearFilters,
     sets,

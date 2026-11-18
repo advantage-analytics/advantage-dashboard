@@ -131,7 +131,9 @@ export function WallCard({
     setState(navigateState);
   }
 
-  const label = `${name}, ${playerName}: ${summary.countLabel}`;
+  const label = `${name}, ${playerName}: ${summary.countLabel}${
+    summary.countNote ? `, ${summary.countNote}` : ""
+  }${summary.handNote ? `, ${summary.handNote}` : ""}`;
   const courtProps = {
     cut,
     chart: "scatter",
@@ -209,11 +211,28 @@ export function WallCard({
             )}
           </span>
         </div>
-        <SplitBar
-          summary={summary}
-          possessive={possessive}
-          errorNoun={name.toLowerCase()}
-        />
+        {summary.countNote !== null && (
+          // The approaches card's points with no landing: counted beside
+          // the name, drawn nowhere — said here so the court can't read as
+          // disagreeing with the count.
+          <p
+            className="m-0 text-right text-[11px] tabular-nums"
+            style={{ color: "var(--ink-500)" }}
+          >
+            {summary.countNote}
+          </p>
+        )}
+        {(summary.segments.length > 0 || summary.notDrawn === 0) && (
+          // No segments because nothing counted was drawn (an approaches
+          // card with no landings): no bar at all — an empty grey track
+          // beside "7 approaches" reads as "you hit none". The note above
+          // says why.
+          <SplitBar
+            summary={summary}
+            possessive={possessive}
+            errorNoun={name.toLowerCase()}
+          />
+        )}
         <div className="mt-[6px] flex flex-wrap gap-x-[14px] gap-y-1">
           <span className="text-[11px]" style={{ color: "var(--ink-500)" }}>
             {summary.keyLead}
@@ -233,6 +252,18 @@ export function WallCard({
             </span>
           ))}
         </div>
+        {summary.handNote !== null && (
+          // The wing keys above rest on the opponent's hand; where the
+          // match does not record it they read it as right-handed. Said
+          // under the keys it qualifies, in the count note's quiet voice.
+          <p
+            data-wall-hand-note=""
+            className="m-0 text-[11px]"
+            style={{ color: "var(--ink-500)" }}
+          >
+            {summary.handNote}
+          </p>
+        )}
       </div>
     </>
   );
@@ -297,7 +328,11 @@ function SplitBar({
   const active = placed.find((p) => p.i === hovered) ?? null;
 
   return (
-    <span className="relative mt-[10px] block" aria-hidden="true">
+    <span
+      data-wall-split-bar="true"
+      className="relative mt-[10px] block"
+      aria-hidden="true"
+    >
       <span className="flex h-[6px] gap-[2px] overflow-hidden rounded-[3px]">
         {placed.length === 0 ? (
           <i

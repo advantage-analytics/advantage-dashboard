@@ -10,7 +10,13 @@ import {
 import {
   ACE_STAR_FILL,
   ACE_STAR_RADIUS_RATIO,
+  APPROACH_LABEL_INK,
+  APPROACH_LABEL_TRACKING,
+  APPROACH_LANE_LABEL_OPACITY,
+  APPROACH_SIDE_LABEL_OPACITY,
   APRON_FILL,
+  approachLaneText,
+  approachLeftLaneSide,
   COURT_FILL,
   HEAT_APRON_FILL,
   HEAT_COURT_FILL,
@@ -25,6 +31,7 @@ import {
   projectViewerDot,
   starPoints,
   trianglePointsFor,
+  viewerApproachLabelScale,
   viewerArtPoint,
   viewerHeatFilterRegion,
   viewerBandEdges,
@@ -42,10 +49,13 @@ import {
   buildReadout,
   buildZoneReadout,
   markClickHint,
+  placeApronReadout,
   placeReadout,
+  type PairPart,
 } from "./viz-readout";
 import { nextMarkIndex } from "./viz-mark-roving";
 import { isPlacementCut } from "./cut-kinds";
+import type { Hand } from "../match-filters/shot-geometry";
 import {
   type Chart,
   type Cut,
@@ -122,6 +132,51 @@ const ZONE_COUNT_Y = VIEWER_COURT.netY + 21;
 const DEUCE_LABEL_X = (VIEWER_COURT.singlesLeft + VIEWER_COURT.centreX) / 2;
 const AD_LABEL_X = (VIEWER_COURT.centreX + VIEWER_COURT.singlesRight) / 2;
 
+// The Approaches apron (`VIEWER_APPROACH_FRAME`'s apron past each
+// baseline): "Placement" and the wing names above the far baseline, "Contact"
+// below the near one — on the apron only, never on the court.
+//
+// T23: the opened court multiplies these by `viewerApproachLabelScale`, so
+// they open no smaller than a landing cut's band labels (5.6 units at that
+// cut's zoom) — the wing names at a hair over that, the side words a step
+// up. They are the lightbox's own: the wall card's `ApproachCourtArt` keeps
+// `court-art.tsx`'s `APPROACH_*_LABEL_SIZE`.
+const APPROACH_LIGHTBOX_SIDE_SIZE = 6.4;
+const APPROACH_LIGHTBOX_LANE_SIZE = 5.8;
+// The lines are stacked by the face's own extent rather than at fixed Ys,
+// so they clear each other at every scale: a line's box runs about an
+// ascent above its baseline and a descent below it (`--font-mono`'s metrics,
+// rounded up), and `APPROACH_APRON_GAP` units (× the scale) separate a line
+// from the next and the wing line from the baseline.
+const APRON_FONT_ASCENT = 1.05;
+const APRON_FONT_DESCENT = 0.3;
+const APPROACH_APRON_GAP = 1.2;
+
+/** The apron words' sizes and baselines at `scale`. */
+function approachApronLayout(scale: number) {
+  const side = APPROACH_LIGHTBOX_SIDE_SIZE * scale;
+  const lane = APPROACH_LIGHTBOX_LANE_SIZE * scale;
+  const gap = APPROACH_APRON_GAP * scale;
+  const laneY = VIEWER_COURT.farBaselineY - gap - APRON_FONT_DESCENT * lane;
+  return {
+    side,
+    lane,
+    laneY,
+    placementY:
+      laneY - APRON_FONT_ASCENT * lane - gap - APRON_FONT_DESCENT * side,
+    contactY: VIEWER_COURT.nearBaselineY + gap + APRON_FONT_ASCENT * side,
+  };
+}
+/** Centre of each hitter's-view third of the singles court (`laneOf`). */
+const APPROACH_LANE_X = (() => {
+  const third = (VIEWER_COURT.singlesRight - VIEWER_COURT.singlesLeft) / 3;
+  return {
+    left: VIEWER_COURT.singlesLeft + third / 2,
+    middle: VIEWER_COURT.centreX,
+    right: VIEWER_COURT.singlesRight - third / 2,
+  } as const;
+})();
+
 /** P2m: while the band editor is open the marks (and heat) sit back at 35%
  *  so the dividers and their labels read first. */
 const EDITING_ART_OPACITY = 0.35;
@@ -133,6 +188,10 @@ const LINE_SCALE = 1.3;
  *  size, a 1.5px white ring at its radius + 3. */
 const SELECTED_RING_R = VIEWER_COURT.markRadius + 3;
 const SELECTED_RING_W = 1.5;
+/** An active (hovered, focused or selected) mark's glyph scale — the same
+ *  `scale(1.4)` as globals.css `[data-viz-mark][data-active]
+ *  [data-viz-mark-glyph]`; change both together. */
+const ACTIVE_GLYPH_SCALE = 1.4;
 /** The siblings of a selected mark sit back at 40%. */
 const UNSELECTED_OPACITY = 0.4;
 /** The mark readout's narrowest width (canvas S04). */
@@ -146,8 +205,42 @@ const MARK_HIT_R = VIEWER_COURT.markRadius + 1.6;
  *  outside the radius): a few pixels however far the court is zoomed out. */
 const MARK_HIT_FLOOR_PX = 6;
 
+/** A pair's readout, hung off its mark on the side `placeApronReadout`
+ *  chose: the near edge at the anchor, centred on its height — or, above or
+ *  below, centred under/over it as every other readout. */
+const APRON_READOUT_TRANSFORM: Record<
+  "left" | "right" | "above" | "below",
+  string
+> = {
+  left: "translate(-100%, -50%)",
+  right: "translate(0, -50%)",
+  above: "translate(-50%, -100%)",
+  below: "translate(-50%, 0)",
+};
+
 /** The handoff's own highlighted-box alpha (P2b's `fill-opacity="0.09"`). */
 const ZONE_HIGHLIGHT_OPACITY = 0.09;
+
+/**
+ * The contact mark of an Approaches pair (`VizDot.pair`) on this frame, or
+ * `null` for every other dot. `VIEWER_COURT` is already the upright full
+ * court with the subject at the bottom, so the contact goes where every
+ * contact cut draws its marks — the near half, `nearBaselineY + depthM` —
+ * and the placement (the dot's own position) where every landing cut does:
+ * the same two halves, and the same lateral sense, `projectApproachPair`
+ * gives `FULL_COURT_VERTICAL`.
+ */
+export function pairContactPoint(
+  cut: Cut,
+  dot: VizDot,
+): { x: number; y: number } | null {
+  if (cut !== "approaches" || !dot.pair) return null;
+  return projectViewerDot("returnContact", {
+    lateralM: dot.pair.lateralM,
+    depthM: dot.pair.depthM,
+    atNet: false,
+  });
+}
 
 function fillFor(dot: VizDot): string {
   if (dot.shape === "star") return ACE_STAR_FILL;
@@ -205,6 +298,7 @@ export function LightboxCourt({
   matchFor,
   canWatchMark,
   focusIds = null,
+  opponentHand,
   outline = null,
   onReadoutEnter,
   onReadoutLeave,
@@ -258,6 +352,15 @@ export function LightboxCourt({
   canWatchMark?: (dot: VizDot) => boolean;
   /** A hovered Statistics row's marks: the rest sit back at 40%. */
   focusIds?: ReadonlySet<string> | null;
+  /**
+   * Approaches: the hand of whoever is NOT the court's subject, which sides
+   * the apron's "Their FH" / "Their BH". `null` is a known-unknown hand, read
+   * as right-handed like the rest of the cut. Omitted (a court over several
+   * opponents, the season's), it is read off the dots
+   * (`approachLeftLaneSide`): one known hand names their wings, anything
+   * else the hitter's "Left · Middle · Right".
+   */
+  opponentHand?: Hand | null;
   /** The hovered or chosen Statistics row's zone or band, outlined dashed white. */
   outline?: CourtOutline | null;
   onReadoutEnter?: () => void;
@@ -282,6 +385,11 @@ export function LightboxCourt({
   const court = heat ? HEAT_COURT_FILL : COURT_FILL;
   const vb = VIEWER_COURT.viewBox;
   const z = transform.z;
+  // T23: the whole length opens at about half a landing cut's zoom, and the
+  // art's type is in viewBox units — so the Approaches court's words are
+  // drawn larger by the ratio of the two frames' fits on this stage. They
+  // still scale with the zoom after that, as on every cut.
+  const labelScale = cut === "approaches" ? viewerApproachLabelScale(stage) : 1;
 
   const highlighted = cut === "serve" ? highlightedZoneKeys(filters) : null;
   // The Zones chart IS its six cells — the same white wash, scaled to the
@@ -303,6 +411,27 @@ export function LightboxCourt({
       ? null
       : (dots.find((d) => d.id === activeId) ?? null);
   const activeMeta = active?.meta ?? null;
+
+  // An Approaches pair is ONE mark with two places on court: the readout
+  // names the one last pointed at ("Contact" / "Placement") and hangs from
+  // it. Placement is the default — a keyboard focus, or a selection never
+  // pointed at.
+  const [pairPart, setPairPart] = useState<{
+    id: string;
+    part: PairPart;
+  } | null>(null);
+  const pointPart = useCallback(
+    (id: string, part: PairPart) => setPairPart({ id, part }),
+    [],
+  );
+  const activeContact = active !== null ? pairContactPoint(cut, active) : null;
+  const activePart: PairPart | null =
+    activeContact === null
+      ? null
+      : pairPart !== null && active !== null && pairPart.id === active.id
+        ? pairPart.part
+        : "placement";
+
   const markReadout =
     active !== null && activeMeta
       ? buildMarkReadout(
@@ -316,6 +445,7 @@ export function LightboxCourt({
               active.id === selectedId,
               canWatchMark?.(active) ?? false,
             ),
+            part: activePart,
           },
         )
       : null;
@@ -339,13 +469,17 @@ export function LightboxCourt({
 
   const shownReadout = markReadout ?? zoneReadout;
   let readoutStyle: React.CSSProperties | null = null;
+  let readoutSide: string | undefined;
   if (shownReadout !== null) {
     // Viewbox -> art px -> layer px (the svg is `artPx * z`) -> stage px (the
     // wrapper is translated by px/py). A zone hangs from the net, so the card
     // sits over its cell and leaves the percentage below the net readable.
     let art: { x: number; y: number } | null = null;
     if (active !== null && markReadout !== null) {
-      const p = projectViewerDot(cut, active);
+      const p =
+        activePart === "contact" && activeContact !== null
+          ? activeContact
+          : projectViewerDot(cut, active);
       art = viewerArtPoint(p.x, p.y);
     } else if (shownZone !== null) {
       const cell = zoneCellX(ZONES.findIndex((z) => z.key === shownZone));
@@ -356,19 +490,40 @@ export function LightboxCourt({
       // in viewBox units, scaled to stage px through the art.
       const ringPx =
         (SELECTED_RING_R * VIEWER_COURT.artPx.w * z) / VIEWER_COURT.viewBox.w;
-      const place = placeReadout(
-        { x: transform.px + art.x * z, y: transform.py + art.y * z },
-        stage,
-        markReadout !== null ? ringPx + 8 : undefined,
-      );
-      readoutStyle = {
-        ...DARK_READOUT_STYLE,
-        left: place.left,
-        top: place.top,
-        minWidth: Math.min(MIN_READOUT_W, place.width),
-        maxWidth: place.width,
-        transform: `translate(-50%, ${place.below ? "0" : "-100%"})`,
+      const anchor = {
+        x: transform.px + art.x * z,
+        y: transform.py + art.y * z,
       };
+      if (activeContact !== null) {
+        // A pair's card opens outward into the apron beside the court, so it
+        // never lies over the other half's marks (`placeApronReadout`).
+        const centre =
+          transform.px + viewerArtPoint(VIEWER_COURT.centreX, 0).x * z;
+        const place = placeApronReadout(anchor, stage, centre, ringPx + 8);
+        readoutSide = place.side;
+        readoutStyle = {
+          ...DARK_READOUT_STYLE,
+          left: place.left,
+          top: place.top,
+          minWidth: Math.min(MIN_READOUT_W, place.width),
+          maxWidth: place.width,
+          transform: APRON_READOUT_TRANSFORM[place.side],
+        };
+      } else {
+        const place = placeReadout(
+          anchor,
+          stage,
+          markReadout !== null ? ringPx + 8 : undefined,
+        );
+        readoutStyle = {
+          ...DARK_READOUT_STYLE,
+          left: place.left,
+          top: place.top,
+          minWidth: Math.min(MIN_READOUT_W, place.width),
+          maxWidth: place.width,
+          transform: `translate(-50%, ${place.below ? "0" : "-100%"})`,
+        };
+      }
     }
   }
 
@@ -469,7 +624,11 @@ export function LightboxCourt({
             make the baseline itself look dimmed. Outside `MarkLayer` and
             memo'd on its own props, so a pan frame never re-renders it. */}
           {bands !== null && (
-            <VizBandsOverlay {...bands} zones={chart === "zones"} />
+            <VizBandsOverlay
+              {...bands}
+              zones={chart === "zones"}
+              labelScale={labelScale}
+            />
           )}
 
           <CourtLines />
@@ -481,12 +640,23 @@ export function LightboxCourt({
               textAnchor="middle"
               fill={LINE_COLOR}
               fontFamily="var(--font-sans)"
-              fontSize={8}
+              fontSize={8 * labelScale}
             >
               {isPlacementCut(cut)
                 ? "No depth bands selected"
                 : "No contact bands selected"}
             </text>
+          )}
+
+          {cut === "approaches" && (
+            <ApproachApronLabels
+              scale={labelScale}
+              leftIsForehand={
+                opponentHand !== undefined
+                  ? opponentHand !== "left"
+                  : approachLeftLaneSide(dots)
+              }
+            />
           )}
 
           {cut === "serve" && (
@@ -528,6 +698,7 @@ export function LightboxCourt({
                 onDeactivate={onDeactivate}
                 onRove={onRove}
                 onSelect={onSelect}
+                onPointPart={pointPart}
               />
             )}
           </g>
@@ -539,10 +710,20 @@ export function LightboxCourt({
       {markReadout !== null && readoutStyle !== null && active !== null && (
         <div
           data-viz-readout=""
+          data-viz-readout-side={readoutSide}
           aria-hidden="true"
           className={`pointer-events-none absolute z-[2] flex flex-col gap-0.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
           style={readoutStyle}
         >
+          {markReadout.part !== undefined && (
+            // Which of the pair's two marks the card is about, first.
+            <span
+              data-viz-readout-part=""
+              className="text-[11px] leading-[1.45] text-white/[0.64]"
+            >
+              {markReadout.part}
+            </span>
+          )}
           <span className="mb-0.5 flex items-center gap-[7px]">
             <ReadoutGlyph dot={active} />
             <span className="text-[12px] leading-[1.35] font-medium text-white">
@@ -607,6 +788,67 @@ export function LightboxCourt({
           </div>
         )}
     </>
+  );
+}
+
+/**
+ * The Approaches cut's apron words (`approach-map-v9.html`, the wall card's
+ * `ApproachCourtArt` labels): "Placement" over the far half, the opponent's
+ * wing over each third just past the far baseline (the hitter's "Left ·
+ * Middle · Right" where no one hand sides it, `approachLaneText`), "Contact"
+ * under the near half. Under the marks, and deaf to the pointer, so no word
+ * takes a hover.
+ */
+function ApproachApronLabels({
+  leftIsForehand,
+  scale,
+}: {
+  leftIsForehand: boolean | null;
+  scale: number;
+}) {
+  const laneText = approachLaneText(leftIsForehand);
+  const layout = approachApronLayout(scale);
+  return (
+    <g
+      data-approach-labels=""
+      aria-hidden="true"
+      fill={APPROACH_LABEL_INK}
+      fontFamily="var(--font-mono)"
+      letterSpacing={APPROACH_LABEL_TRACKING * scale}
+      textAnchor="middle"
+      style={{ textTransform: "uppercase", pointerEvents: "none" }}
+    >
+      <text
+        data-approach-label="placement"
+        x={VIEWER_COURT.centreX}
+        y={layout.placementY}
+        fontSize={layout.side}
+        fillOpacity={APPROACH_SIDE_LABEL_OPACITY}
+      >
+        Placement
+      </text>
+      <text
+        data-approach-label="contact"
+        x={VIEWER_COURT.centreX}
+        y={layout.contactY}
+        fontSize={layout.side}
+        fillOpacity={APPROACH_SIDE_LABEL_OPACITY}
+      >
+        Contact
+      </text>
+      {(["left", "middle", "right"] as const).map((lane) => (
+        <text
+          key={lane}
+          data-approach-lane={lane}
+          x={APPROACH_LANE_X[lane]}
+          y={layout.laneY}
+          fontSize={layout.lane}
+          fillOpacity={APPROACH_LANE_LABEL_OPACITY}
+        >
+          {laneText[lane]}
+        </text>
+      ))}
+    </g>
   );
 }
 
@@ -835,6 +1077,7 @@ const MarkLayer = memo(function MarkLayer({
   onDeactivate,
   onRove,
   onSelect,
+  onPointPart,
 }: {
   cut: Cut;
   dots: VizDot[];
@@ -853,6 +1096,9 @@ const MarkLayer = memo(function MarkLayer({
   onDeactivate: (id: string) => void;
   onRove: (id: string) => void;
   onSelect: (id: string) => void;
+  /** Which of an Approaches pair's two marks the pointer is on (or the
+   *  keyboard reached: the placement). Stable identity. */
+  onPointPart: (id: string, part: PairPart) => void;
 }) {
   const placed = useMemo(
     () =>
@@ -864,7 +1110,10 @@ const MarkLayer = memo(function MarkLayer({
               return [r.title, ...r.lines].join(" — ");
             })()
           : `${subjectName} — mark`;
-        return { dot, x, y, fill: fillFor(dot), label };
+        // An Approaches pair: the same dot's contact, drawn in the near half
+        // as the second mark of ONE interactive group.
+        const contact = pairContactPoint(cut, dot);
+        return { dot, x, y, contact, fill: fillFor(dot), label };
       }),
     [dots, cut, subjectName],
   );
@@ -917,9 +1166,12 @@ const MarkLayer = memo(function MarkLayer({
 
   return (
     <>
-      {placed.map(({ dot, x, y, fill, label }, index) => {
+      {placed.map(({ dot, x, y, contact, fill, label }, index) => {
         const isSelected = dot.id === selectedId;
         const isFocused = dot.id === focusedId;
+        // A pair rings BOTH its marks whenever it is the one being read —
+        // hovered, focused or selected — so the eye finds the other half.
+        const pairLit = contact !== null && (isSelected || dot.id === activeId);
         const dimmed =
           selectedId !== null
             ? !isSelected
@@ -946,9 +1198,14 @@ const MarkLayer = memo(function MarkLayer({
             opacity={dimmed ? UNSELECTED_OPACITY : undefined}
             onMouseEnter={() => onActivate(dot.id, false)}
             onMouseLeave={() => onDeactivate(dot.id)}
-            onFocus={(e) =>
-              onActivate(dot.id, e.currentTarget.matches(":focus-visible"))
-            }
+            onFocus={(e) => {
+              const keyboard = e.currentTarget.matches(":focus-visible");
+              // The keyboard reaches a pair as one stop: its card reads the
+              // placement. A click's focus keeps the mark it landed on.
+              if (keyboard && contact !== null)
+                onPointPart(dot.id, "placement");
+              onActivate(dot.id, keyboard);
+            }}
             onBlur={() => onDeactivate(dot.id)}
             onKeyDown={(e) => handleKeyDown(e, index)}
             onClick={(e) => {
@@ -981,60 +1238,174 @@ const MarkLayer = memo(function MarkLayer({
               onSelect(next);
             }}
           >
-            {isFocused && (
-              // Fix round 1 #10: a keyboard-only ring OUTSIDE the hover halo.
-              // `outline-none` alone left a focused mark indistinguishable
-              // from a hovered one; this is the affordance the outline was.
-              <circle
-                cx={x}
-                cy={y}
-                r={FOCUS_RING_R}
-                fill="none"
-                stroke="var(--ink-900)"
-                strokeWidth={1.4}
-                strokeOpacity={0.85}
-                vectorEffect="non-scaling-stroke"
+            {contact === null ? (
+              <MarkBody
+                x={x}
+                y={y}
+                dot={dot}
+                fill={fill}
+                focused={isFocused}
+                ringed={isSelected}
+                selected={isSelected}
               />
+            ) : (
+              (
+                [
+                  ["contact", contact.x, contact.y],
+                  ["placement", x, y],
+                ] as const
+              ).map(([part, px, py]) => (
+                <g
+                  key={part}
+                  data-viz-mark-part={part}
+                  onMouseEnter={() => onPointPart(dot.id, part)}
+                >
+                  <MarkBody
+                    x={px}
+                    y={py}
+                    dot={dot}
+                    fill={fill}
+                    focused={isFocused}
+                    ringed={pairLit}
+                    selected={isSelected}
+                    pair
+                  />
+                </g>
+              ))
             )}
-            {isSelected && (
-              <circle
-                data-viz-selected-ring=""
-                cx={x}
-                cy={y}
-                r={SELECTED_RING_R}
-                fill="none"
-                stroke={LINE_COLOR}
-                strokeWidth={SELECTED_RING_W}
-                vectorEffect="non-scaling-stroke"
-              />
-            )}
-            {/* The hit area: the mark grown by a hair, so the readout comes
-                up over the point and not a mark's width off it (it was r 9
-                round a 2.2 mark, and answered 18px from its centre). */}
-            {/* Plus a 3px ring that does not scale (a transparent
-                non-scaling stroke still takes the pointer), so zoomed out
-                to Full court the target never shrinks to a pixel or two. */}
-            <circle
-              cx={x}
-              cy={y}
-              r={MARK_HIT_R}
-              fill="transparent"
-              stroke="transparent"
-              strokeWidth={MARK_HIT_FLOOR_PX}
-              vectorEffect="non-scaling-stroke"
-            />
-            {/* Grows a little while hovered or focused (`data-active`,
-                globals.css `[data-viz-mark-glyph]`): the point you are on
-                answers under the pointer as well as in the readout. */}
-            <g data-viz-mark-glyph="">
-              <Mark dot={dot} x={x} y={y} fill={fill} />
-            </g>
           </g>
         );
       })}
+      {(() => {
+        // A selected pair is drawn LAST, so neither of its marks sits under
+        // another point's. Its interactive group keeps its place in the DOM —
+        // moving a focused node blurs it, and the roving order is the dots'
+        // own — so what rises is a copy of its rings and marks, which takes
+        // no pointer and says nothing to a screen reader.
+        const top = placed.find(
+          (item) => item.dot.id === selectedId && item.contact !== null,
+        );
+        if (!top || top.contact === null) return null;
+        return (
+          <g
+            data-viz-raised={top.dot.id}
+            aria-hidden="true"
+            pointerEvents="none"
+          >
+            {[top.contact, { x: top.x, y: top.y }].map((p, i) => (
+              <g key={i}>
+                <circle
+                  cx={p.x}
+                  cy={p.y}
+                  r={SELECTED_RING_R}
+                  fill="none"
+                  stroke={LINE_COLOR}
+                  strokeWidth={SELECTED_RING_W}
+                  vectorEffect="non-scaling-stroke"
+                />
+                {/* Grows with the group it copies: `data-viz-mark-glyph`
+                    carries the easing, and the scale is the one globals.css
+                    gives an active mark's glyph, written here because the
+                    copy is not itself a `[data-viz-mark]`. */}
+                <g
+                  data-viz-mark-glyph=""
+                  style={
+                    top.dot.id === activeId
+                      ? { transform: `scale(${ACTIVE_GLYPH_SCALE})` }
+                      : undefined
+                  }
+                >
+                  <Mark dot={top.dot} x={p.x} y={p.y} fill={top.fill} />
+                </g>
+              </g>
+            ))}
+          </g>
+        );
+      })()}
     </>
   );
 });
+
+/**
+ * One mark's drawing inside its interactive group: the keyboard ring, the
+ * selection ring, the hit area and the glyph. A single-mark cut draws one; an
+ * Approaches pair draws one at each of its two places, both under the same
+ * group, so the pair is one tab stop, one hover and one selection.
+ */
+function MarkBody({
+  x,
+  y,
+  dot,
+  fill,
+  focused,
+  ringed,
+  selected,
+  pair = false,
+}: {
+  x: number;
+  y: number;
+  dot: VizDot;
+  fill: string;
+  focused: boolean;
+  /** Draw the white ring: the selection, or a pair being read. */
+  ringed: boolean;
+  selected: boolean;
+  pair?: boolean;
+}) {
+  return (
+    <>
+      {focused && (
+        // Fix round 1 #10: a keyboard-only ring OUTSIDE the hover halo.
+        // `outline-none` alone left a focused mark indistinguishable
+        // from a hovered one; this is the affordance the outline was.
+        <circle
+          cx={x}
+          cy={y}
+          r={FOCUS_RING_R}
+          fill="none"
+          stroke="var(--ink-900)"
+          strokeWidth={1.4}
+          strokeOpacity={0.85}
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
+      {ringed && (
+        <circle
+          data-viz-selected-ring={selected ? "" : undefined}
+          data-viz-pair-ring={pair ? "" : undefined}
+          cx={x}
+          cy={y}
+          r={SELECTED_RING_R}
+          fill="none"
+          stroke={LINE_COLOR}
+          strokeWidth={SELECTED_RING_W}
+          vectorEffect="non-scaling-stroke"
+        />
+      )}
+      {/* The hit area: the mark grown by a hair, so the readout comes
+                up over the point and not a mark's width off it (it was r 9
+                round a 2.2 mark, and answered 18px from its centre). */}
+      {/* Plus a 3px ring that does not scale (a transparent
+                non-scaling stroke still takes the pointer), so zoomed out
+                to Full court the target never shrinks to a pixel or two. */}
+      <circle
+        cx={x}
+        cy={y}
+        r={MARK_HIT_R}
+        fill="transparent"
+        stroke="transparent"
+        strokeWidth={MARK_HIT_FLOOR_PX}
+        vectorEffect="non-scaling-stroke"
+      />
+      {/* Grows a little while hovered or focused (`data-active`,
+                globals.css `[data-viz-mark-glyph]`): the point you are on
+                answers under the pointer as well as in the readout. */}
+      <g data-viz-mark-glyph="">
+        <Mark dot={dot} x={x} y={y} fill={fill} />
+      </g>
+    </>
+  );
+}
 
 /**
  * The heat layer's per-dot projection for this frame — module-level per cut,
@@ -1054,6 +1425,7 @@ const VIEWER_HEAT_PROJECTORS: Record<
   rallyPosition: (d) => toCxCy("rallyPosition", d),
   rallyPlacement: (d) => toCxCy("rallyPlacement", d),
   errors: (d) => toCxCy("errors", d),
+  approaches: (d) => toCxCy("approaches", d),
 };
 
 function toCxCy(cut: Cut, dot: VizDot): { cx: number; cy: number } {

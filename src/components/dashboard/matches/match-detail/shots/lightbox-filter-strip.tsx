@@ -1,7 +1,7 @@
 "use client";
 
 import { AppliedFilterStrip } from "@/components/dashboard/shared/applied-filter-strip";
-import { draftCountLine } from "../match-filters/panel-draft";
+import { draftCountLine, type CountNoun } from "../match-filters/panel-draft";
 
 /* ── Applied strip ─────────────────────────────────────────────────────── */
 
@@ -9,7 +9,7 @@ import { draftCountLine } from "../match-filters/panel-draft";
  * The applied strip under the court's control row (DS Data Table rule 6, the
  * dashboard's one `AppliedFilterStrip`): the filter glyph, the cut as one
  * sentence of capitalised phrases joined by middots ("Aces · To the T"),
- * "N of M points", and one quiet action — "Back to all points" when a
+ * "N of M points" (or what the cut counts), and one quiet action — "Back to all points" when a
  * Statistics row is the only cut, "Clear filter" otherwise. Never chips.
  *
  * It unfolds into the court column and folds away like every list strip; the
@@ -22,6 +22,9 @@ interface FilterStripProps {
   /** "N of M points" — omitted by a host with no points to count. */
   shown?: number;
   total?: number;
+  /** What N and M count: points, unless the cut counts something else
+   *  (Approaches: "times at the net"). */
+  noun?: CountNoun;
   statOnly: boolean;
   onClear: () => void;
 }
@@ -30,6 +33,7 @@ export function LightboxFilterStrip({
   phrases,
   shown,
   total,
+  noun,
   statOnly,
   onClear,
 }: FilterStripProps) {
@@ -46,7 +50,7 @@ export function LightboxFilterStrip({
       }
       count={
         shown !== undefined && total !== undefined
-          ? draftCountLine(shown, total)
+          ? draftCountLine(shown, total, noun)
           : null
       }
       action={statOnly ? "Back to all points" : "Clear filter"}

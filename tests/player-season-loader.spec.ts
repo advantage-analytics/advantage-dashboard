@@ -895,6 +895,7 @@ test("loadPlayerSeasonCourts reads the season's matches and points with no file 
       "matchId",
       "opponent",
       "opponentHand",
+      "playerHand",
       "points",
       "score",
       "won",
@@ -1230,6 +1231,48 @@ test("seasonOpponentCount never counts a practice partner or a teammate as an op
       side({ id: "6", player2_name: "Zara Novak", match_type: "Tournament" }),
     ]),
   ).toBe(1);
+});
+
+/* ── Hands, by seat ──────────────────────────────────────────────────────── */
+
+test("a season match reads the row's hands for the player's seat, the legacy seat-two row included", async () => {
+  const { client } = fakeClient(fullTables());
+  const { deps } = fakeBallPaths({});
+  const side = (
+    overrides: Partial<DbPlayerMatchRow> & { id: string },
+    isPlayer1: boolean,
+  ): PlayerMatchSide => ({ match: matchRow(overrides), isPlayer1 });
+  const hands = { player_hand: "left", opponent_hand: "right" };
+
+  const season = await loadPlayerSeason(
+    client,
+    [
+      // The legacy row: no seat-one id, the player in seat two. `player_*`
+      // is the player's own there (`playerColumnsSeat`).
+      side(
+        { id: "m-a", player1_id: null, player2_id: "u-ada", ...hands },
+        false,
+      ),
+      // The wizard's seat two: a teammate's upload, both seat ids set.
+      // `player_*` is seat one's, so the player faced it.
+      side(
+        { id: "m-b", player1_id: "p-bea", player2_id: "p-ada", ...hands },
+        false,
+      ),
+      // The wizard's seat one.
+      side({ id: "m-d", ...hands }, true),
+    ],
+    deps,
+  );
+  const of = (id: string) => {
+    const m = season.perMatch.find((x) => x.matchId === id);
+    if (!m) throw new Error(`${id} was not folded`);
+    return { playerHand: m.playerHand, opponentHand: m.opponentHand };
+  };
+
+  expect(of("m-a")).toEqual({ playerHand: "left", opponentHand: "right" });
+  expect(of("m-b")).toEqual({ playerHand: "right", opponentHand: "left" });
+  expect(of("m-d")).toEqual({ playerHand: "left", opponentHand: "right" });
 });
 
 /* ── Failing closed, and the empty season ────────────────────────────────── */

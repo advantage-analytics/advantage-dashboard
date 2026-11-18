@@ -1,9 +1,10 @@
 /**
- * Default cuts for the Visualizations tab: the wall's five court-first cards
+ * Default cuts for the Visualizations tab: the wall's six court-first cards
  * (canvas W5), in order — All serves, Returns, Return contact, Rally shots,
- * Unforced errors. `name` is the card's title and the lightbox's. Return
- * contact is a card again (user ask, 2026-11-10; the wall had dropped it to
- * four on 2026-11-08).
+ * Approaches, Unforced errors. `name` is the card's title and the lightbox's.
+ * Return contact is a card again (user ask, 2026-11-10; the wall had dropped
+ * it to four on 2026-11-08). Approaches joined after Rally shots (approach
+ * heatmap, plan step 8).
  *
  * Pure TypeScript; no React, no "use client".
  */
@@ -16,6 +17,14 @@ export interface DefaultCut {
   name: string;
   filters: Partial<VizFilters>;
   pills: string[];
+  /**
+   * The part of `filters` that defines the cut rather than narrowing it:
+   * "Clear filter" always comes back to it, even once the reader has
+   * loosened it, and the strip never names it while the court holds it —
+   * loosened, it reads "Way to the net: any". Omitted, Clear on a loosened
+   * card goes to no filters at all ("All serves" loosened is every serve).
+   */
+  floor?: Partial<VizFilters>;
 }
 
 /**
@@ -53,6 +62,19 @@ export const DEFAULT_CUTS: DefaultCut[] = [
     name: "Rally shots",
     filters: {},
     pills: ["All rally shots"],
+  },
+  {
+    cut: "approaches",
+    chart: "scatter",
+    name: "Approaches",
+    // Approach shots alone: the cut's baseline, not an applied filter —
+    // serve-and-volley and drawn-in points stay one "Way to the net" pick
+    // away.
+    filters: { entry: ["approach"] },
+    // Approaches is the card, so Clear after a "Serve and volley" tick is
+    // approaches only again, not every net point.
+    floor: { entry: ["approach"] },
+    pills: ["Approaches"],
   },
   {
     cut: "errors",

@@ -48,11 +48,25 @@ import {
   shotMatchesNet,
   shotMatchesThen,
   finalShotOf,
+  handOf,
   lastShotOf,
   type MatchFilterContext,
   type MatchFilterKey,
   type MatchFilters,
 } from "../match-filters/model";
+import {
+  APPROACH_BUCKET_LABEL,
+  approachLateralM,
+  approachOf,
+  LATERAL_THIRD_M,
+  SINGLES_HALF_M,
+  type Approach,
+  type ApproachDirection,
+  type ApproachEndingBucket,
+  type ApproachWing,
+} from "../match-filters/approach";
+import type { NetEnding, NetEntry } from "../match-filters/net-game";
+import type { Hand } from "../match-filters/shot-geometry";
 import { bandKindFor, marksAreShots } from "./cut-kinds";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
@@ -63,7 +77,8 @@ export type Cut =
   | "returnContact"
   | "rallyPosition"
   | "rallyPlacement"
-  | "errors";
+  | "errors"
+  | "approaches";
 export type Chart = "scatter" | "zones" | "heat";
 export type PlayerFilter = "you" | "opponent";
 
@@ -90,6 +105,9 @@ export type PressureFilter = readonly PressureValue[];
 export type ResultFilter = readonly ResultValue[];
 export type RallyFilter = readonly RallyValue[];
 export type ErrorFilter = readonly ErrorValue[];
+export type EntryFilter = readonly NetEntry[];
+export type ApproachToFilter = readonly ApproachWing[];
+export type ApproachDirFilter = readonly ApproachDirection[];
 
 export interface ShotFilterState {
   set: SetFilter;
@@ -106,6 +124,12 @@ export interface VizFilters extends ShotFilterState {
   player: PlayerFilter;
   /** Errors cut only: which errors are plotted. Empty = every error. */
   error: ErrorFilter;
+  /** Approaches cut only: how the subject came in. Empty = every entry. */
+  entry: EntryFilter;
+  /** Approaches cut only: the opponent's wing the approach went to. */
+  approachTo: ApproachToFilter;
+  /** Approaches cut only: the approach shot's direction. */
+  approachDir: ApproachDirFilter;
   /**
    * The Video tab's advanced filters (`match-filters/model.ts`), edited
    * through the same `FiltersPanel`. AND'd with every group above. Its
@@ -125,6 +149,9 @@ export const EMPTY_VIZ_FILTERS: VizFilters = {
   result: [],
   rally: [],
   error: [],
+  entry: [],
+  approachTo: [],
+  approachDir: [],
   match: EMPTY_MATCH_FILTERS,
 };
 
@@ -168,6 +195,26 @@ export interface VizDotMeta {
    * always agree on a point. Absent everywhere else.
    */
   stroke?: string;
+  /** Approaches cut only: how the subject came in (`netEntryOf`). */
+  entry?: NetEntry;
+  /** Approaches cut only: the opponent's wing the approach went to. */
+  wing?: ApproachWing | null;
+  /** Approaches cut only: the approach shot's direction; null for a serve. */
+  direction?: ApproachDirection | null;
+  /** Approaches cut only: how the point ended (`netEndingOf`). */
+  ending?: NetEnding;
+  /** Approaches cut only: the "How it ended" row `ending` falls in. */
+  bucket?: ApproachEndingBucket;
+  /** Approaches cut only: `wing` assumes a right-handed opponent. */
+  handAssumed?: boolean;
+  /**
+   * Approaches cut only: the hand `wing` was worked out from — the seat the
+   * subject approached against — or null where the match does not give it
+   * (`handAssumed`). Carried so a court over several opponents (the
+   * season's) can tell whether they share one hand, which a middle-lane
+   * wing alone cannot say (`approachLeftLaneSide`, `court-art.tsx`).
+   */
+  opponentHand?: Hand | null;
 }
 
 /**
@@ -217,6 +264,13 @@ export interface VizDot {
   lateralM: number;
   depthM: number;
   atNet: boolean;
+  /**
+   * Approaches cut only: where the approach shot was struck, in
+   * `contactMetrics`' frame. The dot's own `lateralM`/`depthM` stay the
+   * placement, so code that reads one position per dot is unaffected. Absent
+   * when the contact is unmeasured.
+   */
+  pair?: { lateralM: number; depthM: number };
   /** Optional (every existing fixture that hand-builds a `VizDot`
    *  without it stays valid) — `computeViz`/`computeRallyViz` always set it
    *  for a real point/shot; only absent for a caller-constructed test dot
@@ -224,19 +278,36 @@ export interface VizDot {
   meta?: VizDotMeta;
 }
 
+/**
+ * What a list or a count needs of a mark, without a place on court: a
+ * `VizDot` is one, and so is an Approaches entry with no landing
+ * (`VizResult.undrawn`).
+ */
+export type VizMark = Pick<VizDot, "id" | "outcome" | "shape" | "meta">;
+
 export interface VizResult {
   dots: VizDot[];
+  /**
+   * Approaches cut only: the counted approaches with no placement, in match
+   * order — counted in `count` but never drawn, so `count - dots.length` is
+   * their number. The lightbox's Points list, its count and Watch read them
+   * with the dots (`resultMarks`); the court never does. Absent on every
+   * other cut.
+   */
+  undrawn?: VizMark[];
   count: number; // points matching the filters (rallyPosition: matching SHOTS)
   total: number; // drawable points in the cut's pool (rallyPosition: drawable SHOTS)
-  noun: "serves" | "returns" | "shots" | "errors";
+  noun: "serves" | "returns" | "shots" | "errors" | "approaches";
   zoneStats: Record<ZoneKey, ZoneStats> | null; // serve cut only
   /** Drawable out/net serves, excluded from the service-zone denominator. */
   serveOutOrNetCount?: number;
 }
 
 /** All three chart types support every visualization cut except Errors,
- * which has no service boxes or bands to count into — scatter and heat. */
+ * which has no service boxes or bands to count into — scatter and heat —
+ * and Approaches, whose dot is a contact/placement pair — scatter only. */
 export function chartAllowedOn(cut: Cut, chart: Chart): boolean {
+  if (cut === "approaches") return chart === "scatter";
   if (cut === "errors") return chart === "scatter" || chart === "heat";
   return (
     [
@@ -249,13 +320,20 @@ export function chartAllowedOn(cut: Cut, chart: Chart): boolean {
   );
 }
 
+const CHARTS: readonly Chart[] = ["scatter", "zones", "heat"];
+
+/** The charts `cut` can be drawn as (`chartAllowedOn`), in menu order. */
+export function chartsFor(cut: Cut): Chart[] {
+  return CHARTS.filter((chart) => chartAllowedOn(cut, chart));
+}
+
 /* ── Helpers moved from the retired shot-filters hook ────────────────────── */
 
 const REAL_NET_Y = 11.885;
 const REAL_COURT_LENGTH = 23.77;
 const REAL_SERVICE_Y = 5.485;
 const SERVE_BOX_DEPTH_M = REAL_NET_Y - REAL_SERVICE_Y; // ≈6.4
-const SERVE_BOX_HALF_WIDTH_M = 4.115;
+const SERVE_BOX_HALF_WIDTH_M = SINGLES_HALF_M; // the box spans the singles width
 const SERVE_LINE_TOL_M = 0.2;
 
 /* ── Serve placement metrics ───────────────────────────────────────────────
@@ -881,6 +959,9 @@ const BASE_KEYS = [
 export function filterKeysFor(cut: Cut): (keyof VizFilters)[] {
   if (cut === "serve") return [...BASE_KEYS, "zone", "match"];
   if (cut === "errors") return [...BASE_KEYS, "error", "match"];
+  if (cut === "approaches") {
+    return [...BASE_KEYS, "entry", "approachTo", "approachDir", "match"];
+  }
   return [...BASE_KEYS, "match"];
 }
 
@@ -1162,7 +1243,7 @@ function rallyLandingMetrics(shot: MatchShot) {
   const miss =
     atNet ||
     shot.result === "Out" ||
-    Math.abs(lateralM) > REAL_SINGLES_HALF_M + IN_COURT_EPS ||
+    Math.abs(lateralM) > SINGLES_HALF_M + IN_COURT_EPS ||
     depthM > REAL_NET_Y + IN_COURT_EPS;
   // After `miss` has read the landing's own lateral: a net ball is drawn on
   // its path at the net (`netDotLateralM`), which is position only.
@@ -1332,6 +1413,160 @@ function computeErrorsViz(
 }
 
 /**
+ * Approaches cut: one entry per point the SUBJECT came to the net on
+ * (`approachOf`, so this cut and the Net game card count the same points the
+ * same way). Unlike the other cuts, a point with no drawable placement still
+ * counts in `count` and `total` (the statistics are about the approach, not
+ * its landing); it only draws no dot.
+ *
+ * A dot is the approach shot's placement in the opponent's court, from behind
+ * the hitter (`approachLateralM`, `rallyLandingMetrics`' depth), with the
+ * contact as its `pair` when measured. `entry`, `approachTo` and
+ * `approachDir` narrow; an approach with no wing or direction matches neither
+ * filter once it is set. The wing is the hand of the seat the subject is
+ * approaching against, so on the opponent's court it is the player's.
+ */
+function computeApproachViz(
+  points: MatchPoint[],
+  filters: VizFilters,
+  subjectIsPlayer1: boolean,
+  matchPass: MatchPass | null,
+  matchCtx: MatchFilterContext | undefined,
+): VizResult {
+  const { total, pool } = approachPool(
+    points,
+    filters,
+    subjectIsPlayer1,
+    matchPass,
+    matchCtx,
+  );
+  const opponentHand = approachOpponentHand(subjectIsPlayer1, matchCtx);
+  let count = 0;
+  const dots: VizDot[] = [];
+  const undrawn: VizMark[] = [];
+
+  for (const { point: p, approach } of pool) {
+    if (!approachToPasses(approach, filters)) continue;
+    if (!approachDirPasses(approach, filters)) continue;
+    count++;
+    const { shot } = approach;
+    const mark: VizMark = {
+      id: p.id,
+      outcome: p.wonByPlayer1 === subjectIsPlayer1 ? "won" : "lost",
+      shape: shapeFromShotType(shot.shotType),
+      meta: {
+        ...pointDotMeta(p, subjectIsPlayer1, shot),
+        entry: approach.entry,
+        wing: approach.wing,
+        direction: approach.direction,
+        ending: approach.ending,
+        bucket: approach.bucket,
+        handAssumed: approach.handAssumed,
+        opponentHand,
+      },
+    };
+
+    // The placement, by the classifier's own rule: null when unmeasured or
+    // the ball never crossed, exactly where `approach.lane` is null. Without
+    // one the approach is listed, not drawn.
+    const lateralM = approachLateralM(shot);
+    const landing = lateralM === null ? null : rallyLandingMetrics(shot);
+    if (lateralM === null || !landing) {
+      undrawn.push(mark);
+      continue;
+    }
+    const contact = contactMetrics(shot.contactX, shot.contactY);
+
+    dots.push({
+      ...mark,
+      lateralM,
+      depthM: landing.depthM,
+      atNet: false,
+      ...(contact ? { pair: contact } : {}),
+    });
+  }
+
+  return { dots, undrawn, count, total, noun: "approaches", zoneStats: null };
+}
+
+/** The hand of the seat the subject approaches against; null when unknown. */
+function approachOpponentHand(
+  subjectIsPlayer1: boolean,
+  matchCtx: MatchFilterContext | undefined,
+): Hand | null {
+  return matchCtx ? handOf(!subjectIsPlayer1, matchCtx) : null;
+}
+
+interface PooledApproach {
+  point: MatchPoint;
+  approach: Approach;
+}
+
+/**
+ * The Approaches cut's pool before its two placement filters: every one of
+ * the SUBJECT's net points (`total`), those `entry` keeps (`entryTotal`, the
+ * cut's own baseline: what the Statistics rail's count reads "of"), and
+ * those the base pills and the advanced filters keep as well (`pool`). `approachTo` and `approachDir`
+ * are left to the caller, so the Statistics rail can lift one at a time
+ * (`approachStats`). One pass for the court and the rail, so the two can
+ * never count different points.
+ */
+function approachPool(
+  points: MatchPoint[],
+  filters: VizFilters,
+  subjectIsPlayer1: boolean,
+  matchPass: MatchPass | null,
+  matchCtx: MatchFilterContext | undefined,
+): { total: number; entryTotal: number; pool: PooledApproach[] } {
+  let total = 0;
+  let entryTotal = 0;
+  const pool: PooledApproach[] = [];
+  const opponentHand = approachOpponentHand(subjectIsPlayer1, matchCtx);
+
+  for (const p of points) {
+    const approach = approachOf(
+      p,
+      subjectIsPlayer1,
+      matchCtx?.lobKeys,
+      opponentHand,
+    );
+    if (!approach) continue;
+
+    total++;
+    if (filters.entry.length && !filters.entry.includes(approach.entry)) {
+      continue;
+    }
+    entryTotal++;
+    if (!pointMatchesFilters(p, filters, "serve", subjectIsPlayer1, "return")) {
+      continue;
+    }
+    if (matchPass !== null) {
+      if (!matchPass.point(p)) continue;
+      if (matchPass.shot && !matchPass.shot(approach.shot)) continue;
+    }
+    pool.push({ point: p, approach });
+  }
+  return { total, entryTotal, pool };
+}
+
+/** `approachTo`: an approach with no wing matches no choice once it is set. */
+function approachToPasses(approach: Approach, filters: VizFilters): boolean {
+  return (
+    !filters.approachTo.length ||
+    (approach.wing !== null && filters.approachTo.includes(approach.wing))
+  );
+}
+
+/** `approachDir`: a serve (no direction) matches no choice once it is set. */
+function approachDirPasses(approach: Approach, filters: VizFilters): boolean {
+  return (
+    !filters.approachDir.length ||
+    (approach.direction !== null &&
+      filters.approachDir.includes(approach.direction))
+  );
+}
+
+/**
  * `VizDotMeta` common to every dot drawn for point `p`, plus the one shot
  * (`shotType`/`result`) the specific dot came from — `serve`
  * reads the resolved serve shot, `returnPlacement`/`returnContact` the
@@ -1412,6 +1647,15 @@ export function computeViz(
       subjectIsPlayer1,
       matchPass,
       errorsJudgedIn(matchCtx),
+    );
+  }
+  if (cut === "approaches") {
+    return computeApproachViz(
+      points,
+      filters,
+      subjectIsPlayer1,
+      matchPass,
+      matchCtx,
     );
   }
 
@@ -1620,8 +1864,9 @@ export interface StatRow {
  */
 export function statRowAnnouncement(row: StatRow, cut: Cut): string {
   if (row.share) {
-    if (row.count === 0) return `${row.label}: no errors`;
-    return `${row.label}: ${row.winPct}% of errors, ${row.count}`;
+    const of = cut === "approaches" ? "approaches" : "errors";
+    if (row.count === 0) return `${row.label}: no ${of}`;
+    return `${row.label}: ${row.winPct}% of ${of}, ${row.count}`;
   }
   const noun = marksAreShots(cut) ? "shots" : "points";
   if (row.winPct === null) return `${row.label}: no ${noun}`;
@@ -1647,6 +1892,23 @@ export interface VizStats {
    * contact cuts and errors, which have no landing to count.
    */
   landed?: { count: number; of: number };
+  /**
+   * The Approaches cut's two KPI tiles (`approachStats`): how many approaches
+   * are shown, labelled "of N …" only when a filter narrows the cut's own
+   * pool, and how many of them were won. Absent on every other cut, whose
+   * figures read off the groups.
+   */
+  kpi?: StatKpi;
+}
+
+export interface StatKpi {
+  /** The approaches shown: `computeViz(...).count`. */
+  count: number;
+  /** The count tile's label: "approaches", or "of 9 approaches" when narrowed. */
+  countLabel: string;
+  won: number;
+  /** `won` of `count`, rounded; `null` when `count === 0`. */
+  winPct: number | null;
 }
 
 /**
@@ -1673,11 +1935,33 @@ const ZONE_ROWS: { key: ZoneKey; label: string }[] = [
 
 // Singles court is 8.23m wide — 4.115m either side of the center line. Same
 // value `court-geometry.ts`'s `SINGLES_HALF_WIDTH_M` uses for the drawn
-// court; kept as a local constant here rather than imported, since that file
-// is a client-adjacent geometry/SVG module and this one stays plain.
-const REAL_SINGLES_HALF_M = 4.115;
-const LATERAL_THIRD_M = REAL_SINGLES_HALF_M / 3; // ≈1.372m
+// court; taken from `approach.ts` rather than that file, which is a
+// client-adjacent geometry/SVG module while this one stays plain.
 const IN_COURT_EPS = 1e-6;
+
+/** A saved view's filter group, named when the reader loosens it to "any". */
+export const LOOSENED_LABEL: Partial<Record<keyof VizFilters, string>> = {
+  ball: "Serve",
+  court: "Court",
+  set: "Set",
+  zone: "Zone",
+  result: "Result",
+  pressure: "Score",
+  rally: "Rally",
+  game: "Game",
+  error: "Error type",
+  entry: "Way to the net",
+  approachTo: "Approach to",
+  approachDir: "Direction",
+  match: "Advanced filters",
+};
+
+/**
+ * The applied sentence's last word on the Approaches cut: "Their backhand"
+ * and "Their forehand" are worked out from the opponent's hand, and where
+ * the match does not record it the court reads them as right-handed.
+ */
+export const HAND_ASSUMED_NOTE = "assumes right-handed";
 
 function makeRow(
   key: string,
@@ -1708,6 +1992,17 @@ function rowTieBreak(a: StatRow, b: StatRow): number {
  * list that reshuffled with the numbers made the reader find "Deep" again
  * on every filter change, and put the rows out of step with the court
  * beside them. */
+/** Groups whose rows keep the order they were built in, whatever the rates. */
+const APPROACH_GROUP_KEYS = [
+  "approach-to",
+  "approach-direction",
+  "approach-ended",
+] as const;
+const FIXED_ORDER_GROUPS: ReadonlySet<string> = new Set([
+  "depth",
+  ...APPROACH_GROUP_KEYS,
+]);
+
 function sortRows(rows: StatRow[]): StatRow[] {
   return [...rows].sort((a, b) => {
     if (a.winPct === null && b.winPct === null) return rowTieBreak(a, b);
@@ -1722,17 +2017,43 @@ function sortRows(rows: StatRow[]): StatRow[] {
  * The order `computeVizStats` gives a group's rows, for a caller that has
  * summed rows from several matches and must put them back in it (the player
  * profile's season fold, `lib/data/player-season-viz.ts`): a "Depth" group
- * as it came (band order — see `sortRows`), share rows (the errors cut's,
+ * and the Approaches cut's three groups as they came (court and fixed order
+ * — see `sortRows` and `approachStats`), share rows (the errors cut's,
  * `errorStats`) by count, every other group by win rate (`sortRows`).
  * `tests/player-season-viz.spec.ts` pins that one match merged with itself
  * comes back in `computeVizStats`' own order.
  */
 export function orderStatRows(rows: StatRow[], groupKey: string): StatRow[] {
-  if (groupKey === "depth") return rows;
+  if (FIXED_ORDER_GROUPS.has(groupKey)) return rows;
   if (rows.some((row) => row.share)) {
     return [...rows].sort((a, b) => b.count - a.count || rowTieBreak(a, b));
   }
   return sortRows(rows);
+}
+
+/** The Approaches cut's groups in the order `approachStats` builds them. */
+const APPROACH_GROUP_RANK: ReadonlyMap<string, number> = new Map(
+  APPROACH_GROUP_KEYS.map((key, i) => [key, i]),
+);
+
+/**
+ * Groups put back in `computeVizStats`' own order, for a caller that unites
+ * several matches' groups in first-seen order (`mergeVizStats`): a match
+ * with no wing has no "Approach to", so a season whose first match lacks one
+ * would otherwise list "How it ended" above it. Only the Approaches groups
+ * have a fixed order; every other group keeps its place.
+ */
+export function orderStatGroups<G extends { key: string }>(groups: G[]): G[] {
+  const ranked = groups
+    .filter((g) => APPROACH_GROUP_RANK.has(g.key))
+    .sort(
+      (a, b) =>
+        APPROACH_GROUP_RANK.get(a.key)! - APPROACH_GROUP_RANK.get(b.key)!,
+    );
+  let next = 0;
+  return groups.map((g) =>
+    APPROACH_GROUP_RANK.has(g.key) ? ranked[next++] : g,
+  );
 }
 
 /**
@@ -1838,7 +2159,7 @@ function serveStatsGroup(
 function isPlacementRow(d: VizDot): boolean {
   if (d.outcome === "miss") return false;
   return (
-    Math.abs(d.lateralM) <= REAL_SINGLES_HALF_M + IN_COURT_EPS &&
+    Math.abs(d.lateralM) <= SINGLES_HALF_M + IN_COURT_EPS &&
     d.depthM >= -IN_COURT_EPS &&
     d.depthM <= REAL_NET_Y + IN_COURT_EPS
   );
@@ -2129,6 +2450,10 @@ export function computeVizStats(
     };
   }
 
+  if (cut === "approaches") {
+    return approachStats(points, filters, subjectIsPlayer1, matchCtx);
+  }
+
   if (cut === "errors") {
     const groups = errorStats(result);
     const noun = total === 1 ? "error" : "errors";
@@ -2188,14 +2513,13 @@ function errorMissKey(dot: VizDot): "net" | "long" | "wide" | "in" {
     return dot.depthM > SERVE_BOX_DEPTH_M + IN_COURT_EPS ? "long" : "wide";
   }
   if (dot.depthM > REAL_NET_Y + IN_COURT_EPS) return "long";
-  if (Math.abs(dot.lateralM) > REAL_SINGLES_HALF_M + IN_COURT_EPS)
-    return "wide";
+  if (Math.abs(dot.lateralM) > SINGLES_HALF_M + IN_COURT_EPS) return "wide";
   if (dot.meta?.result === "Out") {
     // The tracker's call is the authority (as `rallyLandingMetrics`'s): an
     // Out whose landing reads just inside — imputed onto a line — is out
     // over whichever line it sits nearer.
     const toBaseline = REAL_NET_Y - dot.depthM;
-    const toSideline = REAL_SINGLES_HALF_M - Math.abs(dot.lateralM);
+    const toSideline = SINGLES_HALF_M - Math.abs(dot.lateralM);
     return toBaseline <= toSideline ? "long" : "wide";
   }
   return "in";
@@ -2225,6 +2549,7 @@ export function statRowKeyOf(
       return (dot.meta?.stroke ?? "Other").toLowerCase();
     return null;
   }
+  if (cut === "approaches") return approachRowKeyOf(groupKey, dot);
   if (cut === "returnPlacement" || cut === "rallyPlacement") {
     if (!isPlacementRow(dot)) return null;
     if (groupKey === "direction" && cut === "returnPlacement")
@@ -2246,6 +2571,214 @@ export function statRowKeyOf(
     return null;
   }
   return null;
+}
+
+/**
+ * `statRowKeyOf` for the Approaches cut, which reads only a mark's `meta`, so
+ * an approach with no landing (`VizResult.undrawn`) is bucketed by the same
+ * rule: no wing or direction means no Approach to or Direction row; How it
+ * ended still has one.
+ */
+export function approachRowKeyOf(
+  groupKey: string,
+  mark: VizMark,
+): string | null {
+  const meta = mark.meta;
+  if (groupKey === "approach-to") return meta?.wing ?? null;
+  if (groupKey === "approach-direction") {
+    return meta?.direction ? APPROACH_DIRECTION_KEY[meta.direction] : null;
+  }
+  if (groupKey === "approach-ended") return meta?.bucket ?? null;
+  return null;
+}
+
+const APPROACH_WING_ROWS: { key: ApproachWing; label: string }[] = [
+  { key: "backhand", label: "Their backhand" },
+  { key: "middle", label: "Middle" },
+  { key: "forehand", label: "Their forehand" },
+];
+
+const APPROACH_DIRECTION_KEY: Record<ApproachDirection, string> = {
+  Crosscourt: "crosscourt",
+  Middle: "middle",
+  "Down the Line": "dtl",
+};
+
+const APPROACH_DIRECTION_ROWS: { key: ApproachDirection; label: string }[] = [
+  { key: "Crosscourt", label: "Crosscourt" },
+  { key: "Middle", label: "Middle" },
+  { key: "Down the Line", label: "Down the line" },
+];
+
+/** "How it ended", in the rail's order; the lob split only when lobs are known. */
+const APPROACH_ENDED_ROWS = {
+  lobsKnown: [
+    "passed-dtl",
+    "passed-crosscourt",
+    "lobbed",
+    "won-at-net",
+    "own-error",
+  ],
+  lobsUnknown: [
+    "passed-or-lobbed-dtl",
+    "passed-or-lobbed-crosscourt",
+    "won-at-net",
+    "own-error",
+  ],
+} as const satisfies Record<string, readonly ApproachEndingBucket[]>;
+
+/**
+ * What the Approaches cut counts, named for the `entry` choice it is
+ * narrowed to (the design's rail): "approaches" for approach shots alone,
+ * "serve-and-volley points", "times drawn in", and "times at the net" for
+ * any mix, or none chosen (all three).
+ */
+export function approachNoun(entry: EntryFilter, n: number): string {
+  const one = n === 1;
+  const only = entry.length === 1 ? entry[0] : null;
+  if (only === "approach") return one ? "approach" : "approaches";
+  if (only === "serve-volley") {
+    return one ? "serve-and-volley point" : "serve-and-volley points";
+  }
+  if (only === "drawn-in") return one ? "time drawn in" : "times drawn in";
+  return one ? "time at the net" : "times at the net";
+}
+
+/**
+ * The Approaches cut's Statistics rail (design: KPI tiles, then "Approach
+ * to", "Direction" and "How it ended"), from the same pool `computeViz`
+ * draws (`approachPool`), so the rail counts every approach the court does —
+ * an approach with no placement included, though it draws no dot.
+ *
+ * - **KPI:** the approaches shown and how many were won. The count reads
+ *   "of N …" only when a filter narrows the cut's own pool (its `entry`).
+ * - **Approach to** (their backhand, middle, their forehand) ignores the
+ *   `approachTo` filter and follows the others, so every wing stays there to
+ *   compare and switch to; likewise **Direction** (crosscourt, middle, down
+ *   the line) ignores `approachDir`. Each is left out when nothing in the
+ *   pool has one: a wing needs a landing, so a match with no coordinates has
+ *   no Approach to (three "0 of 0" rows under a KPI of N would read as "you
+ *   hit none"); a serve has no direction, so a serve-and-volley-only pool
+ *   has no Direction. Decided from the pool, not the filtered rows, so a
+ *   group never drops because of its own filter.
+ * - **How it ended** follows every filter: each row is a count and its share
+ *   of the KPI count, and the rows sum to it. With lob keys unknown the two
+ *   passing rows read "Passed or lobbed …" and there is no Lobbed row.
+ *
+ * Every group keeps its rows in a fixed order (`FIXED_ORDER_GROUPS`): they
+ * are places on the court and an ordered list of endings, not a ranking.
+ */
+function approachStats(
+  points: MatchPoint[],
+  filters: VizFilters,
+  subjectIsPlayer1: boolean,
+  matchCtx: MatchFilterContext | undefined,
+): VizStats {
+  const matchPass = matchFilterPass(
+    points,
+    filters,
+    subjectIsPlayer1,
+    matchCtx,
+  );
+  const { entryTotal, pool } = approachPool(
+    points,
+    filters,
+    subjectIsPlayer1,
+    matchPass,
+    matchCtx,
+  );
+  const won = (e: PooledApproach) =>
+    e.point.wonByPlayer1 === subjectIsPlayer1 ? 1 : 0;
+
+  const shown = pool.filter(
+    (e) =>
+      approachToPasses(e.approach, filters) &&
+      approachDirPasses(e.approach, filters),
+  );
+  const count = shown.length;
+  const wonCount = shown.reduce((n, e) => n + won(e), 0);
+  const noun = approachNoun(filters.entry, count);
+  const kpi: StatKpi = {
+    count,
+    countLabel:
+      count === entryTotal
+        ? noun
+        : `of ${entryTotal} ${approachNoun(filters.entry, entryTotal)}`,
+    won: wonCount,
+    winPct: count === 0 ? null : Math.round((wonCount / count) * 100),
+  };
+
+  const groups: StatGroup[] = [];
+
+  // Approach to: every filter but its own; absent with no wing to show.
+  if (pool.some((e) => e.approach.wing !== null)) {
+    const byWing = pool.filter((e) => approachDirPasses(e.approach, filters));
+    groups.push({
+      key: "approach-to",
+      label: "Approach to",
+      rows: APPROACH_WING_ROWS.map(({ key, label }) => {
+        const rows = byWing.filter((e) => e.approach.wing === key);
+        return makeRow(
+          key,
+          label,
+          rows.length,
+          rows.reduce((n, e) => n + won(e), 0),
+        );
+      }),
+    });
+  }
+
+  // Direction: every filter but its own; absent with no direction to show.
+  if (pool.some((e) => e.approach.direction !== null)) {
+    const byDir = pool.filter((e) => approachToPasses(e.approach, filters));
+    groups.push({
+      key: "approach-direction",
+      label: "Direction",
+      rows: APPROACH_DIRECTION_ROWS.map(({ key, label }) => {
+        const rows = byDir.filter((e) => e.approach.direction === key);
+        return makeRow(
+          APPROACH_DIRECTION_KEY[key],
+          label,
+          rows.length,
+          rows.reduce((n, e) => n + won(e), 0),
+        );
+      }),
+    });
+  }
+
+  // How it ended: every filter; a share of the approaches shown.
+  const lobsKnown = !!matchCtx?.lobKeys;
+  const buckets = lobsKnown
+    ? APPROACH_ENDED_ROWS.lobsKnown
+    : APPROACH_ENDED_ROWS.lobsUnknown;
+  groups.push({
+    key: "approach-ended",
+    label: "How it ended",
+    rows: buckets.map((bucket): StatRow => {
+      const n = shown.filter((e) => e.approach.bucket === bucket).length;
+      return {
+        key: bucket,
+        label: APPROACH_BUCKET_LABEL[bucket],
+        count: n,
+        won: 0,
+        winPct: count === 0 ? null : Math.round((n / count) * 100),
+        share: true,
+      };
+    }),
+  });
+
+  return {
+    title: "Where the approaches went",
+    subtitle: `Points won by approach · ${count} ${noun}`,
+    groups,
+    // The won-rate groups only: "How it ended" is a share, not a win rate.
+    sentence: buildSentence(
+      groups.filter((g) => g.key !== "approach-ended"),
+      approachNoun(filters.entry, 2),
+    ),
+    total: count,
+    kpi,
+  };
 }
 
 /**

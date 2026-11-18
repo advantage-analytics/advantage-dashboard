@@ -13,7 +13,8 @@ import type { DistanceUnit } from "@/lib/format/distance";
 import type { MatchFilterContext } from "../match-filters/model";
 import { useMatchFilters } from "../match-filters/provider";
 import { useVizState } from "./use-viz-state";
-import { useVizBands } from "./viz-bands-context";
+import { useVizBands } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
+import { useVizLobKeys } from "./viz-lob-keys-context";
 import {
   bandZonesFor,
   type VizBandZones,
@@ -82,12 +83,35 @@ export interface VizView {
  * The report's filter context (`useMatchFilters().context`) with the LIVE
  * bands laid in — a band edit applies here before its save lands — so the
  * advanced filters' Contact and Landed in bucket by exactly the bands the
- * court draws and counts with.
+ * court draws and counts with; and the match's lob shots
+ * (`viz-lob-keys.tsx`), so the Approaches cut tells a lob from a pass.
+ *
+ * The ONE context the tab computes with: the wall's cards (`viz-wall.tsx`),
+ * the Saved cards (`saved-views-band.tsx`) and the opened view
+ * (`viz-lightbox.tsx`, `useVizView`) all read it, so a card and its lightbox
+ * cannot disagree. `lobKeys` is left out (not set to `null`) until known —
+ * the same "unknown" either way.
  */
 export function useVizFilterContext(): MatchFilterContext {
   const { context } = useMatchFilters();
   const { bands, unit } = useVizBands();
-  return useMemo(() => ({ ...context, bands, unit }), [context, bands, unit]);
+  const lobKeys = useVizLobKeys();
+  return useMemo(
+    () => vizFilterContext(context, bands, unit, lobKeys),
+    [context, bands, unit, lobKeys],
+  );
+}
+
+/** {@link useVizFilterContext}'s merge, pure. */
+export function vizFilterContext(
+  context: MatchFilterContext,
+  bands: BandSettings,
+  unit: DistanceUnit,
+  lobKeys: ReadonlySet<number> | null,
+): MatchFilterContext {
+  return lobKeys
+    ? { ...context, bands, unit, lobKeys }
+    : { ...context, bands, unit };
 }
 
 export function useVizView(): VizView {
@@ -125,9 +149,21 @@ export function useVizView(): VizView {
             result ?? undefined,
             bands,
             unit,
+            // The Approaches rail reads hands and lob keys off it, as the
+            // court does (`computeViz` above).
+            context,
           )
         : null,
-    [points, cut, state.filters, subjectIsPlayer1, result, bands, unit],
+    [
+      points,
+      cut,
+      state.filters,
+      subjectIsPlayer1,
+      result,
+      bands,
+      unit,
+      context,
+    ],
   );
 
   const bandZones = useMemo(

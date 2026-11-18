@@ -109,4 +109,16 @@ test.describe("legendItemsFor", () => {
       "Backhand",
     ]);
   });
+
+  test("approaches scatter: won, lost, forehand(circle), backhand(triangle) — no miss", () => {
+    const items = legendItemsFor("approaches", "scatter");
+    expect(items.map((i) => i.label)).toEqual([
+      "Won",
+      "Lost",
+      "Forehand",
+      "Backhand",
+    ]);
+    expect(items.find((i) => i.label === "Backhand")!.glyph).toBe("triangle");
+    expect(new Set(items.map((i) => i.key)).size).toBe(items.length);
+  });
 });

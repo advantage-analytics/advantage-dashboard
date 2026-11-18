@@ -1047,3 +1047,104 @@ test("a chart switch keeps the season's court exactly where it is — at 100%, a
   await page.mouse.up();
   await cycle(await read());
 });
+
+test("the season's opened Approaches court says it assumes right-handed beside its legend when a folded match has no opponent hand, with no filter ticked", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  // `?landing=some`: one folded match against Jordan Lee, no hand on it.
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&cut=approaches&landing=some&delay=50`,
+  );
+  const dialog = page.getByRole("dialog", { name: "Approaches" });
+  await expect(dialog).toBeVisible({ timeout: 8_000 });
+  await expect(marks(dialog).first()).toBeVisible({ timeout: 5_000 });
+  // No filter ticked: no strip, and the line still says it.
+  await expect(dialog.locator("[data-viz-filter-strip]")).toHaveCount(0);
+  const line = dialog.locator("[data-viz-hand-assumed]");
+  await expect(line).toHaveText("assumes right-handed");
+  await expect(line).toBeVisible();
+  await expect(dialog.getByText(/assumes right-handed/i)).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+test("the season's opened Approaches court names its lanes Left · Middle · Right over opponents of different hands, and their wings over opponents who share one known hand", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  const lanes = async (nethands: string) => {
+    await page.goto(
+      `${origin}${PROFILE}?tab=visualizations&cut=approaches&nethands=${nethands}&delay=50`,
+    );
+    const dialog = page.getByRole("dialog", { name: "Approaches" });
+    await expect(dialog).toBeVisible({ timeout: 8_000 });
+    await expect(marks(dialog).first()).toBeVisible({ timeout: 5_000 });
+    const lane = (side: string) =>
+      dialog.locator(`[data-approach-lane="${side}"]`);
+    return { dialog, lane };
+  };
+
+  // A right-hander and a left-hander: no one hand sides the apron, so the
+  // thirds are the hitter's own.
+  const mixed = await lanes("mixed");
+  await expect(mixed.lane("left")).toHaveText("Left");
+  await expect(mixed.lane("middle")).toHaveText("Middle");
+  await expect(mixed.lane("right")).toHaveText("Right");
+  await expect(mixed.dialog.getByText("Their FH", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(mixed.dialog.getByText("Their BH", { exact: true })).toHaveCount(
+    0,
+  );
+  // Each match still says which wing of THAT opponent an approach went to,
+  // so the Statistics pane keeps its per-wing rows.
+  await expect(
+    mixed.dialog.getByRole("button", { name: /^Their backhand/ }),
+  ).toBeVisible();
+  await expect(
+    mixed.dialog.getByRole("button", { name: /^Their forehand/ }),
+  ).toBeVisible();
+
+  // Both opponents left-handed: their backhand is the hitter's left third.
+  const lefties = await lanes("left");
+  await expect(lefties.lane("left")).toHaveText("Their BH");
+  await expect(lefties.lane("middle")).toHaveText("Middle");
+  await expect(lefties.lane("right")).toHaveText("Their FH");
+  expect(errors).toEqual([]);
+});
+
+test("the season's opened Approaches court names the approaches it cannot draw: a season approach with no landing reads in the not-drawn line beside the drawn marks", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&cut=approaches&landing=some&delay=50`,
+  );
+  const dialog = page.getByRole("dialog", { name: "Approaches" });
+  await expect(dialog).toBeVisible({ timeout: 8_000 });
+  // The fixture took the landing off two of the player's approaches.
+  const line = dialog.locator("[data-viz-not-drawn]");
+  await expect(line).toHaveText("2 not drawn: no landing recorded", {
+    timeout: 5_000,
+  });
+  await expect(line).toBeVisible();
+  await expect(marks(dialog).first()).toBeVisible();
+  await expect(dialog).not.toContainText("No approaches recorded for");
+
+  // Another cut over the same season: no line.
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&cut=rallyPlacement&landing=some&delay=50`,
+  );
+  const rally = page.getByRole("dialog").first();
+  await expect(rally.locator("[data-court-stage]")).toBeVisible({
+    timeout: 8_000,
+  });
+  await expect(rally.locator("[data-viz-not-drawn]")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

@@ -11,7 +11,7 @@ import { canManageSavedView } from "@/lib/data/saved-views-logic";
 import { ChartMenu } from "./chart-menu";
 import { CutMenu } from "./cut-menu";
 import { defaultCutsFor } from "./default-cuts";
-import { isPlayable, pointsBehind } from "./lightbox-points";
+import { isPlayable, pointsBehind, resultMarks } from "./lightbox-points";
 import { LightboxPointList } from "./lightbox-point-list";
 import { SaveAsViewButton } from "./save-as-view-button";
 import {
@@ -34,8 +34,10 @@ import {
   computeViz,
   errorsJudgedIn,
   filterKeysFor,
+  HAND_ASSUMED_NOTE,
+  LOOSENED_LABEL,
   type PlayerFilter,
-  type VizDot,
+  type VizMark,
   type VizFilters,
 } from "./viz-model";
 import { activeFilterEntries, courtFor, sameFilterValue } from "./viz-url";
@@ -44,20 +46,6 @@ import {
   useFiltersPanelData,
 } from "../match-filters/provider";
 import { lightboxCountLine } from "./wall-summary";
-
-/** A saved view's filter group, named when the reader loosens it to "any". */
-const LOOSENED_LABEL: Partial<Record<keyof VizFilters, string>> = {
-  ball: "Serve",
-  court: "Court",
-  set: "Set",
-  zone: "Zone",
-  result: "Result",
-  pressure: "Score",
-  rally: "Rally",
-  game: "Game",
-  error: "Error type",
-  match: "Advanced filters",
-};
 
 /** Opens the Video tab on the points the lightbox shows, by point number,
  *  named by `label` in its strip. */
@@ -75,7 +63,8 @@ export type WatchPoints = (pointNumbers: number[], label: string) => void;
  * sentence and "Clear filter"'s target against the card's or saved view's
  * baseline, and hands all of it to `VizLightboxShell`, which draws it and
  * keeps the reading state (zoom, selection, picks, pane, Esc). The footer's
- * N is `pointsBehind()` over the same marks the court draws.
+ * N is `pointsBehind()` over the same marks the court draws, and the
+ * approaches it counts but cannot draw (`resultMarks`).
  */
 export function VizLightbox({
   wallPlayer,
@@ -177,6 +166,7 @@ export function VizLightbox({
         result.dots,
         pick,
         bands,
+        result.undrawn,
       );
     };
   }, [points, cut, state.filters, subjectIsPlayer1, matchCtx, result, bands]);
@@ -209,7 +199,7 @@ export function VizLightbox({
   // the match has a video to play and the point a clip in it.
   const canWatchFilm = meta.hasPlayableVideo && onWatchPoints !== undefined;
   const canWatchDot = useCallback(
-    (dot: VizDot) => {
+    (dot: VizMark) => {
       if (!canWatchFilm || !dot.meta?.pointId) return false;
       const point = pointById.get(dot.meta.pointId);
       return point !== undefined && isPlayable(point);
@@ -287,6 +277,33 @@ export function VizLightbox({
             view: null,
           }
         : null;
+  // The default card's floor (`DefaultCut.floor`): the filters that make the
+  // card what it is — Approaches is approach shots — which "Clear filter"
+  // always comes back to, even once loosened. A saved view has none: Clear
+  // goes back to the view itself.
+  const floor: Partial<VizFilters> =
+    baseline !== null && baseline.view === null
+      ? (defaultCut?.floor ?? {})
+      : {};
+  const floorFilters: VizFilters = {
+    ...EMPTY_VIZ_FILTERS,
+    ...floor,
+    player: state.filters.player,
+  };
+  const floorKeys = Object.keys(floor) as (keyof VizFilters)[];
+  // The floor, while the court still holds it, is the card and not a filter
+  // on it: the strip never names it, and an empty court under it has nothing
+  // recorded rather than nothing matching.
+  const floorHeld = (key: keyof VizFilters) =>
+    floorKeys.includes(key) && sameFilterValue(key, liveFilters, floorFilters);
+  // Nor is the player switch: the opponent's court is the other side of the
+  // match, not a narrowing of it, and Clear keeps the player — an empty
+  // court there has none recorded, with nothing for Clear to remove.
+  const stageHasFilters =
+    hasFilters &&
+    activeFilterEntries(state).some(
+      (e) => e.key !== "player" && !floorHeld(e.key),
+    );
   const cardFilters: VizFilters | null = baseline?.filters ?? null;
   const cardKeys = baseline?.keys ?? [];
   const onCard =
@@ -311,7 +328,7 @@ export function VizLightbox({
       "scatter",
       matchCtx,
     );
-    return pointsBehind(cut, all.dots, points);
+    return pointsBehind(cut, resultMarks(all), points);
     // `denominatorFilters` is rebuilt every render; its content is keyed by
     // these.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -441,12 +458,12 @@ export function VizLightbox({
 
   // What "Clear filter" leaves: a saved view's own filters, always — Clear
   // goes back to the view; the card's while the title still names the card;
-  // otherwise nothing but the player. Exactly the filters the strip names
-  // are removed.
+  // otherwise nothing but the player and the card's floor (Approaches is
+  // approach shots again). Exactly the filters the strip names are removed.
   const clearTarget: VizFilters =
     baseline !== null && (onCard || baseline.view !== null)
       ? baseline.filters
-      : { ...EMPTY_VIZ_FILTERS, player: state.filters.player };
+      : floorFilters;
   // Back on the view's filters for the view's own player, the court IS the
   // view again: keep its id, so its title, Saved highlight and link return.
   const clearViewId =
@@ -490,9 +507,12 @@ export function VizLightbox({
   const names = { you: you.shortName, opponent: opp.shortName };
   const onView = baseline !== null && baseline.view !== null;
   const unchangedBaseKey = (key: keyof VizFilters) =>
-    cardFilters !== null &&
-    cardKeys.includes(key) &&
-    (onView ? sameFilterValue(key, liveFilters, cardFilters) : onCard);
+    (cardFilters !== null &&
+      cardKeys.includes(key) &&
+      (onView ? sameFilterValue(key, liveFilters, cardFilters) : onCard)) ||
+    // The card's floor, while the court still holds it, is never named:
+    // "To their backhand", not "Approach · To their backhand".
+    floorHeld(key);
   const phrases = activeFilterEntries(state, names, {
     errorSplitJudged,
     bandLabels: bandLabelsOf(matchCtx),
@@ -506,6 +526,19 @@ export function VizLightbox({
         sameFilterValue(key, liveFilters, EMPTY_VIZ_FILTERS)
       )
         phrases.push(`${LOOSENED_LABEL[key] ?? "Filter"}: any`);
+  // The floor let go of entirely (every way to the net, say) is a change
+  // Clear undoes, so it is named too.
+  for (const key of floorKeys)
+    if (
+      !sameFilterValue(key, floorFilters, EMPTY_VIZ_FILTERS) &&
+      sameFilterValue(key, liveFilters, EMPTY_VIZ_FILTERS)
+    )
+      phrases.push(`${LOOSENED_LABEL[key] ?? "Filter"}: any`);
+  // Wing words ("To their backhand") rest on the opponent's hand; where any
+  // shown approach had to assume it, the sentence says so.
+  const sentenceNote = result.dots.some((d) => d.meta?.handAssumed === true)
+    ? HAND_ASSUMED_NOTE
+    : undefined;
 
   return (
     <VizLightboxShell
@@ -517,9 +550,16 @@ export function VizLightbox({
       subjectName={subjectName}
       unit={unit}
       bandZones={bandZones}
-      hasFilters={hasFilters}
+      hasFilters={stageHasFilters}
       statRowDots={statRowDots}
       whereFor={whereFor}
+      // The apron's "Their FH" / "Their BH" follow the hand of whoever the
+      // court is NOT about: the opponent's, or the player's on the
+      // opponent's court. `ctx.hands` is seat-correct (`playerHands`).
+      opponentHand={
+        (subjectIsPlayer1 ? matchCtx.hands.player2 : matchCtx.hands.player1) ??
+        null
+      }
       watch={{
         canWatch: canWatchDot,
         onWatch: (dot, sentence) => {
@@ -549,6 +589,7 @@ export function VizLightbox({
       }
       subtitle={subtitle}
       filterPhrases={phrases}
+      sentenceNote={sentenceNote}
       panelActive={panelActive}
       onClose={close}
       onClearFilters={clearFilters}
