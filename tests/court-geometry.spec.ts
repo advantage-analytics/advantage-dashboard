@@ -1356,6 +1356,76 @@ test.describe("viewerInitialTransform", () => {
   });
 });
 
+/**
+ * T16: the Approaches cut draws a pair per point — a contact in the near half,
+ * a placement in the far half — so its 100% is the whole length, not the far
+ * landing half `isLandingCut` would otherwise send it to (which opened with
+ * every contact below the stage). Same stage sizes as the landing-cut test.
+ */
+test.describe("viewerInitialTransform — approaches", () => {
+  const stages = [
+    { w: 700, h: 900 },
+    { w: 1100, h: 640 },
+    { w: 820, h: 560 },
+  ];
+
+  test("both baselines are inside the stage, with apron beyond each, and the court is centred across", () => {
+    for (const s of stages) {
+      const t = viewerInitialTransform("approaches", s);
+      const toStageY = (y: number) => t.py + viewerArtPoint(0, y).y * t.z;
+      const far = toStageY(VIEWER_COURT.farBaselineY);
+      const near = toStageY(VIEWER_COURT.nearBaselineY);
+      expect(far).toBeGreaterThan(0);
+      expect(near).toBeLessThan(s.h);
+      // Room on the apron past each baseline for labels drawn there.
+      expect(far).toBeGreaterThan(20);
+      expect(s.h - near).toBeGreaterThan(20);
+      // Centred across, and the full length centred down the stage.
+      const centre = viewerArtPoint(VIEWER_COURT.centreX, 0);
+      expect(t.px + centre.x * t.z).toBeCloseTo(s.w / 2, 4);
+      expect((far + near) / 2).toBeCloseTo(s.h / 2, 4);
+      // Both sidelines (doubles) are on stage too.
+      const left = viewerArtPoint(VIEWER_COURT.doubles.x, 0);
+      const right = viewerArtPoint(
+        VIEWER_COURT.doubles.x + VIEWER_COURT.doubles.w,
+        0,
+      );
+      expect(t.px + left.x * t.z).toBeGreaterThan(0);
+      expect(t.px + right.x * t.z).toBeLessThan(s.w);
+      // "Full court" is still a step out from here, not the same view.
+      expect(viewerFullCourtTransform(s).z).toBeLessThan(t.z);
+      // A fixed point of clampPan: the seeded transform is already valid.
+      expect(clampPan(t, VIEWER_COURT.artPx, s)).toEqual(t);
+    }
+  });
+
+  test("the other cuts open where they did: landing cuts on the far half, contact cuts on the near baseline", () => {
+    for (const s of stages) {
+      const approach = viewerInitialTransform("approaches", s);
+      for (const cut of [
+        "serve",
+        "returnPlacement",
+        "rallyPlacement",
+        "errors",
+      ] as const) {
+        const t = viewerInitialTransform(cut, s);
+        const bottom = viewerArtPoint(
+          0,
+          VIEWER_LANDING_FRAME.minY + VIEWER_LANDING_FRAME.h,
+        );
+        expect(t.py + bottom.y * t.z).toBeCloseTo(s.h, 4);
+        // The landing half is closer in than the whole length.
+        expect(t.z).toBeGreaterThan(approach.z);
+      }
+      for (const cut of ["returnContact", "rallyPosition"] as const) {
+        const t = viewerInitialTransform(cut, s);
+        const nearBaseline = viewerArtPoint(0, VIEWER_COURT.nearBaselineY);
+        expect(t.py + nearBaseline.y * t.z).toBeCloseTo(s.h * (500 / 950), 3);
+      }
+    }
+  });
+});
+
 /* ── Phase 2B: depth/contact band geometry ───────────────────────────────── */
 
 /**

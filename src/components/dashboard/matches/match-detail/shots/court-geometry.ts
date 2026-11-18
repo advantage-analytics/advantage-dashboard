@@ -1334,6 +1334,27 @@ export const VIEWER_LANDING_FRAME = {
   h: VIEWER_COURT.netY + VIEWER_NET_GUTTER - VIEWER_COURT.courtFrame.minY,
 } as const;
 
+/**
+ * The Approaches cut's 100% frame: the whole length, baseline to baseline,
+ * with `VIEWER_APPROACH_APRON` beyond each one. A pair is a contact in the
+ * near half and a placement in the far half, so a landing half
+ * (`VIEWER_LANDING_FRAME`) would open with every contact below the stage. The
+ * apron is where a hitter strikes from behind the baseline, and where labels
+ * on the strip ends draw. It is a little shorter than `courtFrame`'s 44-unit
+ * apron so "Full court" is still a step out from here, not the same view.
+ */
+// ≈1.9 m (6.2 ft) past each baseline.
+const VIEWER_APPROACH_APRON = 32;
+export const VIEWER_APPROACH_FRAME = {
+  minX: VIEWER_COURT.courtFrame.minX,
+  minY: VIEWER_COURT.farBaselineY - VIEWER_APPROACH_APRON,
+  w: VIEWER_COURT.courtFrame.w,
+  h:
+    VIEWER_COURT.nearBaselineY -
+    VIEWER_COURT.farBaselineY +
+    2 * VIEWER_APPROACH_APRON,
+} as const;
+
 /** `frame`'s fit scale on `stage`, clamped to the zoom range. */
 function frameFitZ(
   frame: { w: number; h: number },
@@ -1379,6 +1400,12 @@ export function viewerFullCourtTransform(stage: Size): PanZoom {
  * readout calls it 100%. `zoomAbout`/`panBy` (`pan-zoom.ts`) take over from
  * user input.
  *
+ * `"approaches"`: a pair per point, its contact in the near half and its
+ * placement in the far half, so the whole length — `VIEWER_APPROACH_FRAME`,
+ * both baselines and their aprons — fitted to the stage and centred on both
+ * axes. Checked before the landing branch, which `isLandingCut` would
+ * otherwise send it down.
+ *
  * Landing cuts (`"serve"`, `"returnPlacement"`, `"rallyPlacement"`,
  * `"errors"`): the half the shots land in (`viewerLandingHalf` — the far
  * half), `VIEWER_LANDING_FRAME` fitted to the stage, horizontally centred,
@@ -1403,6 +1430,21 @@ export function viewerFullCourtTransform(stage: Size): PanZoom {
 export function viewerInitialTransform(cut: Cut, stage: Size): PanZoom {
   const art = VIEWER_COURT.artPx;
   const centre = viewerArtPoint(VIEWER_COURT.centreX, 0);
+
+  if (cut === "approaches") {
+    const frame = VIEWER_APPROACH_FRAME;
+    const z = frameFitZ(frame, stage);
+    const middle = viewerArtPoint(0, frame.minY + frame.h / 2);
+    return clampPan(
+      {
+        z,
+        px: stage.w / 2 - centre.x * z,
+        py: stage.h / 2 - middle.y * z,
+      },
+      art,
+      stage,
+    );
+  }
 
   if (viewerLandingHalf(cut) !== null) {
     const frame = VIEWER_LANDING_FRAME;

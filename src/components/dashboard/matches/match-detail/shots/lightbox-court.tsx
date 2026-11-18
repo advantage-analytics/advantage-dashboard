@@ -177,7 +177,7 @@ const ZONE_HIGHLIGHT_OPACITY = 0.09;
  * the same two halves, and the same lateral sense, `projectApproachPair`
  * gives `FULL_COURT_VERTICAL`.
  */
-function pairContactPoint(
+export function pairContactPoint(
   cut: Cut,
   dot: VizDot,
 ): { x: number; y: number } | null {

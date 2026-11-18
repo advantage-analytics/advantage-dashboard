@@ -54,7 +54,11 @@ import { PlayerChips } from "./player-chips";
 import { filterRailReducer } from "../match-filters/rail-state";
 import { LightboxAdvancedDrawer } from "./lightbox-advanced-drawer";
 import { LightboxMatchesSheet } from "./lightbox-matches-sheet";
-import { LightboxCourt, type CourtOutline } from "./lightbox-court";
+import {
+  LightboxCourt,
+  pairContactPoint,
+  type CourtOutline,
+} from "./lightbox-court";
 import {
   COUNT_NOUN,
   LegendFilter,
@@ -246,6 +250,9 @@ export interface VizLightboxShellProps {
 
 /** The close's fade, on the scrim and the box alike. */
 const LIGHTBOX_CLOSE_MS = 150;
+// Room left between a selected Approaches pair's marks and the stage's edges
+// when the glide frames both: the selected ring and a little air past it.
+const PAIR_GLIDE_MARGIN_PX = 56;
 
 /** The legend's picks, worded for the strip. */
 const LEGEND_WORD: Record<LegendPick, string> = {
@@ -474,13 +481,37 @@ export function VizLightboxShell({
   // Selecting (a mark's click or Enter, or a Points row) centres the mark on
   // the stage, easing in to 150% of the cut's 100% on the way when the court
   // is further out than that; deselecting leaves the court where it is.
+  //
+  // An Approaches pair is one mark drawn in two places, so it glides to the
+  // MIDPOINT of its contact and placement instead, and its zoom is capped at
+  // the scale that keeps both inside the stage with `PAIR_GLIDE_MARGIN_PX` to
+  // spare — zooming back out if the court was closer in than that. Centring
+  // on the placement alone at 150% put the contact off the stage.
   const { glideTo, stage: pzStage } = pz;
   const glideToMark = useCallback(
     (dot: VizDot) => {
       if (pzStage.w === 0 || pzStage.h === 0) return;
-      const p = projectViewerDot(cut, dot);
+      const placed = projectViewerDot(cut, dot);
+      const p = viewerArtPoint(placed.x, placed.y);
       const home = viewerInitialTransform(cut, pzStage);
-      glideTo(viewerArtPoint(p.x, p.y), home.z * GLIDE_MIN_RELATIVE_ZOOM);
+      const minZ = home.z * GLIDE_MIN_RELATIVE_ZOOM;
+      const contact = pairContactPoint(cut, dot);
+      if (contact === null) {
+        glideTo(p, minZ);
+        return;
+      }
+      const c = viewerArtPoint(contact.x, contact.y);
+      const span = (d: number, room: number) =>
+        d > 0 ? Math.max(room - 2 * PAIR_GLIDE_MARGIN_PX, 1) / d : Infinity;
+      const maxZ = Math.min(
+        span(Math.abs(p.x - c.x), pzStage.w),
+        span(Math.abs(p.y - c.y), pzStage.h),
+      );
+      glideTo(
+        { x: (p.x + c.x) / 2, y: (p.y + c.y) / 2 },
+        Math.min(minZ, maxZ),
+        maxZ,
+      );
     },
     [cut, pzStage, glideTo],
   );

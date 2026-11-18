@@ -81,7 +81,14 @@ export interface PanZoomApi {
    * zoom button or key, a re-fit — cancels a glide in flight, so the two
    * never fight.
    */
-  glideTo: (point: { x: number; y: number }, minZ: number) => void;
+  glideTo: (
+    point: { x: number; y: number },
+    minZ: number,
+    /** A ceiling on the glide's zoom, above which the court is zoomed back
+     *  out — for a target that must stay whole on the stage (an Approaches
+     *  pair). Defaults to no ceiling. */
+    maxZ?: number,
+  ) => void;
   /** One arrow-key step, in stage pixels. */
   nudge: (dx: number, dy: number) => void;
   onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => void;
@@ -231,11 +238,16 @@ export function usePanZoom(
   }, [stage, locked, cancelGlide]);
 
   const glideTo = useCallback(
-    (point: { x: number; y: number }, minZ: number) => {
+    (point: { x: number; y: number }, minZ: number, maxZ = Infinity) => {
       if (locked || stage.w === 0 || stage.h === 0) return;
       cancelGlide();
       const from = tRef.current;
-      const to = centreOn(point, Math.max(from.z, minZ), ART, stage);
+      const to = centreOn(
+        point,
+        Math.min(Math.max(from.z, minZ), maxZ),
+        ART,
+        stage,
+      );
       if (prefersReducedMotion()) {
         setT(to);
         return;

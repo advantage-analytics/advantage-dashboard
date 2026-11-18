@@ -155,3 +155,12 @@ is the runner's. Newest entries at the bottom.
 2. With `ventry=any` and no net points, the stage reads "none recorded" while the strip says "How you came in: any", with no Clear link on the stage.
 3. The Unforced errors card has filters but no `floor`, so an empty one opened from the wall still reads "No errors match these filters".
 4. Check MCP `open_visualization` and any other `cut=approaches` link builder now that a bare cut means approaches only.
+
+## T16 · Frame the opened Approaches court on its full length — done
+
+**gate:** mechanical pass · completion pass
+**changed:** `viewerInitialTransform("approaches")` fits a new `VIEWER_APPROACH_FRAME` (both baselines plus 32 units of apron, centred both ways) before the landing-cut branch; other cuts unchanged. `glideToMark` glides a selected pair to the midpoint of its contact and placement, with the zoom capped (new optional `maxZ` on `use-pan-zoom.ts` `glideTo`) so both marks fit; `pairContactPoint` exported from `lightbox-court.tsx`. New specs in `court-geometry.spec.ts` (three stage sizes) and the approach lightbox harness (all marks on stage at open; both marks after selecting each pair, including from a zoomed-in court).
+**follow-ups:**
+
+1. `viewerLandingHalf("approaches")` still returns `"far"`; return `null` or document the exception.
+2. Contacts more than about 1.9 m behind the baseline start just off the stage; the apron can grow to 43 units before it equals "Full court".

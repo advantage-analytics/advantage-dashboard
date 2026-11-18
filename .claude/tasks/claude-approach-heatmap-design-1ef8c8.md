@@ -227,7 +227,7 @@ ready).
 
 ## T16 · Frame the opened Approaches court on its full length
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/court-geometry.ts` (`viewerInitialTransform`), `shots/viz-lightbox-shell.tsx` (`glideToMark`); `tests/court-geometry.spec.ts`, `tests/viz-approach-lightbox-browser.spec.ts` + `tests/fixtures/viz-approach-lightbox-harness.tsx`
 - **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`
