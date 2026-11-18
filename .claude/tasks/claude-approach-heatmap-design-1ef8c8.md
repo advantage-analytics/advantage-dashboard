@@ -382,7 +382,7 @@ ready).
 
 ## T27 · Drop the Approach to group when no approach has a wing
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/viz-model.ts` (`approachStats` ~2621, the `wingGroup` built unconditionally ~2661); `src/lib/data/player-season-viz.ts` (`mergeVizStats` ~406, group order); `tests/viz-model.spec.ts`, `tests/player-season-viz.spec.ts`, `tests/viz-approach-filters-browser.spec.ts` (the `?landing=none` option already exists)
 - **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`

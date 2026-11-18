@@ -38,6 +38,7 @@ import {
   PASSED_DTL,
   p as netPoint,
   s as netShot,
+  withoutLanding,
 } from "./fixtures/approach-points";
 import { approachOf } from "@/components/dashboard/matches/match-detail/match-filters/approach";
 import {
@@ -3532,17 +3533,77 @@ test.describe("computeVizStats — approaches cut", () => {
     );
     expect(s.kpi?.count).toBe(1);
     expect(s.total).toBe(1);
-    expect(
-      s.groups
-        .find((g) => g.key === "approach-to")!
-        .rows.reduce((n, r) => n + r.count, 0),
-    ).toBe(0);
+    // No wing anywhere in the pool: no Approach to group at all.
+    expect(s.groups.find((g) => g.key === "approach-to")).toBeUndefined();
     expect(
       s.groups
         .find((g) => g.key === "approach-ended")!
         .rows.reduce((n, r) => n + r.count, 0),
     ).toBe(1);
     expect(statsAreEmpty(s)).toBe(false);
+  });
+
+  /** `computeViz` and `computeVizStats` over `points`, every net point. */
+  const statsOver = (
+    points: MatchPoint[],
+    filters: Partial<VizFilters> = {},
+  ) => {
+    const f = { ...EMPTY_VIZ_FILTERS, ...filters };
+    const result = computeViz(points, "approaches", f, true, "scatter", ctx);
+    return {
+      result,
+      stats: computeVizStats(
+        points,
+        "approaches",
+        f,
+        true,
+        result,
+        DEFAULT_BANDS,
+        "ft",
+        ctx,
+      ),
+    };
+  };
+
+  test("no approach has a landing: no Approach to group; the KPI and How it ended still count every one", () => {
+    const { result, stats: s } = statsOver(MATCH.map(withoutLanding));
+    expect(result.dots).toHaveLength(0);
+    const n = s.kpi?.count ?? 0;
+    expect(n).toBeGreaterThan(0);
+    expect(n).toBe(6);
+    expect(s.groups.map((g) => g.key)).not.toContain("approach-to");
+    expect(s.groups.at(-1)?.key).toBe("approach-ended");
+    const ended = s.groups.find((g) => g.key === "approach-ended")!;
+    expect(ended.rows.reduce((sum, r) => sum + r.count, 0)).toBe(n);
+    expect(statsAreEmpty(s)).toBe(false);
+  });
+
+  test("some approaches drawn, some not: Approach to keeps its three rows, summing to the drawn ones, even with a wing ticked", () => {
+    const stripped = new Set(["passed-dtl", "lobbed"]);
+    const points = MATCH.map((p) =>
+      stripped.has(p.id) ? withoutLanding(p) : p,
+    );
+    const wingRows = (s: ReturnType<typeof statsOver>["stats"]) =>
+      s.groups.find((g) => g.key === "approach-to")?.rows;
+
+    const { result, stats: s } = statsOver(points);
+    expect(s.kpi?.count).toBe(6);
+    const drawn = result.dots.length;
+    expect(drawn).toBeGreaterThan(0);
+    expect(drawn).toBeLessThan(6);
+    expect(s.groups[0]?.key).toBe("approach-to");
+    const rows = wingRows(s)!;
+    expect(rows.map((r) => r.key)).toEqual(["backhand", "middle", "forehand"]);
+    expect(rows.reduce((sum, r) => sum + r.count, 0)).toBe(drawn);
+
+    // Its own filter ticked: still there, every row kept.
+    const ticked = statsOver(points, { approachTo: ["forehand"] }).stats;
+    expect(wingRows(ticked)?.map((r) => r.key)).toEqual([
+      "backhand",
+      "middle",
+      "forehand",
+    ]);
+    expect(wingRows(ticked)).toEqual(rows);
   });
 
   test("rows are picks: each drawn mark keys to the row that counted it", () => {

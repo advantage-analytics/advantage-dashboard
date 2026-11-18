@@ -441,6 +441,23 @@ test("no approach has a landing: the Points pane lists every counted one, N / N 
   expect(errors).toEqual([]);
 });
 
+test("no approach has a landing: the Statistics pane shows the KPI count and How it ended, and no Approach to group", async ({
+  page,
+}) => {
+  const { dialog, errors } = await openApproaches(page, "&landing=none");
+  await expect(courtMarks(dialog)).toHaveCount(0);
+  // The pane that opens on Statistics: LightboxStats' own column.
+  const pane = dialog.locator("[data-stat-summary]").locator("xpath=..");
+  await expect(pane).toHaveCount(1);
+  const n = await kpiN(dialog);
+  expect(n).toBeGreaterThan(0);
+  await expect(pane.locator("[data-stat-summary]")).toContainText(String(n));
+  await expect(pane).toContainText("How it ended");
+  for (const text of ["Approach to", "Their backhand", "Their forehand"])
+    await expect(pane).not.toContainText(text);
+  expect(errors).toEqual([]);
+});
+
 test("an Approach to wing and a legend pick narrow the Points pane to the count the court and KPI show", async ({
   page,
 }) => {

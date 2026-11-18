@@ -27,6 +27,7 @@ import {
   filterKeysFor,
   HAND_ASSUMED_NOTE,
   LOOSENED_LABEL,
+  orderStatGroups,
   orderStatRows,
   subjectFor,
   type Chart,
@@ -397,7 +398,9 @@ export function mergeVizResults(
  * stroke nobody hit that day — is kept), count and won summed, the
  * percentage divided once — won of count for a points row, count of every
  * mark shown (`shareTotal`, the merged result's marks) for a share row — and
- * each group put back in `computeVizStats`' own order (`orderStatRows`).
+ * each group put back in `computeVizStats`' own order (`orderStatRows`), and
+ * the groups too (`orderStatGroups`: a match with no wing has no "Approach
+ * to", so first-seen order alone could list it below "How it ended").
  *
  * `title` is the cut's (the same on every part). `subtitle` and `sentence`
  * are per-match prose the shell does not print; the season says how many
@@ -458,7 +461,7 @@ export function mergeVizStats(
   return {
     title: parts[0]?.title ?? "",
     subtitle: `Over ${matches} ${matches === 1 ? "match" : "matches"}`,
-    groups: merged,
+    groups: orderStatGroups(merged),
     sentence: null,
     total: parts.reduce((n, p) => n + p.total, 0),
   };

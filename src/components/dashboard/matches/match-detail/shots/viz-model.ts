@@ -2028,6 +2028,34 @@ export function orderStatRows(rows: StatRow[], groupKey: string): StatRow[] {
   return sortRows(rows);
 }
 
+/** The Approaches cut's groups in the order `approachStats` builds them. */
+const APPROACH_GROUP_RANK: ReadonlyMap<string, number> = new Map(
+  ["approach-to", "approach-direction", "approach-ended"].map((key, i) => [
+    key,
+    i,
+  ]),
+);
+
+/**
+ * Groups put back in `computeVizStats`' own order, for a caller that unites
+ * several matches' groups in first-seen order (`mergeVizStats`): a match
+ * with no wing has no "Approach to", so a season whose first match lacks one
+ * would otherwise list "How it ended" above it. Only the Approaches groups
+ * have a fixed order; every other group keeps its place.
+ */
+export function orderStatGroups<G extends { key: string }>(groups: G[]): G[] {
+  const ranked = groups
+    .filter((g) => APPROACH_GROUP_RANK.has(g.key))
+    .sort(
+      (a, b) =>
+        APPROACH_GROUP_RANK.get(a.key)! - APPROACH_GROUP_RANK.get(b.key)!,
+    );
+  let next = 0;
+  return groups.map((g) =>
+    APPROACH_GROUP_RANK.has(g.key) ? ranked[next++] : g,
+  );
+}
+
 /**
  * The claim→evidence sentence. Only rows with `count >= 3` ("qualifying")
  * take part — as the headline AND as the comparison set — so the clause
@@ -2627,8 +2655,12 @@ export function approachNoun(entry: EntryFilter, n: number): string {
  * - **Approach to** (their backhand, middle, their forehand) ignores the
  *   `approachTo` filter and follows the others, so every wing stays there to
  *   compare and switch to; likewise **Direction** (crosscourt, middle, down
- *   the line) ignores `approachDir`. Direction is left out when nothing in
- *   the pool has one (a serve has none, so a serve-and-volley-only pool).
+ *   the line) ignores `approachDir`. Each is left out when nothing in the
+ *   pool has one: a wing needs a landing, so a match with no coordinates has
+ *   no Approach to (three "0 of 0" rows under a KPI of N would read as "you
+ *   hit none"); a serve has no direction, so a serve-and-volley-only pool
+ *   has no Direction. Decided from the pool, not the filtered rows, so a
+ *   group never drops because of its own filter.
  * - **How it ended** follows every filter: each row is a count and its share
  *   of the KPI count, and the rows sum to it. With lob keys unknown the two
  *   passing rows read "Passed or lobbed …" and there is no Lobbed row.
@@ -2676,24 +2708,27 @@ function approachStats(
     winPct: count === 0 ? null : Math.round((wonCount / count) * 100),
   };
 
-  // Approach to: every filter but its own.
-  const byWing = pool.filter((e) => approachDirPasses(e.approach, filters));
-  const wingGroup: StatGroup = {
-    key: "approach-to",
-    label: "Approach to",
-    rows: APPROACH_WING_ROWS.map(({ key, label }) => {
-      const rows = byWing.filter((e) => e.approach.wing === key);
-      return makeRow(
-        key,
-        label,
-        rows.length,
-        rows.reduce((n, e) => n + won(e), 0),
-      );
-    }),
-  };
+  const groups: StatGroup[] = [];
+
+  // Approach to: every filter but its own; absent with no wing to show.
+  if (pool.some((e) => e.approach.wing !== null)) {
+    const byWing = pool.filter((e) => approachDirPasses(e.approach, filters));
+    groups.push({
+      key: "approach-to",
+      label: "Approach to",
+      rows: APPROACH_WING_ROWS.map(({ key, label }) => {
+        const rows = byWing.filter((e) => e.approach.wing === key);
+        return makeRow(
+          key,
+          label,
+          rows.length,
+          rows.reduce((n, e) => n + won(e), 0),
+        );
+      }),
+    });
+  }
 
   // Direction: every filter but its own; absent with no direction to show.
-  const groups: StatGroup[] = [wingGroup];
   if (pool.some((e) => e.approach.direction !== null)) {
     const byDir = pool.filter((e) => approachToPasses(e.approach, filters));
     groups.push({

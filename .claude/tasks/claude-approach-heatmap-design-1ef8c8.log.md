@@ -261,3 +261,13 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. The legend's "assumes right-handed" line still shows on a court whose lanes read Left · Middle · Right — accurate for the per-wing stats, but worth a design look.
+
+## T27 · Drop the Approach to group when no approach has a wing — done
+
+**gate:** mechanical PASS · completion-review pass
+
+**changed:** `approachStats` builds the Approach to group only when some pooled approach has a wing (pool, not filtered rows — mirrors Direction). New `orderStatGroups` keeps the Approaches groups in built order; `mergeVizStats` applies it so a season whose first match has no wings still lists Approach to first (fixes Direction's same exposure). One existing `viz-model.spec.ts` case ("an approach with no placement counts in the KPI and ending, in no wing") now asserts the group is absent instead of zero-sum, since that old assertion is the behaviour removed. New cases in `viz-model`, `player-season-viz` and `viz-approach-filters-browser` specs.
+
+**follow-ups:**
+
+1. The filter panel's "Approach to" checklist still shows on a match with no wings (out of scope).

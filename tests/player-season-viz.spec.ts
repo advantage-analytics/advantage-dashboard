@@ -65,6 +65,7 @@ import {
   OPP_ERROR,
   SERVE_VOLLEY,
   passedBy,
+  withoutLanding,
 } from "./fixtures/approach-points";
 import { RALLY_POINTS, rallyShot } from "./fixtures/viz-rally-points";
 import { ASYMMETRIC_SERVES, servePoint } from "./fixtures/viz-serve-points";
@@ -2439,6 +2440,52 @@ test.describe("the Approaches card over a season", () => {
   }
   const wingOf = (dots: { id: string; meta?: { wing?: unknown } }[]) =>
     Object.fromEntries(dots.map((d) => [d.id, d.meta?.wing]));
+
+  test("mergeVizStats: a match with wings and one without lists Approach to before How it ended, with the first's wings, in either order; none with wings, no Approach to", () => {
+    /** `m` with no landing anywhere: its approaches count, none has a wing. */
+    const bare = (m: SeasonVizMatch, matchId: string): SeasonVizMatch => ({
+      ...m,
+      matchId,
+      points: m.points.map(withoutLanding),
+    });
+    const BARE = bare(LEFTY, "bare");
+    const merge = (season: SeasonVizMatch[]) => {
+      const parts = season.map((m) => approachPart(m, APPROACH_FILTERS));
+      return mergeVizStats(
+        parts.map((p) => p.stats),
+        parts.reduce((n, p) => n + p.result.dots.length, 0),
+        season.length,
+      );
+    };
+    const tally = (stats: VizStats) =>
+      stats.groups
+        .find((g) => g.key === "approach-to")
+        ?.rows.map((r) => `${r.key}: ${r.won} of ${r.count}`);
+
+    const own = approachPart(RIGHTY, APPROACH_FILTERS).stats;
+    expect(
+      approachPart(BARE, APPROACH_FILTERS).stats.kpi?.count,
+    ).toBeGreaterThan(0);
+    expect(tally(own)?.length).toBe(3);
+    for (const season of [
+      [RIGHTY, BARE],
+      [BARE, RIGHTY],
+    ]) {
+      const merged = merge(season);
+      const keys = merged.groups.map((g) => g.key);
+      expect(keys).toContain("approach-to");
+      expect(keys.indexOf("approach-to")).toBeLessThan(
+        keys.indexOf("approach-ended"),
+      );
+      expect(keys[0]).toBe("approach-to");
+      expect(tally(merged)).toEqual(tally(own));
+    }
+
+    // No match has a wing: the season has no Approach to either.
+    const none = merge([BARE, bare(RIGHTY, "bare-2")]);
+    expect(none.groups.map((g) => g.key)).not.toContain("approach-to");
+    expect(none.groups.map((g) => g.key)).toContain("approach-ended");
+  });
 
   test("seasonMatchContext hands each SEAT its own hand on Approaches, and none on any other cut", () => {
     const m = { ...RIGHTY, opponentHand: "left", playerHand: "right" } as const;
