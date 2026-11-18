@@ -117,3 +117,11 @@ is the runner's. Newest entries at the bottom.
 1. A browser spec mounting `ShotsTab` on an Advantage Intelligence match with a stubbed ball-paths response, checking a "Lobbed" row on both the card and its lightbox (no current harness covers the loaded case).
 2. Confirm `film/use-film-filter-context.ts` (`sourceProvider === "splitstep"`) and this tab (`meta.isDerived`) cannot diverge.
 3. Wall and saved cards now read the live bands too: a saved view with a Contact or Landed-in filter buckets by the same bands as its lightbox (small behaviour change).
+
+## T13 · Carry approaches through the season card — blocked
+
+**gate:** mechanical FAIL (lint pass, typecheck pass, tests: 2 failed of ~10,700) · completion not run
+**reason:** `tests/player-season-loader.spec.ts:857` ("loadPlayerSeasonCourts reads the season's matches and points…") pins the exact keys of a season match, and the task added `playerHand` (read in `player-season-server.ts` so the opponent's court can use the player's hand) without updating that list. Real, and a one-line spec update. The second failure, `tests/r2-delete-and-fallback.spec.ts:425` (R2 copy queued when Azure deletes fail), touches nothing on this branch and passed in all twelve earlier gates; likely flaky, not this task's.
+**stash:** ed5dd836dc014719d2b362e6e17997676f3bb1c7
+**what the stashed work does:** season Approaches card computed per match with that match's hands (`seasonMatchContext` gains a cut argument; hands only on `approaches`), a new optional `playerHand` on season matches, pair contacts carried on `result.dots[i].pair` (millimetre-rounded), `mergeApproachKpi` so "Won x of n" sums across matches, `DefaultCut.floor` and the "assumes right-handed" note in the season lightbox, `approachNoun` exported; 7 new `player-season-viz` cases.
+**to unblock:** `git stash apply ed5dd836dc014719d2b362e6e17997676f3bb1c7`, add `"playerHand"` to the key list at `tests/player-season-loader.spec.ts:889`, re-run the gate, reset T13 to `todo` or commit by hand.
