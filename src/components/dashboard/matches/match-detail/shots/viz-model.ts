@@ -2530,7 +2530,7 @@ const APPROACH_ENDED_ROWS = {
  * "serve-and-volley points", "times drawn in", and "times at the net" for
  * any mix, or none chosen (all three).
  */
-function approachNoun(entry: EntryFilter, n: number): string {
+export function approachNoun(entry: EntryFilter, n: number): string {
   const one = n === 1;
   const only = entry.length === 1 ? entry[0] : null;
   if (only === "approach") return one ? "approach" : "approaches";

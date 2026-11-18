@@ -434,6 +434,11 @@ async function readAnalyzedMatches(
       opponentHand: normalizePlayerHand(
         isPlayer1 ? match.opponent_hand : match.player_hand,
       ),
+      // The player's own hand, for the player's seat the same way — the
+      // Approaches cut's opponent court reads it.
+      playerHand: normalizePlayerHand(
+        isPlayer1 ? match.player_hand : match.opponent_hand,
+      ),
       // The Matches sheet's row and its Result / Surface menus, from the
       // player's seat (guardrails §4).
       won: matchOutcome(match.score, isPlayer1),
@@ -541,6 +546,7 @@ export async function loadPlayerSeasonCourts(
         date,
         opponent,
         opponentHand,
+        playerHand,
         won,
         score,
         courtType,
@@ -553,6 +559,7 @@ export async function loadPlayerSeasonCourts(
         date,
         opponent,
         opponentHand,
+        playerHand,
         won,
         score,
         courtType,

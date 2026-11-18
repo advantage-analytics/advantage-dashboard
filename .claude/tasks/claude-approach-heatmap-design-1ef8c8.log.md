@@ -125,3 +125,13 @@ is the runner's. Newest entries at the bottom.
 **stash:** ed5dd836dc014719d2b362e6e17997676f3bb1c7
 **what the stashed work does:** season Approaches card computed per match with that match's hands (`seasonMatchContext` gains a cut argument; hands only on `approaches`), a new optional `playerHand` on season matches, pair contacts carried on `result.dots[i].pair` (millimetre-rounded), `mergeApproachKpi` so "Won x of n" sums across matches, `DefaultCut.floor` and the "assumes right-handed" note in the season lightbox, `approachNoun` exported; 7 new `player-season-viz` cases.
 **to unblock:** `git stash apply ed5dd836dc014719d2b362e6e17997676f3bb1c7`, add `"playerHand"` to the key list at `tests/player-season-loader.spec.ts:889`, re-run the gate, reset T13 to `todo` or commit by hand.
+
+## T13 · Carry approaches through the season card — done
+
+**gate:** mechanical pass · completion pass (re-run after the block above)
+**changed:** Stash ed5dd836 applied unchanged, plus `"playerHand"` added to the season match key list in `tests/player-season-loader.spec.ts` (the one-line fix that blocked it). Season Approaches card computed per match with that match's hands (`seasonMatchContext` gains a cut argument, hands only on `approaches`), optional `playerHand` on season matches (`player-season.ts`, `player-season-server.ts`), pair contacts on `result.dots[i].pair` (millimetre-rounded; `SeasonDotPoint` unchanged), `mergeApproachKpi` so "Won x of n" sums across matches, `DefaultCut.floor` and the "assumes right-handed" note in the season lightbox, `approachNoun` exported from `viz-model.ts`. 7 new `player-season-viz` cases. The `r2-delete-and-fallback` failure from the first run did not recur.
+**follow-ups:**
+
+1. The match report infers an unrecorded hand from strokes (`inferHand`); the season assumes right-handed and flags it, so a match with no stored hand can show different wings on the season than on its report.
+2. `SEASON_HAND_ASSUMED_NOTE` and `FLOOR_LOOSENED_LABEL` copy strings from the client-only `viz-lightbox.tsx`; a shared pure module would remove the copies.
+3. The season lightbox has no Points list, so `approachDetail` wording does not appear there.

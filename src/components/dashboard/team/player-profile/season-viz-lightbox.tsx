@@ -236,6 +236,7 @@ function emptyCourt(
     title: label,
     subtitle: "",
     filterPhrases: [],
+    sentenceNote: null,
     panelActive: false,
     clearFilters: { ...EMPTY_VIZ_FILTERS, player: filters.player },
     sets: [],
@@ -592,6 +593,7 @@ export function SeasonVizLightbox({
         }
         subtitle={court.subtitle}
         filterPhrases={court.filterPhrases}
+        sentenceNote={court.sentenceNote ?? undefined}
         panelActive={court.panelActive}
         onClose={close}
         onClearFilters={clearFilters}

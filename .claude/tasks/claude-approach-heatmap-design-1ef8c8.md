@@ -184,7 +184,7 @@ ready).
 
 ## T13 · Carry approaches through the season card
 
-- **status:** blocked
+- **status:** done
 - **model:** fable
 - **needs:** T3, T7, T9
 - **files:** (guess) `src/lib/data/player-season-viz.ts`, `src/components/dashboard/team/player-profile/season-viz-lightbox.tsx`; `tests/player-season-viz.spec.ts`

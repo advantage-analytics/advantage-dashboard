@@ -895,6 +895,7 @@ test("loadPlayerSeasonCourts reads the season's matches and points with no file 
       "matchId",
       "opponent",
       "opponentHand",
+      "playerHand",
       "points",
       "score",
       "won",

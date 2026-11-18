@@ -133,6 +133,9 @@ export interface SeasonMatch extends SeasonMatchStats {
   /** The opponent's hand off the match row (`SeasonVizMatch.opponentHand`),
    *  null when it does not say. Optional: a fold reads none of it. */
   opponentHand?: "right" | "left" | null;
+  /** The player's own hand off the match row (`SeasonVizMatch.playerHand`),
+   *  null when it does not say. Optional, as `opponentHand`. */
+  playerHand?: "right" | "left" | null;
   /** Won from the player's seat (`matchOutcome`), null where the score
    *  cannot say. Optional, as `opponentHand`: only the courts read it. */
   won?: boolean | null;

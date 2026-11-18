@@ -15,6 +15,7 @@ import {
   decodeStatRowDots,
   encodeStatRowDots,
   filterOptionPatches,
+  cutNoun,
   mergeVizResults,
   mergeVizStats,
   optionCountKey,
@@ -56,6 +57,14 @@ import {
   type VizState,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import { wallSummaryFor } from "@/components/dashboard/matches/match-detail/shots/wall-summary";
+import {
+  LOBBED,
+  LOB_T,
+  OPP_APPROACH,
+  OPP_ERROR,
+  SERVE_VOLLEY,
+  passedBy,
+} from "./fixtures/approach-points";
 import { RALLY_POINTS, rallyShot } from "./fixtures/viz-rally-points";
 import { ASYMMETRIC_SERVES, servePoint } from "./fixtures/viz-serve-points";
 import { createLoader } from "./fixtures/vm-modules";
@@ -2330,5 +2339,401 @@ test.describe("Opponent plays and Matches (the season's own filters)", () => {
     expect(
       courtSignature(data.cut, data.chart, data.filters, true, data.season),
     ).toBe(sig({ opponentHand: null, matches: ["d", "a"] }));
+  });
+});
+
+/* ── Approaches over the season ─────────────────────────────────────────── */
+
+test.describe("the Approaches card over a season", () => {
+  const APPROACH_FILTERS: VizFilters = {
+    ...EMPTY_VIZ_FILTERS,
+    entry: ["approach"],
+    player: "you",
+  };
+  const approachState = (filters: Partial<VizFilters> = {}): VizState => ({
+    cut: "approaches",
+    chart: "scatter",
+    filters: { ...APPROACH_FILTERS, ...filters },
+    viewId: null,
+  });
+  /** The fixture's points as one match's: its own ids and point numbers. */
+  const matchPoints = (prefix: string, points: MatchPoint[]): MatchPoint[] =>
+    prefixed(points, prefix).map((p, i) => ({ ...p, pointNumber: i + 1 }));
+  /** The player's approach shot (shot 4 of `passedBy`) struck from a tracked
+   *  position — more digits than a millimetre. */
+  const struckFrom = (point: MatchPoint): MatchPoint => ({
+    ...point,
+    shots: point.shots!.map((shot) =>
+      shot.shotNumber === 4 && shot.isPlayer1
+        ? { ...shot, contactX: 1.23456789, contactY: 3.98765432 }
+        : shot,
+    ),
+  });
+  /** `OPP_ERROR` with no landing on the approach (shot 3): an approach the
+   *  player won that the court cannot draw. */
+  const WON_UNPLACED: MatchPoint = {
+    ...OPP_ERROR,
+    shots: OPP_ERROR.shots!.map((shot) =>
+      shot.shotNumber === 3 ? { ...shot, landingY: null } : shot,
+    ),
+  };
+
+  // The player sits in seat one in both matches (the fixture is theirs from
+  // the low end) and approaches to their own LEFT (`lx: -3`) in each: a
+  // right-hander's forehand, a left-hander's backhand.
+  const RIGHTY: SeasonVizMatch = {
+    matchId: "righty",
+    points: matchPoints("r", [
+      struckFrom(passedBy("to-left", "Down the Line", -3)),
+      WON_UNPLACED,
+      OPP_APPROACH,
+    ]),
+    isPlayer1: true,
+    isDerived: false,
+    errorSplitJudged: true,
+    date: "2026-10-01",
+    opponent: "Lee",
+    opponentHand: "right",
+  };
+  const LEFTY: SeasonVizMatch = {
+    matchId: "lefty",
+    points: matchPoints("l", [
+      SERVE_VOLLEY,
+      struckFrom(passedBy("to-left", "Crosscourt", -3)),
+      LOBBED,
+    ]),
+    isPlayer1: true,
+    isDerived: false,
+    errorSplitJudged: true,
+    date: "2026-11-03",
+    opponent: "Ortiz",
+    opponentHand: "left",
+  };
+  const SEASON = [RIGHTY, LEFTY];
+
+  /** One match's part, the report's way, under its OWN hands. */
+  function approachPart(m: SeasonVizMatch, filters: VizFilters) {
+    const points = vizPoints(m.points, m.isDerived);
+    const ctx = seasonMatchContext(m, BANDS, "approaches");
+    const subject = subjectFor(filters, m.isPlayer1);
+    const result = computeViz(
+      points,
+      "approaches",
+      filters,
+      subject,
+      "scatter",
+      ctx,
+    );
+    const stats = computeVizStats(
+      points,
+      "approaches",
+      filters,
+      subject,
+      result,
+      DEFAULT_BANDS,
+      "ft",
+      ctx,
+    );
+    return { result, stats };
+  }
+  const wingOf = (dots: { id: string; meta?: { wing?: unknown } }[]) =>
+    Object.fromEntries(dots.map((d) => [d.id, d.meta?.wing]));
+
+  test("seasonMatchContext hands each SEAT its own hand on Approaches, and none on any other cut", () => {
+    const m = { ...RIGHTY, opponentHand: "left", playerHand: "right" } as const;
+    expect(seasonMatchContext(m, BANDS, "approaches").hands).toEqual({
+      player1: "right",
+      player2: "left",
+    });
+    // The player in seat two: the opponent's hand is seat one's.
+    expect(
+      seasonMatchContext({ ...m, isPlayer1: false }, BANDS, "approaches").hands,
+    ).toEqual({ player1: "left", player2: "right" });
+    for (const cut of [undefined, ...CUTS])
+      expect(seasonMatchContext(m, BANDS, cut).hands).toEqual({
+        player1: null,
+        player2: null,
+      });
+    // No lob files in the season (plan decision Q8).
+    expect(
+      seasonMatchContext(m, BANDS, "approaches").lobKeys ?? null,
+    ).toBeNull();
+  });
+
+  test("a right-handed and a left-handed opponent: after mergeVizResults each approach is in its own match's wing", () => {
+    const parts = SEASON.map((m) => approachPart(m, APPROACH_FILTERS));
+    const merged = mergeVizResults(
+      "approaches",
+      parts.map((p) => p.result),
+    );
+    // The same shot to the same side of the court, read by each match's hand.
+    expect(wingOf(merged.dots)).toEqual({
+      "r:to-left": "forehand",
+      "l:to-left": "backhand",
+      "l:lobbed": "forehand",
+    });
+    expect(merged.dots.every((d) => d.meta?.handAssumed === false)).toBe(true);
+    expect(merged.noun).toBe("approaches");
+    expect(merged.count).toBe(4);
+
+    // The season's own fold is that merge.
+    const data = buildSeasonLightbox(SEASON, approachState(), BANDS, NAMES)!;
+    expect(wingOf(data.result.dots)).toEqual(wingOf(merged.dots));
+    const wings = data.stats.groups.find((g) => g.key === "approach-to")!;
+    expect(Object.fromEntries(wings.rows.map((r) => [r.key, r.count]))).toEqual(
+      { forehand: 2, middle: 0, backhand: 1 },
+    );
+    // A Statistics row picks the marks of its wing, across both matches.
+    const pick = (row: string) =>
+      [
+        ...decodeStatRowDots(
+          data.result.dots,
+          data.statRowDots[statPickKey({ group: "approach-to", row })],
+        ),
+      ].sort();
+    expect(pick("backhand")).toEqual(["l:to-left"]);
+    expect(pick("forehand")).toEqual(["l:lobbed", "r:to-left"]);
+    expect(data.sentenceNote).toBeNull();
+
+    // Folded as if both opponents were right-handed, the lefty's approach
+    // would sit in the wrong wing.
+    const wrong = buildSeasonLightbox(
+      [RIGHTY, { ...LEFTY, opponentHand: "right" }],
+      approachState(),
+      BANDS,
+      NAMES,
+    )!;
+    expect(wingOf(wrong.result.dots)["l:to-left"]).toBe("forehand");
+  });
+
+  test("a match that does not give the hand reads right-handed and the strip says so; the opponent's court reads the player's hand", () => {
+    const unknown = buildSeasonLightbox(
+      [RIGHTY, { ...LEFTY, opponentHand: null }],
+      approachState(),
+      BANDS,
+      NAMES,
+    )!;
+    expect(wingOf(unknown.result.dots)["l:to-left"]).toBe("forehand");
+    expect(unknown.result.dots.map((d) => [d.id, d.meta?.handAssumed])).toEqual(
+      [
+        ["r:to-left", false],
+        ["l:to-left", true],
+        ["l:lobbed", true],
+      ],
+    );
+    expect(unknown.sentenceNote).toBe("assumes right-handed");
+
+    // The opponent's approach (`OPP_APPROACH`, to THEIR left) goes to the
+    // player's wing: a left-handed player's backhand.
+    const theirs = (playerHand: "left" | "right" | null) =>
+      buildSeasonLightbox(
+        [{ ...RIGHTY, playerHand }],
+        approachState({ player: "opponent" }),
+        BANDS,
+        NAMES,
+      )!;
+    expect(wingOf(theirs("left").result.dots)).toEqual({
+      "r:opp-approach": "backhand",
+    });
+    expect(wingOf(theirs("right").result.dots)).toEqual({
+      "r:opp-approach": "forehand",
+    });
+    expect(theirs("left").sentenceNote).toBeNull();
+    expect(theirs(null).sentenceNote).toBe("assumes right-handed");
+  });
+
+  test("a pair's contact survives the trip to the browser, to the millimetre, and dotPoints stays one per mark in order", () => {
+    const parts = SEASON.map((m) => approachPart(m, APPROACH_FILTERS));
+    const raw = parts.flatMap((p) => p.result.dots);
+    const data = buildSeasonLightbox(SEASON, approachState(), BANDS, NAMES)!;
+    // What the browser is handed: the props, serialized.
+    const sent = JSON.parse(JSON.stringify(data)) as SeasonLightboxData;
+    expect(sent).toEqual(data);
+
+    const mm = (n: number) => Math.round(n * 1000) / 1000;
+    expect(sent.result.dots.map((d) => d.id)).toEqual(raw.map((d) => d.id));
+    expect(raw.length).toBe(3);
+    for (const [i, dot] of sent.result.dots.entries()) {
+      const source = raw[i];
+      // Every fixture approach has a measured contact.
+      expect(source.pair, dot.id).toBeDefined();
+      expect(dot.pair, dot.id).toEqual({
+        lateralM: mm(source.pair!.lateralM),
+        depthM: mm(source.pair!.depthM),
+      });
+      expect(dot.lateralM).toBe(mm(source.lateralM));
+      expect(dot.depthM).toBe(mm(source.depthM));
+    }
+    // The tracked contact really had more digits than survive.
+    const tracked = raw.find((d) => d.id === "r:to-left")!.pair!;
+    expect(mm(tracked.lateralM)).not.toBe(tracked.lateralM);
+    expect(mm(tracked.depthM)).not.toBe(tracked.depthM);
+
+    // One point reference per mark, in the marks' order: its match (an
+    // index into `matches`) and where in it the point was.
+    expect(sent.dotPoints).toHaveLength(sent.result.dots.length);
+    const where = new Map(
+      SEASON.flatMap((m, mi) =>
+        m.points.map((p) => [p.id, [mi, p] as const] as const),
+      ),
+    );
+    sent.result.dots.forEach((dot, i) => {
+      const [mi, point] = where.get(dot.meta!.pointId!)!;
+      expect(sent.dotPoints[i], dot.id).toEqual([
+        mi,
+        point.pointNumber,
+        point.setNumber,
+        point.gameNumber,
+        point.serverIsPlayer1 ? 1 : 0,
+      ]);
+      expect(sent.matches[sent.dotPoints[i][0]].id).toBe(SEASON[mi].matchId);
+    });
+    // A row's positions decode against the marks as sent.
+    expect([
+      ...decodeStatRowDots(
+        sent.result.dots,
+        sent.statRowDots[
+          statPickKey({ group: "approach-to", row: "backhand" })
+        ],
+      ),
+    ]).toEqual(["l:to-left"]);
+
+    // The wall card's marks keep the contact too, and nothing of `meta`.
+    const card = buildSeasonCards(SEASON, "you", BANDS).find(
+      (c) => c.cut === "approaches",
+    )!;
+    expect(card.dots).toEqual(
+      sent.result.dots.map(({ meta: _meta, ...dot }) => dot),
+    );
+    expect(card.dots.every((d) => d.pair !== undefined)).toBe(true);
+  });
+
+  test('the season loads no lob files: endings read "Passed or lobbed …" and there is no Lobbed row', () => {
+    const data = buildSeasonLightbox(SEASON, approachState(), BANDS, NAMES)!;
+    const ended = data.stats.groups.find((g) => g.key === "approach-ended")!;
+    expect(ended.rows.map((r) => [r.key, r.label, r.count])).toEqual([
+      ["passed-or-lobbed-dtl", "Passed or lobbed down the line", 1],
+      // `LOBBED`'s reply is a lob by its ball path (`LOB_T`), which the
+      // season does not read: it is a pass or a lob, crosscourt.
+      ["passed-or-lobbed-crosscourt", "Passed or lobbed crosscourt", 2],
+      ["won-at-net", "Won at the net", 1],
+      ["own-error", "Your error", 0],
+    ]);
+    expect(
+      LEFTY.points.some((p) => p.shots!.some((s) => s.videoTime === LOB_T)),
+    ).toBe(true);
+    expect(ended.rows.some((r) => r.key === "lobbed")).toBe(false);
+    expect(JSON.stringify(data.stats)).not.toContain('"Lobbed"');
+    expect(data.result.dots.map((d) => d.meta?.bucket)).not.toContain("lobbed");
+    // A share of every approach shown, drawn or not.
+    expect(data.result.count).toBe(4);
+    expect(ended.rows.map((r) => r.winPct)).toEqual([25, 50, 25, 0]);
+  });
+
+  test("the labels, and the wall's Approaches card: the KPI summed over the matches, an approach the court cannot draw included", () => {
+    expect(SEASON_CUT_LABEL.approaches).toBe("Approaches");
+    expect(SEASON_CUT_LABEL.approaches).toBe(CUT_LABEL.approaches);
+    expect(cutNoun("approaches")).toBe("approaches");
+
+    const cards = buildSeasonCards(SEASON, "you", BANDS);
+    const card = cards.find((c) => c.key === "you:approaches")!;
+    expect(card).toBeDefined();
+    expect(cards.indexOf(card)).toBe(
+      defaultCutsFor(true).findIndex((c) => c.cut === "approaches"),
+    );
+    expect(card.name).toBe("Approaches");
+    expect(card.cut).toBe("approaches");
+    expect(card.state.filters).toEqual(APPROACH_FILTERS);
+
+    const parts = SEASON.map((m) => approachPart(m, APPROACH_FILTERS));
+    const count = sum(parts.map((p) => p.stats.kpi!.count));
+    const won = sum(parts.map((p) => p.stats.kpi!.won));
+    // Four approaches, three drawn; the one won is the one not drawn.
+    expect([count, won]).toEqual([4, 1]);
+    expect(card.summary.total).toBe(count);
+    expect(card.summary.count).toBe(3);
+    expect(card.summary.notDrawn).toBe(1);
+    expect(card.summary.keyLead).toBe("Won 1 of 4");
+    expect(card.dots.map((d) => d.id)).toEqual(
+      parts.flatMap((p) => p.result.dots.map((d) => d.id)),
+    );
+
+    // The opened card's KPI tiles are the same sums, labelled by the
+    // report's rule: the noun alone, "of N …" once a filter narrows it.
+    const open = buildSeasonLightbox(SEASON, approachState(), BANDS, NAMES)!;
+    expect(open.stats.kpi).toEqual({
+      count: 4,
+      countLabel: "approaches",
+      won: 1,
+      winPct: 25,
+    });
+    expect(open.subtitle).toBe(
+      "Approaches · Maya Chen · 2 matches · 4 approaches, 1 won",
+    );
+    const narrowed = buildSeasonLightbox(
+      SEASON,
+      approachState({ approachTo: ["backhand"] }),
+      BANDS,
+      NAMES,
+    )!;
+    expect(narrowed.stats.kpi).toEqual({
+      count: 1,
+      countLabel: "of 4 approaches",
+      won: 0,
+      winPct: 0,
+    });
+    // One match folded alone is the report's own KPI.
+    const alone = buildSeasonLightbox(
+      [LEFTY],
+      approachState({ approachTo: ["backhand"] }),
+      BANDS,
+      NAMES,
+    )!;
+    expect(alone.stats.kpi).toEqual(
+      approachPart(LEFTY, approachState({ approachTo: ["backhand"] }).filters)
+        .stats.kpi,
+    );
+  });
+
+  test("Clear comes back to approach shots (the card's floor), which the strip never names while the court holds it", () => {
+    const onCard = buildSeasonLightbox(SEASON, approachState(), BANDS, NAMES)!;
+    expect(onCard.title).toBe("Approaches");
+    expect(onCard.filterPhrases).toEqual([]);
+    expect(onCard.panelActive).toBe(false);
+    expect(onCard.clearFilters).toEqual(APPROACH_FILTERS);
+
+    // Loosened to another way in: Clear is approach shots again.
+    const serveVolley = buildSeasonLightbox(
+      SEASON,
+      approachState({ entry: ["serve-volley"] }),
+      BANDS,
+      NAMES,
+    )!;
+    expect(serveVolley.clearFilters).toEqual(APPROACH_FILTERS);
+    expect(serveVolley.panelActive).toBe(true);
+    expect(serveVolley.filterPhrases).toHaveLength(1);
+    expect(serveVolley.stats.kpi?.countLabel).toBe("serve-and-volley point");
+
+    // Let go of entirely: named, so Clear has something to undo.
+    const any = buildSeasonLightbox(
+      SEASON,
+      approachState({ entry: [] }),
+      BANDS,
+      NAMES,
+    )!;
+    expect(any.filterPhrases).toEqual(["How you came in: any"]);
+    expect(any.clearFilters).toEqual(APPROACH_FILTERS);
+    expect(any.panelActive).toBe(true);
+
+    // Narrowed on the card: the wing is named, the floor is not.
+    const narrowed = buildSeasonLightbox(
+      SEASON,
+      approachState({ approachTo: ["backhand"] }),
+      BANDS,
+      NAMES,
+    )!;
+    expect(narrowed.filterPhrases).toHaveLength(1);
+    expect(narrowed.filterPhrases[0]).not.toMatch(/approach\b(?! to)/i);
+    expect(narrowed.clearFilters).toEqual(APPROACH_FILTERS);
   });
 });
