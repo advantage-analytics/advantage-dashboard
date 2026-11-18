@@ -534,9 +534,10 @@ async function readPublishedSessions(
  * disjoint. Hours are the job's match video.
  *
  * Time worked is the paid labeller's own `label_work_beats` minutes on each
- * session, whenever they fell — anyone else's (an admin checking it) is not
- * theirs. Practice sets are not in the report: every one so far was paid
- * outside it.
+ * session, up to the end of the range — anyone else's (an admin checking it)
+ * is not theirs, and minutes after the range (a sent-back session reworked
+ * later) never change a closed month's figure. Practice sets are not in the
+ * report: every one so far was paid outside it.
  */
 export async function getLabelPayReport(
   range: { from: string; to: string },
@@ -555,10 +556,15 @@ export async function getLabelPayReport(
     submitted_at: string;
   };
   const SUBMISSION_COLUMNS = "id, session_id, submitted_by, submitted_at";
+  const empty: PayReport = {
+    ok: true,
+    from: range.from,
+    to: range.to,
+    rows: [],
+    lines: [],
+  };
   const published = await readPublishedSessions(db, fromIso, toIso);
-  if (published.length === 0) {
-    return { ok: true, from: range.from, to: range.to, rows: [], lines: [] };
-  }
+  if (published.length === 0) return empty;
   // Every submission of those sessions up to the end of the range: a session
   // published in the range was first submitted before its publish. Chunked,
   // since the ids travel in the URL.
@@ -596,12 +602,11 @@ export async function getLabelPayReport(
     const who = first.get(session.id)?.submitted_by;
     return who ? [{ ...session, who }] : [];
   });
-  if (paid.length === 0) {
-    return { ok: true, from: range.from, to: range.to, rows: [], lines: [] };
-  }
+  if (paid.length === 0) return empty;
 
   type BeatRow = { session_id: string; user_id: string; minute: string };
   const whoBySession = new Map(paid.map((s) => [s.id, s.who]));
+  const payees = [...new Set(paid.map((s) => s.who))];
   const [beats, users] = await Promise.all([
     Promise.all(
       idChunks([...whoBySession.keys()]).map((ids) =>
@@ -610,6 +615,8 @@ export async function getLabelPayReport(
             .from("label_work_beats")
             .select("session_id, user_id, minute")
             .in("session_id", ids)
+            .in("user_id", payees)
+            .lt("minute", toIso)
             .order("session_id")
             .order("user_id")
             .order("minute")
@@ -630,9 +637,9 @@ export async function getLabelPayReport(
   const minutesBySession = new Map<string, string[]>();
   for (const beat of beats) {
     if (beat.user_id !== whoBySession.get(beat.session_id)) continue;
-    const held = minutesBySession.get(beat.session_id);
-    if (held) held.push(beat.minute);
-    else minutesBySession.set(beat.session_id, [beat.minute]);
+    const held = minutesBySession.get(beat.session_id) ?? [];
+    held.push(beat.minute);
+    minutesBySession.set(beat.session_id, held);
   }
   const userById = new Map(users.map((u) => [u.id, u]));
 

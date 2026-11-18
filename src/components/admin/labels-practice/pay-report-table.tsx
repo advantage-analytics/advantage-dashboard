@@ -13,6 +13,7 @@ import {
   PendingBar,
   PendingRegion,
 } from "@/components/dashboard/loading/pending";
+import { formatHoursMinutes } from "@/lib/format/duration";
 import { advField } from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
 import { DownloadCsvButton } from "./download-csv-button";
@@ -71,12 +72,9 @@ function hours(n: number): string {
   return n.toFixed(2);
 }
 
-/** Minutes as "3h 11m", or "45m" under an hour. */
+/** Minutes as "3h 11m", "45m" — the app's one phrasing of a span. */
 function duration(minutes: number): string {
-  const whole = Math.round(minutes);
-  const h = Math.floor(whole / 60);
-  const m = whole % 60;
-  return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m`;
+  return formatHoursMinutes(minutes * 60);
 }
 
 // The report is in UTC days, so every stamp on it reads in UTC too.
@@ -100,8 +98,17 @@ function clock(iso: string): string {
   return CLOCK.format(new Date(iso));
 }
 
+/** "Nov 16, 07:04–10:42", naming the end's day too when it is another one. */
+function sittingWindow(s: PaySitting): string {
+  const end =
+    day(s.end) === day(s.start)
+      ? clock(s.end)
+      : `${day(s.end)}, ${clock(s.end)}`;
+  return `${day(s.start)}, ${clock(s.start)}–${end}`;
+}
+
 function sittingText(s: PaySitting): string {
-  return `${s.start.slice(0, 16)}Z–${s.end.slice(11, 16)}Z (${s.minutes}m)`;
+  return `${s.start}/${s.end} (${s.minutes}m)`;
 }
 
 function labellerWorked(row: PayLabellerRow): string {
@@ -173,9 +180,9 @@ export function PayReportTable({
 
   const linesBy = new Map<string, PaySessionLine[]>();
   for (const line of lines) {
-    const held = linesBy.get(line.labellerId);
-    if (held) held.push(line);
-    else linesBy.set(line.labellerId, [line]);
+    const held = linesBy.get(line.labellerId) ?? [];
+    held.push(line);
+    linesBy.set(line.labellerId, held);
   }
 
   return (
@@ -237,7 +244,14 @@ export function PayReportTable({
                           </span>
                         </span>
                         <span className="text-right text-[var(--ink-900)]">
-                          {duration((r.publishedHours + r.checkedHours) * 60)}
+                          {duration(
+                            // The sum of the session lines as they print, so
+                            // the total never differs from them by a rounding.
+                            (linesBy.get(r.labellerId) ?? []).reduce(
+                              (n, l) => n + Math.round(l.videoHours * 60),
+                              0,
+                            ),
+                          )}
                         </span>
                         <span className="text-right font-medium text-[var(--ink-900)]">
                           {labellerWorked(r)}
@@ -267,10 +281,12 @@ export function PayReportTable({
               })}
             </div>
           </div>
-          <p className="text-[11px] text-[var(--ink-600)]">
-            — means no active time was recorded for the session; a + on a total
-            means it leaves such sessions out. Times are UTC.
-          </p>
+          {rows.some((r) => r.untrackedSessions > 0) ? (
+            <p className="text-[11px] text-[var(--ink-600)]">
+              — means no active time was recorded for the session; a + on a
+              total means it leaves such sessions out.
+            </p>
+          ) : null}
         </>
       )}
     </section>
@@ -286,7 +302,8 @@ function SessionLine({
   open: boolean;
   onToggle: () => void;
 }) {
-  const tracked = line.workedMinutes !== null;
+  const worked = line.workedMinutes;
+  const tracked = worked !== null;
   const panel = `pay-session-${line.sessionId}`;
   return (
     <div>
@@ -312,7 +329,7 @@ function SessionLine({
           <span
             className={cn("text-right", !tracked && "text-[var(--ink-400)]")}
           >
-            {tracked ? duration(line.workedMinutes ?? 0) : "—"}
+            {worked === null ? "—" : duration(worked)}
           </span>
         </span>
       </button>
@@ -323,7 +340,7 @@ function SessionLine({
         >
           {line.sittings.map((s) => (
             <li key={s.start}>
-              {day(s.start)}, {clock(s.start)}–{clock(s.end)} —{" "}
+              {sittingWindow(s)} UTC —{" "}
               <span className="text-[var(--ink-900)]">
                 {duration(s.minutes)}
               </span>

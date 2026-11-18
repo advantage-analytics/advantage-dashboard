@@ -346,6 +346,9 @@ test.describe("label pay report", () => {
         // Someone else checking it is not.
         beat("s-worked", ADMIN, "2026-11-18T08:59:00Z"),
         beat("s-worked", BEN, "2026-11-17T10:00:00Z"),
+        // Reworked after the range closed (sent back in December): never
+        // changes November's figure.
+        beat("s-worked", ANA, "2026-12-03T10:00:00Z"),
       ],
       users,
     });
