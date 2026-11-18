@@ -7,7 +7,8 @@ import {
   requestInvite,
   raiseObjection,
 } from "@/lib/services/programs/claim-actions";
-import { CLAIM_ROLES } from "@/lib/services/programs/claim-roles";
+import { CLAIM_ROLES, toClaimRole } from "@/lib/services/programs/claim-roles";
+import { track } from "@/lib/analytics";
 import {
   CLAIM_BUTTON,
   CLAIM_FIELD,
@@ -111,8 +112,17 @@ export function ContactOwnerForm({
             })
           : await raiseObjection({ programKey, email, note });
 
-      if (!result.ok) setError(result.error);
-      else setSent(true);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      if (kind === "request") {
+        track("program_join_requested", {
+          program_status: "claimed",
+          role: toClaimRole(role),
+        });
+      }
+      setSent(true);
     });
   }
 

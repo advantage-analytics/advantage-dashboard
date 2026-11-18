@@ -3,6 +3,7 @@ import FormHeader from "@/components/auth/form-header";
 import AuthFooter from "@/components/auth/auth-footer";
 import { errorHref } from "@/lib/auth/confirm-link";
 import {
+  connectorApp,
   consentPath,
   getOAuthAuthorizationDetails,
   goesToConnector,
@@ -125,7 +126,7 @@ export default async function ConsentPage({
 
       <form action={decideOAuthConsent} className="flex flex-col gap-[16px]">
         <input type="hidden" name="authorization_id" value={authorizationId} />
-        <DecisionButtons />
+        <DecisionButtons connector={connectorApp(request.redirectUri)} />
         <AuthFooter>
           <span className="text-micro max-w-[44ch]">
             Nothing is shared until you press Allow. Removing the connector from{" "}
