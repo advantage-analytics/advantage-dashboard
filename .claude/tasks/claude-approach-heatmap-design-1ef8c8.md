@@ -196,3 +196,59 @@ ready).
   - [ ] `SEASON_CUT_LABEL` and `cutNoun` have their approaches entries, and the spec asserts `buildSeasonCards` returns the Approaches card
   - [ ] No existing season card's assertions are edited beyond the card count
 - **notes:** Plan step 12. Each match is computed with its own `seasonMatchContext` (that match's hands) before merging. The season loads no lob files (plan decision Q8). Clips use the season lightbox's existing "open that match's Video tab" behaviour, which the eyes-on stage checks. The plan says `SeasonDotPoint` should carry the contact, but that tuple is a point reference (`[match, pointNumber, set, game, server]`) and positions travel in `result.dots`; pick whichever encoding meets the second criterion and say which in the report.
+
+## T14 · Map match hands to seats, not the viewer
+
+- **status:** todo
+- **model:** fable
+- **files:** (guess) `src/lib/data/match-detail-server.ts` (`transformDbMatchToMatch`, the hand block near line 263); doc comment in `src/components/dashboard/matches/player-hands.ts`; new `tests/match-hands-seat.spec.ts` (or cases beside the seat tests in `tests/insight-voice.spec.ts`, which already imports the transform)
+- **routes:** `/dashboard/matches/[matchId]`
+- **done when:**
+  - [ ] A committed spec calls `transformDbMatchToMatch` on one row (`player_hand: "left"`, `opponent_hand: "right"`, both seat ids set) and asserts `player1.hand` is left and `player2.hand` is right for a viewer in seat one, a viewer in seat two, a viewer in neither seat with seat two on the roster, and `pinnedSeat: "player2"`
+  - [ ] The spec asserts the same for the backhands: `player_backhand` on `player1.backhand` and `opponent_backhand` on `player2.backhand`, whichever seat the report is turned to
+  - [ ] The spec asserts a null row column still falls back to that seat's own profile (the `profiles` entry for that seat's id) in both orientations
+  - [ ] The spec asserts `playerHands()` of the report turned to seat two gives `{ player1: "left", player2: "right" }` for that row, and the doc comment on `playerHands` no longer describes an `isUserPlayer1` swap
+  - [ ] `player-season-server.ts` and `labels-server.ts` (`enteredHandsFor`) are not modified
+- **notes:** From /pr-check receipt 4ca777c. Guardrails §4: read `docs/ui-revamp-guardrails.md` first. The wizard writes `player_hand` for seat one (`new-match-wizard/utils.ts` `buildMatchData`: `player1_name = formData.playerName`, `player_hand = formData.playerHand`); the edit dialog, `label-overview-server.ts` and the season loader (`player-season-server.ts` ~431) already read by seat. Today the transform swaps on `isUserPlayer1`, so the same row gives different hands to different viewers, and the Approaches wings, Direction inside-out and the point-list wording mirror on a report turned to seat two. Everything reads these through `playerHands` → `ctx.hands`; the share link uses the same transform. No existing spec pins the old mapping. Known disagreement left alone on purpose: `enteredHandsFor` reads `player_*` as seat two's on a row with only `player2_id` set (four live legacy imports, one with differing hands); do not change it here, and say in the report that those rows now read differently on the report and in the label console.
+
+## T15 · Open Approaches on its baseline without the card
+
+- **status:** todo
+- **model:** fable
+- **files:** (guess) `src/components/dashboard/matches/match-detail/shots/viz-url.ts` (`parseVizState`, `vizStateQuery`), `shots/cut-menu.tsx` (`selectCut`), `shots/default-cuts.ts` (`floor`); `src/lib/data/player-season-viz.ts` (`parseSeasonVizState`); `tests/viz-url.spec.ts`, `tests/viz-approach-filters-browser.spec.ts` + `tests/fixtures/viz-approach-filters-harness.tsx`
+- **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`
+- **done when:**
+  - [ ] A committed spec asserts the state the report reads from a query of `cut=approaches` with no How-you-came-in param has `entry: ["approach"]`, that `parseSeasonVizState` gives the same, and that a query carrying a `ventry` value is read as written
+  - [ ] The harness spec opens the Approaches cut by URL with no `ventry` and asserts no filter strip, the Filters button not engaged and the Approach checkbox ticked
+  - [ ] A committed spec asserts that picking Approaches from the View menu on another cut lands on `entry: ["approach"]` with no "How you came in: any" in the strip
+  - [ ] The existing "Approach unticked (every way in)" assertions in `tests/viz-approach-filters-browser.spec.ts` are not edited, and a spec asserts a state with `cut: "approaches"` and an empty `entry` survives `vizStateQuery` → the same read as an empty `entry`; `validateVizInput` still accepts a view with an empty `entry` as written
+  - [ ] The harness spec opens the cut by URL for a player with no approaches and asserts the stage reads "No approaches recorded for … yet", not "No approaches match these filters"
+- **notes:** From /pr-check receipt 4ca777c. The baseline is `DefaultCut.floor` (`{ entry: ["approach"] }`, added by T10); `viz-lightbox.tsx` and `buildSeasonLightbox` already treat a held floor as no filter, so the fix is where the state is made, not in the strip. Do not put the floor in `carryFilters` unconditionally: `chart-menu.tsx` and `lightbox-advanced-panel.tsx` call it with the cut unchanged, which would undo a reader's untick. The season lightbox is rebuilt on the server from the URL on every change, so if a bare `cut=approaches` now means approaches only, "every way in" needs its own spelling in the URL (fourth criterion). `parseVizState` without its `match` argument is the saved-view validator's read and must not rewrite a stored view. An existing `viz-url.spec.ts` assertion that pins `cut=approaches` to an empty `entry` may change; no other may. Not in scope: `save-view-dialog.tsx` and the cut menu counting the floor as a filter (T10 follow-up 2).
+
+## T16 · Frame the opened Approaches court on its full length
+
+- **status:** todo
+- **model:** opus
+- **files:** (guess) `src/components/dashboard/matches/match-detail/shots/court-geometry.ts` (`viewerInitialTransform`), `shots/viz-lightbox-shell.tsx` (`glideToMark`); `tests/court-geometry.spec.ts`, `tests/viz-approach-lightbox-browser.spec.ts` + `tests/fixtures/viz-approach-lightbox-harness.tsx`
+- **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`
+- **done when:**
+  - [ ] `tests/court-geometry.spec.ts` asserts that under `viewerInitialTransform("approaches", stage)`, for the stage sizes the suite already uses, both of `VIEWER_COURT`'s baselines fall inside the stage and the court is centred horizontally
+  - [ ] The harness spec asserts that on open, before any click, every contact mark and every placement mark lies inside the stage's box
+  - [ ] The harness spec asserts that after a pair is selected, both of its marks lie inside the stage's box
+  - [ ] No existing `viewerInitialTransform`, `viewerFullCourtTransform` or framing assertion for another cut is edited, and the other cuts' transforms are unchanged
+- **notes:** From /pr-check receipt 4ca777c (T8 follow-up 1). `viewerInitialTransform` has no approaches case: `isLandingCut` sends it down the far-half branch, so contacts start below the stage, and `glideToMark` centres on the placement at 150% of that frame, which can push the contact off. The zoom readout's 100% and the `0` key follow `viewerInitialTransform`, so they move with it. How the selection keeps both marks in view (no glide, a glide to the pair's midpoint, a capped zoom) is the runner's call; say which in the report. The season lightbox uses the same shell.
+
+## T17 · Draw the apron labels in the opened Approaches court
+
+- **status:** todo
+- **model:** opus
+- **needs:** T16
+- **files:** (guess) `src/components/dashboard/matches/match-detail/shots/lightbox-court.tsx`; `shots/court-art.tsx` only to share the label constants; `tests/viz-approach-lightbox-browser.spec.ts` + `tests/fixtures/viz-approach-lightbox-harness.tsx`
+- **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`
+- **done when:**
+  - [ ] The harness spec asserts the opened Approaches court shows "Placement", "Contact" and, left to right, "Their FH", "Middle", "Their BH" when the opponent's hand is right or unknown
+  - [ ] The spec asserts a known left-handed opponent swaps the outer two to "Their BH" … "Their FH"
+  - [ ] The spec asserts all five labels lie inside the stage's box at the opening frame
+  - [ ] The spec asserts the labels are absent from another cut's opened court, and no existing label assertion (serve zones, court sides, the wall card's "no text") is edited
+  - [ ] The labels use `--font-mono` and an existing colour token; the diff adds no raw hex colour
+- **notes:** From /pr-check receipt 4ca777c (T8 follow-up 2). T7 put these labels in `CourtArt` (`labels` prop, `ApproachCourtArt`), but the lightbox draws its own court on `VIEWER_COURT` and nothing passes `labels`, so they ship nowhere. Wording and look: `court-art.tsx`'s `APPROACH_LABEL_*` constants and `work/approach-heatmap/02_design/references/approach-map-v9.html`; labels sit on the apron only, never on the court. Read `.skills/advantage-analytics-design/SKILL.md` first. `CourtArt` infers the opponent's hand from the dots (`leftLaneIsForehand`), which falls back to right-handed when a filter leaves no dot with a known hand (T7 follow-up 1); the lightbox has the match's hands in its filter context, so prefer those. Needs T16 so the opening frame includes the apron the labels sit on.
