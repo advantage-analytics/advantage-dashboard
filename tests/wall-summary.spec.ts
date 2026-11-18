@@ -26,6 +26,7 @@ import {
   MATCH as APPROACH_MATCH,
   p as netPoint,
   s as netShot,
+  withoutLanding,
 } from "./fixtures/approach-points";
 
 const POINTS = [
@@ -471,6 +472,48 @@ test("the approaches count line names the points not drawn, and only when there 
       depthBandRows(DEFAULT_BANDS, "ft"),
     ),
   ).toBe(`${result.count} approaches, ${stats.kpi!.won} won`);
+});
+
+test("approaches counted but none drawn: no wing segments, just the count, the note and the lead", () => {
+  // Every point's landings gone (real match 9e4d293e): the approaches still
+  // count, but no wing is known, so the card names none — never three 0s.
+  const { result, stats, summary } = approachSummary(
+    APPROACH_MATCH.map(withoutLanding),
+  );
+  const n = result.count;
+  expect(n).toBeGreaterThan(0);
+  expect(summary.count).toBe(0);
+  expect(summary.total).toBe(n);
+  expect(summary.segments).toEqual([]);
+  for (const label of ["To backhand", "Middle", "To forehand"])
+    expect(summary.segments.map((seg) => seg.label)).not.toContain(label);
+  expect(summary.countLabel).toBe(
+    `${n} ${n === 1 ? "approach" : "approaches"}`,
+  );
+  expect(summary.notDrawn).toBe(n);
+  expect(summary.countNote).toBe(`${n} not drawn: no landing recorded`);
+  expect(summary.keyLead).toBe(`Won ${stats.kpi!.won} of ${n}`);
+  expect(stats.kpi!.count).toBe(n);
+});
+
+test("approaches partly drawn: all three wings, summing to the drawn ones only, the note naming the rest", () => {
+  const { tile, result, summary } = approachSummary([
+    ...APPROACH_MATCH,
+    withoutLanding({ ...UNPLACED, id: "bare-1" }),
+    withoutLanding({ ...UNPLACED, id: "bare-2" }),
+  ]);
+  expect(summary.segments.map((seg) => seg.label)).toEqual([
+    "To backhand",
+    "Middle",
+    "To forehand",
+  ]);
+  const drawn = tile.dots.length;
+  expect(drawn).toBeGreaterThan(0);
+  expect(summary.segments.reduce((n, seg) => n + seg.count, 0)).toBe(drawn);
+  expect(summary.count).toBe(drawn);
+  expect(result.count).toBe(drawn + 2);
+  expect(summary.notDrawn).toBe(2);
+  expect(summary.countNote).toBe("2 not drawn: no landing recorded");
 });
 
 test("a subject with no net points gets an approaches tile counting 0, so the wall's empty rule holds", () => {

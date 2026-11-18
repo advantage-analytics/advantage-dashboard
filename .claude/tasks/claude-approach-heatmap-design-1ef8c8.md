@@ -312,7 +312,7 @@ ready).
 
 ## T22 · Stop the Approaches card drawing wings as zeroes
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/wall-summary.ts` (`wallSummaryFor`'s `approaches` branch, `WallSummary`); `shots/wall-card.tsx` (the `SplitBar` and the key row under it, ~225-250); `tests/wall-summary.spec.ts` (`approachSummary`, ~379-470); a rendered-markup case in `tests/viz-gallery-browser.spec.ts` or the approach harness, with `withoutLanding()` from `tests/fixtures/approach-points.ts`
 - **routes:** `/dashboard/matches/[matchId]`

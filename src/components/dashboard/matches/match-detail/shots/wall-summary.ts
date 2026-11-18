@@ -85,6 +85,9 @@ export interface WallSummary {
   unit: string;
   /** `true` on the errors card: `pct` is a share, not a win rate. */
   share: boolean;
+  /** Empty on an approaches card whose approaches all lack a landing
+   *  (`notDrawn === total > 0`): no wing is known, so the card draws no bar
+   *  and no wing keys rather than three zeroes. */
   segments: WallSegment[];
   /** Won of every segment together, rounded — the readout's "Average N%".
    *  `null` on the errors card and when nothing landed in. */
@@ -177,6 +180,12 @@ export function wallSummaryFor(
     const drawnWon = segments.reduce((n, s) => n + s.won, 0);
     const notDrawn = Math.max(0, total - drawnCount);
     const wonAll = stats.kpi?.won ?? drawnWon;
+    // Approaches counted but none drawn (no landing anywhere): a wing is
+    // only known from a landing, so there are no wings to name — three
+    // "0"s beside "7 approaches" would read as "you hit none". No
+    // segments; the note says why. A card with no approaches at all
+    // (`total === 0`) keeps its three zero wings.
+    const noWings = drawnCount === 0 && total > 0;
     return {
       countLabel: wallCountLabel(cut, drawnCount, total),
       count: drawnCount,
@@ -184,7 +193,7 @@ export function wallSummaryFor(
       keyLead: `Won ${wonAll} of ${total}`,
       unit: "approaches",
       share: false,
-      segments,
+      segments: noWings ? [] : segments,
       averagePct: pct(drawnWon, drawnCount),
       notDrawn,
       countNote: notDrawnNote(notDrawn),

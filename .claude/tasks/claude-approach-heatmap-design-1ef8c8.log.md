@@ -209,3 +209,14 @@ is the runner's. Newest entries at the bottom.
 
 1. The Points pane's empty line still reads "No {noun} match these filters." whatever the filter state; it could use the same empty line.
 2. T15 follow-up 2 stands: with `ventry=any` and no net points the stage says "none recorded" while the strip names the loosened floor.
+
+## T22 · Stop the Approaches card drawing wings as zeroes — done
+
+**gate:** mechanical PASS · completion-review pass
+
+**changed:** `wallSummaryFor("approaches")` returns no segments when approaches are counted but none has a landing (`drawnCount === 0 && total > 0`), keeping the count, the "N not drawn" note and "Won x of N"; `wall-card.tsx` draws the split bar only when there are segments or nothing is undrawn, and marks it `data-wall-split-bar`. New offline spec `tests/wall-card-approaches.spec.ts` renders the real card; two new cases in `tests/wall-summary.spec.ts`.
+
+**follow-ups:**
+
+1. With the bar gone, the gap above "Won x of N" on that card is 10px smaller than on other cards — check on screen.
+2. Other cuts' cards still draw an empty grey track when they have nothing; left alone as out of scope.
