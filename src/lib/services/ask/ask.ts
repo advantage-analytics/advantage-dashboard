@@ -953,7 +953,7 @@ export async function* askQuestion(
     // answer in the views, and the planner could only refuse it. The route
     // read it before reserving (`app-help.ts`); it is answered with the page
     // that does it, before any model call, and nothing is spent.
-    const help = input.appHelp ?? null;
+    const help = input.appHelp;
     if (help) {
       await release();
       yield {
