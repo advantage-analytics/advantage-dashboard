@@ -58,6 +58,7 @@ import {
   approachLateralM,
   approachOf,
   LATERAL_THIRD_M,
+  SINGLES_HALF_M,
   type Approach,
   type ApproachDirection,
   type ApproachEndingBucket,
@@ -1217,7 +1218,7 @@ function rallyLandingMetrics(shot: MatchShot) {
   const miss =
     atNet ||
     shot.result === "Out" ||
-    Math.abs(lateralM) > REAL_SINGLES_HALF_M + IN_COURT_EPS ||
+    Math.abs(lateralM) > SINGLES_HALF_M + IN_COURT_EPS ||
     depthM > REAL_NET_Y + IN_COURT_EPS;
   // After `miss` has read the landing's own lateral: a net ball is drawn on
   // its path at the net (`netDotLateralM`), which is position only.
@@ -1893,9 +1894,8 @@ const ZONE_ROWS: { key: ZoneKey; label: string }[] = [
 
 // Singles court is 8.23m wide — 4.115m either side of the center line. Same
 // value `court-geometry.ts`'s `SINGLES_HALF_WIDTH_M` uses for the drawn
-// court; kept as a local constant here rather than imported, since that file
-// is a client-adjacent geometry/SVG module and this one stays plain.
-const REAL_SINGLES_HALF_M = 4.115;
+// court; taken from `approach.ts` rather than that file, which is a
+// client-adjacent geometry/SVG module while this one stays plain.
 const IN_COURT_EPS = 1e-6;
 
 /** A saved view's filter group, named when the reader loosens it to "any". */
@@ -2090,7 +2090,7 @@ function serveStatsGroup(
 function isPlacementRow(d: VizDot): boolean {
   if (d.outcome === "miss") return false;
   return (
-    Math.abs(d.lateralM) <= REAL_SINGLES_HALF_M + IN_COURT_EPS &&
+    Math.abs(d.lateralM) <= SINGLES_HALF_M + IN_COURT_EPS &&
     d.depthM >= -IN_COURT_EPS &&
     d.depthM <= REAL_NET_Y + IN_COURT_EPS
   );
@@ -2444,14 +2444,13 @@ function errorMissKey(dot: VizDot): "net" | "long" | "wide" | "in" {
     return dot.depthM > SERVE_BOX_DEPTH_M + IN_COURT_EPS ? "long" : "wide";
   }
   if (dot.depthM > REAL_NET_Y + IN_COURT_EPS) return "long";
-  if (Math.abs(dot.lateralM) > REAL_SINGLES_HALF_M + IN_COURT_EPS)
-    return "wide";
+  if (Math.abs(dot.lateralM) > SINGLES_HALF_M + IN_COURT_EPS) return "wide";
   if (dot.meta?.result === "Out") {
     // The tracker's call is the authority (as `rallyLandingMetrics`'s): an
     // Out whose landing reads just inside — imputed onto a line — is out
     // over whichever line it sits nearer.
     const toBaseline = REAL_NET_Y - dot.depthM;
-    const toSideline = REAL_SINGLES_HALF_M - Math.abs(dot.lateralM);
+    const toSideline = SINGLES_HALF_M - Math.abs(dot.lateralM);
     return toBaseline <= toSideline ? "long" : "wide";
   }
   return "in";

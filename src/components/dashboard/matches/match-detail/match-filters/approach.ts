@@ -88,7 +88,7 @@ export interface Approach {
 }
 
 /** Singles half-width over three, in metres — one lane of the court. */
-const SINGLES_HALF_M = 4.115;
+export const SINGLES_HALF_M = 4.115;
 export const LATERAL_THIRD_M = SINGLES_HALF_M / 3;
 
 /**

@@ -1291,6 +1291,8 @@ export function buildSeasonLightbox(
     player: filters.player,
   };
   const floorKeys = Object.keys(floor) as (keyof VizFilters)[];
+  const floorHeld = (key: keyof VizFilters) =>
+    floorKeys.includes(key) && sameFilterValue(key, filters, floorFilters);
   const clearFilters: VizFilters =
     baseline !== null && onCard ? baseline.filters : floorFilters;
   const panelActive =
@@ -1306,10 +1308,7 @@ export function buildSeasonLightbox(
       (entry) =>
         entry.key !== "player" &&
         !(onCard && baseline !== null && baseline.keys.includes(entry.key)) &&
-        !(
-          floorKeys.includes(entry.key) &&
-          sameFilterValue(entry.key, filters, floorFilters)
-        ),
+        !floorHeld(entry.key),
     )
     .map((entry) => entry.label);
   // The floor let go of entirely (every way to the net) is a change Clear
@@ -1365,13 +1364,7 @@ export function buildSeasonLightbox(
     // court has none recorded, not none matching.
     hasFilters:
       seasonActive ||
-      activeFilterEntries(state).some(
-        (entry) =>
-          !(
-            floorKeys.includes(entry.key) &&
-            sameFilterValue(entry.key, filters, floorFilters)
-          ),
-      ),
+      activeFilterEntries(state).some((entry) => !floorHeld(entry.key)),
     title: baseline !== null && onCard ? baseline.name : SEASON_CUT_LABEL[cut],
     subtitle: `${SEASON_CUT_LABEL[cut]} · ${subjectWord} · ${matches} ${matches === 1 ? "match" : "matches"} · ${lightboxCountLine(
       cut,
