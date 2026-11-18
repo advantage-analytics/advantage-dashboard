@@ -268,8 +268,23 @@ export interface VizDot {
   meta?: VizDotMeta;
 }
 
+/**
+ * What a list or a count needs of a mark, without a place on court: a
+ * `VizDot` is one, and so is an Approaches entry with no landing
+ * (`VizResult.undrawn`).
+ */
+export type VizMark = Pick<VizDot, "id" | "outcome" | "shape" | "meta">;
+
 export interface VizResult {
   dots: VizDot[];
+  /**
+   * Approaches cut only: the counted approaches with no placement, in match
+   * order — counted in `count` but never drawn, so `count - dots.length` is
+   * their number. The lightbox's Points list, its count and Watch read them
+   * with the dots (`resultMarks`); the court never does. Absent on every
+   * other cut.
+   */
+  undrawn?: VizMark[];
   count: number; // points matching the filters (rallyPosition: matching SHOTS)
   total: number; // drawable points in the cut's pool (rallyPosition: drawable SHOTS)
   noun: "serves" | "returns" | "shots" | "errors" | "approaches";
@@ -1417,28 +1432,17 @@ function computeApproachViz(
   );
   let count = 0;
   const dots: VizDot[] = [];
+  const undrawn: VizMark[] = [];
 
   for (const { point: p, approach } of pool) {
     if (!approachToPasses(approach, filters)) continue;
     if (!approachDirPasses(approach, filters)) continue;
     count++;
     const { shot } = approach;
-
-    // The placement, by the classifier's own rule: null when unmeasured or
-    // the ball never crossed, exactly where `approach.lane` is null.
-    const lateralM = approachLateralM(shot);
-    const landing = lateralM === null ? null : rallyLandingMetrics(shot);
-    if (lateralM === null || !landing) continue;
-    const contact = contactMetrics(shot.contactX, shot.contactY);
-
-    dots.push({
+    const mark: VizMark = {
       id: p.id,
-      lateralM,
-      depthM: landing.depthM,
       outcome: p.wonByPlayer1 === subjectIsPlayer1 ? "won" : "lost",
       shape: shapeFromShotType(shot.shotType),
-      atNet: false,
-      ...(contact ? { pair: contact } : {}),
       meta: {
         ...pointDotMeta(p, subjectIsPlayer1, shot),
         entry: approach.entry,
@@ -1448,10 +1452,29 @@ function computeApproachViz(
         bucket: approach.bucket,
         handAssumed: approach.handAssumed,
       },
+    };
+
+    // The placement, by the classifier's own rule: null when unmeasured or
+    // the ball never crossed, exactly where `approach.lane` is null. Without
+    // one the approach is listed, not drawn.
+    const lateralM = approachLateralM(shot);
+    const landing = lateralM === null ? null : rallyLandingMetrics(shot);
+    if (lateralM === null || !landing) {
+      undrawn.push(mark);
+      continue;
+    }
+    const contact = contactMetrics(shot.contactX, shot.contactY);
+
+    dots.push({
+      ...mark,
+      lateralM,
+      depthM: landing.depthM,
+      atNet: false,
+      ...(contact ? { pair: contact } : {}),
     });
   }
 
-  return { dots, count, total, noun: "approaches", zoneStats: null };
+  return { dots, undrawn, count, total, noun: "approaches", zoneStats: null };
 }
 
 interface PooledApproach {
@@ -2480,15 +2503,7 @@ export function statRowKeyOf(
       return (dot.meta?.stroke ?? "Other").toLowerCase();
     return null;
   }
-  if (cut === "approaches") {
-    const meta = dot.meta;
-    if (groupKey === "approach-to") return meta?.wing ?? null;
-    if (groupKey === "approach-direction") {
-      return meta?.direction ? APPROACH_DIRECTION_KEY[meta.direction] : null;
-    }
-    if (groupKey === "approach-ended") return meta?.bucket ?? null;
-    return null;
-  }
+  if (cut === "approaches") return approachRowKeyOf(groupKey, dot);
   if (cut === "returnPlacement" || cut === "rallyPlacement") {
     if (!isPlacementRow(dot)) return null;
     if (groupKey === "direction" && cut === "returnPlacement")
@@ -2509,6 +2524,25 @@ export function statRowKeyOf(
       return dot.shape === "triangle" ? "backhand" : "forehand";
     return null;
   }
+  return null;
+}
+
+/**
+ * `statRowKeyOf` for the Approaches cut, which reads only a mark's `meta`, so
+ * an approach with no landing (`VizResult.undrawn`) is bucketed by the same
+ * rule: no wing or direction means no Approach to or Direction row; How it
+ * ended still has one.
+ */
+export function approachRowKeyOf(
+  groupKey: string,
+  mark: VizMark,
+): string | null {
+  const meta = mark.meta;
+  if (groupKey === "approach-to") return meta?.wing ?? null;
+  if (groupKey === "approach-direction") {
+    return meta?.direction ? APPROACH_DIRECTION_KEY[meta.direction] : null;
+  }
+  if (groupKey === "approach-ended") return meta?.bucket ?? null;
   return null;
 }
 

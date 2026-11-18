@@ -191,3 +191,12 @@ is the runner's. Newest entries at the bottom.
 
 1. Stripping every landing drops the fixture's approach count from 5 to 4: the Net game's drawn-in rule reads the opponent's bounce, so missing landings move points between entries. Check how real coordinate-free matches (9e4d293e) classify.
 2. With nothing drawn, the "Won 0 / Lost 0" legend still shows under the stage card; consider muting it.
+
+## T20 · List every counted approach in the Points pane — done
+
+**gate:** mechanical pass · completion pass
+**changed:** `VizResult.undrawn` (Approaches only) carries approaches with no landing as position-less marks, kept out of `dots`; `resultMarks()` (`lightbox-points.ts`) feeds the Points list, its count, selection, Watch and the legend counts, while the court gets only drawn dots. `statPickDotIds` buckets undrawn marks too (How it ended keeps them; Approach to and Direction drop them). On Approaches the strip and pane count say the cut's noun ("approaches" / "times at the net") instead of "points". An undrawn row lights and takes the second click without ringing a mark. New cases in `lightbox-points.spec.ts` and the filters harness (new `?video=1`); `season-viz-lightbox.tsx` type-only.
+**follow-ups:**
+
+1. The season's `mergeVizResults` drops `undrawn`, so the season legend counts only drawn approaches.
+2. Memoise the shell's `marks` / `matched` derivations if profiling shows a cost.

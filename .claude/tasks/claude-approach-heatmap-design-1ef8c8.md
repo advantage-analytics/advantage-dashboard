@@ -283,7 +283,7 @@ ready).
 
 ## T20 · List every counted approach in the Points pane
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T19
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/viz-model.ts` (`computeApproachViz`, `VizResult`), `shots/lightbox-points.ts` (`pointsBehind`), `shots/viz-lightbox-shell.tsx` (`matched` ~876, strip count ~1085, pane count ~1317), `shots/viz-lightbox.tsx` (`allPointsBehind`), `shots/lightbox-filter-strip.tsx`; `tests/lightbox-points.spec.ts`, `tests/viz-model.spec.ts`, `tests/viz-approach-filters-browser.spec.ts`

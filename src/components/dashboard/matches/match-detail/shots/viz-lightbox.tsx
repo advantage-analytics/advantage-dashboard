@@ -11,7 +11,7 @@ import { canManageSavedView } from "@/lib/data/saved-views-logic";
 import { ChartMenu } from "./chart-menu";
 import { CutMenu } from "./cut-menu";
 import { defaultCutsFor } from "./default-cuts";
-import { isPlayable, pointsBehind } from "./lightbox-points";
+import { isPlayable, pointsBehind, resultMarks } from "./lightbox-points";
 import { LightboxPointList } from "./lightbox-point-list";
 import { SaveAsViewButton } from "./save-as-view-button";
 import {
@@ -37,7 +37,7 @@ import {
   HAND_ASSUMED_NOTE,
   LOOSENED_LABEL,
   type PlayerFilter,
-  type VizDot,
+  type VizMark,
   type VizFilters,
 } from "./viz-model";
 import { activeFilterEntries, courtFor, sameFilterValue } from "./viz-url";
@@ -63,7 +63,8 @@ export type WatchPoints = (pointNumbers: number[], label: string) => void;
  * sentence and "Clear filter"'s target against the card's or saved view's
  * baseline, and hands all of it to `VizLightboxShell`, which draws it and
  * keeps the reading state (zoom, selection, picks, pane, Esc). The footer's
- * N is `pointsBehind()` over the same marks the court draws.
+ * N is `pointsBehind()` over the same marks the court draws, and the
+ * approaches it counts but cannot draw (`resultMarks`).
  */
 export function VizLightbox({
   wallPlayer,
@@ -165,6 +166,7 @@ export function VizLightbox({
         result.dots,
         pick,
         bands,
+        result.undrawn,
       );
     };
   }, [points, cut, state.filters, subjectIsPlayer1, matchCtx, result, bands]);
@@ -197,7 +199,7 @@ export function VizLightbox({
   // the match has a video to play and the point a clip in it.
   const canWatchFilm = meta.hasPlayableVideo && onWatchPoints !== undefined;
   const canWatchDot = useCallback(
-    (dot: VizDot) => {
+    (dot: VizMark) => {
       if (!canWatchFilm || !dot.meta?.pointId) return false;
       const point = pointById.get(dot.meta.pointId);
       return point !== undefined && isPlayable(point);
@@ -320,7 +322,7 @@ export function VizLightbox({
       "scatter",
       matchCtx,
     );
-    return pointsBehind(cut, all.dots, points);
+    return pointsBehind(cut, resultMarks(all), points);
     // `denominatorFilters` is rebuilt every render; its content is keyed by
     // these.
     // eslint-disable-next-line react-hooks/exhaustive-deps

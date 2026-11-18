@@ -315,3 +315,190 @@ test("another cut's opened court never carries the not-drawn line, even over a m
   }
   expect(errors).toEqual([]);
 });
+
+/* ── The Points pane lists every counted approach (T20) ───────────────── */
+
+/** The fixture's points in match order: `pointNumber` is index + 1. */
+const MATCH_ORDER = [
+  "serve-volley",
+  "passed-dtl",
+  "passed-cc",
+  "drawn-in",
+  "lobbed",
+  "opp-error",
+  "opp-approach",
+  "baseline",
+];
+
+/** The KPI tile's count, whatever the cut counts it in ("7 times at the net"). */
+async function kpiN(dialog: Locator): Promise<number> {
+  const label = await dialog
+    .locator("[data-stat-summary] p")
+    .first()
+    .locator(".sr-only")
+    .textContent();
+  const match = /^(\d+)\b/.exec(label?.trim() ?? "");
+  expect(match, `KPI tile reads "${label}"`).not.toBeNull();
+  return Number(match![1]);
+}
+
+const pointRows = (dialog: Locator) =>
+  dialog.getByRole("list", { name: "Points" }).locator("[data-point-id]");
+
+/** The pane's "N / M" beside the Points chip, as [N, M]. */
+async function paneCount(dialog: Locator): Promise<[number, number]> {
+  const text = await dialog
+    .locator("span.mono.tabular[aria-label]")
+    .first()
+    .textContent();
+  const match = /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(text ?? "");
+  expect(match, `pane count reads "${text}"`).not.toBeNull();
+  return [Number(match![1]), Number(match![2])];
+}
+
+/** The applied strip's "N of M …" (`AppliedFilterStrip`'s count). */
+const stripCount = (strip: Locator) => strip.locator("span.text-micro.tabular");
+
+async function showPoints(dialog: Locator) {
+  await dialog.getByRole("button", { name: "Points", exact: true }).click();
+}
+
+async function showStats(dialog: Locator) {
+  await dialog.getByRole("button", { name: "Statistics", exact: true }).click();
+}
+
+test("no approach has a landing: the Points pane lists every counted one, N / N with N the KPI's, never 'No points to play'", async ({
+  page,
+}) => {
+  const { dialog, errors } = await openApproaches(page, "&landing=none");
+  await expect(courtMarks(dialog)).toHaveCount(0);
+  const n = await kpiN(dialog);
+  expect(n).toBeGreaterThan(0);
+
+  await showPoints(dialog);
+  await expect(pointRows(dialog)).toHaveCount(n);
+  expect(await paneCount(dialog)).toEqual([n, n]);
+  await expect(
+    dialog.locator(`[aria-label="${n} of ${n} approaches"]`),
+  ).toHaveCount(1);
+  await expect(dialog).not.toContainText("No points to play");
+  await expect(dialog).not.toContainText("match these filters");
+  // In match order.
+  const ids = await pointRows(dialog).evaluateAll((rows) =>
+    rows.map((r) => r.getAttribute("data-point-id")),
+  );
+  expect(ids).toEqual(
+    [...ids].sort((a, b) => MATCH_ORDER.indexOf(a!) - MATCH_ORDER.indexOf(b!)),
+  );
+  expect(errors).toEqual([]);
+});
+
+test("an Approach to wing and a legend pick narrow the Points pane to the count the court and KPI show", async ({
+  page,
+}) => {
+  const { dialog, errors } = await openApproaches(
+    page,
+    "&landing=some&hand=known",
+  );
+  const all = await kpiN(dialog);
+
+  // A legend pick (Won): the pane's N is the Won key's count, which counts
+  // the undrawn approaches too, so Won + Lost is the KPI's.
+  const legend = dialog.getByRole("group", { name: "Filter by outcome" });
+  const keyCount = async (name: string) =>
+    Number(
+      /(\d+)\s*$/.exec(
+        (await legend
+          .getByRole("button", { name: new RegExp(`^${name}`) })
+          .textContent()) ?? "",
+      )![1],
+    );
+  const won = await keyCount("Won");
+  const lost = await keyCount("Lost");
+  expect(won + lost).toBe(all);
+  await showPoints(dialog);
+  await legend.getByRole("button", { name: /^Won/ }).click();
+  await expect(pointRows(dialog)).toHaveCount(won);
+  expect((await paneCount(dialog))[0]).toBe(won);
+  await legend.getByRole("button", { name: /^Won/ }).click();
+  await expect(pointRows(dialog)).toHaveCount(all);
+
+  // An Approach to wing: an undrawn approach has no wing, so the KPI and
+  // the court drop it, and the pane does too.
+  const panel = await openPanel(page);
+  await panel.getByRole("checkbox", { name: /^Their forehand\b/ }).click();
+  await page.keyboard.press("Escape");
+  await showStats(dialog);
+  const wing = await kpiN(dialog);
+  expect(wing).toBeLessThan(all);
+  await showPoints(dialog);
+  await expect(pointRows(dialog)).toHaveCount(wing);
+  expect((await paneCount(dialog))[0]).toBe(wing);
+  await expect(courtMarks(dialog)).not.toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("the second click, or Enter, on the row of an approach with no landing watches that point", async ({
+  page,
+}) => {
+  for (const how of ["click", "enter"] as const) {
+    const { dialog, errors } = await openApproaches(
+      page,
+      "&landing=none&video=1",
+    );
+    await showPoints(dialog);
+    const row = pointRows(dialog).first();
+    const id = await row.getAttribute("data-point-id");
+    expect(id).not.toBeNull();
+    await row.click();
+    // The row lights though there is no mark to ring.
+    await expect(row).toHaveAttribute("data-playing", "true");
+    await expect(row).toContainText("Click again to watch");
+    await expect(courtMarks(dialog)).toHaveCount(0);
+    expect(new URL(page.url()).searchParams.get("tab")).not.toBe("film");
+    if (how === "click") await row.click();
+    else await row.press("Enter");
+    await expect(page).toHaveURL(/tab=film/);
+    expect(new URL(page.url()).searchParams.get("pn")).toBe(
+      String(MATCH_ORDER.indexOf(id!) + 1),
+    );
+    expect(errors).toEqual([]);
+  }
+});
+
+test("the strip counts what the approaches cut counts — never points — and another cut's still reads points", async ({
+  page,
+}) => {
+  for (const landing of ["", "&landing=none"]) {
+    await page.setViewportSize({ width: 1512, height: 982 });
+    await page.goto(`${origin}/?tab=shots&cut=approaches&ventry=any${landing}`);
+    const dialog = page.getByRole("dialog", { name: "Approaches" });
+    await expect(dialog).toBeVisible();
+    const strip = dialog.locator("[data-viz-filter-strip]");
+    await expect(strip).toContainText("How you came in: any");
+    const n = await kpiN(dialog);
+    expect(n).toBeGreaterThan(0);
+    // Only the first number must agree with the KPI: the denominator is the
+    // cut's widest pool, which `entry` off the card's floor can pass.
+    await expect(stripCount(strip)).toHaveText(
+      new RegExp(`^${n} of \\d+ times at the net$`),
+    );
+    await expect(strip).not.toContainText(/points?/);
+  }
+
+  // On the card's own entry, narrowed by a wing: approaches, not points.
+  const { dialog } = await openApproaches(page, "&landing=some&hand=known");
+  const panel = await openPanel(page);
+  await panel.getByRole("checkbox", { name: /^Their forehand\b/ }).click();
+  await page.keyboard.press("Escape");
+  const strip = dialog.locator("[data-viz-filter-strip]");
+  await expect(stripCount(strip)).toHaveText(/^\d+ of \d+ approach(es)?$/);
+  await expect(strip).not.toContainText(/points?/);
+
+  // Another cut's strip still counts points.
+  await page.goto(`${origin}/?tab=shots&cut=serve&ball=first`);
+  const serve = page.getByRole("dialog").first();
+  await expect(stripCount(serve.locator("[data-viz-filter-strip]"))).toHaveText(
+    /^\d+ of \d+ points?$/,
+  );
+});

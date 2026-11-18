@@ -25,10 +25,13 @@ import {
  * `?landing=none` takes every shot's landing off (real match 9e4d293e: the
  * approaches count, none can be drawn); `?landing=some` takes it off two of
  * your approaches only (`PASSED_DTL`, `LOBBED`), so the rest still draw.
+ * `?video=1` gives the match a playable video (every fixture point has a
+ * clip), so a second click on a mark or a Points row watches its point.
  */
 const params = new URLSearchParams(window.location.search);
 const handKnown = params.get("hand") === "known";
 const landing = params.get("landing");
+const video = params.get("video") === "1";
 const NO_LANDING: ReadonlySet<string> = new Set([PASSED_DTL.id, LOBBED.id]);
 const source = (
   params.get("net") === "never" ? [BASELINE, OPP_APPROACH] : MATCH
@@ -73,7 +76,7 @@ createRoot(document.getElementById("root")!).render(
         summary={null}
         isDerived={false}
         statsPublished={false}
-        hasPlayableVideo={false}
+        hasPlayableVideo={video}
         savedViews={[]}
         workspaceRole="owner"
         workspaceKind="personal"

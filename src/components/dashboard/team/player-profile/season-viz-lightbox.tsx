@@ -22,6 +22,7 @@ import {
   type PlayerFilter,
   type VizDot,
   type VizFilters,
+  type VizMark,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
   courtFor,
@@ -351,7 +352,7 @@ export function SeasonVizLightbox({
     [refs, seasonMatches],
   );
   const canWatch = useCallback(
-    (dot: VizDot): boolean => {
+    (dot: VizMark): boolean => {
       const ref = refs.byDot.get(dot.id);
       if (!ref || ref[1] <= 0) return false;
       return seasonMatches?.[ref[0]]?.hasPlayableVideo === true;
