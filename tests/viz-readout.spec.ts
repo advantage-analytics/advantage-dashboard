@@ -4,6 +4,7 @@ import {
   buildReadout,
   buildZoneReadout,
   markClickHint,
+  placeApronReadout,
   placeReadout,
   statRowTooltip,
   wonFigureLabel,
@@ -248,6 +249,79 @@ test("the readout slides along the stage's edges and fits a narrow phone", () =>
   expect(placeReadout({ x: 2, y: 400 }, stage).left).toBe(118);
   expect(placeReadout({ x: 318, y: 400 }, stage).left).toBe(202);
   expect(placeReadout({ x: 160, y: 400 }, { w: 200, h: 700 }).width).toBe(184);
+});
+
+test.describe("placeApronReadout (the Approaches pair's readout)", () => {
+  // A 1000×800 stage with the court's centre line at x=500; the card is the
+  // worst-case 220 wide, held 10px off its mark, 8px in from the stage.
+  const stage = { w: 1000, h: 800 };
+  const centre = 500;
+
+  test("it opens outward into the apron: left of a left-half mark, right of a right-half one", () => {
+    expect(placeApronReadout({ x: 400, y: 300 }, stage, centre)).toEqual({
+      side: "left",
+      left: 390,
+      top: 300,
+      width: 220,
+    });
+    expect(placeApronReadout({ x: 600, y: 300 }, stage, centre)).toEqual({
+      side: "right",
+      left: 610,
+      top: 300,
+      width: 220,
+    });
+  });
+
+  test("with no room outward it opens on the other side", () => {
+    // 100 - 10 - 220 < 8: the left apron cannot hold it.
+    expect(placeApronReadout({ x: 100, y: 300 }, stage, centre)).toMatchObject({
+      side: "right",
+      left: 110,
+    });
+    // 900 + 10 + 220 > 992: nor can the right.
+    expect(placeApronReadout({ x: 900, y: 300 }, stage, centre)).toMatchObject({
+      side: "left",
+      left: 890,
+    });
+  });
+
+  test("when neither side fits it sits above the mark, then below at the top", () => {
+    const narrow = { w: 300, h: 800 };
+    expect(placeApronReadout({ x: 140, y: 400 }, narrow, 150)).toEqual({
+      side: "above",
+      left: 140,
+      top: 390,
+      width: 220,
+    });
+    expect(placeApronReadout({ x: 140, y: 40 }, narrow, 150)).toMatchObject({
+      side: "below",
+      top: 50,
+    });
+  });
+
+  test("a side card is centred on its mark and kept off the stage's top and bottom", () => {
+    expect(placeApronReadout({ x: 400, y: 20 }, stage, centre).top).toBe(88);
+    expect(placeApronReadout({ x: 400, y: 790 }, stage, centre).top).toBe(712);
+  });
+
+  test("the gap is the caller's: the selection ring's radius plus 8", () => {
+    expect(placeApronReadout({ x: 400, y: 300 }, stage, centre, 20).left).toBe(
+      380,
+    );
+  });
+});
+
+test("a pair's readout names the mark it is about; a single mark's has no such line", () => {
+  const m = meta({ shotType: "Forehand", pointScore: "30-15" });
+  expect(
+    buildMarkReadout(m, "won", "approaches", null, { part: "contact" }).part,
+  ).toBe("Contact");
+  expect(
+    buildMarkReadout(m, "won", "approaches", null, { part: "placement" }).part,
+  ).toBe("Placement");
+  expect(buildMarkReadout(m, "won", "approaches", null)).not.toHaveProperty(
+    "part",
+  );
 });
 
 test("a mark panned out of view pins the readout to the nearest edge", () => {

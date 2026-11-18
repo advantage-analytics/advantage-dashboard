@@ -69,3 +69,13 @@ is the runner's. Newest entries at the bottom.
 1. Wing labels are inferred from the dots; if a filter leaves no dot with a known hand, a left-handed opponent's labels fall back to right-handed wording. An explicit opponent-hand prop would fix it.
 2. On the approaches frame, heat and zones draw only the court (the cut is scatter only).
 3. v9 draws small centre marks on each baseline; the existing return court never did, so they were left out.
+
+## T8 · Make a pair one interactive mark in the opened court — done
+
+**gate:** mechanical pass · completion pass
+**changed:** `lightbox-court.tsx` draws a pair dot as one interactive group with two marks (contact in the near half, placement in the far half of the lightbox's upright court): hovering or focusing either rings both, selecting rings both, dims the rest to `UNSELECTED_OPACITY` and appends an aria-hidden, pointer-less copy so the pair sits on top without moving the focused node. `viz-readout.ts` gains an optional `part` line ("Contact" / "Placement") and `placeApronReadout` (outward, then the other side, then above). New harness `tests/viz-approach-lightbox-browser.spec.ts` (+ fixture) and `placeApronReadout` cases in `tests/viz-readout.spec.ts`; `viz-mark-roving.ts` unchanged.
+**follow-ups:**
+
+1. The lightbox opens framed on the far half (as for every landing cut), so approach contacts start below the stage until "Full court" is pressed; selecting a pair centres on the placement and can push the contact off-screen. Fix in `viewerInitialTransform` (`court-geometry.ts`); no queued task covers it.
+2. The opened court has no Contact / Placement / wing labels: T7 added them to `CourtArt` only, and the lightbox draws its own court. No queued task covers it.
+3. The raised copy's hover scale (1.4) repeats a value in `globals.css`; keep them in step.

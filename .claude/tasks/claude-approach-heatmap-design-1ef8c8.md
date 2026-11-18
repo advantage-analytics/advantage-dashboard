@@ -114,7 +114,7 @@ ready).
 
 ## T8 · Make a pair one interactive mark in the opened court
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T7
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/lightbox-court.tsx`, `shots/viz-readout.ts`, `shots/viz-mark-roving.ts`; `tests/viz-readout.spec.ts`, `tests/viz-mark-roving.spec.ts`, a harness spec in the pattern of `tests/viz-lightbox-shell-browser.spec.ts`
