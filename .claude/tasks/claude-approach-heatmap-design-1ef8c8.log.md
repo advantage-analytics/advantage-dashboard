@@ -231,3 +231,13 @@ is the runner's. Newest entries at the bottom.
 
 1. The test browser draws the labels in Times (no next/font inside SVG in the harness); the layout is sized for Roboto Mono's taller ascent — check the opened court on screen.
 2. "Full court" is now only ~3% wider than the opening frame (was 4.5%); no geometry test pins that margin.
+
+## T24 · Show the assumed-hand caveat beside the opened Approaches legend — done
+
+**gate:** mechanical PASS · completion-review pass
+
+**changed:** `viz-lightbox-shell.tsx` no longer appends `sentenceNote` to the filter strip; the legend row shows it as its own quiet line (`data-viz-hand-assumed`) whenever it is set, beside the "N not drawn" line when both apply. One existing case in `tests/viz-approach-filters-browser.spec.ts` now asserts the strip lacks the caveat; new cases there and in `tests/season-viz-browser.spec.ts`.
+
+**follow-ups:**
+
+1. The season case uses `?landing=some`; a mixed-hands (`?hands=1`) case is not covered.

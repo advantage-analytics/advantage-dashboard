@@ -1048,6 +1048,28 @@ test("a chart switch keeps the season's court exactly where it is — at 100%, a
   await cycle(await read());
 });
 
+test("the season's opened Approaches court says it assumes right-handed beside its legend when a folded match has no opponent hand, with no filter ticked", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  // `?landing=some`: one folded match against Jordan Lee, no hand on it.
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&cut=approaches&landing=some&delay=50`,
+  );
+  const dialog = page.getByRole("dialog", { name: "Approaches" });
+  await expect(dialog).toBeVisible({ timeout: 8_000 });
+  await expect(marks(dialog).first()).toBeVisible({ timeout: 5_000 });
+  // No filter ticked: no strip, and the line still says it.
+  await expect(dialog.locator("[data-viz-filter-strip]")).toHaveCount(0);
+  const line = dialog.locator("[data-viz-hand-assumed]");
+  await expect(line).toHaveText("assumes right-handed");
+  await expect(line).toBeVisible();
+  await expect(dialog.getByText(/assumes right-handed/i)).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
 test("the season's opened Approaches court names the approaches it cannot draw: a season approach with no landing reads in the not-drawn line beside the drawn marks", async ({
   page,
 }) => {

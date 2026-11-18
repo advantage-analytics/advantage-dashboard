@@ -340,7 +340,7 @@ ready).
 
 ## T24 · Show the assumed-hand caveat beside the opened Approaches legend
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/viz-lightbox-shell.tsx` (the strip's `sentenceNote && phrases.length > 0` ~1136; the legend row's `data-viz-not-drawn` line ~1355); `shots/viz-lightbox.tsx` (`sentenceNote` ~539) and `src/lib/data/player-season-viz.ts` (~1379) only if the condition changes; `tests/viz-approach-filters-browser.spec.ts` (~209) + `tests/fixtures/viz-approach-filters-harness.tsx`; `tests/season-viz-browser.spec.ts` + `tests/fixtures/season-viz-harness.tsx`
 - **routes:** `/dashboard/matches/[matchId]`, `/dashboard/team/roster/[playerId]`

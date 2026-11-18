@@ -188,9 +188,9 @@ export interface VizLightboxShellProps {
   /** The strip's sentence for the filters (the shell adds the legend's and a
    *  Statistics row's pick). Empty: no strip unless a pick is on. */
   filterPhrases: string[];
-  /** A caveat that closes the strip's sentence whenever there is one
-   *  ("assumes right-handed"). Never a phrase of its own: it opens no strip,
-   *  and it stays out of the Watch hand-off's label. */
+  /** A caveat on what the court draws ("assumes right-handed"): a quiet line
+   *  at the legend row's end, shown with or without a filter strip. Never a
+   *  strip phrase, and it stays out of the Watch hand-off's label. */
   sentenceNote?: string;
   /** A filter beyond the baseline is on: the Filters trigger reads applied. */
   panelActive: boolean;
@@ -1132,11 +1132,7 @@ export function VizLightboxShell({
 
                   {!isDraft && (
                     <LightboxFilterStrip
-                      phrases={
-                        sentenceNote && phrases.length > 0
-                          ? [...phrases, sentenceNote]
-                          : phrases
-                      }
+                      phrases={phrases}
                       shown={pointList ? matched.length : undefined}
                       total={pointList?.total}
                       noun={listNoun}
@@ -1350,16 +1346,33 @@ export function VizLightboxShell({
                           )}
                         </div>
                       )}
-                      {/* Some approaches drawn, some not: the same sentence
-                          as a quiet line at the legend's end, so the marks
-                          on court never read as every approach counted. */}
-                      {notDrawnLine !== null && result.dots.length > 0 && (
-                        <p
-                          data-viz-not-drawn=""
-                          className="text-micro m-0 shrink-0 leading-6 text-[var(--ink-600)] tabular-nums"
-                        >
-                          {notDrawnLine}
-                        </p>
+                      {((notDrawnLine !== null && result.dots.length > 0) ||
+                        sentenceNote) && (
+                        <div className="flex shrink-0 items-center gap-3">
+                          {/* Some approaches drawn, some not: the same
+                              sentence as a quiet line at the legend's end, so
+                              the marks on court never read as every approach
+                              counted. */}
+                          {notDrawnLine !== null && result.dots.length > 0 && (
+                            <p
+                              data-viz-not-drawn=""
+                              className="text-micro m-0 leading-6 text-[var(--ink-600)] tabular-nums"
+                            >
+                              {notDrawnLine}
+                            </p>
+                          )}
+                          {/* A drawn mark's wing rests on a hand the match
+                              does not hold: said here, once, whether or not
+                              a filter strip is up. */}
+                          {sentenceNote && (
+                            <p
+                              data-viz-hand-assumed=""
+                              className="text-micro m-0 leading-6 text-[var(--ink-600)]"
+                            >
+                              {sentenceNote}
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   )}

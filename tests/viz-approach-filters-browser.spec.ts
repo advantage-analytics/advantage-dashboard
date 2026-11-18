@@ -216,8 +216,13 @@ test("the applied sentence says it assumes right-handed only where a shown appro
   await panel.getByRole("checkbox", { name: /^Their backhand\b/ }).click();
   await page.keyboard.press("Escape");
   await expect(strip).toContainText("To their backhand");
-  await expect(strip).toContainText(/assumes right-handed/i);
-  // A caveat closes a sentence; it never opens a strip of its own.
+  // Said once, in the legend row's line — never again in the strip.
+  await expect(strip).not.toContainText(/assumes right-handed/i);
+  await expect(handAssumed(assumed.dialog)).toHaveText("assumes right-handed");
+  await expect(assumed.dialog.getByText(/assumes right-handed/i)).toHaveCount(
+    1,
+  );
+  // A caveat never opens a strip of its own.
   await strip.getByRole("button", { name: "Clear filter" }).click();
   await expect(strip).toHaveCount(0);
   expect(assumed.errors).toEqual([]);
@@ -231,6 +236,49 @@ test("the applied sentence says it assumes right-handed only where a shown appro
   await expect(knownStrip).toContainText("To their backhand");
   await expect(knownStrip).not.toContainText(/assumes right-handed/i);
   expect(known.errors).toEqual([]);
+});
+
+const handAssumed = (dialog: Locator) =>
+  dialog.locator("[data-viz-hand-assumed]");
+
+test("the opened Approaches court says it assumes right-handed beside its legend with no filter ticked, and only where a drawn approach assumed the hand", async ({
+  page,
+}) => {
+  // The card's floor alone: no filter ticked, so no strip — the line still
+  // says the wings assume the opponent's hand.
+  const assumed = await openApproaches(page);
+  await expect(assumed.dialog.locator("[data-viz-filter-strip]")).toHaveCount(
+    0,
+  );
+  await expect(handAssumed(assumed.dialog)).toHaveCount(1);
+  await expect(handAssumed(assumed.dialog)).toBeVisible();
+  await expect(handAssumed(assumed.dialog)).toHaveText("assumes right-handed");
+  await expect(assumed.dialog.getByText(/assumes right-handed/i)).toHaveCount(
+    1,
+  );
+  expect(assumed.errors).toEqual([]);
+
+  // The hand is on the match: nothing assumed.
+  const known = await openApproaches(page, "&hand=known");
+  await expect(known.dialog.locator("[data-court-stage]")).toBeVisible();
+  await expect(handAssumed(known.dialog)).toHaveCount(0);
+  await expect(known.dialog).not.toContainText(/assumes right-handed/i);
+
+  // No approach drawn: no wing was worked out, so nothing was assumed.
+  await page.goto(`${origin}/?tab=shots&cut=approaches&landing=none`);
+  const bare = page.getByRole("dialog", { name: "Approaches" });
+  await expect(bare.locator("[data-viz-not-drawn]")).toHaveCount(1);
+  await expect(handAssumed(bare)).toHaveCount(0);
+  await expect(bare).not.toContainText(/assumes right-handed/i);
+
+  // Another cut's opened court, same unknown hand: never the line.
+  for (const cut of ["serve", "rallyPlacement", "errors"]) {
+    await page.goto(`${origin}/?tab=shots&cut=${cut}`);
+    const other = page.getByRole("dialog").first();
+    await expect(other.locator("[data-court-stage]")).toBeVisible();
+    await expect(handAssumed(other)).toHaveCount(0);
+    await expect(other).not.toContainText(/assumes right-handed/i);
+  }
 });
 
 /** The Statistics column's approaches KPI tile: "6 approaches" → 6. */
