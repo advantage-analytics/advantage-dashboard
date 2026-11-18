@@ -99,7 +99,7 @@ ready).
 
 ## T7 · Draw approach pairs and labels in CourtArt
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T6
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/court-art.tsx`; a harness spec in the pattern of `tests/viz-rally-placement-browser.spec.ts` with its fixture under `tests/fixtures/`

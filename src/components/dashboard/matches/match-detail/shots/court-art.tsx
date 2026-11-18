@@ -23,8 +23,12 @@ import {
   zoneCellX,
   zoneOpacity,
   trianglePointsFor,
+  type TriangleKind,
   starPoints,
+  FULL_COURT_VERTICAL,
+  projectApproachPair,
 } from "./court-geometry";
+import { laneOf } from "../match-filters/approach";
 import { isPlacementCut } from "./cut-kinds";
 import {
   type Chart,
@@ -151,9 +155,13 @@ function CourtMark({
   index,
   count,
   interaction,
+  triangleKind,
 }: {
   dot: VizDot;
   cut: Cut;
+  /** Overrides the cut's own triangle orientation — the Approaches frame
+   *  draws in unrotated screen space, so its backhands point up ("serve"). */
+  triangleKind?: TriangleKind;
   cx: number;
   cy: number;
   radius: number;
@@ -174,11 +182,12 @@ function CourtMark({
     ) : dot.shape === "triangle" ? (
       <polygon
         points={trianglePointsFor(
-          cut === "serve"
-            ? "serve"
-            : isPlacementCut(cut)
-              ? "placement"
-              : "contact",
+          triangleKind ??
+            (cut === "serve"
+              ? "serve"
+              : isPlacementCut(cut)
+                ? "placement"
+                : "contact"),
           cx,
           cy,
           radius,
@@ -596,6 +605,303 @@ export function HeatLayer({
 const ZONE_LABEL_COUNT_SIZE = 10;
 const ZONE_LABEL_PCT_SIZE = 8;
 
+/** The landscape full court's two surface rects (doubles, then singles), in
+ *  `RETURN_COURT` units — shared by the return frames and, turned upright,
+ *  the Approaches frame. */
+function ReturnCourtSurface({ fill }: { fill: string }) {
+  return (
+    <>
+      <rect
+        x={RETURN_COURT.farBaselineX}
+        y={RETURN_COURT.doublesTop}
+        width={RETURN_COURT.nearBaselineX - RETURN_COURT.farBaselineX}
+        height={RETURN_COURT.doublesBottom - RETURN_COURT.doublesTop}
+        fill={fill}
+      />
+      <rect
+        x={RETURN_COURT.farBaselineX}
+        y={RETURN_COURT.singlesTop}
+        width={RETURN_COURT.nearBaselineX - RETURN_COURT.farBaselineX}
+        height={RETURN_COURT.singlesBottom - RETURN_COURT.singlesTop}
+        fill={fill}
+      />
+    </>
+  );
+}
+
+/** The landscape full court's lines and net, in `RETURN_COURT` units. */
+function ReturnCourtLines() {
+  const lines: [number, number, number, number][] = [
+    // Doubles and singles sidelines.
+    [
+      RETURN_COURT.farBaselineX,
+      RETURN_COURT.doublesTop,
+      RETURN_COURT.nearBaselineX,
+      RETURN_COURT.doublesTop,
+    ],
+    [
+      RETURN_COURT.farBaselineX,
+      RETURN_COURT.doublesBottom,
+      RETURN_COURT.nearBaselineX,
+      RETURN_COURT.doublesBottom,
+    ],
+    [
+      RETURN_COURT.farBaselineX,
+      RETURN_COURT.singlesTop,
+      RETURN_COURT.nearBaselineX,
+      RETURN_COURT.singlesTop,
+    ],
+    [
+      RETURN_COURT.farBaselineX,
+      RETURN_COURT.singlesBottom,
+      RETURN_COURT.nearBaselineX,
+      RETURN_COURT.singlesBottom,
+    ],
+    // Baselines.
+    [
+      RETURN_COURT.farBaselineX,
+      RETURN_COURT.doublesTop,
+      RETURN_COURT.farBaselineX,
+      RETURN_COURT.doublesBottom,
+    ],
+    [
+      RETURN_COURT.nearBaselineX,
+      RETURN_COURT.doublesTop,
+      RETURN_COURT.nearBaselineX,
+      RETURN_COURT.doublesBottom,
+    ],
+    // Service lines and the centre service line.
+    [
+      RETURN_COURT.serviceLineFarX,
+      RETURN_COURT.singlesTop,
+      RETURN_COURT.serviceLineFarX,
+      RETURN_COURT.singlesBottom,
+    ],
+    [
+      RETURN_COURT.serviceLineNearX,
+      RETURN_COURT.singlesTop,
+      RETURN_COURT.serviceLineNearX,
+      RETURN_COURT.singlesBottom,
+    ],
+    [
+      RETURN_COURT.serviceLineFarX,
+      RETURN_COURT.centerY,
+      RETURN_COURT.serviceLineNearX,
+      RETURN_COURT.centerY,
+    ],
+  ];
+  return (
+    <>
+      {lines.map(([x1, y1, x2, y2]) => (
+        <line
+          key={`${x1},${y1},${x2},${y2}`}
+          x1={x1}
+          y1={y1}
+          x2={x2}
+          y2={y2}
+          stroke={LINE_COLOR}
+          strokeWidth={RETURN_COURT.lineWidth}
+        />
+      ))}
+      {/* Net. */}
+      <line
+        x1={RETURN_COURT.netX}
+        y1={RETURN_COURT.netTopY}
+        x2={RETURN_COURT.netX}
+        y2={RETURN_COURT.netBottomY}
+        stroke={LINE_COLOR}
+        strokeWidth={RETURN_COURT.netStrokeWidth}
+      />
+    </>
+  );
+}
+
+// Apron labels on the Approaches frame (`approach-map-v9.html`): Roboto Mono,
+// capitals, dark ink. `--surface-dark` rather than `--ink-900`, because the
+// apron is the same green in both themes and `--ink-900` turns light in dark
+// mode.
+const APPROACH_LABEL_INK = "var(--surface-dark)";
+const APPROACH_SIDE_LABEL_SIZE = 7.4;
+const APPROACH_SIDE_LABEL_OPACITY = 0.72;
+const APPROACH_LANE_LABEL_SIZE = 6.8;
+const APPROACH_LANE_LABEL_OPACITY = 0.5;
+const APPROACH_LABEL_TRACKING = 0.9;
+
+/**
+ * Whether the hitter's LEFT third faces the opponent's forehand — true for a
+ * right-hander (`wingOf`). Read off the dots themselves: any dot whose wing
+ * was worked out from a KNOWN hand (`handAssumed: false`) and whose placement
+ * sits in an outer third settles it. With no such dot the hand is unknown and,
+ * as everywhere else in the cut, a right-hander is assumed.
+ */
+function leftLaneIsForehand(dots: VizDot[]): boolean {
+  for (const d of dots) {
+    const wing = d.meta?.wing;
+    if (d.meta?.handAssumed !== false || !wing || wing === "middle") continue;
+    const lane = laneOf(d.lateralM);
+    if (lane === "middle") continue;
+    return (lane === "left") === (wing === "forehand");
+  }
+  return true;
+}
+
+/** Keeps a mark inside the wall card's tighter window, one radius in, so a
+ *  wild placement or a deep contact sits on the card's edge rather than off
+ *  it (`projectApproachPair` only clamps to the opened view). */
+function clampToCard(p: { x: number; y: number }): { x: number; y: number } {
+  const vb = FULL_COURT_VERTICAL.cardViewBox;
+  const m = RETURN_DOT_R;
+  return {
+    x: Math.min(Math.max(p.x, vb.minX + m), vb.minX + vb.w - m),
+    y: Math.min(Math.max(p.y, vb.minY + m), vb.minY + vb.h - m),
+  };
+}
+
+/**
+ * The Approaches cut: `FULL_COURT_VERTICAL`, the landscape court turned
+ * upright with the subject at the bottom, and each dot drawn as a PAIR — its
+ * contact (`pair`) in the near half and its placement in the far half, two
+ * marks with the same id and nothing joining them. A dot without `pair` draws
+ * its placement alone. Marks are drawn in screen space, outside the rotated
+ * group, so a backhand triangle keeps its apex up.
+ *
+ * `labels` is the opened view: the roomier viewBox and, on the apron only,
+ * "Placement" above the far baseline, "Contact" below the near one and the
+ * opponent's wing over each third. Without it (the wall card) the viewBox is
+ * the tighter `cardViewBox` and no text is drawn.
+ */
+function ApproachCourtArt({
+  dots,
+  chart,
+  className,
+  fill,
+  labels,
+  ariaLabel,
+  markInteraction,
+}: {
+  dots: VizDot[];
+  chart: Chart;
+  className?: string;
+  fill?: boolean;
+  labels?: boolean;
+  ariaLabel: string;
+  markInteraction?: CourtMarkInteraction;
+}) {
+  const box = labels
+    ? FULL_COURT_VERTICAL.viewBox
+    : FULL_COURT_VERTICAL.cardViewBox;
+  const leftIsForehand = leftLaneIsForehand(dots);
+  const laneText = {
+    left: leftIsForehand ? "Their FH" : "Their BH",
+    middle: "Middle",
+    right: leftIsForehand ? "Their BH" : "Their FH",
+  } as const;
+  const place = labels ? (p: { x: number; y: number }) => p : clampToCard;
+  return (
+    <svg
+      viewBox={`${box.minX} ${box.minY} ${box.w} ${box.h}`}
+      data-approach-frame={labels ? "opened" : "card"}
+      {...(fill ? { height: "100%" } : {})}
+      width="100%"
+      preserveAspectRatio="xMidYMid meet"
+      role={markInteraction ? "group" : "img"}
+      aria-label={ariaLabel}
+      className={className}
+    >
+      <rect
+        x={box.minX}
+        y={box.minY}
+        width={box.w}
+        height={box.h}
+        fill={APRON_FILL}
+      />
+      <g transform={FULL_COURT_VERTICAL.groupTransform}>
+        <ReturnCourtSurface fill={COURT_FILL} />
+        <ReturnCourtLines />
+      </g>
+      {chart === "scatter" &&
+        dots.map((d, index) => {
+          const projected = projectApproachPair(d);
+          const placement = place(projected.placement);
+          const contact = projected.contact ? place(projected.contact) : null;
+          return (
+            <g key={d.id} data-approach-pair={d.id}>
+              {contact && (
+                <g data-approach-mark={d.id} data-approach-part="contact">
+                  <CourtMark
+                    dot={d}
+                    cut="approaches"
+                    triangleKind="serve"
+                    cx={contact.x}
+                    cy={contact.y}
+                    radius={RETURN_DOT_R}
+                    index={index}
+                    count={dots.length}
+                  />
+                </g>
+              )}
+              {/* Only the placement takes the focused-inspection handlers,
+                  so keyboard roving keeps one stop per dot. */}
+              <g data-approach-mark={d.id} data-approach-part="placement">
+                <CourtMark
+                  dot={d}
+                  cut="approaches"
+                  triangleKind="serve"
+                  cx={placement.x}
+                  cy={placement.y}
+                  radius={RETURN_DOT_R}
+                  index={index}
+                  count={dots.length}
+                  interaction={markInteraction}
+                />
+              </g>
+            </g>
+          );
+        })}
+      {labels && (
+        <g
+          data-approach-labels=""
+          aria-hidden="true"
+          fill={APPROACH_LABEL_INK}
+          fontFamily="var(--font-mono)"
+          letterSpacing={APPROACH_LABEL_TRACKING}
+          textAnchor="middle"
+          style={{ textTransform: "uppercase" }}
+        >
+          <text
+            x={FULL_COURT_VERTICAL.labels.placement.x}
+            y={FULL_COURT_VERTICAL.labels.placement.y}
+            fontSize={APPROACH_SIDE_LABEL_SIZE}
+            fillOpacity={APPROACH_SIDE_LABEL_OPACITY}
+          >
+            Placement
+          </text>
+          <text
+            x={FULL_COURT_VERTICAL.labels.contact.x}
+            y={FULL_COURT_VERTICAL.labels.contact.y}
+            fontSize={APPROACH_SIDE_LABEL_SIZE}
+            fillOpacity={APPROACH_SIDE_LABEL_OPACITY}
+          >
+            Contact
+          </text>
+          {(["left", "middle", "right"] as const).map((lane) => (
+            <text
+              key={lane}
+              data-approach-lane={lane}
+              x={FULL_COURT_VERTICAL.labels.lanes[lane].x}
+              y={FULL_COURT_VERTICAL.labels.lanes[lane].y}
+              fontSize={APPROACH_LANE_LABEL_SIZE}
+              fillOpacity={APPROACH_LANE_LABEL_OPACITY}
+            >
+              {laneText[lane]}
+            </text>
+          ))}
+        </g>
+      )}
+    </svg>
+  );
+}
+
 export function CourtArt({
   cut,
   dots,
@@ -998,6 +1304,19 @@ export function CourtArt({
     );
   }
 
+  if (cut === "approaches")
+    return (
+      <ApproachCourtArt
+        dots={dots}
+        chart={chart}
+        className={className}
+        fill={fill}
+        labels={labels}
+        ariaLabel={ariaLabel}
+        markInteraction={markInteraction}
+      />
+    );
+
   // Return cuts — one shared landscape full-court frame. `returnPlacement`
   // sets the design's own `rotate(180deg)` on the svg; `returnContact` does
   // not. `projectReturnDot` accounts for that extra flip in the lateral
@@ -1021,104 +1340,11 @@ export function CourtArt({
       <g clipPath={`url(#${clipId})`}>
         <g transform={RETURN_COURT.outerGroupTransform}>
           <g transform={RETURN_COURT.innerGroupTransform}>
-            <rect
-              x={RETURN_COURT.farBaselineX}
-              y={RETURN_COURT.doublesTop}
-              width={RETURN_COURT.nearBaselineX - RETURN_COURT.farBaselineX}
-              height={RETURN_COURT.doublesBottom - RETURN_COURT.doublesTop}
-              fill={courtFillColor}
-            />
-            <rect
-              x={RETURN_COURT.farBaselineX}
-              y={RETURN_COURT.singlesTop}
-              width={RETURN_COURT.nearBaselineX - RETURN_COURT.farBaselineX}
-              height={RETURN_COURT.singlesBottom - RETURN_COURT.singlesTop}
-              fill={courtFillColor}
-            />
+            <ReturnCourtSurface fill={courtFillColor} />
             {chart === "zones" && !draft && bandZones && (
               <CourtBandZones zones={bandZones} labels={labels} />
             )}
-            <line
-              x1={RETURN_COURT.farBaselineX}
-              y1={RETURN_COURT.doublesTop}
-              x2={RETURN_COURT.nearBaselineX}
-              y2={RETURN_COURT.doublesTop}
-              stroke={LINE_COLOR}
-              strokeWidth={RETURN_COURT.lineWidth}
-            />
-            <line
-              x1={RETURN_COURT.farBaselineX}
-              y1={RETURN_COURT.doublesBottom}
-              x2={RETURN_COURT.nearBaselineX}
-              y2={RETURN_COURT.doublesBottom}
-              stroke={LINE_COLOR}
-              strokeWidth={RETURN_COURT.lineWidth}
-            />
-            <line
-              x1={RETURN_COURT.farBaselineX}
-              y1={RETURN_COURT.singlesTop}
-              x2={RETURN_COURT.nearBaselineX}
-              y2={RETURN_COURT.singlesTop}
-              stroke={LINE_COLOR}
-              strokeWidth={RETURN_COURT.lineWidth}
-            />
-            <line
-              x1={RETURN_COURT.farBaselineX}
-              y1={RETURN_COURT.singlesBottom}
-              x2={RETURN_COURT.nearBaselineX}
-              y2={RETURN_COURT.singlesBottom}
-              stroke={LINE_COLOR}
-              strokeWidth={RETURN_COURT.lineWidth}
-            />
-            <line
-              x1={RETURN_COURT.farBaselineX}
-              y1={RETURN_COURT.doublesTop}
-              x2={RETURN_COURT.farBaselineX}
-              y2={RETURN_COURT.doublesBottom}
-              stroke={LINE_COLOR}
-              strokeWidth={RETURN_COURT.lineWidth}
-            />
-            <line
-              x1={RETURN_COURT.nearBaselineX}
-              y1={RETURN_COURT.doublesTop}
-              x2={RETURN_COURT.nearBaselineX}
-              y2={RETURN_COURT.doublesBottom}
-              stroke={LINE_COLOR}
-              strokeWidth={RETURN_COURT.lineWidth}
-            />
-            <line
-              x1={RETURN_COURT.serviceLineFarX}
-              y1={RETURN_COURT.singlesTop}
-              x2={RETURN_COURT.serviceLineFarX}
-              y2={RETURN_COURT.singlesBottom}
-              stroke={LINE_COLOR}
-              strokeWidth={RETURN_COURT.lineWidth}
-            />
-            <line
-              x1={RETURN_COURT.serviceLineNearX}
-              y1={RETURN_COURT.singlesTop}
-              x2={RETURN_COURT.serviceLineNearX}
-              y2={RETURN_COURT.singlesBottom}
-              stroke={LINE_COLOR}
-              strokeWidth={RETURN_COURT.lineWidth}
-            />
-            <line
-              x1={RETURN_COURT.serviceLineFarX}
-              y1={RETURN_COURT.centerY}
-              x2={RETURN_COURT.serviceLineNearX}
-              y2={RETURN_COURT.centerY}
-              stroke={LINE_COLOR}
-              strokeWidth={RETURN_COURT.lineWidth}
-            />
-            {/* Net. */}
-            <line
-              x1={RETURN_COURT.netX}
-              y1={RETURN_COURT.netTopY}
-              x2={RETURN_COURT.netX}
-              y2={RETURN_COURT.netBottomY}
-              stroke={LINE_COLOR}
-              strokeWidth={RETURN_COURT.netStrokeWidth}
-            />
+            <ReturnCourtLines />
 
             {/* Every return-frame cut's blobs draw through the same blur +
                 colourize filter — still inside the same clipPath, still in

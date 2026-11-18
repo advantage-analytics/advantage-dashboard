@@ -59,3 +59,13 @@ is the runner's. Newest entries at the bottom.
 
 1. Points clamp to the opened viewBox only; on the tighter wall card a serve contact far behind the baseline would be clipped. T7 may clamp to `cardViewBox` there.
 2. `subjectBaselineX` is `RETURN_COURT.farBaselineX` (40): the names read reversed from `RETURN_COURT`'s near/far.
+
+## T7 · Draw approach pairs and labels in CourtArt — done
+
+**gate:** mechanical pass · completion pass
+**changed:** `court-art.tsx` gains `ApproachCourtArt` for the `approaches` cut: the court inside the rotated group, each dot a `data-approach-pair` group with an unjoined contact mark and placement mark, backhands apex-up through a new `CourtMark` `triangleKind` override. With `labels`, Placement / Contact and the hand-aware wing names sit on the apron in `--font-mono` and `--surface-dark`; without, the wall card uses `cardViewBox` and clamps to it. The landscape court drawing was extracted into `ReturnCourtSurface` / `ReturnCourtLines`, shared with the return frames (same output). New harness `tests/viz-approach-court-browser.spec.ts` with fixture `tests/fixtures/viz-approach-court-harness.tsx`.
+**follow-ups:**
+
+1. Wing labels are inferred from the dots; if a filter leaves no dot with a known hand, a left-handed opponent's labels fall back to right-handed wording. An explicit opponent-hand prop would fix it.
+2. On the approaches frame, heat and zones draw only the court (the cut is scatter only).
+3. v9 draws small centre marks on each baseline; the existing return court never did, so they were left out.
