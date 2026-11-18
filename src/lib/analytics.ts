@@ -1,6 +1,13 @@
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
 import type { VideoRejectionReason } from "@/lib/services/upload/types";
+import type { ClaimRoleValue } from "@/lib/services/programs/claim-roles";
+import type { ConnectorApp } from "@/lib/auth/oauth-consent";
+import type {
+  AcquisitionSource,
+  RosterSizeBand,
+  WeeklyFilmBand,
+} from "@/app/onboarding/answers";
 
 /**
  * The typed registry of product-analytics events captured from the browser.
@@ -109,6 +116,37 @@ export interface AnalyticsEvents {
   // `analysis_ready` end in a server redirect or a webhook, so they are
   // captured on the server: see analytics-server.ts.
   program_claim_started: { program_id: string };
+  // The coach path's last screen, the program intake at `/claim/team/about`,
+  // reached after a directory claim (`/claim/ready`) or a new custom team.
+  // Same event name as the player's finish so one insight counts both; the
+  // player's is still captured directly in `onboarding-flow.tsx` and carries
+  // no `path`. Bands and the source are enums; Skip sends them null.
+  onboarding_completed: {
+    path: "claim";
+    persona: "coach";
+    skipped: boolean;
+    roster_size_band: RosterSizeBand | null;
+    weekly_film_band: WeeklyFilmBand | null;
+    acquisition_source: AcquisitionSource | null;
+  };
+  // "Request an invite" to a directory program, sent only once the request is
+  // on file. `claimed` is a program with an owner or a claim in progress (the
+  // request reaches them), `unclaimed` one with nobody yet (it waits for the
+  // first claim). The role is the form's allowlisted answer; never the name,
+  // address or note.
+  program_join_requested: {
+    program_status: "claimed" | "unclaimed";
+    role: ClaimRoleValue | null;
+  };
+
+  // The connector sign-in (claude.ai, ChatGPT, … → /oauth/consent). Which app
+  // is asking is read from its allowlisted callback (`connectorApp`), never
+  // the self-registered client name, the authorization id or a token.
+  oauth_consent_viewed: { connector: ConnectorApp | null };
+  oauth_consent_decided: {
+    decision: "approve" | "deny";
+    connector: ConnectorApp | null;
+  };
 }
 
 export type AnalyticsEvent = keyof AnalyticsEvents;

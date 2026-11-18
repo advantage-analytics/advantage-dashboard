@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Loader2, Users } from "lucide-react";
 import { requestInvite } from "@/lib/services/programs/claim-actions";
-import { CLAIM_ROLES } from "@/lib/services/programs/claim-roles";
+import { CLAIM_ROLES, toClaimRole } from "@/lib/services/programs/claim-roles";
+import { track } from "@/lib/analytics";
 import { ReferralLink } from "./referral-link";
 import {
   CLAIM_BUTTON,
@@ -95,8 +96,15 @@ export function ReferralRequestForm({
         name,
         role: role || undefined,
       });
-      if (!result.ok) setError(result.error);
-      else setSent(true);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      track("program_join_requested", {
+        program_status: "unclaimed",
+        role: toClaimRole(role),
+      });
+      setSent(true);
     });
   }
 
