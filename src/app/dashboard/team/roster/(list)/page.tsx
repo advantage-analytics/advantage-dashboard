@@ -67,6 +67,9 @@ const UPLOAD_COPY: Record<UploadPolicy, string> = {
   everyone: "Anyone on the team can upload for a teammate",
 };
 
+const PLAYER_ID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default async function RosterPage({
   searchParams,
 }: {
@@ -81,6 +84,15 @@ export default async function RosterPage({
   // empty roster belonging to nobody.
   if (active.kind !== "team") redirect("/dashboard");
 
+  // `?player=` opened this page's peek drawer until 2026-11-17. The rows
+  // travel now, so a link saved from then lands where its row goes: the
+  // player's page, which answers an id that names nobody itself. Here, above
+  // the boundary: a redirect thrown under `WidgetBoundary` is caught by it.
+  const { player } = await searchParams;
+  if (typeof player === "string" && PLAYER_ID.test(player)) {
+    redirect(`/dashboard/team/roster/${player}`);
+  }
+
   // A hidden control is not authorization — every write behind these re-checks
   // `is_program_staff` in SQL. This only decides what is worth rendering.
   //
@@ -94,11 +106,7 @@ export default async function RosterPage({
   return (
     <WidgetBoundary key={`${viewer.id}:${active.id}`} label="Roster">
       <Suspense fallback={<RosterPageSkeleton />}>
-        <RosterContent
-          active={active}
-          viewer={viewer}
-          searchParams={searchParams}
-        />
+        <RosterContent active={active} viewer={viewer} />
       </Suspense>
     </WidgetBoundary>
   );
@@ -107,7 +115,6 @@ export default async function RosterPage({
 async function RosterContent({
   active,
   viewer,
-  searchParams,
 }: {
   active: NonNullable<
     Awaited<ReturnType<typeof getWorkspaceContext>>
@@ -115,13 +122,8 @@ async function RosterContent({
   viewer: NonNullable<
     Awaited<ReturnType<typeof getWorkspaceContext>>
   >["viewer"];
-  searchParams: Promise<{ player?: string | string[] }>;
 }) {
   const canManage = isProgramStaff(active);
-
-  // A deep link is the one case that lands with the drawer already open.
-  const { player } = await searchParams;
-  const initialSelectedId = typeof player === "string" ? player : null;
 
   // Four reads start together. The join-request queue, the former-players
   // list and the join link are staff-only: `program_join_requests` and
@@ -474,7 +476,6 @@ async function RosterContent({
         invites={roster.invites}
         canManage={canManage}
         viewerId={viewer.id}
-        initialSelectedId={initialSelectedId}
         title={title}
         actions={actions}
         notices={notices}

@@ -1,11 +1,10 @@
 "use client";
 
 import { CoachManagedMark } from "@/components/ui/coach-managed-mark";
-import Link from "next/link";
 import { useRef } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, Reorder, useReducedMotion } from "framer-motion";
-import { GitMerge, GripVertical } from "lucide-react";
+import { ChevronRight, GitMerge, GripVertical } from "lucide-react";
 import { BENCH, sequenceFrom } from "@/lib/data/lineup-draft";
 import { AnalysisStatusLine } from "@/components/dashboard/shared/analysis-status-line";
 import {
@@ -38,6 +37,7 @@ import {
   resendInput,
 } from "@/components/dashboard/team/roster-vocabulary";
 import type { RosterInvite, RosterMember } from "@/lib/data/team-roster-server";
+import { RosterRowMenu } from "@/components/dashboard/team/roster-row-menu";
 
 /**
  * The players on the program, and the order they play in.
@@ -83,7 +83,7 @@ import type { RosterInvite, RosterMember } from "@/lib/data/team-roster-server";
  * ── 4. Set lineup is a mode, not a column ───────────────────────────────────
  * The action rides the column-header row. Pressing it turns this table into
  * the editor: rows become draggable, the grip borrows the `#` cell of the row
- * under the pointer, and a click no longer opens the drawer — which is why it
+ * under the pointer, and a click no longer opens the player page — which is why it
  * is a mode with its own Cancel rather than a handle sitting there always.
  * `RosterView` owns that state and the save.
  *
@@ -409,8 +409,10 @@ function MemberRow({
   spot,
   canManage,
   isViewer,
-  selected,
-  onToggle,
+  onEdit,
+  onError,
+  run,
+  pending,
   onMerge,
   lineup,
   listRef,
@@ -425,8 +427,11 @@ function MemberRow({
   spot: number | null;
   canManage: boolean;
   isViewer: boolean;
-  selected: boolean;
-  onToggle: (member: RosterMember, viaKeyboard: boolean) => void;
+  /** The row menu's writes — see `RosterRowMenu`. */
+  onEdit: (member: RosterMember) => void;
+  onError: (message: string | null) => void;
+  run: (action: () => Promise<ActionResult | InviteResult>) => void;
+  pending: boolean;
   onMerge: (member: RosterMember) => void;
   lineup: LineupDraft | null;
   /** The list — what a drag is constrained to. */
@@ -465,9 +470,8 @@ function MemberRow({
       value={member.playerId}
       id={rosterRowId(member.playerId)}
       tabIndex={0}
-      aria-current={selected ? "true" : undefined}
       /* Only the mode makes a row a handle. Outside it the item is inert and
-         the click below opens the drawer. */
+         the click below opens the player page. */
       dragListener={inLineupMode}
       /* The row cannot leave the list. The card clips at its edge — its
          `overflow-x-auto` makes it a scroll box in both axes — so a row
@@ -492,14 +496,14 @@ function MemberRow({
       transition={{ layout: reduceMotion ? { duration: 0 } : ROW_SLIDE }}
       onClick={(event) => {
         // In lineup mode the row is a handle, not a link. Without this the
-        // drawer would open every time a drag ended a pixel from where it
+        // page would change every time a drag ended a pixel from where it
         // started.
         if (inLineupMode) return;
         if (event.metaKey || event.ctrlKey) {
-          router.push(href);
+          window.open(href, "_blank", "noopener");
           return;
         }
-        onToggle(member, false);
+        router.push(href);
       }}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
@@ -532,7 +536,7 @@ function MemberRow({
 
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          onToggle(member, true);
+          router.push(href);
         }
       }}
       className={cn(
@@ -548,8 +552,7 @@ function MemberRow({
            pointer sitting on top of it would otherwise give it. */
         !lifted && "hover:bg-[var(--surface-muted)]",
         /* A form bar has a hover of its own, so one hover shows at a time. */
-        !selected && "[&:has([data-own-hover]:hover)]:bg-transparent",
-        selected && !inLineupMode && "bg-[var(--surface-muted)]",
+        "[&:has([data-own-hover]:hover)]:bg-transparent",
         /* One outline, two weights of it.
 
            FOCUSED is the system's own ring, by value — the same
@@ -597,25 +600,14 @@ function MemberRow({
           photoUrl={member.avatarUrl}
         />
         <span className="flex min-w-0 items-center gap-2">
-          {inLineupMode ? (
-            <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
-              {member.name}
-            </span>
-          ) : (
-            <Link
-              href={href}
-              /* No `title`. A 52px row cannot give a long name the height, so
-                 it truncates — but the tooltip that used to disclose it drew
-                 in the OS's own style, and the full name is already one click
-                 away in the drawer, which wraps it. CSS truncation hides
-                 nothing from a screen reader either: the text stays in the
-                 DOM and is read in full. */
-              onClick={(event) => event.stopPropagation()}
-              className="block truncate rounded-[var(--radius-cell)] text-[13px] font-medium text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-            >
-              {member.name}
-            </Link>
-          )}
+          {/* Plain text: the whole row opens the player page, so the name
+              is not a second link to it. No `title` either — a 52px row
+              cannot give a long name the height, so it truncates, and the
+              page it opens prints it in full. CSS truncation hides nothing
+              from a screen reader: the text stays in the DOM. */}
+          <span className="truncate text-[13px] font-medium text-[var(--ink-900)]">
+            {member.name}
+          </span>
           {isViewer && <YouPill className="shrink-0" />}
           {/* A player who is also the owner, a coach or staff — they added
               themselves to the roster. Shown to everyone: it says why a name
@@ -660,6 +652,27 @@ function MemberRow({
           Possible duplicate
         </button>
       )}
+
+      {/* The row's trailing pair, gone while a lineup is being set (the row
+          is a handle then): the staff menu, and the record chevron that says
+          the row travels (`tables.md` rule 3). */}
+      {!inLineupMode && canManage && (
+        <RosterRowMenu
+          member={member}
+          isViewer={isViewer}
+          onEdit={() => onEdit(member)}
+          onError={onError}
+          run={run}
+          pending={pending}
+        />
+      )}
+      {!inLineupMode && (
+        <ChevronRight
+          aria-hidden="true"
+          strokeWidth={1.5}
+          className="size-[13px] shrink-0 text-[var(--ink-300)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--ink-900)] group-focus-visible:text-[var(--ink-900)]"
+        />
+      )}
     </Reorder.Item>
   );
 }
@@ -669,8 +682,8 @@ export function RosterTable({
   invites,
   canManage,
   viewerId,
-  selectedId,
-  onToggle,
+  onEdit,
+  onError,
   onMerge,
   run,
   pending,
@@ -688,8 +701,8 @@ export function RosterTable({
   invites: RosterInvite[];
   canManage: boolean;
   viewerId: string;
-  selectedId: string | null;
-  onToggle: (member: RosterMember, viaKeyboard: boolean) => void;
+  onEdit: (member: RosterMember) => void;
+  onError: (message: string | null) => void;
   onMerge: (member: RosterMember) => void;
   run: (action: () => Promise<ActionResult | InviteResult>) => void;
   pending: boolean;
@@ -880,8 +893,10 @@ export function RosterTable({
                   spot={spot}
                   canManage={canManage}
                   isViewer={member.userId === viewerId}
-                  selected={member.playerId === selectedId}
-                  onToggle={onToggle}
+                  onEdit={onEdit}
+                  onError={onError}
+                  run={run}
+                  pending={pending}
                   onMerge={onMerge}
                   lineup={lineup}
                   listRef={listRef}

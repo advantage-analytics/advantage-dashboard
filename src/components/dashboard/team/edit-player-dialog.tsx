@@ -69,7 +69,7 @@ import { mayRemoveStaffProfile } from "./add-self-dialog";
  *
  * ── Remove, where the page asks for it ──────────────────────────────────────
  * With `onRemoved`, the footer's left slot carries **Remove from roster** — the
- * roster drawer's Options row, moved to the one surface the player profile
+ * roster row menu's own row, on the one surface the player profile
  * has for this player. It rests grey and turns `--danger` on hover and focus
  * (DS › Dropdown / Menu, destructive rows), and it does not remove: it swaps
  * the dialog to a confirm step, and red stands only on that step's button.
@@ -96,7 +96,7 @@ export function EditPlayerDialog({
   /**
    * Offers Remove from roster, and runs once the player is archived — the
    * profile page navigates away, since the page it is on now names nobody.
-   * Absent where another surface already carries Remove (the roster drawer).
+   * Absent where another surface already carries Remove (the roster row's menu).
    */
   onRemoved?: () => void;
   /**

@@ -155,22 +155,14 @@ test.describe("wiring", () => {
     );
   });
 
-  test("the drawer's figures come from the side the row reads from", () => {
-    const drawer = readFileSync(
-      "src/components/dashboard/matches/match-drawer.tsx",
-      "utf8",
-    );
+  test("a drawer's figures come from the side the row reads from", () => {
     const sections = readFileSync(
       "src/components/dashboard/matches/drawer-sections.tsx",
       "utf8",
     );
-    expect(drawer).toContain(
-      "useMatchSnapshotPair(match.id, inFlight, match.turned)",
-    );
-    // The one-sided read the schedule's drawer keeps, and the pair's
-    // "you" row: both pick the seat the list row reads from.
+    // The one-sided read the schedule's drawer keeps picks the seat the list
+    // row reads from.
     expect(sections).toContain('.eq("is_player1", !turned)');
-    expect(sections).toContain("row.is_player1 === !turned");
   });
 });
 

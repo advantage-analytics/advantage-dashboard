@@ -21,7 +21,7 @@ import type { KeyboardEvent } from "react";
  * `DialogPrimitive.Content` (a fixed box with no transform at rest) so the
  * dialog's focus scope and outside-click rule still count them as inside.
  *
- * The shell is the roster's (`team/player-drawer.tsx`): the WIDTH runs
+ * The shell is the peek drawer's (`PeekDrawerFrame`): the WIDTH runs
  * `roster-drawer-in` / `-out` (200ms `--ease-primary`) and the sheet leaves
  * the DOM when the out animation ends.
  */

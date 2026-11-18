@@ -24,7 +24,7 @@ master-detail split is retired; its detail is the peek drawer below.
    (12px tabular ink-700, 72px) · the name at 13/500 ink-900 with its 26px
    mark (program initials for a dual, the tournament mark for a tournament) ·
    context at 12px ink-600 · then the numbers and the outcome, **flush left in
-   fixed tracks** (see the alignment clause below). Canonical orders: **Matches** = Date · Opponent · Result · Score · Event (+ mono round) · Analysis (the fluid cell, heading nothing) — no ⋯ lane: a match's Edit · Delete live in the drawer header, which renders at the same `lg` breakpoint as the table (2026-09-13); a draft row peeks too, into the same rail (Draft n / N, Discard in its header ⋯, Continue as the footer primary), so no row on the page carries a ⋯. A draft row fills the same tracks with what it has answered (2026-10-25): the match day under Date ("—" until entered); the opponent under Opponent with the pill (team: the player takes the pill, the opponent stands alone); "—" for Result, since nothing is decided; the sets typed so far under Score, one ink quieter (`--ink-600`) because nothing has checked them; the event label under Event; and in the lifecycle cell the dashed wait ring, the step it stopped at as one word (`stepLabel`), then "Continue" — beside the open rail the cell is at its 96px floor, which holds the ring and Continue alone, so the step word is read by screen readers only there (the rail names the step) rather than truncating to a letter; at rest the word truncates before Continue ever does. _Supersedes: the player's name under Opponent (the viewer's own, on a personal list), "—" for a typed score, and "Continue" standing in the Event cell._ The team table puts Player (13/500 ink-900) before Opponent (13/400 ink-700), and gives up Event while the match drawer is open — as the personal table does too (2026-10-25): beside the 340px rail the personal card sits under the list's 776px floor, and with Opponent and Event at their fixed maxima the grid overflowed the card and cut the lifecycle cell off; the rail names the event, so the column is the one to give up (`LIST_GRID_COLS_COMPACT`). The glyph leads the score in a fixed track so the outcome sits at one x ("✓ 6-4, 3-6", the drawer's reading); Event trails the numbers as the least-scanned, widest text. The opponent carries no 26px mark — an initials circle read as a profile picture for someone not in the product (2026-09-13). _Supersedes: "Matches = Date · Opponent · Event (+ mono round) · Score · Result · Analysis (the fluid cell, heading nothing) · ⋯ · chevron — the outcome closes the facts, and the lifecycle annotation trails them because it is blank on eight rows in ten"_; **Roster** = # · Player ·
+   fixed tracks** (see the alignment clause below). Canonical orders: **Matches** = Date · Opponent · Result · Score · Event (+ mono round) · Analysis (the fluid cell, heading nothing), then the row's trailing mark pinned to its right edge with no track of its own — the record chevron on a match row, the ⋯ that holds Discard on a draft row (rule 3; 2026-11-17). A match's Edit · Delete live on its report's More menu, so a match row carries no ⋯. _Supersedes (2026-11-17): "no ⋯ lane: a match's Edit · Delete live in the drawer header … a draft row peeks too, into the same rail (Draft n / N, Discard in its header ⋯, Continue as the footer primary), so no row on the page carries a ⋯."_ A draft row fills the same tracks with what it has answered (2026-10-25): the match day under Date ("—" until entered); the opponent under Opponent with the pill (team: the player takes the pill, the opponent stands alone); "—" for Result, since nothing is decided; the sets typed so far under Score, one ink quieter (`--ink-600`) because nothing has checked them; the event label under Event; and in the lifecycle cell the dashed wait ring, the step it stopped at as one word (`stepLabel`), then "Continue"; the word truncates before Continue ever does. A match row that a saved upload fills (a folded draft) carries the Draft pill and the same "Continue" in its lifecycle cell. _Supersedes: the player's name under Opponent (the viewer's own, on a personal list), "—" for a typed score, and "Continue" standing in the Event cell._ The team table puts Player (13/500 ink-900, plain text — the row opens the match, and a name that led to the player page was the click readers made when they wanted the match) before Opponent (13/400 ink-700). The glyph leads the score in a fixed track so the outcome sits at one x ("✓ 6-4, 3-6"); Event trails the numbers as the least-scanned, widest text. The opponent carries no 26px mark — an initials circle read as a profile picture for someone not in the product (2026-09-13). _Supersedes: "Matches = Date · Opponent · Event (+ mono round) · Score · Result · Analysis (the fluid cell, heading nothing) · ⋯ · chevron — the outcome closes the facts, and the lifecycle annotation trails them because it is blank on eight rows in ten"_; **Roster** = # · Player ·
    Record · Form · Last match (the fluid cell; Record leads Form: the number a coach ranks
    by first, the five-tick trail that qualifies it second); **Schedule** = Date · Event · Type · Venue ·
    Lines `n / 9` · Score · Result. Text and its header flush left; a numeric
@@ -36,7 +36,7 @@ master-detail split is retired; its detail is the peek drawer below.
    follows the score it belongs to. Header and value then share an x, which is
    the rule `EmptyMark` and `ResultMark` already follow inside a cell. The cost
    is that Schedule's rows no longer close on a hard right edge — neither page
-   draws a trailing ⋯ lane (Matches moved its menu into the drawer, and a
+   draws a trailing ⋯ lane (a match's menu is on its report, and a
    container row may not have one, rule 3) — so
    size the Result track to its widest content — "Not played", 60px, not the
    52px heading, which clips it — and let the column, not a gap, hold the
@@ -90,16 +90,25 @@ master-detail split is retired; its detail is the peek drawer below.
    inside an event drawer, a player's match list) navigate to the
    report: trailing `chevron-right` 13px, ink-300 → ink-900 on hover, held
    resting and hovered so nothing shifts; the hover wash is transient.
-   **One ruled exception: the Matches page** (2026-09-13). Its rows peek in
-   the match drawer (Peek Drawer, below) and carry no chevron, because that
-   page is where a player triages a season rather than opens one report;
-   ⌘-click on the row and the drawer's title still open the report, and a
-   match row anywhere else keeps its chevron and navigates.
-   _Supersedes: "Record rows (matches, wherever they appear — Home, Matches,
-   inside an event drawer, a player's match list) navigate to the report."_
-   **Container rows** (events on Schedule, players on Roster) open the peek
-   drawer (below) and carry **no chevron** — there is nothing to travel to;
-   the wash persists on the selected row. A link inside a container row that
+   **No exception for the Matches page** (2026-11-17): its rows open the
+   report like a match row anywhere else, ⌘-click opens it in a new tab, and
+   nothing else on the row is a link. A draft row travels too, into its
+   wizard; it says so with "Continue" and holds its ⋯ (Discard) where a
+   match row holds the chevron. _Supersedes (2026-09-13): "One ruled
+   exception: the Matches page. Its rows peek in the match drawer and carry
+   no chevron, because that page is where a player triages a season rather
+   than opens one report." In use nobody triaged: every drawer one coach
+   opened was followed by the click through to the report, and two other
+   readers left the list by the player's name without reaching a match._
+   **Player rows open the player page** (2026-11-17) and carry the same
+   chevron; the name is plain text, since the row is already the link.
+   Staff get one ⋯ before the chevron (Can send video · Invite to claim ·
+   Edit player · Remove from roster). _Supersedes: "players on Roster open
+   the peek drawer and carry no chevron — there is nothing to travel to",
+   written before the player page existed._
+   **Container rows** (events on Schedule, opponents on Opponents) open the
+   peek drawer (below) and carry **no chevron** — there is nothing to travel
+   to; the wash persists on the selected row. A link inside a container row that
    travels to a record may carry the chevron in its own cell, faded in with the
    row (ink-300) and ink-900 on the link, taking no width from the cell: the row
    still peeks, and the chevron says this one cell leaves the page (2026-10-30,
@@ -164,7 +173,9 @@ master-detail split is retired; its detail is the peek drawer below.
    [chrome.md › Dropdown / Menu](chrome.md#dropdown--menu)) and a
    `detail` line on consequential items ("Coach and teammates lose this
    match"). Keep to 2–3, revealed on hover / focus-within. Container rows
-   have no action gutter — the Roster's Upload lives in the drawer.
+   have no action gutter. The Roster row's staff ⋯ (rule 3) is the one
+   standing trigger: it is drawn at rest, because a finger has no hover and
+   the row has no drawer left to hold those writes.
 6. **Filter panel + applied strip.** One panel, sectioned: facets about the
    record first, facets about the counterparty below a hairline under an
    "Opponent" heading. 2–3 options → segmented row with an "Any" default;
@@ -253,7 +264,7 @@ master-detail split is retired; its detail is the peek drawer below.
    rows on screen. A workspace with drafts and no matches draws this same list
    (2026-10-30): the drafts fill the table, no footer pages nothing, and a cut
    counts the drafts ("1 of 2 drafts"), never "0 of 0". Below `lg` a draft lists
-   as a `DraftCard` above the match cards and peeks the same rail. Lifecycle
+   as a `DraftCard` above the match cards: the card is the link into the wizard, with its ⋯ (Discard) in the corner beside the link. Lifecycle
    cell copy: "View report"
    when ready · `StatusChip` while running (no elapsed time — the tray owns
    progress) · "Estimate · Review data" for low confidence (grey fact + blue
@@ -281,23 +292,23 @@ master-detail split is retired; its detail is the peek drawer below.
 
 ### Peek Drawer (v3)
 
-The container-row destination — one 340px shell for Roster, Schedule and (by the ruled exception in rule 3) Matches.
+The container-row destination — one 340px shell for Schedule and Opponents. The Matches and Roster drawers were retired on 2026-11-17 (rule 3): their rows open the report and the player page.
 `--surface-card`, hairline left edge, `--shadow-dropdown`; slides in 200ms
 `--ease-primary` while the table reflows to the remaining width (the flexible
 name column absorbs the loss — nothing else moves). **Opens on click, never
 hover**: a panel opening under a crossing cursor shifts the table and is
 unreachable from a keyboard. Click opens and selects (the wash persists); `↑↓`
 step to the next record; Esc, the X, or re-clicking the selected row closes.
-No URL of its own — `?player=` / `?event=` deep links are the one case that
-lands open. **Closed is the resting state**: full-width table, nothing
+No URL of its own — the `?event=` deep link is the one case that lands
+open. (`?match=`, `?draft=` and the Roster's `?player=`, which opened the
+retired drawers, redirect to the report, the wizard and the player page.) **Closed is the resting state**: full-width table, nothing
 selected, no chevrons, no gutter.
 
-- **Header, 44px, 20px inset:** ‹ › stepping · counter "Player 3 / 6" · ⋯ ·
+- **Header, 44px, 20px inset:** ‹ › stepping · counter "Event 3 / 6" · ⋯ ·
   divider · X — and nothing else. The bridge to the record's page is the
-  **name in the body**, ink-900 at rest and blue on hover, the same
-  affordance the roster row's name carries; ⌘-click on the row does the same.
-  The body scrolls; a full-width primary pins to the bottom ("Upload for
-  Rafael" · "Enter results").
+  **name in the body**, ink-900 at rest and blue on hover; ⌘-click on the
+  row does the same. The body scrolls; a full-width primary pins to the
+  bottom ("Enter results").
 
   _This retires the header's "Open profile ↗" chip._ Two routes to one page
   cost a 340px header its last breathing room: measured at 340, the flexible
@@ -309,8 +320,8 @@ selected, no chevrons, no gutter.
   dismissal only** — anything that travels somewhere belongs in the body.
 
 - **The record's name wraps; it never truncates.** The name is 16/400 ink-900
-  (2026-11-10, design owner's call) — the player drawer's and the profile
-  rail's `PlayerIdentity`, and the match drawer's full-name title — and a
+  (2026-11-10, design owner's call) — the profile rail's `PlayerIdentity`
+  is the same block — and a
   long one takes two lines, not a tooltip: the panel scrolls anyway, and a
   person's name in their own drawer is as essential as this surface gets
   ("nothing essential lives only in a tooltip", Empty State); a single
@@ -323,103 +334,41 @@ selected, no chevrons, no gutter.
   names at 22px, and the answer is two lines, not a tooltip" — the drawer
   name was `.text-title-lg` (24/300), larger than the same player's name on
   their profile rail; one shared block at one size replaced both._
-- **Player body:** identity (`PlayerIdentity`: 40px avatar, the name with the
-  Coach-managed glyph and the viewer's `You` pill beside it, the facts line,
-  then Record + form and Plays — the profile rail's block, so a player reads
-  the same in both) → the four measures as one selector ABOVE the sparkline
-  they switch, each with its figure (`MeasureSelector`, shared with both
-  Opponents drawers) → the chart under a header that says only what the
-  selector does not (the full label, "Last N", the change; no date row — the
-  dates are the chart's hover and the list below) → four recent matches as
-  record rows (with chevrons — these navigate) → one footer button: Upload,
-  or "Open profile" for a viewer who cannot upload. Upload is never
-  event-level. _Supersedes (2026-11-10): "identity → six-match sparkline with
-  a stat header → four 24px stat pills that switch the chart → three recent
-  matches as record rows (with chevrons — these navigate) → Upload."_
-  **With no measured figure the selector and the chart are absent, not
-  empty.**
-  Gate on "is there a value", never on "has matches" — a player whose only
-  match is still analysing has a row and no numbers, which is the same
-  nothing to chart. Left in, the header read "—", the sparkline drew empty
-  air between two blank dates, and the four pills stayed clickable: a coach
-  could press one, watch it select, and watch nothing happen. **A control
-  that responds and does nothing is worse than an absent one**, and it is the
-  one case where honest-zero's "render the region's own anatomy" loses —
-  anatomy is labels and axes, not live buttons wired to nothing. What the
-  pills would have told you moves into the empty line under Recent matches
-  ("Serve and pressure numbers appear here once one is analyzed"), and the
-  way to make it appear is the drawer's own primary. A count link to an empty
-  page ("All 0") goes too.
+- **Player body — retired 2026-11-17.** The Roster drawer is gone; a player
+  row opens the player page, whose rail carries the same `PlayerIdentity`
+  block. Its staff writes moved to the row's ⋯ (rule 3) and its Upload is the
+  rail's New match. The drawer's `MeasureSelector` and sparkline live on in
+  both Opponents drawers, where the rule it taught still holds: **with no
+  measured figure the selector and the chart are absent, not empty** — gate
+  on "is there a value", never on "has matches", because a control that
+  responds and does nothing is worse than an absent one.
 - **Event body:** program mark + name + conference → glyph row (date · venue ·
   surface) → score row (28/300 tabular, winner ink-900, loser ink-500) + nine
   4×18px outcome ticks (singles · gap · doubles) → all nine lines at 36px as
   record rows ("Awaiting result" lines have no chevron; an unset line is a
   blue "+ Set line" row) → Enter results.
-- **Match body** (Matches page only, 2026-11-10): both players' full names
-  as the report link (wraps), over one "date · event · round" line (a match
-  with no event says a muted "No event") → the match report's own
-  `RailScoreboard` (`bare`, via `drawer-scoreboard.ts`), so the drawer and the
-  page draw one scoreboard — absent while the match analyses → the analysis
-  state when there is one → the four snapshot figures for both players as
-  the report's head-to-head rows (`SnapshotComparison`: surnames over 64px
-  columns, the leader ink-900/500; break points lead on conversion rate,
-  double faults on the lower count), or the one-sided figures when the
-  opponent has none → the icon fact rows the match has (court · home/away ·
-  provider · on a team match its scheduled line, the one row with a
-  chevron); an empty fact is left out, never "Not specified". Seat one is the
-  side the row reads from — the viewer on a personal list, the program's
-  player on a team one (`toTeamSide`) — the seat the report calls "you".
-  _Supersedes (2026-11-10): "the match's name as the report link ("Player vs
-  Opponent" on a team, "vs Opponent" personal; wraps) over event · round →
-  `ResultMark` + 16px score on a fixed 20px line … and a nowrap glyph row
-  (date · duration · surface) → the analysis state when there is one → four
-  snapshot figures once numbers exist, absent before → on a team match, the
-  scheduled line it counts toward, as one record row."_ **Footer: a ghost
-  "Open match" for every viewer, always**, with the one primary under it only
-  when an action applies ("Try again" on a failed analysis, for its uploader).
-  The ghost is keyed to nothing: gating it on a missing permission leaves a
-  permitted viewer with nothing left to do an empty footer, and the footer
-  changing shape by role reads as a different panel. The ⋯ (Edit · Delete)
-  follows the uploader, not the role. _Shipped:_ `matches/match-drawer.tsx`.
-- **Draft body** (Matches page only, same `PeekDrawerFrame`, 2026-10-25): the
-  draft named as a match is — "vs Opponent" personal, "Player vs Opponent"
-  team, "Untitled match" before either (`draftTitle`,
-  `lib/wizard/draft-row-fields.ts`) — as the wizard link with an outlined
-  Draft pill → event label or "No event yet" → the wizard's own 2px
-  `StepIndicator` over "Stopped at Source / File / Video check / Details"
-  (`stepLabel`; an import's file step is "Export") with "n / N" in mono at
-  the right → the match rail's `DrawerFact` rows: the match day ("No date
-  yet"), court ("Not specified"), `ProviderFact` ("No source yet" before one
-  is picked), the file name with "· Pick
-  again on Continue" in ink-400 ("No file yet"), and "Edited <date>" last,
-  muted. A fact not yet answered reads muted, never blank, and nothing in the
-  body is a sentence. ⋯ is one `FloatMenu` row, "Discard draft" (`Trash2`,
-  grey at rest, `--danger` on intent, an 11px line on what it clears),
-  confirmed in `ConfirmDialog` — "Discard this draft?", naming the match the
-  way the title does, "Keep draft" · "Discard draft" — so the delete has a
-  pending state and a refusal has a line to land on; on success the rail
-  slides out as on Esc, then the row leaves. Footer is one primary "Continue"
-  and no ghost, since the wizard is the only page a draft has. ↑↓ walk the
-  listed drafts, then the matches. _Shipped:_ `matches/draft-drawer.tsx`,
-  `matches/discard-draft-dialog.tsx`. _Supersedes: "the name as the wizard
-  link with an outlined Draft pill → event label or 'No event yet' → edited
-  date · file name → 'Stopped at step n of N'; ⋯ holds Discard with its
-  consequence" — the player's name as the title (the viewer's own, on a
-  personal rail), a step count that said how far but not where, a file line
-  that implied the file was held, a sentence the pill already said, and a bare
-  Popover with a standing red label whose one-click delete swallowed its
-  error._
-- _Shipped:_ `schedule/static/event-drawer.tsx` and
-  `team/player-drawer.tsx` — the roster's v3 delta (the Record column, the
-  drawer, the retirement of the stat column and the action gutter) is closed.
-  Both rails use one shell: a CSS width keyframe, never an animated inline
+- **Match body and Draft body — retired 2026-11-17** with the Matches
+  drawer (rule 3). What they held has a home: the report itself for the
+  scoreboard, figures, facts and the recovery action; the report's More menu
+  for Edit · Delete; and for a draft, "Continue" on its row and the row's ⋯
+  for Discard — one `FloatMenu` row (`Trash2`, grey at rest, `--danger` on
+  intent, an 11px line on what it clears), confirmed in `ConfirmDialog`
+  ("Discard this draft?", naming the match, "Keep draft" · "Discard draft"),
+  so the delete keeps its pending state and a refusal has a line to land on.
+  After a discard, focus goes to the row below the one that left.
+  _Shipped:_ `matches/draft-discard-menu.tsx`,
+  `matches/discard-draft-dialog.tsx`.
+- _Shipped:_ `schedule/static/event-drawer.tsx`; the shell is
+  `PeekDrawerFrame` (`matches/match-drawer.tsx`, named for the page that had
+  it first). Every rail uses that one shell: a CSS width keyframe, never an animated inline
   width, which left the rail invisible.
 
-### Roster Row (v3) — the row compares, the drawer reads
+### Roster Row (v3) — the row compares, the player page reads
 
 `#` (11px mono tabular ink-500, "—" when unranked) · Player (26px `Avatar` +
-name 13/500 ink-900 — a link, blue on hover) · Record (13px tabular
-— what coaches rank by) · Form (`FormPills`) · Last match. Invited people
+name 13/500 ink-900, plain text: the row is the link) · Record (13px tabular
+— what coaches rank by) · Form (`FormPills`) · Last match · for staff the ⋯ ·
+the record chevron (rule 3). Invited people
 share the table: dashed-ring avatar, position "—", email as the name,
 "Invited Aug 4 by you · player role", Resend (11px blue) · Revoke (11px
 ink-500) inline.
@@ -438,7 +387,7 @@ every state grew its own trailing element and the column lost its shape. Now:
 `ResultMark`, opponent (12px ink-700), and one token in the same place. A
 settled row shows its date (`text-micro` tabular), a running row shows a
 `StatusChip`, an unscored row shows a "Review score" pill. No score — that
-moves to the drawer's recent matches. No elapsed clock — the activity tray
+is on the player page. No elapsed clock — the activity tray
 owns running progress.
 
 The two token treatments differ on purpose, and the difference is the rule:
@@ -458,7 +407,7 @@ everything else must not move.
   are on rather than adding a person — and the header row already spans the
   card it modifies. 11px blue with a 12px grip glyph, inside the last column
   (law 10). A mode with its own Cancel, not a handle sitting there always,
-  because in it a row click grabs instead of opening the drawer.
+  because in it a row click grabs instead of opening the player page.
 - **The mode swaps the page's actions, not its shape.** Ghost + primary
   crossfade to Cancel + Save (`AnimatePresence mode="popLayout"`, 120ms) so
   the primary never moves. A banner in the inline-notice register states the

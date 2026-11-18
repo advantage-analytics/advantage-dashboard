@@ -3,7 +3,7 @@
  * each specifier below to this file:
  *
  * - `@/lib/wizard/actions` — `"use server"`, pulls the server Supabase client
- *   into the bundle. The draft drawer calls `deleteMatchDraft` from its
+ *   into the bundle. A draft's ⋯ calls `deleteMatchDraft` from its
  *   confirm; `?discard=refused` on the harness URL makes it answer an error,
  *   and every call lands in `window.draftDiscards`.
  * - `@/components/dashboard/team/roster-table` — a match row takes only
@@ -16,9 +16,9 @@ declare global {
   }
 }
 
-// Read once, at load: the page mirrors the open row onto the URL
-// (`replaceState` to `?draft=…`), which has dropped this flag by the time
-// the confirm fires.
+// Read once, at load: the page mirrors its filters onto the URL
+// (`replaceState`), which can have dropped this flag by the time the confirm
+// fires.
 const REFUSE =
   new URLSearchParams(window.location.search).get("discard") === "refused";
 

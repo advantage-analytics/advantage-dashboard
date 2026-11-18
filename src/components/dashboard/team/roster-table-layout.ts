@@ -18,14 +18,15 @@ export const ROW = "flex items-center gap-4";
 
 /**
  * The row's intrinsic width, not a round number: 24 + 240 (Player's floor) + 72 + 96 + 196 of
- * columns, four 16px gaps between the five items, and the 48px the card pads
- * by. Below it the card scrolls sideways instead of letting a cell overflow
+ * columns, four 16px gaps between the five items, the row's trailing pair —
+ * the staff menu (28) and the chevron (13), each after a 16px gap — and the
+ * 48px the card pads by. Below it the card scrolls sideways instead of letting a cell overflow
  * its own padding box.
  *
  * It is also the size container `COL.player`'s `cqw` measures, so every box
  * that draws this table (the table, day-zero, loading) takes it.
  */
-export const ROSTER_MIN_WIDTH = "min-w-[740px] @container";
+export const ROSTER_MIN_WIDTH = "min-w-[813px] @container";
 
 /**
  * The header row's labels and the column each sits over, in row order.

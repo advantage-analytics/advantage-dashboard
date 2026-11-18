@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { CoachManagedMark } from "@/components/ui/coach-managed-mark";
 import { FormStrip } from "@/components/dashboard/shared/form-strip";
 import type { FormBar } from "@/lib/data/form-bar";
@@ -7,10 +6,10 @@ import { getInitials } from "@/lib/data/match-utils";
 import { recordLabel } from "@/lib/data/player-profile";
 
 /**
- * Who a player is, drawn the same way wherever one player is the subject: the
- * roster's player drawer and the player profile's rail (drawer redesign,
- * "Previous iteration" boards). One component so the two cannot drift — a
- * coach opening a player from the roster and then their page sees one block.
+ * Who a player is, on the player profile's rail. It was shared with the
+ * roster's player drawer (drawer redesign, "Previous iteration" boards) until
+ * that drawer was retired on 2026-11-17, when roster rows began opening the
+ * player page.
  *
  *   - the header: a 40px avatar beside the name, with the facts line
  *     ("Junior · Singles 2") under it;
@@ -30,7 +29,6 @@ import { recordLabel } from "@/lib/data/player-profile";
  */
 export function PlayerIdentity({
   name,
-  href,
   photoUrl = null,
   facts,
   pill = null,
@@ -40,11 +38,8 @@ export function PlayerIdentity({
   form = [],
   plays = null,
   nameAs = "h2",
-  markAlign = "start",
 }: {
   name: string;
-  /** Where the name leads (the profile), or omitted on the profile itself. */
-  href?: string;
   photoUrl?: string | null;
   /** Plain facts for the line under the name, in order; empties are dropped. */
   facts: readonly (string | null | undefined)[];
@@ -57,18 +52,10 @@ export function PlayerIdentity({
   /** The Opponents table's wording ("Right · Two-handed"), or null. */
   plays?: string | null;
   /**
-   * The name's element. The drawer's dialog is titled by it (`h2`); the
-   * profile rail passes `p`, because the page's own heading already names the
+   * The name's element: `h2` by default; the profile rail passes `p`, because the page's own heading already names the
    * player and the rail is a summary beside it.
    */
   nameAs?: "h2" | "p";
-  /**
-   * Which edge of the Coach-managed tooltip lines up with the glyph. The
-   * tooltip opens toward the room the host has: the roster drawer sits on
-   * the screen's right edge, so it passes `end` and the tooltip opens back
-   * over the name; the profile rail sits on the left and keeps `start`.
-   */
-  markAlign?: "start" | "end";
 }) {
   const factLine = facts.filter((fact): fact is string => Boolean(fact));
   const decided = wins + losses;
@@ -85,19 +72,8 @@ export function PlayerIdentity({
         />
         <div className="flex min-w-0 flex-1 flex-col gap-[3px] pt-px">
           <Heading className="text-[16px] leading-[22px] font-normal [text-wrap:balance] [overflow-wrap:anywhere] text-[var(--ink-900)]">
-            {href ? (
-              <Link
-                href={href}
-                className="rounded-[var(--radius-cell)] text-[var(--ink-900)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
-              >
-                {name}
-              </Link>
-            ) : (
-              name
-            )}
-            {coachManaged && (
-              <CoachManagedMark align={markAlign} className="ml-1.5" />
-            )}
+            {name}
+            {coachManaged && <CoachManagedMark className="ml-1.5" />}
             {/* `You` is identity, not standing, so it sits beside the name
                 (Settings Pages rule, `reference/settings.md`), never on the
                 facts line. */}
