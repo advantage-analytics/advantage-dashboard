@@ -125,3 +125,9 @@ export async function loadProgramUsage(
   await answer();
   return { usedSeconds: 1800, capSeconds: 270000, billingMonth, lines: [] };
 }
+
+// The labeller board's Claim on /label, for `tests/label-board-claim.spec.ts`.
+export async function claimLabelMatchAction(_jobId: string) {
+  await answer();
+  return { sessionId: "33333333-3333-4333-8333-333333333333" };
+}

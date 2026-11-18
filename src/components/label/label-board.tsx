@@ -15,6 +15,7 @@ import type {
   LabellerTodoRow,
 } from "@/lib/data/label-queue-server";
 import { agoText, isOverdue, labelDueText } from "@/lib/services/labels/queue";
+import { actionRejected } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
@@ -153,7 +154,10 @@ function TodoLane({
     setRefusal(null);
     setClaiming(jobId);
     startTransition(async () => {
-      const result = await claimLabelMatchAction(jobId);
+      // A rejection inside the transition would reach the root error boundary
+      // (there is no `error.tsx` under /label) and swap the whole board for an
+      // error screen; `actionRejected` makes it one more refusal on the row.
+      const result = await claimLabelMatchAction(jobId).catch(actionRejected);
       if ("sessionId" in result) {
         router.push(`/label/${result.sessionId}`);
         return;
