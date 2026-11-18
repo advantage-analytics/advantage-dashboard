@@ -196,15 +196,16 @@ test("labels name Contact, Placement and the three wings on the opened view only
       .locator("svg text")
       .evaluateAll((nodes) => nodes.map((n) => n.textContent));
 
-  // Hand unknown: a right-hander, whose forehand is the hitter's left third.
+  // Hand unknown (every dot `handAssumed`): no one known hand sides the
+  // apron, so the thirds are named from the hitter's side.
   expect(await texts(opened)).toEqual([
     "Placement",
     "Contact",
-    "Their FH",
+    "Left",
     "Middle",
-    "Their BH",
+    "Right",
   ]);
-  for (const name of ["Placement", "Contact", "Their FH", "Middle", "Their BH"])
+  for (const name of ["Placement", "Contact", "Left", "Middle", "Right"])
     await expect(opened.getByText(name, { exact: true })).toBeVisible();
   // Lane names left to right across the far baseline, above the court.
   const laneX = await opened
@@ -218,10 +219,18 @@ test("labels name Contact, Placement and the three wings on the opened view only
 
   // The wall card carries no text at all.
   expect(await texts(card)).toEqual([]);
-  for (const name of ["Placement", "Contact", "Their FH", "Middle", "Their BH"])
+  for (const name of [
+    "Placement",
+    "Contact",
+    "Their FH",
+    "Their BH",
+    "Left",
+    "Middle",
+    "Right",
+  ])
     await expect(card.getByText(name, { exact: true })).toHaveCount(0);
 
-  // A known left-hander swaps the outer wings.
+  // A known left-hander names their wings, backhand on the hitter's left.
   const lefty = page.getByTestId("lefty");
   await expect(lefty.locator('[data-approach-lane="left"]')).toHaveText(
     "Their BH",

@@ -65,6 +65,7 @@ import {
   type ApproachWing,
 } from "../match-filters/approach";
 import type { NetEnding, NetEntry } from "../match-filters/net-game";
+import type { Hand } from "../match-filters/shot-geometry";
 import { bandKindFor, marksAreShots } from "./cut-kinds";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
@@ -205,6 +206,14 @@ export interface VizDotMeta {
   bucket?: ApproachEndingBucket;
   /** Approaches cut only: `wing` assumes a right-handed opponent. */
   handAssumed?: boolean;
+  /**
+   * Approaches cut only: the hand `wing` was worked out from — the seat the
+   * subject approached against — or null where the match does not give it
+   * (`handAssumed`). Carried so a court over several opponents (the
+   * season's) can tell whether they share one hand, which a middle-lane
+   * wing alone cannot say (`approachLeftLaneSide`, `court-art.tsx`).
+   */
+  opponentHand?: Hand | null;
 }
 
 /**
@@ -1430,6 +1439,7 @@ function computeApproachViz(
     matchPass,
     matchCtx,
   );
+  const opponentHand = approachOpponentHand(subjectIsPlayer1, matchCtx);
   let count = 0;
   const dots: VizDot[] = [];
   const undrawn: VizMark[] = [];
@@ -1451,6 +1461,7 @@ function computeApproachViz(
         ending: approach.ending,
         bucket: approach.bucket,
         handAssumed: approach.handAssumed,
+        opponentHand,
       },
     };
 
@@ -1477,6 +1488,15 @@ function computeApproachViz(
   return { dots, undrawn, count, total, noun: "approaches", zoneStats: null };
 }
 
+/** The hand of the seat the subject approaches against; null when unknown. */
+function approachOpponentHand(
+  subjectIsPlayer1: boolean,
+  matchCtx: MatchFilterContext | undefined,
+): Hand | null {
+  const hands = matchCtx?.hands;
+  return (subjectIsPlayer1 ? hands?.player2 : hands?.player1) ?? null;
+}
+
 interface PooledApproach {
   point: MatchPoint;
   approach: Approach;
@@ -1501,9 +1521,7 @@ function approachPool(
   let total = 0;
   let entryTotal = 0;
   const pool: PooledApproach[] = [];
-  const hands = matchCtx?.hands;
-  const opponentHand =
-    (subjectIsPlayer1 ? hands?.player2 : hands?.player1) ?? null;
+  const opponentHand = approachOpponentHand(subjectIsPlayer1, matchCtx);
 
   for (const p of points) {
     const approach = approachOf(

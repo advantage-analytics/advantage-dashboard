@@ -1070,6 +1070,53 @@ test("the season's opened Approaches court says it assumes right-handed beside i
   expect(errors).toEqual([]);
 });
 
+test("the season's opened Approaches court names its lanes Left · Middle · Right over opponents of different hands, and their wings over opponents who share one known hand", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  const lanes = async (nethands: string) => {
+    await page.goto(
+      `${origin}${PROFILE}?tab=visualizations&cut=approaches&nethands=${nethands}&delay=50`,
+    );
+    const dialog = page.getByRole("dialog", { name: "Approaches" });
+    await expect(dialog).toBeVisible({ timeout: 8_000 });
+    await expect(marks(dialog).first()).toBeVisible({ timeout: 5_000 });
+    const lane = (side: string) =>
+      dialog.locator(`[data-approach-lane="${side}"]`);
+    return { dialog, lane };
+  };
+
+  // A right-hander and a left-hander: no one hand sides the apron, so the
+  // thirds are the hitter's own.
+  const mixed = await lanes("mixed");
+  await expect(mixed.lane("left")).toHaveText("Left");
+  await expect(mixed.lane("middle")).toHaveText("Middle");
+  await expect(mixed.lane("right")).toHaveText("Right");
+  await expect(mixed.dialog.getByText("Their FH", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(mixed.dialog.getByText("Their BH", { exact: true })).toHaveCount(
+    0,
+  );
+  // Each match still says which wing of THAT opponent an approach went to,
+  // so the Statistics pane keeps its per-wing rows.
+  await expect(
+    mixed.dialog.getByRole("button", { name: /^Their backhand/ }),
+  ).toBeVisible();
+  await expect(
+    mixed.dialog.getByRole("button", { name: /^Their forehand/ }),
+  ).toBeVisible();
+
+  // Both opponents left-handed: their backhand is the hitter's left third.
+  const lefties = await lanes("left");
+  await expect(lefties.lane("left")).toHaveText("Their BH");
+  await expect(lefties.lane("middle")).toHaveText("Middle");
+  await expect(lefties.lane("right")).toHaveText("Their FH");
+  expect(errors).toEqual([]);
+});
+
 test("the season's opened Approaches court names the approaches it cannot draw: a season approach with no landing reads in the not-drawn line beside the drawn marks", async ({
   page,
 }) => {

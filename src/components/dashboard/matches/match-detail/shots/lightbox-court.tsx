@@ -16,7 +16,7 @@ import {
   APPROACH_SIDE_LABEL_OPACITY,
   APRON_FILL,
   approachLaneText,
-  leftLaneIsForehand,
+  approachLeftLaneSide,
   COURT_FILL,
   HEAT_APRON_FILL,
   HEAT_COURT_FILL,
@@ -356,8 +356,9 @@ export function LightboxCourt({
    * Approaches: the hand of whoever is NOT the court's subject, which sides
    * the apron's "Their FH" / "Their BH". `null` is a known-unknown hand, read
    * as right-handed like the rest of the cut. Omitted (a court over several
-   * opponents, the season's), it is read off the dots as the wall card does
-   * (`leftLaneIsForehand`).
+   * opponents, the season's), it is read off the dots
+   * (`approachLeftLaneSide`): one known hand names their wings, anything
+   * else the hitter's "Left · Middle · Right".
    */
   opponentHand?: Hand | null;
   /** The hovered or chosen Statistics row's zone or band, outlined dashed white. */
@@ -653,7 +654,7 @@ export function LightboxCourt({
               leftIsForehand={
                 opponentHand !== undefined
                   ? opponentHand !== "left"
-                  : leftLaneIsForehand(dots)
+                  : approachLeftLaneSide(dots)
               }
             />
           )}
@@ -793,14 +794,15 @@ export function LightboxCourt({
 /**
  * The Approaches cut's apron words (`approach-map-v9.html`, the wall card's
  * `ApproachCourtArt` labels): "Placement" over the far half, the opponent's
- * wing over each third just past the far baseline, "Contact" under the near
- * half. Under the marks, and deaf to the pointer, so no word takes a hover.
+ * wing over each third just past the far baseline — or the hitter's "Left ·
+ * Middle · Right" where no one hand sides it (`approachLaneText`) —
+ * "Contact" under the near half. Under the marks, and deaf to the pointer, so no word takes a hover.
  */
 function ApproachApronLabels({
   leftIsForehand,
   scale,
 }: {
-  leftIsForehand: boolean;
+  leftIsForehand: boolean | null;
   scale: number;
 }) {
   const laneText = approachLaneText(leftIsForehand);

@@ -251,3 +251,13 @@ is the runner's. Newest entries at the bottom.
 **follow-ups:**
 
 1. `dots` is optional only so existing `{ count: N }` test literals compile; a caller that omits it silently gets no hand note — consider making it required.
+
+## T26 · Label the apron lanes Left · Middle · Right when opponents' hands differ — done
+
+**gate:** mechanical PASS · completion-review pass
+
+**changed:** Each approach dot's meta carries its opponent's hand (`viz-model.ts`, `approachOpponentHand` shared with the stats pool — outside `files:` but needed, since a middle-lane dot says nothing about the hand). `court-art.tsx` replaces `leftLaneIsForehand` with `approachLeftLaneSide(dots)`: one known hand gives that opponent's wings; mixed, assumed, or no telling dot gives the hitter's "Left · Middle · Right" (`approachLaneText(null)`). An empty court reads Left · Middle · Right. `lightbox-court.tsx` uses it only when no `opponentHand` is passed, so the match lightbox is unchanged. New `tests/approach-lanes.spec.ts`; season harness `?nethands=mixed|left` and a new season case; `tests/viz-approach-court-browser.spec.ts`'s opened-view label case now expects Left · Middle · Right because its default dots are hand-assumed.
+
+**follow-ups:**
+
+1. The legend's "assumes right-handed" line still shows on a court whose lanes read Left · Middle · Right — accurate for the per-wing stats, but worth a design look.

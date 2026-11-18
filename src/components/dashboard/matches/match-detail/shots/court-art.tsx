@@ -29,6 +29,7 @@ import {
   projectApproachPair,
 } from "./court-geometry";
 import { laneOf } from "../match-filters/approach";
+import type { Hand } from "../match-filters/shot-geometry";
 import { isPlacementCut } from "./cut-kinds";
 import {
   type Chart,
@@ -728,8 +729,14 @@ export const APPROACH_LANE_LABEL_SIZE = 6.8;
 export const APPROACH_LANE_LABEL_OPACITY = 0.5;
 export const APPROACH_LABEL_TRACKING = 0.9;
 
-/** The wing name over each hitter's-view third, left to right. */
-export function approachLaneText(leftIsForehand: boolean) {
+/**
+ * The words over each hitter's-view third, left to right: the opponent's
+ * wing when one hand sides the apron (`true`: their forehand on the left, a
+ * right-hander), or the hitter's own sides when none does (`null`).
+ */
+export function approachLaneText(leftIsForehand: boolean | null) {
+  if (leftIsForehand === null)
+    return { left: "Left", middle: "Middle", right: "Right" } as const;
   return {
     left: leftIsForehand ? "Their FH" : "Their BH",
     middle: "Middle",
@@ -738,21 +745,43 @@ export function approachLaneText(leftIsForehand: boolean) {
 }
 
 /**
- * Whether the hitter's LEFT third faces the opponent's forehand — true for a
- * right-hander (`wingOf`). Read off the dots themselves: any dot whose wing
- * was worked out from a KNOWN hand (`handAssumed: false`) and whose placement
- * sits in an outer third settles it. With no such dot the hand is unknown and,
- * as everywhere else in the cut, a right-hander is assumed.
+ * The opponent's hand behind one dot: its own `opponentHand`, else read off
+ * a wing worked out from a KNOWN hand (`handAssumed: false`) whose placement
+ * sits in an outer third. `null` is an assumed hand; `undefined`, a dot that
+ * cannot say (a hand-built dot in the middle third, or one with no meta).
  */
-export function leftLaneIsForehand(dots: VizDot[]): boolean {
+function dotOpponentHand(d: VizDot): Hand | null | undefined {
+  const meta = d.meta;
+  if (!meta) return undefined;
+  if (meta.handAssumed === true) return null;
+  if (meta.opponentHand !== undefined) return meta.opponentHand;
+  const wing = meta.wing;
+  if (meta.handAssumed !== false || !wing || wing === "middle")
+    return undefined;
+  const lane = laneOf(d.lateralM);
+  if (lane === "middle") return undefined;
+  return (lane === "left") === (wing === "forehand") ? "right" : "left";
+}
+
+/**
+ * Which way the apron's thirds are named, read off the dots — for a court
+ * over several opponents (the season's), which has no one hand to pass.
+ * Every dot from one KNOWN hand: `true` for a right-hander (their forehand
+ * is the hitter's left third, `wingOf`), `false` for a left-hander. Dots
+ * that do not share one known hand — two hands, any hand assumed — or no
+ * dot that says: `null`, and the thirds read "Left · Middle · Right" from
+ * the hitter's side. So an empty court names the hitter's sides too.
+ */
+export function approachLeftLaneSide(dots: VizDot[]): boolean | null {
+  let shared: Hand | undefined;
   for (const d of dots) {
-    const wing = d.meta?.wing;
-    if (d.meta?.handAssumed !== false || !wing || wing === "middle") continue;
-    const lane = laneOf(d.lateralM);
-    if (lane === "middle") continue;
-    return (lane === "left") === (wing === "forehand");
+    const hand = dotOpponentHand(d);
+    if (hand === undefined) continue;
+    if (hand === null) return null;
+    if (shared !== undefined && shared !== hand) return null;
+    shared = hand;
   }
-  return true;
+  return shared === undefined ? null : shared === "right";
 }
 
 /** Keeps a mark inside the wall card's tighter window, one radius in, so a
@@ -777,7 +806,7 @@ function clampToCard(p: { x: number; y: number }): { x: number; y: number } {
  *
  * `labels` is the opened view: the roomier viewBox and, on the apron only,
  * "Placement" above the far baseline, "Contact" below the near one and the
- * opponent's wing over each third. Without it (the wall card) the viewBox is
+ * opponent's wing over each third (`approachLeftLaneSide`). Without it (the wall card) the viewBox is
  * the tighter `cardViewBox` and no text is drawn.
  */
 function ApproachCourtArt({
@@ -800,7 +829,7 @@ function ApproachCourtArt({
   const box = labels
     ? FULL_COURT_VERTICAL.viewBox
     : FULL_COURT_VERTICAL.cardViewBox;
-  const laneText = approachLaneText(leftLaneIsForehand(dots));
+  const laneText = approachLaneText(approachLeftLaneSide(dots));
   const place = labels ? (p: { x: number; y: number }) => p : clampToCard;
   return (
     <svg

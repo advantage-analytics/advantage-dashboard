@@ -368,7 +368,7 @@ ready).
 
 ## T26 · Label the apron lanes Left · Middle · Right when opponents' hands differ
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) `src/components/dashboard/matches/match-detail/shots/court-art.tsx` (`leftLaneIsForehand` ~747, `approachLaneText` ~732, `ApproachCourtArt` ~803); `shots/lightbox-court.tsx` (the `opponentHand !== undefined ? … : leftLaneIsForehand(dots)` fallback ~656, `ApproachApronLabels` ~800); `tests/season-viz-browser.spec.ts` + `tests/fixtures/season-viz-harness.tsx` (`HANDS_SEASON`); `tests/viz-approach-court-browser.spec.ts` + `tests/fixtures/viz-approach-court-harness.tsx`; a unit spec for the lane decision (new, or in `tests/approach.spec.ts`)
 - **routes:** `/dashboard/team/roster/[playerId]`
