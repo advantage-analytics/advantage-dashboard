@@ -395,7 +395,9 @@ export const CLAIM_MICRO = "text-micro";
  * **Never `blue` in a list above a checkbox.** `AuthCheckbox` fills Signal Blue
  * with a white check when set, so blue marks above it stack four blue
  * checkmarks in one column with only the last one meaning anything. The
- * guardian acknowledgments pass `ink` for exactly that reason.
+ * guardian acknowledgments pass `ink` for exactly that reason. The one
+ * exception is `/terms-update`, whose rows are all blue because its checkbox
+ * sits apart in a `--surface-subtle` well, not in the marks' column.
  *
  * Not `CircleCheck`, which is `ResultMark`'s glyph and means a match outcome;
  * not the claim flow's `ArrowRight` (`claim/sharing-rows.tsx`), which marks
