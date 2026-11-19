@@ -1334,6 +1334,31 @@ export const VIEWER_LANDING_FRAME = {
   h: VIEWER_COURT.netY + VIEWER_NET_GUTTER - VIEWER_COURT.courtFrame.minY,
 } as const;
 
+/**
+ * The Approaches cut's 100% frame: the whole length, baseline to baseline,
+ * with `VIEWER_APPROACH_APRON` beyond each one. A pair is a contact in the
+ * near half and a placement in the far half, so a landing half
+ * (`VIEWER_LANDING_FRAME`) would open with every contact below the stage. The
+ * apron is where a hitter strikes from behind the baseline, and where labels
+ * on the strip ends draw. It is a little shorter than `courtFrame`'s 44-unit
+ * apron so "Full court" is still a step out from here, not the same view.
+ */
+// ≈2.1 m (7 ft) past each baseline. T23: 36, up from 32 — the apron words
+// open at a landing cut's type size now (`viewerApproachLabelScale`), and at
+// 32 "Placement" over the wing names left no room above it for the mono
+// face's ascent. Keep it under ~43, where this frame is as tall as
+// `courtFrame` and "Full court" stops being a step out.
+const VIEWER_APPROACH_APRON = 36;
+export const VIEWER_APPROACH_FRAME = {
+  minX: VIEWER_COURT.courtFrame.minX,
+  minY: VIEWER_COURT.farBaselineY - VIEWER_APPROACH_APRON,
+  w: VIEWER_COURT.courtFrame.w,
+  h:
+    VIEWER_COURT.nearBaselineY -
+    VIEWER_COURT.farBaselineY +
+    2 * VIEWER_APPROACH_APRON,
+} as const;
+
 /** `frame`'s fit scale on `stage`, clamped to the zoom range. */
 function frameFitZ(
   frame: { w: number; h: number },
@@ -1346,6 +1371,20 @@ function frameFitZ(
     stage.h / (frame.h * pxPerUnit),
   );
   return clampNum(fitZ * multiplier, ZOOM_MIN, ZOOM_MAX);
+}
+
+/**
+ * How much larger the Approaches court draws its words than a landing cut
+ * does, on `stage`: the ratio of the two frames' fits. Its art's type is in
+ * viewBox units and it opens on the whole length, at about half the zoom the
+ * landing cuts open at, so this opens its labels at Returns' on-screen size.
+ * A ratio, not a constant, because `frameFitZ` is width-bound on a tall,
+ * narrow stage (then 1). Never below 1.
+ */
+export function viewerApproachLabelScale(stage: Size): number {
+  const landing = frameFitZ(VIEWER_LANDING_FRAME, stage);
+  const approach = frameFitZ(VIEWER_APPROACH_FRAME, stage);
+  return Math.max(1, landing / approach);
 }
 
 /**
@@ -1379,6 +1418,12 @@ export function viewerFullCourtTransform(stage: Size): PanZoom {
  * readout calls it 100%. `zoomAbout`/`panBy` (`pan-zoom.ts`) take over from
  * user input.
  *
+ * `"approaches"`: a pair per point, its contact in the near half and its
+ * placement in the far half, so the whole length — `VIEWER_APPROACH_FRAME`,
+ * both baselines and their aprons — fitted to the stage and centred on both
+ * axes. Checked before the landing branch, which `isLandingCut` would
+ * otherwise send it down.
+ *
  * Landing cuts (`"serve"`, `"returnPlacement"`, `"rallyPlacement"`,
  * `"errors"`): the half the shots land in (`viewerLandingHalf` — the far
  * half), `VIEWER_LANDING_FRAME` fitted to the stage, horizontally centred,
@@ -1403,6 +1448,21 @@ export function viewerFullCourtTransform(stage: Size): PanZoom {
 export function viewerInitialTransform(cut: Cut, stage: Size): PanZoom {
   const art = VIEWER_COURT.artPx;
   const centre = viewerArtPoint(VIEWER_COURT.centreX, 0);
+
+  if (cut === "approaches") {
+    const frame = VIEWER_APPROACH_FRAME;
+    const z = frameFitZ(frame, stage);
+    const middle = viewerArtPoint(0, frame.minY + frame.h / 2);
+    return clampPan(
+      {
+        z,
+        px: stage.w / 2 - centre.x * z,
+        py: stage.h / 2 - middle.y * z,
+      },
+      art,
+      stage,
+    );
+  }
 
   if (viewerLandingHalf(cut) !== null) {
     const frame = VIEWER_LANDING_FRAME;
@@ -1430,4 +1490,190 @@ export function viewerInitialTransform(cut: Cut, stage: Size): PanZoom {
     art,
     stage,
   );
+}
+
+/* ── Full vertical court (Approaches cut) ──────────────────────────────────
+ *
+ * The Approaches cut draws a pair per point — where the approach was struck
+ * and where it landed — so it needs both halves at once. This frame is the
+ * landscape `RETURN_COURT` content (every rect/line constant reused as-is)
+ * turned upright by ONE group, `rotate(-90 240 104.5)`, so the subject's
+ * baseline (`RETURN_COURT.farBaselineX`, x=40) sits at the BOTTOM and the
+ * opponent's (`RETURN_COURT.nearBaselineX`, x=440) at the TOP — the reverse
+ * of which landscape baseline the return frames call "near", because there
+ * the court is drawn from the returner's far side.
+ *
+ * Unlike the return frames, marks are NOT drawn inside that group: they are
+ * projected to screen (viewBox) coordinates by `projectApproachPair` and
+ * drawn on top, so a backhand triangle keeps its apex up with the unrotated
+ * `trianglePointsFor("serve", …)`, and labels read upright.
+ *
+ * The rotation maps landscape (x, y) to screen (X, Y):
+ *   X = netX + (y − centerY)       — landscape lateral becomes screen x
+ *   Y = centerY − (x − netX)       — landscape depth becomes screen y
+ * (`fullVerticalToScreen`). Ground truth for every number below is the
+ * approved look, `work/approach-heatmap/02_design/references/approach-map-v9.html`.
+ */
+const FULL_VERTICAL_ROTATE_CX = RETURN_COURT.netX; // 240
+const FULL_VERTICAL_ROTATE_CY = RETURN_COURT.centerY; // 104.5
+
+/** Landscape `RETURN_COURT` coordinates → this frame's screen (viewBox) space. */
+export function fullVerticalToScreen(
+  x: number,
+  y: number,
+): { x: number; y: number } {
+  return {
+    x: FULL_VERTICAL_ROTATE_CX + (y - FULL_VERTICAL_ROTATE_CY),
+    y: FULL_VERTICAL_ROTATE_CY - (x - FULL_VERTICAL_ROTATE_CX),
+  };
+}
+
+// Screen lines the viewBoxes and labels hang off.
+const FV_CENTRE_X = fullVerticalToScreen(0, RETURN_COURT.centerY).x; // 240
+const FV_NET_Y = fullVerticalToScreen(RETURN_COURT.netX, 0).y; // 104.5
+const FV_SUBJECT_BASELINE_Y = fullVerticalToScreen(
+  RETURN_COURT.farBaselineX,
+  0,
+).y; // 304.5
+const FV_FAR_BASELINE_Y = fullVerticalToScreen(RETURN_COURT.nearBaselineX, 0).y; // -95.5
+const FV_DOUBLES_HALF_W = RETURN_COURT.centerY - RETURN_COURT.doublesTop; // 92.5
+
+// Apron beyond each edge of the court, in screen units. The opened view
+// leaves room above the far baseline for the wing names and "Placement",
+// and below the subject's baseline for "Contact"; the wall card is tighter
+// so the court fills the art box's height.
+const FV_OPEN_APRON = { side: 29.5, top: 46.5, bottom: 35.5 } as const;
+const FV_CARD_APRON = { side: 17.5, top: 8.5, bottom: 9.5 } as const;
+
+function fullVerticalViewBox(apron: {
+  side: number;
+  top: number;
+  bottom: number;
+}) {
+  const minY = FV_FAR_BASELINE_Y - apron.top;
+  return {
+    minX: FV_CENTRE_X - FV_DOUBLES_HALF_W - apron.side,
+    minY,
+    w: 2 * (FV_DOUBLES_HALF_W + apron.side),
+    h: FV_SUBJECT_BASELINE_Y + apron.bottom - minY,
+  };
+}
+
+/** Singles-court thirds as seen by the hitter (`approach.ts`'s `laneOf`). */
+export type FullVerticalLane = "left" | "middle" | "right";
+
+const FV_SINGLES_W = RETURN_COURT.singlesBottom - RETURN_COURT.singlesTop;
+/** Landscape lateral-y bounds of each hitter's-view third. Hitter's left is
+ *  screen left, which is the smaller landscape y. */
+const FV_LANE_Y: Record<FullVerticalLane, [number, number]> = {
+  left: [RETURN_COURT.singlesTop, RETURN_COURT.singlesTop + FV_SINGLES_W / 3],
+  middle: [
+    RETURN_COURT.singlesTop + FV_SINGLES_W / 3,
+    RETURN_COURT.singlesTop + (2 * FV_SINGLES_W) / 3,
+  ],
+  right: [
+    RETURN_COURT.singlesTop + (2 * FV_SINGLES_W) / 3,
+    RETURN_COURT.singlesBottom,
+  ],
+};
+
+function laneScreenX(lane: FullVerticalLane): { x1: number; x2: number } {
+  const [a, b] = FV_LANE_Y[lane];
+  return {
+    x1: fullVerticalToScreen(0, a).x,
+    x2: fullVerticalToScreen(0, b).x,
+  };
+}
+
+function laneLabel(lane: FullVerticalLane): { x: number; y: number } {
+  const { x1, x2 } = laneScreenX(lane);
+  return { x: (x1 + x2) / 2, y: FV_FAR_BASELINE_Y - 9.5 }; // y -105
+}
+
+export const FULL_COURT_VERTICAL = {
+  /** The opened view's viewBox ("118 -142 244 482"). */
+  viewBox: fullVerticalViewBox(FV_OPEN_APRON),
+  /** The wall card's tighter viewBox ("130 -104 220 418"). */
+  cardViewBox: fullVerticalViewBox(FV_CARD_APRON),
+  /** Wraps the landscape `RETURN_COURT` court drawing (rects, lines, net). */
+  groupTransform: `rotate(-90 ${FV_CENTRE_X} ${FV_NET_Y})`,
+  /** Landscape depth-x of the subject's baseline (drawn at the bottom). */
+  subjectBaselineX: RETURN_COURT.farBaselineX,
+  /** Landscape depth-x of the opponent's baseline (drawn at the top). */
+  opponentBaselineX: RETURN_COURT.nearBaselineX,
+  /** Screen positions, in viewBox units. */
+  centreX: FV_CENTRE_X,
+  netY: FV_NET_Y,
+  subjectBaselineY: FV_SUBJECT_BASELINE_Y,
+  farBaselineY: FV_FAR_BASELINE_Y,
+  /** Screen x-span of each hitter's-view third of the singles court. */
+  lanes: {
+    left: laneScreenX("left"),
+    middle: laneScreenX("middle"),
+    right: laneScreenX("right"),
+  },
+  /** Text anchors (text-anchor="middle"), all on the apron. */
+  labels: {
+    placement: { x: FV_CENTRE_X, y: FV_FAR_BASELINE_Y - 28.5 }, // -124
+    contact: { x: FV_CENTRE_X, y: FV_SUBJECT_BASELINE_Y + 23.5 }, // 328
+    /** Wing names, one above each third, just over the far baseline. */
+    lanes: {
+      left: laneLabel("left"),
+      middle: laneLabel("middle"),
+      right: laneLabel("right"),
+    },
+  },
+} as const;
+
+/**
+ * Projects an Approaches dot to screen coordinates on `FULL_COURT_VERTICAL`.
+ *
+ * - **Placement** (the dot's own `lateralM`/`depthM`, `rallyLandingMetrics`'
+ *   frame): depth is metres past the net, so it runs from the net up to the
+ *   opponent's baseline at ≈11.885 m — the far (top) half.
+ * - **Contact** (`pair`, `contactMetrics`' frame): depth is signed metres
+ *   behind (+) / inside (−) the subject's own baseline, so it runs from the
+ *   bottom baseline toward the net — the near (bottom) half. `null` when the
+ *   dot has no `pair`.
+ *
+ * Lateral, for both: metres to the hitter's right as they face the net. The
+ * hitter stands at the bottom facing up, so their right is screen right on
+ * both halves — no per-mark sign flip, unlike `projectReturnDot`.
+ *
+ * Both points are clamped inside the opened `viewBox`, inset by one mark's
+ * radius, so a wild out or a contact far behind the baseline sits at the
+ * edge rather than vanishing.
+ */
+export function projectApproachPair(
+  dot: Pick<VizDot, "lateralM" | "depthM" | "pair">,
+): {
+  placement: { x: number; y: number };
+  contact: { x: number; y: number } | null;
+} {
+  const lateralY = (lateralM: number) =>
+    RETURN_COURT.centerY + lateralM * LATERAL_UNITS_PER_METER;
+  const placement = fullVerticalToScreen(
+    RETURN_COURT.netX + dot.depthM * UNITS_PER_METER,
+    lateralY(dot.lateralM),
+  );
+  const contact = dot.pair
+    ? fullVerticalToScreen(
+        FULL_COURT_VERTICAL.subjectBaselineX -
+          dot.pair.depthM * UNITS_PER_METER,
+        lateralY(dot.pair.lateralM),
+      )
+    : null;
+  return {
+    placement: clampToFullVertical(placement),
+    contact: contact ? clampToFullVertical(contact) : null,
+  };
+}
+
+function clampToFullVertical(p: { x: number; y: number }) {
+  const vb = FULL_COURT_VERTICAL.viewBox;
+  const m = RETURN_DOT_R;
+  return {
+    x: clampNum(p.x, vb.minX + m, vb.minX + vb.w - m),
+    y: clampNum(p.y, vb.minY + m, vb.minY + vb.h - m),
+  };
 }

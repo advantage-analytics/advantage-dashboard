@@ -13,7 +13,10 @@ import { isUuid } from "@/lib/admin/validation";
 import type { FlagCounts } from "@/lib/services/labels/job-groups";
 import { ADMIN_REQUIRED } from "@/lib/services/labels/edit-session";
 import { parseLabelStartScore } from "@/lib/services/labels/session-fields";
-import { normalizePlayerHand } from "@/components/dashboard/matches/player-hands";
+import {
+  normalizePlayerHand,
+  playerColumnsSeat,
+} from "@/components/dashboard/matches/player-hands";
 import {
   PLAYBACK_JOB_COLUMNS,
   choosePlaybackFile,
@@ -721,8 +724,8 @@ async function readEnteredHands(
  * Which seat the match row's `player_*` / `opponent_*` columns describe, and
  * each seat's id. `player_*` is the account holder's ("you"), as the match
  * page reads it (`transformDbMatchToMatch`), not seat 1's: the wizard seats
- * them first, but a row with only `player2_id` set seats them second (old
- * SwingVision imports), and then the opponent — `opponent_player_id` when
+ * them first, but a row with only `player2_id` set seats them second (the
+ * legacy shape `playerColumnsSeat` names), and then the opponent — `opponent_player_id` when
  * the row names one — is seat 1.
  */
 /** What `enteredHandsFor` reads of the match row. */
@@ -739,7 +742,8 @@ function enteredSeats(match: EnteredHandsRow | null): {
   youAreP2: boolean;
   ids: Record<LabelSide, string | null>;
 } {
-  const youAreP2 = !match?.player1_id && !!match?.player2_id;
+  // The shared guard (`playerColumnsSeat`), so the match report agrees.
+  const youAreP2 = playerColumnsSeat(match) === "player2";
   const opponent = match?.opponent_player_id ?? null;
   return {
     youAreP2,

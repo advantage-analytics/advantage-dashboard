@@ -3,8 +3,10 @@
 import { prefersReducedMotion } from "@/components/dashboard/shared/use-reduced-motion";
 import { memo, useEffect, useMemo, useRef } from "react";
 import type { MatchPoint } from "@/lib/data/match-points-server";
-import { pointResultLabel } from "@/components/dashboard/matches/match-detail/match-filters/model";
-import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
+import {
+  pointResultLabel,
+  type MatchFilterContext,
+} from "@/components/dashboard/matches/match-detail/match-filters/model";
 import { useMatchSides } from "@/components/dashboard/matches/match-detail/use-match-sides";
 import { useOptionalWorkspace } from "@/components/dashboard/workspace-provider";
 import {
@@ -12,8 +14,18 @@ import {
   groupPointsByGame,
 } from "@/components/dashboard/matches/match-detail/film/point-list";
 import { LIST_TONE } from "@/components/dashboard/matches/match-detail/film/point-list-tone";
-import { pointDetail } from "@/components/dashboard/matches/match-detail/film/film-shots";
+import {
+  pointDetail,
+  pointFlags,
+} from "@/components/dashboard/matches/match-detail/film/film-shots";
+import {
+  approachDetail,
+  approachOf,
+} from "@/components/dashboard/matches/match-detail/match-filters/approach";
 import { scoreColumns } from "@/components/dashboard/matches/match-detail/film/film-score";
+import { useVizFilterContext } from "./use-viz-view";
+import { useVizState } from "./use-viz-state";
+import { subjectFor } from "./viz-model";
 
 /**
  * The lightbox's Points column (canvas S03, S05, S07): the points behind the
@@ -25,6 +37,11 @@ import { scoreColumns } from "@/components/dashboard/matches/match-detail/film/f
  * lights its row and scrolls it into view. A click (or Enter) on the lit row
  * is the second click and watches its point (`VizLightboxShell`'s `select`);
  * when it can, the lit row's grey line ends "· Click again to watch".
+ *
+ * On the Approaches cut the grey line is the approach instead
+ * (`approachDetail`: "Forehand down the line, to their backhand"), then the
+ * same pressure tail `pointDetail` ends with; every other cut keeps
+ * `pointDetail`'s line.
  */
 export const LightboxPointList = memo(function LightboxPointList({
   points,
@@ -47,10 +64,15 @@ export const LightboxPointList = memo(function LightboxPointList({
   canWatch: (point: MatchPoint) => boolean;
 }) {
   const sides = useMatchSides();
-  const { context: labelContext } = useMatchFilters();
+  // The view's own context: an approach row reads the lob keys the court
+  // drew with, so a lobbed mark is never a "Passed or lobbed" row.
+  const labelContext = useVizFilterContext();
   const workspace = useOptionalWorkspace()?.active ?? null;
   const t = LIST_TONE.light;
   const youIsPlayer1 = sides.you.isPlayer1;
+  const { state: vizState } = useVizState();
+  const isApproaches = vizState.cut === "approaches";
+  const subjectIsPlayer1 = subjectFor(vizState.filters, youIsPlayer1);
   const { hasGameScore, hasPointScore } = useMemo(
     () => scoreColumns(allPoints),
     [allPoints],
@@ -123,7 +145,9 @@ export const LightboxPointList = memo(function LightboxPointList({
             const isYou = point.wonByPlayer1 === youIsPlayer1;
             const side = isYou ? sides.you : sides.opp;
             const isSelected = point.id === selectedPointId;
-            const detail = pointDetail(point, labelContext.hands);
+            const detail = isApproaches
+              ? approachLine(point, subjectIsPlayer1, labelContext)
+              : pointDetail(point, labelContext.hands);
             return (
               <PointRow
                 key={point.id}
@@ -159,3 +183,22 @@ export const LightboxPointList = memo(function LightboxPointList({
     </div>
   );
 });
+
+/**
+ * The Approaches cut's grey line for `point`: the subject's approach
+ * (`approachDetail`), then the point's pressure tail. A point the subject
+ * never came in on is not on this cut's court, but should one reach the list
+ * it falls back to `pointDetail`'s line.
+ */
+function approachLine(
+  point: MatchPoint,
+  subjectIsPlayer1: boolean,
+  context: MatchFilterContext,
+): string {
+  const { hands, lobKeys } = context;
+  const opponentHand =
+    (subjectIsPlayer1 ? hands.player2 : hands.player1) ?? null;
+  const approach = approachOf(point, subjectIsPlayer1, lobKeys, opponentHand);
+  if (!approach) return pointDetail(point, hands);
+  return [approachDetail(approach), ...pointFlags(point)].join(" · ");
+}

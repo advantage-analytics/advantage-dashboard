@@ -1,9 +1,7 @@
 "use client";
 
 import NextError from "next/error";
-import posthog from "posthog-js";
-import { useEffect } from "react";
-import { isPostHogConfigured } from "@/lib/posthog-client";
+import { useReportBoundaryError } from "@/lib/ui/report-boundary-error";
 
 export default function GlobalError({
   error,
@@ -11,11 +9,10 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  useEffect(() => {
-    if (isPostHogConfigured) {
-      posthog.captureException(error);
-    }
-  }, [error]);
+  // The same rules as every segment's `error.tsx`: a server throw (`digest`)
+  // is already captured by `onRequestError`, and a dropped connection is
+  // nothing we can fix.
+  useReportBoundaryError(error, "global_error");
 
   return (
     <html lang="en">

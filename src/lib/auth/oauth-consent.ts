@@ -128,6 +128,25 @@ export function goesToConnector(details: OAuthAuthorizationDetails): boolean {
   }
 }
 
+/** Which connector a callback belongs to, for analytics. */
+export type ConnectorApp = "claude" | "chatgpt" | "gemini" | "cursor" | "local";
+
+/**
+ * The app a consent request returns to, named from its callback — and only
+ * a callback `isConnectorRedirectUri` accepts, so the answer is one of a
+ * fixed handful and never a string a registrant chose (the client name is
+ * free text under dynamic registration). Null for anything else.
+ */
+export function connectorApp(redirectUri: string | null): ConnectorApp | null {
+  if (!redirectUri || !isConnectorRedirectUri(redirectUri)) return null;
+  const host = new URL(redirectUri).hostname;
+  if (host === "claude.ai" || host === "claude.com") return "claude";
+  if (host === "chatgpt.com") return "chatgpt";
+  if (host === "oauth-redirect.googleusercontent.com") return "gemini";
+  if (host === "www.cursor.com") return "cursor";
+  return "local";
+}
+
 /** The sentence a client outside the allow-list is turned away with. */
 export const UNKNOWN_CLIENT_ERROR =
   "This app can't connect to Advantage. Advantage connects to Claude (claude.ai, Claude Desktop and Claude Code), ChatGPT, Gemini and Cursor.";

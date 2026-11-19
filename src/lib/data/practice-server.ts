@@ -346,30 +346,65 @@ export async function getPracticeOverview(
  * The pay report
  * ---------------------------------------------------------------------- */
 
+/**
+ * One unbroken stretch of work on a session: consecutive work minutes with no
+ * gap longer than {@link SITTING_GAP_MINUTES}. `start` is the first minute,
+ * `end` the minute after the last one, so a single-minute sitting reads
+ * 07:04–07:05.
+ */
+export interface PaySitting {
+  start: string;
+  end: string;
+  /** Active minutes inside the sitting: its `label_work_beats` rows. */
+  minutes: number;
+}
+
+/**
+ * Where a session stands for pay. `checked`: an admin first checked it in the
+ * range, so it is paid there. `awaiting`: published and never checked yet.
+ * `sent-back`: published once, never checked, and back with its labeller (sent
+ * back or reopened). Only `checked` counts toward a labeller's totals; the
+ * other two join the range their first check falls in.
+ */
+export type PayState = "checked" | "awaiting" | "sent-back";
+
 export interface PaySessionLine {
   sessionId: string;
   labellerId: string;
   labellerName: string;
+  /** "Player 1 v Player 2", from the session's match. */
+  match: string;
+  state: PayState;
   /** First time the session was published (`label_sessions.published_at`). */
   publishedAt: string;
+  /** First time an admin checked it (`first_checked_at`, never moves); null until then. */
+  firstCheckedAt: string | null;
+  /** The job's match video, in whole minutes. Totals sum these, so they agree. */
+  videoMinutes: number;
   /**
-   * `checked` once an admin has passed it, else `published` (waiting for the
-   * check, or sent back to its labeller).
+   * The paid labeller's own active minutes on the session up to the end of the
+   * range, or null when none were recorded (labelled before the console
+   * recorded work minutes).
    */
-  state: "published" | "checked";
-  videoHours: number;
+  workedMinutes: number | null;
+  /** Oldest first; empty when `workedMinutes` is null. */
+  sittings: PaySitting[];
 }
 
-/** Published and checked are disjoint: a checked session is not also published. */
+/** Paid counts `checked` lines only; outstanding counts `awaiting` and `sent-back`. */
 export interface PayLabellerRow {
   labellerId: string;
   name: string;
   email: string;
-  publishedSessions: number;
-  publishedHours: number;
-  checkedSessions: number;
-  checkedHours: number;
-  practiceSets: number;
+  paidSessions: number;
+  /** Sum of the paid lines' `videoMinutes`. */
+  paidVideoMinutes: number;
+  /** Active minutes on the paid sessions that recorded any. */
+  workedMinutes: number;
+  /** Paid sessions with no work minutes recorded, so not in `workedMinutes`. */
+  untrackedSessions: number;
+  outstandingSessions: number;
+  outstandingVideoMinutes: number;
 }
 
 export type PayReport =
@@ -381,6 +416,15 @@ export type PayReport =
       lines: PaySessionLine[];
     }
   | { ok: false; reason: "admin-required" };
+
+/**
+ * A gap between two work minutes longer than this starts a new sitting. A
+ * beat is posted only while someone is at the console (work-beats.ts), so a
+ * short gap is a pause inside one sitting, a long one a break between two.
+ */
+export const SITTING_GAP_MINUTES = 15;
+
+const MINUTE_MS = 60_000;
 
 /** `YYYY-MM-DD` or null. */
 export function parseDay(value: unknown): string | null {
@@ -397,52 +441,118 @@ function dayAfter(day: string): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * One labeller's work minutes on one session (ISO strings, any order) folded
+ * into sittings, oldest first.
+ */
+export function groupSittings(minutes: readonly string[]): PaySitting[] {
+  const times = [...new Set(minutes)]
+    .map((m) => new Date(m).getTime())
+    .filter((t) => !Number.isNaN(t))
+    .sort((a, b) => a - b);
+  const sittings: PaySitting[] = [];
+  let start = 0;
+  let last = 0;
+  let count = 0;
+  const close = () => {
+    if (count === 0) return;
+    sittings.push({
+      start: new Date(start).toISOString(),
+      end: new Date(last + MINUTE_MS).toISOString(),
+      minutes: count,
+    });
+  };
+  for (const t of times) {
+    if (count > 0 && t - last > SITTING_GAP_MINUTES * MINUTE_MS) {
+      close();
+      count = 0;
+    }
+    if (count === 0) start = t;
+    last = t;
+    count += 1;
+  }
+  close();
+  return sittings;
+}
+
 // Lives in a dependency-free module so the label queue can use it client-side.
 export { jobVideoSeconds };
 
 type PayJob = JobVideoSpan;
 
-type PublishedSessionRow = {
+type PayMatch = { player1_name: string | null; player2_name: string | null };
+
+type PaySessionRow = {
   id: string;
+  status: string;
   published_at: string | null;
-  checked_at: string | null;
+  first_checked_at: string | null;
   job: PayJob | null;
+  /** Many-to-one through `match_id`: one row or none. */
+  match: PayMatch | null;
 };
 
-/** Non-practice sessions first published inside `[fromIso, toIso)`, with the stamps pay reads. */
-async function readPublishedSessions(
+const PAY_SESSION_COLUMNS =
+  "id, status, published_at, first_checked_at, job:processing_jobs(start_time_seconds, end_time_seconds, billable_seconds), match:matches(player1_name, player2_name)";
+
+/**
+ * The sessions a range's report lists: non-practice sessions an admin first
+ * checked inside `[fromIso, toIso)` (paid there), and those published before
+ * `toIso` and never checked yet (outstanding). A session checked after the
+ * range is in neither, so a closed range's paid figure never moves.
+ */
+async function readPaySessions(
   db: AdminClient,
   fromIso: string,
   toIso: string,
 ): Promise<
   {
     id: string;
+    state: PayState;
     publishedAt: string;
-    checkedAt: string | null;
+    firstCheckedAt: string | null;
     job: PayJob | null;
+    match: string;
   }[]
 > {
-  const rows = await readAllPages<PublishedSessionRow>(
-    db
-      .from("label_sessions")
-      .select(
-        "id, published_at, checked_at, job:processing_jobs(start_time_seconds, end_time_seconds, billable_seconds)",
-      )
-      .neq("kind", "practice")
-      .gte("published_at", fromIso)
-      .lt("published_at", toIso)
-      .order("id")
-      .returns<PublishedSessionRow[]>(),
-    "Could not read published sessions",
-  );
-  return rows.flatMap((row) =>
+  const [paid, outstanding] = await Promise.all([
+    readAllPages<PaySessionRow>(
+      db
+        .from("label_sessions")
+        .select(PAY_SESSION_COLUMNS)
+        .neq("kind", "practice")
+        .gte("first_checked_at", fromIso)
+        .lt("first_checked_at", toIso)
+        .order("id")
+        .returns<PaySessionRow[]>(),
+      "Could not read checked sessions",
+    ),
+    readAllPages<PaySessionRow>(
+      db
+        .from("label_sessions")
+        .select(PAY_SESSION_COLUMNS)
+        .neq("kind", "practice")
+        .lt("published_at", toIso)
+        .is("first_checked_at", null)
+        .order("id")
+        .returns<PaySessionRow[]>(),
+      "Could not read sessions awaiting a check",
+    ),
+  ]);
+  return [...paid, ...outstanding].flatMap((row) =>
     row.published_at
       ? [
           {
             id: row.id,
+            state: row.first_checked_at
+              ? "checked"
+              : row.status === "complete"
+                ? "awaiting"
+                : "sent-back",
             publishedAt: row.published_at,
-            checkedAt: row.checked_at,
+            firstCheckedAt: row.first_checked_at,
             job: row.job,
+            match: `${row.match?.player1_name ?? "Player 1"} v ${row.match?.player2_name ?? "Player 2"}`,
           },
         ]
       : [],
@@ -450,16 +560,22 @@ async function readPublishedSessions(
 }
 
 /**
- * What each labeller published between `from` and `to` (UTC days, both
- * inclusive). A session counts once, on the day it was FIRST published
- * (`label_sessions.published_at`, which never moves), credited to whoever
- * made its first `label_submissions` row — so a session sent back and
- * published again is not paid twice. A session an admin published with no
- * submission has nobody to pay and is left out. It is `checked` once an admin
- * has passed it, else `published` (a sent-back one included); the two are
- * disjoint. Hours are the job's match video. Practice copies are never paid
- * hours: they are counted apart, as practice sets submitted in the range, on
- * the day of their first submission.
+ * What each labeller is paid for between `from` and `to` (UTC days, both
+ * inclusive). A session is paid once, in the range an admin FIRST checked it
+ * (`label_sessions.first_checked_at`, which never moves — `checked_at` is
+ * cleared by a send-back and stamped again by the next check), credited to
+ * whoever made its first `label_submissions` row. A session an admin
+ * published with no submission has nobody to pay and is left out. Hours are
+ * the job's match video.
+ *
+ * Sessions published and not checked yet are listed too, as `awaiting` or
+ * `sent-back`, outside every total: they are paid in the range their first
+ * check falls in.
+ *
+ * Time worked is the paid labeller's own `label_work_beats` minutes on each
+ * session, up to the end of the range — anyone else's (an admin checking it)
+ * is not theirs. Practice sets are not in the report: every one so far was
+ * paid outside it.
  */
 export async function getLabelPayReport(
   range: { from: string; to: string },
@@ -478,32 +594,19 @@ export async function getLabelPayReport(
     submitted_at: string;
   };
   const SUBMISSION_COLUMNS = "id, session_id, submitted_by, submitted_at";
-  // Two reads, never the whole table: the sessions published in the range,
-  // and the submissions made in it (a practice set counts on the day of its
-  // first submission, so only a session submitted in the range can be one).
-  const [published, inRange] = await Promise.all([
-    readPublishedSessions(db, fromIso, toIso),
-    readAllPages<Pick<SubmissionRow, "session_id">>(
-      db
-        .from("label_submissions")
-        .select("session_id")
-        .gte("submitted_at", fromIso)
-        .lt("submitted_at", toIso)
-        .order("submitted_at")
-        .order("id"),
-      "Could not read submissions",
-    ),
-  ]);
-  // Then every submission of those sessions up to the end of the range: a
-  // session published in the range was first submitted before its publish,
-  // and a practice set whose first submission falls before `from` is not
-  // this range's to count. Chunked, since the ids travel in the URL.
-  const sessionIds = [
-    ...new Set([
-      ...published.map((session) => session.id),
-      ...inRange.map((row) => row.session_id),
-    ]),
-  ];
+  const empty: PayReport = {
+    ok: true,
+    from: range.from,
+    to: range.to,
+    rows: [],
+    lines: [],
+  };
+  const listed = await readPaySessions(db, fromIso, toIso);
+  if (listed.length === 0) return empty;
+  // Every submission of those sessions up to the end of the range: a session
+  // published before the range's end was first submitted before its publish.
+  // Chunked, since the ids travel in the URL.
+  const sessionIds = listed.map((session) => session.id);
   const submissions = (
     await Promise.all(
       idChunks(sessionIds).map((ids) =>
@@ -533,47 +636,49 @@ export async function getLabelPayReport(
       first.set(row.session_id, row);
   }
 
-  const paid = published.flatMap((session) => {
+  const credited = listed.flatMap((session) => {
     const who = first.get(session.id)?.submitted_by;
     return who ? [{ ...session, who }] : [];
   });
-  const practiceCandidates = [...first.values()].filter(
-    (row) => row.submitted_at >= fromIso && row.submitted_by,
-  );
+  if (credited.length === 0) return empty;
 
-  type PracticeRow = { id: string; status: string };
-  const practice = (
-    await Promise.all(
-      idChunks(practiceCandidates.map((row) => row.session_id)).map((ids) =>
-        readAllPages<PracticeRow>(
+  type BeatRow = { session_id: string; user_id: string; minute: string };
+  const whoBySession = new Map(credited.map((s) => [s.id, s.who]));
+  const payees = [...new Set(credited.map((s) => s.who))];
+  const [beats, users] = await Promise.all([
+    Promise.all(
+      idChunks([...whoBySession.keys()]).map((ids) =>
+        readAllPages<BeatRow>(
           db
-            .from("label_sessions")
-            .select("id, status")
-            .eq("kind", "practice")
-            .in("id", ids)
-            .order("id"),
-          "Could not read practice sets",
+            .from("label_work_beats")
+            .select("session_id, user_id, minute")
+            .in("session_id", ids)
+            .in("user_id", payees)
+            .lt("minute", toIso)
+            .order("session_id")
+            .order("user_id")
+            .order("minute")
+            .returns<BeatRow[]>(),
+          "Could not read label work minutes",
         ),
       ),
-    )
-  ).flat();
-  const practiceSets = practice.flatMap((session) => {
-    const who = first.get(session.id)?.submitted_by;
-    return session.status === "submitted" && who ? [who] : [];
-  });
-
-  const userIds = [...new Set([...paid.map((s) => s.who), ...practiceSets])];
-  if (userIds.length === 0) {
-    return { ok: true, from: range.from, to: range.to, rows: [], lines: [] };
+    ).then((chunks) => chunks.flat()),
+    readAllPages<DbUser>(
+      db
+        .from("users")
+        .select("id, email, first_name, last_name")
+        .in("id", payees)
+        .order("id"),
+      "Could not read labellers",
+    ),
+  ]);
+  const minutesBySession = new Map<string, string[]>();
+  for (const beat of beats) {
+    if (beat.user_id !== whoBySession.get(beat.session_id)) continue;
+    const held = minutesBySession.get(beat.session_id) ?? [];
+    held.push(beat.minute);
+    minutesBySession.set(beat.session_id, held);
   }
-  const users = await readAllPages<DbUser>(
-    db
-      .from("users")
-      .select("id, email, first_name, last_name")
-      .in("id", userIds)
-      .order("id"),
-    "Could not read labellers",
-  );
   const userById = new Map(users.map((u) => [u.id, u]));
 
   const rows = new Map<string, PayLabellerRow>();
@@ -585,42 +690,56 @@ export async function getLabelPayReport(
       labellerId: who,
       name: nameOf(user),
       email: user?.email ?? "",
-      publishedSessions: 0,
-      publishedHours: 0,
-      checkedSessions: 0,
-      checkedHours: 0,
-      practiceSets: 0,
+      paidSessions: 0,
+      paidVideoMinutes: 0,
+      workedMinutes: 0,
+      untrackedSessions: 0,
+      outstandingSessions: 0,
+      outstandingVideoMinutes: 0,
     };
     rows.set(who, row);
     return row;
   };
 
   const lines: PaySessionLine[] = [];
-  for (const session of paid) {
+  for (const session of credited) {
     const row = rowFor(session.who);
-    const hours = session.job ? jobVideoSeconds(session.job) / 3600 : 0;
-    const state = session.checkedAt ? "checked" : "published";
-    if (state === "checked") {
-      row.checkedSessions += 1;
-      row.checkedHours += hours;
+    const videoMinutes = session.job
+      ? Math.round(jobVideoSeconds(session.job) / 60)
+      : 0;
+    const sittings = groupSittings(minutesBySession.get(session.id) ?? []);
+    const worked = sittings.reduce((n, s) => n + s.minutes, 0);
+    if (session.state === "checked") {
+      row.paidSessions += 1;
+      row.paidVideoMinutes += videoMinutes;
+      if (worked > 0) row.workedMinutes += worked;
+      else row.untrackedSessions += 1;
     } else {
-      row.publishedSessions += 1;
-      row.publishedHours += hours;
+      row.outstandingSessions += 1;
+      row.outstandingVideoMinutes += videoMinutes;
     }
     lines.push({
       sessionId: session.id,
       labellerId: session.who,
       labellerName: row.name,
+      match: session.match,
+      state: session.state,
       publishedAt: session.publishedAt,
-      state,
-      videoHours: hours,
+      firstCheckedAt: session.firstCheckedAt,
+      videoMinutes,
+      workedMinutes: worked > 0 ? worked : null,
+      sittings,
     });
   }
-  for (const who of practiceSets) rowFor(who).practiceSets += 1;
 
+  // Paid lines first, by when they were first checked; then the outstanding
+  // ones, by when they were published.
   lines.sort(
     (a, b) =>
-      a.publishedAt.localeCompare(b.publishedAt) ||
+      Number(a.state !== "checked") - Number(b.state !== "checked") ||
+      (a.firstCheckedAt ?? a.publishedAt).localeCompare(
+        b.firstCheckedAt ?? b.publishedAt,
+      ) ||
       a.sessionId.localeCompare(b.sessionId),
   );
   return {

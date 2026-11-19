@@ -12,10 +12,26 @@
  * deuce and ad rows of each zone are summed. That is the same set of points
  * the existing Zone filter (`VizFilters.zone`) selects — pinned by
  * `tests/wall-summary.spec.ts`.
+ *
+ * The approaches card counts differently: every approach counts, drawn or
+ * not (the statistics are about the approach, not its landing), so its count
+ * is the cut's whole pool and the segments — the wing each approach went to —
+ * hold only the ones with a placement. The rest are named on a note under the
+ * count ("2 not drawn: no landing recorded") rather than letting the court
+ * disagree with the number beside it. Its wings ("To backhand", "To
+ * forehand") rest on the opponent's hand; where a drawn approach had to
+ * assume it, the card says so (`handNote`, `HAND_ASSUMED_NOTE`) — the same
+ * rule and wording as the opened court's legend line.
  */
 
 import type { BandRow } from "@/lib/data/viz-bands";
-import type { Cut, StatRow, VizResult, VizStats } from "./viz-model";
+import {
+  HAND_ASSUMED_NOTE,
+  type Cut,
+  type StatRow,
+  type VizResult,
+  type VizStats,
+} from "./viz-model";
 
 export interface WallSegment {
   key: string;
@@ -43,11 +59,25 @@ export function wallCountLabel(
   // (Net, Long, Wide, and Landed in when any read in), so "N total" and the
   // segments can never disagree.
   if (cut === "errors") return `${count} total`;
+  // Every approach counts, drawn or not: the whole pool, never "in".
+  if (cut === "approaches")
+    return `${total} ${total === 1 ? "approach" : "approaches"}`;
   // Every return has a contact point, in or not: a count, never "in".
   if (cut === "returnContact")
     return `${count} ${count === 1 ? "return" : "returns"}`;
   if (allIn) return `${count} in`;
   return `${count} of ${total} in`;
+}
+
+/**
+ * The sentence naming approaches that count but draw no mark — "2 not drawn:
+ * no landing recorded" — or `null` when every one is drawn. One wording for
+ * the wall card's note under its count and for the opened court's line
+ * (`viz-lightbox-shell.tsx`), so the two never describe the same approaches
+ * differently.
+ */
+export function notDrawnNote(notDrawn: number): string | null {
+  return notDrawn > 0 ? `${notDrawn} not drawn: no landing recorded` : null;
 }
 
 export interface WallSummary {
@@ -57,16 +87,32 @@ export interface WallSummary {
   count: number;
   /** The cut's whole drawable pool (`VizResult.count`). */
   total: number;
-  /** The key's lead word: Landed / Went / Missed. */
+  /** The key's lead word: Landed / Went / Missed — or the approaches card's
+   *  "Won x of n". */
   keyLead: string;
   /** The readout's noun for one segment: "12 in play", "22 returns". */
   unit: string;
   /** `true` on the errors card: `pct` is a share, not a win rate. */
   share: boolean;
+  /** Empty on an approaches card whose approaches all lack a landing
+   *  (`notDrawn === total > 0`): no wing is known, so the card draws no bar
+   *  and no wing keys rather than three zeroes. */
   segments: WallSegment[];
   /** Won of every segment together, rounded — the readout's "Average N%".
    *  `null` on the errors card and when nothing landed in. */
   averagePct: number | null;
+  /** The approaches card's points with no placement: counted in `total`,
+   *  in no segment, drawn nowhere. `0` on every other card. */
+  notDrawn: number;
+  /** The line under the count that names them — "2 not drawn: no landing
+   *  recorded" — or `null` when every point is drawn. */
+  countNote: string | null;
+  /** The approaches card's caveat on its wings — `HAND_ASSUMED_NOTE`
+   *  ("assumes right-handed") when any drawn approach's wing was worked out
+   *  from an assumed hand (`VizDot.meta.handAssumed`), the opened court's
+   *  own rule. `null` when every hand is known, when nothing is drawn (no
+   *  wings named), and on every other card. */
+  handNote: string | null;
 }
 
 const SERVE_ZONES: { key: "t" | "body" | "wide"; label: string }[] = [
@@ -76,6 +122,14 @@ const SERVE_ZONES: { key: "t" | "body" | "wide"; label: string }[] = [
 ];
 
 const DIRECTION_ORDER = ["crosscourt", "middle", "dtl"];
+
+/** The approaches card's segments: the opponent's wing, left to right as the
+ *  design reads them, with the card's own wording. */
+const APPROACH_WINGS: { key: string; label: string }[] = [
+  { key: "backhand", label: "To backhand" },
+  { key: "middle", label: "Middle" },
+  { key: "forehand", label: "To forehand" },
+];
 const MISS_ORDER = ["net", "long", "wide", "in"];
 
 function pct(part: number, whole: number): number | null {
@@ -108,13 +162,18 @@ function groupRows(stats: VizStats, key: string): StatRow[] {
 }
 
 /**
- * The wall card's footer for one of the five default cuts. `depthRows` is
+ * The wall card's footer for one of the six default cuts. `depthRows` is
  * `depthBandRows(bands, unit)` — the workspace's own band order (deep to
  * short), used only to order the rally card's segments.
+ *
+ * `result.dots` is what the card draws; the approaches card reads each dot's
+ * `meta.handAssumed` for `handNote`. Every wall card's caller (the Default
+ * wall, a saved view, a season card) passes its whole `VizResult`; a call
+ * without dots says no hand note.
  */
 export function wallSummaryFor(
   cut: Cut,
-  result: Pick<VizResult, "count">,
+  result: Pick<VizResult, "count"> & Partial<Pick<VizResult, "dots">>,
   stats: VizStats,
   depthRows: BandRow[],
 ): WallSummary {
@@ -124,7 +183,47 @@ export function wallSummaryFor(
   let unit: string;
   let share = false;
 
-  if (cut === "serve") {
+  if (cut === "approaches") {
+    // The Approach to group: one row per wing, only approaches with a
+    // placement (a wing needs a landing), so the bar draws what the court
+    // does. The lead is the KPI's own won-of-shown — every approach, drawn
+    // or not — falling back to the drawn ones where no KPI travels (a
+    // merged season).
+    const wings = groupRows(stats, "approach-to");
+    segments = APPROACH_WINGS.map(({ key, label }) => {
+      const row = wings.find((r) => r.key === key);
+      const count = row?.count ?? 0;
+      const won = row?.won ?? 0;
+      return { key, label, count, won, pct: pct(won, count) };
+    });
+    const drawnCount = segments.reduce((n, s) => n + s.count, 0);
+    const drawnWon = segments.reduce((n, s) => n + s.won, 0);
+    const notDrawn = Math.max(0, total - drawnCount);
+    const wonAll = stats.kpi?.won ?? drawnWon;
+    // Approaches counted but none drawn (no landing anywhere): a wing is
+    // only known from a landing, so there are no wings to name — three
+    // "0"s beside "7 approaches" would read as "you hit none". No
+    // segments; the note says why. A card with no approaches at all
+    // (`total === 0`) keeps its three zero wings.
+    const noWings = drawnCount === 0 && total > 0;
+    // A wing named from a hand the match does not hold: said on the card,
+    // as the opened court says it. No wing drawn, no caveat.
+    const handAssumed =
+      !noWings && (result.dots ?? []).some((d) => d.meta?.handAssumed === true);
+    return {
+      countLabel: wallCountLabel(cut, drawnCount, total),
+      count: drawnCount,
+      total,
+      keyLead: `Won ${wonAll} of ${total}`,
+      unit: "approaches",
+      share: false,
+      segments: noWings ? [] : segments,
+      averagePct: pct(drawnWon, drawnCount),
+      notDrawn,
+      countNote: notDrawnNote(notDrawn),
+      handNote: handAssumed ? HAND_ASSUMED_NOTE : null,
+    };
+  } else if (cut === "serve") {
     const zones = groupRows(stats, "serve-zones");
     segments = SERVE_ZONES.map(({ key, label }) => {
       const rows = zones.filter((r) => r.key.endsWith(`-${key}`));
@@ -173,6 +272,9 @@ export function wallSummaryFor(
     share,
     segments,
     averagePct: share ? null : pct(won, count),
+    notDrawn: 0,
+    countNote: null,
+    handNote: null,
   };
 }
 
@@ -234,7 +336,11 @@ export function lightboxCountLine(
     const won = summary.segments.reduce((n, s) => n + s.won, 0);
     return `${summary.countLabel}, ${won} of those ${summary.count} won`;
   }
-  const rows = groupRows(stats, "depth");
-  const won = rows.reduce((n, r) => n + r.won, 0);
+  // Approaches has no Depth group: its KPI holds the won count, over every
+  // approach shown, drawn or not.
+  const won =
+    cut === "approaches"
+      ? (stats.kpi?.won ?? 0)
+      : groupRows(stats, "depth").reduce((n, r) => n + r.won, 0);
   return `${result.count} ${result.noun}, ${won} won`;
 }

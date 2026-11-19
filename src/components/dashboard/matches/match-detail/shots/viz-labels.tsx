@@ -22,6 +22,7 @@ export const CUT_LABEL: Record<Cut, string> = {
   rallyPosition: "Rally position",
   rallyPlacement: "Rally placement",
   errors: "Errors",
+  approaches: "Approaches",
 };
 
 export const CHART_LABEL: Record<Chart, string> = {
@@ -138,12 +139,14 @@ const RAMP_ITEM: LegendItem = {
  * `cut === "rallyPosition"` has no Miss class — a rally shot's own outcome
  * is just the subject's point result (`computeRallyViz` never emits
  * `"miss"`), so drawing a Miss swatch nobody's dot will ever match would be
- * a legend entry with an empty meaning.
+ * a legend entry with an empty meaning. `cut === "approaches"` likewise: a
+ * dot is a net point the subject won or lost, shaped by the approach
+ * shot's stroke.
  */
 export function legendItemsFor(cut: Cut, chart: Chart): LegendItem[] {
   if (chart === "heat") return [RAMP_ITEM];
   if (chart === "zones") return cut === "serve" ? OUTCOME_ITEMS : [];
-  if (cut === "rallyPosition") {
+  if (cut === "rallyPosition" || cut === "approaches") {
     return [WON_ITEM, LOST_ITEM, FOREHAND_ITEM, BACKHAND_ITEM];
   }
   // Every errors dot is a lost point — one swatch, named for what it is.

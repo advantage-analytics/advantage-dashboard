@@ -14,12 +14,14 @@ import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { BandSettings } from "@/lib/data/viz-bands";
 import type { MatchFilterContext } from "../match-filters/model";
 import {
+  approachRowKeyOf,
   computeViz,
   statRowKeyOf,
   type CourtSideValue,
   type Cut,
   type VizDot,
   type VizFilters,
+  type VizMark,
   type ZoneValue,
 } from "./viz-model";
 
@@ -41,7 +43,18 @@ export function statPickDotIds(
   dots: readonly VizDot[],
   pick: StatPick,
   bands: BandSettings,
+  /** Approaches: the counted approaches with no landing (`VizResult.undrawn`).
+   *  A row keeps them by the same rule as the dots — How it ended does,
+   *  Approach to and Direction cannot (no wing, no direction). */
+  undrawn: readonly VizMark[] = [],
 ): Set<string> {
+  if (cut === "approaches") {
+    return new Set(
+      [...dots, ...undrawn]
+        .filter((d) => approachRowKeyOf(pick.group, d) === pick.row)
+        .map((d) => d.id),
+    );
+  }
   if (cut === "serve") {
     const [side, zone] = pick.row.split("-") as [CourtSideValue, ZoneValue];
     const zoned = computeViz(

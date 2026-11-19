@@ -25,6 +25,7 @@ import { errorSplitJudged } from "@/lib/data/error-split";
 import { seatCrestUrls, type MatchCrestEmbeds } from "@/lib/data/match-crests";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import { isPracticeMatch } from "@/lib/matches/match-type";
+import { rowHandsBySeat } from "@/components/dashboard/matches/player-hands";
 
 export interface DbMatch extends MatchCrestEmbeds {
   id: string;
@@ -261,17 +262,20 @@ export function transformDbMatchToMatch(
   const p2Profile = row.player2_id ? profiles.get(row.player2_id) : undefined;
 
   // Match-row hand/backhand columns are captured at upload time and represent
-  // what was true for THIS match; they win over generic users-table profile.
-  // The "player_*" columns track the user (creator); "opponent_*" tracks the other side.
-  const userHand = row.player_hand ?? undefined;
-  const userBackhand = row.player_backhand ?? undefined;
-  const oppHand = row.opponent_hand ?? undefined;
-  const oppBackhand = row.opponent_backhand ?? undefined;
-
-  const p1Hand = isUserPlayer1 ? userHand : oppHand;
-  const p1Backhand = isUserPlayer1 ? userBackhand : oppBackhand;
-  const p2Hand = isUserPlayer1 ? oppHand : userHand;
-  const p2Backhand = isUserPlayer1 ? oppBackhand : userBackhand;
+  // what was true for THIS match; they win over the seat's own profile.
+  // They belong to SEATS, never to the viewer (guardrails §4): the wizard
+  // writes `player_*` for seat one and `opponent_*` for seat two
+  // (`buildMatchData`), so the same row gives every reader the same hands,
+  // whichever seat the report is turned to. Do not swap on `isUserPlayer1`.
+  // The legacy exception: a row with no `player1_id` and a `player2_id`
+  // seats the account holder second, and its `player_*` columns are theirs,
+  // so seat two's. `rowHandsBySeat` (`playerColumnsSeat`) owns that rule,
+  // shared with the season loader and the label console's `enteredHandsFor`.
+  const seatHands = rowHandsBySeat(row);
+  const p1Hand = seatHands.player1.hand ?? undefined;
+  const p1Backhand = seatHands.player1.backhand ?? undefined;
+  const p2Hand = seatHands.player2.hand ?? undefined;
+  const p2Backhand = seatHands.player2.backhand ?? undefined;
 
   return {
     id: row.id,

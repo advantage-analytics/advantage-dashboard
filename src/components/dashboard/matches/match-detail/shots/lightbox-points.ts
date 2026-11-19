@@ -12,15 +12,31 @@
  */
 
 import type { MatchPoint } from "@/lib/data/match-points-server";
-import { isFirstServeShotType, type Cut, type VizDot } from "./viz-model";
+import {
+  isFirstServeShotType,
+  type Cut,
+  type VizMark,
+  type VizResult,
+} from "./viz-model";
 
 /**
  * The mark stands for a point you could play: anything but a missed first
  * serve. A missed second serve is a double fault, and that is a point.
  */
-export function markIsPoint(cut: Cut, dot: VizDot): boolean {
+export function markIsPoint(cut: Cut, dot: VizMark): boolean {
   if (cut !== "serve" || dot.outcome !== "miss") return true;
   return !isFirstServeShotType(dot.meta?.shotType);
+}
+
+/**
+ * Every mark a result stands for: the drawn dots, then the Approaches cut's
+ * counted approaches with no landing (`VizResult.undrawn`), which a list
+ * names though the court cannot draw them. Every other cut: its dots.
+ */
+export function resultMarks(result: VizResult): VizMark[] {
+  return result.undrawn?.length
+    ? [...result.dots, ...result.undrawn]
+    : result.dots;
 }
 
 /**
@@ -29,7 +45,7 @@ export function markIsPoint(cut: Cut, dot: VizDot): boolean {
  */
 export function pointsBehind(
   cut: Cut,
-  dots: readonly VizDot[],
+  dots: readonly VizMark[],
   points: readonly MatchPoint[],
 ): MatchPoint[] {
   const ids = new Set<string>();
@@ -60,7 +76,7 @@ export const LEGEND_PICKS: { key: LegendPick; label: string }[] = [
   { key: "ace", label: "Ace" },
 ];
 
-export function dotMatchesPick(dot: VizDot, pick: LegendPick): boolean {
+export function dotMatchesPick(dot: VizMark, pick: LegendPick): boolean {
   if (pick === "ace") return dot.shape === "star";
   if (pick === "out") return dot.outcome === "miss";
   return dot.outcome === pick;
@@ -68,7 +84,7 @@ export function dotMatchesPick(dot: VizDot, pick: LegendPick): boolean {
 
 /** How many marks each legend key would keep. */
 export function legendCounts(
-  dots: readonly VizDot[],
+  dots: readonly VizMark[],
 ): Record<LegendPick, number> {
   const counts: Record<LegendPick, number> = {
     won: 0,

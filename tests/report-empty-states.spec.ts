@@ -573,6 +573,10 @@ test.describe("ShotsTab", () => {
     "@/components/dashboard/matches/match-detail/shots/viz-bands-context": {
       VizBandsProvider: passthrough,
     },
+    // The tab's lob-keys read wraps the body: a pass-through here.
+    "@/components/dashboard/matches/match-detail/shots/viz-lob-keys": {
+      VizLobKeysProvider: passthrough,
+    },
   });
 
   test("no points with a ?cut= link: the view-level empty, never an empty court", () => {

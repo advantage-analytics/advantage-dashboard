@@ -9,6 +9,7 @@ import {
   SEASON_SURFACES,
   SEASON_SURFACE_PARAM,
   paramFor,
+  urlValueFor,
 } from "./viz-url";
 
 /**
@@ -35,6 +36,7 @@ const CUTS = {
   rallyPosition: true,
   rallyPlacement: true,
   errors: true,
+  approaches: true,
 } satisfies Record<Cut, true>;
 const CHARTS = {
   scatter: true,
@@ -59,7 +61,11 @@ const QUOTED_PARAMS: ReadonlyMap<string, ReadonlySet<string>> = new Map<
   ...Object.entries(OPTIONS).map(
     ([key, words]): [string, ReadonlySet<string>] => [
       paramFor(key),
-      new Set(key === "player" ? Object.keys(PLAYERS) : Object.keys(words)),
+      new Set(
+        key === "player"
+          ? Object.keys(PLAYERS)
+          : Object.keys(words).map((word) => urlValueFor(key, word)),
+      ),
     ],
   ),
   [SEASON_HAND_PARAM, new Set<string>(OPPONENT_HAND_FILTERS)],

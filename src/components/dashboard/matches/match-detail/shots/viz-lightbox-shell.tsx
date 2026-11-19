@@ -52,9 +52,15 @@ import { LifecycleChip } from "./lifecycle-chip";
 import type { PlayerChipLabels } from "./player-chip-labels";
 import { PlayerChips } from "./player-chips";
 import { filterRailReducer } from "../match-filters/rail-state";
+import { draftCountLine } from "../match-filters/panel-draft";
+import type { Hand } from "../match-filters/shot-geometry";
 import { LightboxAdvancedDrawer } from "./lightbox-advanced-drawer";
 import { LightboxMatchesSheet } from "./lightbox-matches-sheet";
-import { LightboxCourt, type CourtOutline } from "./lightbox-court";
+import {
+  LightboxCourt,
+  pairContactPoint,
+  type CourtOutline,
+} from "./lightbox-court";
 import {
   COUNT_NOUN,
   LegendFilter,
@@ -68,6 +74,7 @@ import {
   legendCounts,
   markIsPoint,
   pointsBehind,
+  resultMarks,
   type LegendPick,
 } from "./lightbox-points";
 import {
@@ -89,13 +96,16 @@ import {
 import type { VizBandsOverlayProps } from "./viz-bands-overlay";
 import { legendItemsFor } from "./viz-labels";
 import { isMarkRovingKey } from "./viz-mark-roving";
+import { notDrawnNote } from "./wall-summary";
 import {
+  approachNoun,
   bandStatRowsForDots,
   type Chart,
   type Cut,
   type PlayerFilter,
   type VizDot,
   type VizFilters,
+  type VizMark,
   type VizResult,
   type VizStats,
 } from "./viz-model";
@@ -146,6 +156,10 @@ export interface VizLightboxShellProps {
   /** "vs Lee · Nov 3": which match a mark is from, on a court drawn over
    *  several (the season's). Omitted on one match's court. */
   matchFor?: (dot: VizDot) => string | null;
+  /** Approaches: the hand of whoever is not the subject, which sides the
+   *  apron's wing names (`LightboxCourt`). `null`: unknown, read as right.
+   *  Omitted (the season's court, several opponents): read off the dots. */
+  opponentHand?: Hand | null;
   /**
    * The second click. A click (or Enter) on the SELECTED mark, or on its
    * Points row, watches that one point when `canWatch` says it can; the
@@ -155,8 +169,10 @@ export interface VizLightboxShellProps {
    * "Click to focus".
    */
   watch?: {
-    canWatch: (dot: VizDot) => boolean;
-    onWatch: (dot: VizDot, phrases: string[]) => void;
+    /** Handed a drawn mark, or an Approaches entry with no landing (its
+     *  Points row has no mark to select). */
+    canWatch: (dot: VizMark) => boolean;
+    onWatch: (dot: VizMark, phrases: string[]) => void;
   };
 
   /* ── Words ───────────────────────────────────────────────────────────── */
@@ -172,6 +188,10 @@ export interface VizLightboxShellProps {
   /** The strip's sentence for the filters (the shell adds the legend's and a
    *  Statistics row's pick). Empty: no strip unless a pick is on. */
   filterPhrases: string[];
+  /** A caveat on what the court draws ("assumes right-handed"): a quiet line
+   *  at the legend row's end, shown with or without a filter strip. Never a
+   *  strip phrase, and it stays out of the Watch hand-off's label. */
+  sentenceNote?: string;
   /** A filter beyond the baseline is on: the Filters trigger reads applied. */
   panelActive: boolean;
 
@@ -242,6 +262,9 @@ export interface VizLightboxShellProps {
 
 /** The close's fade, on the scrim and the box alike. */
 const LIGHTBOX_CLOSE_MS = 150;
+// Room left between a selected Approaches pair's marks and the stage's edges
+// when the glide frames both: the selected ring and a little air past it.
+const PAIR_GLIDE_MARGIN_PX = 56;
 
 /** The legend's picks, worded for the strip. */
 const LEGEND_WORD: Record<LegendPick, string> = {
@@ -281,12 +304,14 @@ export function VizLightboxShell({
   statRowDots,
   whereFor,
   matchFor,
+  opponentHand,
   watch,
   title,
   headerAction,
   notice,
   subtitle,
   filterPhrases,
+  sentenceNote,
   panelActive,
   onClose,
   onClearFilters,
@@ -420,10 +445,40 @@ export function VizLightboxShell({
       ),
     [result, legendPick, pickIds],
   );
+  // Every mark the Points list stands for: the drawn ones, then the
+  // Approaches cut's counted approaches with no landing, narrowed by the
+  // same picks. They list, count and watch like a mark; the court never
+  // draws them.
+  const marks: VizMark[] = useMemo(() => {
+    const undrawn = (result.undrawn ?? []).filter(
+      (d) =>
+        (legendPick === null || dotMatchesPick(d, legendPick)) &&
+        (pickIds === null || pickIds.has(d.id)),
+    );
+    return undrawn.length > 0 ? [...dots, ...undrawn] : dots;
+  }, [result, dots, legendPick, pickIds]);
+
+  // Approaches count every approach, drawn or not (`computeApproachViz`):
+  // one with no landing counts in the Statistics but draws no mark, so the
+  // court names them — the wall card's own sentence (`notDrawnNote`) —
+  // rather than reading as fewer approaches, or as none. Off `result.dots`,
+  // not the legend-narrowed `dots`: a pick hides marks, it records nothing.
+  const notDrawnLine =
+    cut === "approaches"
+      ? notDrawnNote(result.count - result.dots.length)
+      : null;
+  const showNotDrawn = notDrawnLine !== null && result.dots.length > 0;
 
   const visibleSelectedMarkId =
-    selectedMarkId !== null && dots.some((dot) => dot.id === selectedMarkId)
+    selectedMarkId !== null && marks.some((dot) => dot.id === selectedMarkId)
       ? selectedMarkId
+      : null;
+  // The selection as the court sees it: an undrawn approach's row lights,
+  // but there is no mark to ring, nor siblings to fade.
+  const drawnSelectedMarkId =
+    visibleSelectedMarkId !== null &&
+    dots.some((dot) => dot.id === visibleSelectedMarkId)
+      ? visibleSelectedMarkId
       : null;
   // A selection whose mark has left the court (a filter, a legend or
   // Statistics pick, a player switch) is DROPPED, not just hidden: clearing
@@ -435,7 +490,7 @@ export function VizLightboxShell({
 
   const selectedPointId =
     visibleSelectedMarkId !== null
-      ? (dots.find((d) => d.id === visibleSelectedMarkId)?.meta?.pointId ??
+      ? (marks.find((d) => d.id === visibleSelectedMarkId)?.meta?.pointId ??
         null)
       : null;
 
@@ -469,13 +524,37 @@ export function VizLightboxShell({
   // Selecting (a mark's click or Enter, or a Points row) centres the mark on
   // the stage, easing in to 150% of the cut's 100% on the way when the court
   // is further out than that; deselecting leaves the court where it is.
+  //
+  // An Approaches pair is one mark drawn in two places, so it glides to the
+  // MIDPOINT of its contact and placement instead, and its zoom is capped at
+  // the scale that keeps both inside the stage with `PAIR_GLIDE_MARGIN_PX` to
+  // spare — zooming back out if the court was closer in than that. Centring
+  // on the placement alone at 150% put the contact off the stage.
   const { glideTo, stage: pzStage } = pz;
   const glideToMark = useCallback(
     (dot: VizDot) => {
       if (pzStage.w === 0 || pzStage.h === 0) return;
-      const p = projectViewerDot(cut, dot);
+      const placed = projectViewerDot(cut, dot);
+      const p = viewerArtPoint(placed.x, placed.y);
       const home = viewerInitialTransform(cut, pzStage);
-      glideTo(viewerArtPoint(p.x, p.y), home.z * GLIDE_MIN_RELATIVE_ZOOM);
+      const minZ = home.z * GLIDE_MIN_RELATIVE_ZOOM;
+      const contact = pairContactPoint(cut, dot);
+      if (contact === null) {
+        glideTo(p, minZ);
+        return;
+      }
+      const c = viewerArtPoint(contact.x, contact.y);
+      const span = (d: number, room: number) =>
+        d > 0 ? Math.max(room - 2 * PAIR_GLIDE_MARGIN_PX, 1) / d : Infinity;
+      const maxZ = Math.min(
+        span(Math.abs(p.x - c.x), pzStage.w),
+        span(Math.abs(p.y - c.y), pzStage.h),
+      );
+      glideTo(
+        { x: (p.x + c.x) / 2, y: (p.y + c.y) / 2 },
+        Math.min(minZ, maxZ),
+        maxZ,
+      );
     },
     [cut, pzStage, glideTo],
   );
@@ -492,17 +571,19 @@ export function VizLightboxShell({
   // when the host can play it — otherwise nothing. Deselecting is Esc or a
   // click on the empty court, never a second click.
   const select = useCallback(
-    (dot: VizDot) => {
+    (mark: VizMark) => {
       setActiveMarkId(null);
-      if (visibleSelectedMarkId === dot.id) {
+      if (visibleSelectedMarkId === mark.id) {
         const host = watchRef.current;
-        if (host?.canWatch(dot)) host.onWatch(dot, phrasesRef.current);
+        if (host?.canWatch(mark)) host.onWatch(mark, phrasesRef.current);
         return;
       }
-      setSelectedMarkId(dot.id);
-      glideToMark(dot);
+      setSelectedMarkId(mark.id);
+      // An undrawn approach has no place to glide to: the row lights alone.
+      const drawn = dots.find((d) => d.id === mark.id);
+      if (drawn) glideToMark(drawn);
     },
-    [visibleSelectedMarkId, glideToMark],
+    [visibleSelectedMarkId, glideToMark, dots],
   );
   const selectMark = useCallback(
     (id: string) => {
@@ -512,11 +593,12 @@ export function VizLightboxShell({
     [dots, select],
   );
   // A row selects its point's mark on the court (the first mark that stands
-  // for that point), so the row and the mark light together.
+  // for that point), so the row and the mark light together — or, for an
+  // approach with no landing, the row alone.
   const markOfPoint = useCallback(
     (point: MatchPoint) =>
-      dots.find((d) => d.meta?.pointId === point.id && markIsPoint(cut, d)),
-    [dots, cut],
+      marks.find((d) => d.meta?.pointId === point.id && markIsPoint(cut, d)),
+    [marks, cut],
   );
   const selectPoint = useCallback(
     (point: MatchPoint) => {
@@ -831,7 +913,23 @@ export function VizLightboxShell({
   const atHome = sameT(homeT);
   const atFullCourt = sameT(fullT);
 
-  const matched = isDraft || !points ? [] : pointsBehind(cut, dots, points);
+  const matched = isDraft || !points ? [] : pointsBehind(cut, marks, points);
+  // An empty court's one sentence, said alike by the stage and the
+  // Statistics pane: nothing matching only while a filter is in force (the
+  // card's held floor and the player switch are not filters), otherwise
+  // nothing recorded for whoever the court is about.
+  const emptyLine = hasFilters
+    ? `No ${result.noun} match these filters`
+    : `No ${result.noun} recorded for ${subjectName} yet`;
+  // What the strip and the pane count: points, but on Approaches what the
+  // cut counts ("times at the net"), the KPI's own noun.
+  const listNoun =
+    cut === "approaches"
+      ? {
+          one: approachNoun(filters.entry, 1),
+          many: approachNoun(filters.entry, 2),
+        }
+      : undefined;
   const legend = legendItemsFor(cut, chart);
   const heat = chart === "heat";
 
@@ -1038,6 +1136,7 @@ export function VizLightboxShell({
                       phrases={phrases}
                       shown={pointList ? matched.length : undefined}
                       total={pointList?.total}
+                      noun={listNoun}
                       statOnly={statOnly}
                       onClear={clearFilters}
                     />
@@ -1099,9 +1198,9 @@ export function VizLightboxShell({
                       transform={pz.t}
                       stage={pz.stage}
                       panning={pz.panning}
-                      activeId={activeMarkId ?? visibleSelectedMarkId}
+                      activeId={activeMarkId ?? drawnSelectedMarkId}
                       focusedId={focusedMarkId}
-                      selectedId={visibleSelectedMarkId}
+                      selectedId={drawnSelectedMarkId}
                       rovingId={rovingMarkId}
                       onActivate={activateMark}
                       onDeactivate={deactivateMark}
@@ -1109,6 +1208,7 @@ export function VizLightboxShell({
                       onSelect={selectMark}
                       whereFor={whereFor}
                       matchFor={matchFor}
+                      opponentHand={opponentHand}
                       canWatchMark={canWatchMark}
                       focusIds={statHover !== null ? hoverIds : null}
                       outline={outline}
@@ -1145,23 +1245,34 @@ export function VizLightboxShell({
                           Choose a view
                         </button>
                       </StageCard>
+                    ) : result.count === 0 ? (
+                      <StageCard>
+                        <p className="text-[12px] text-[var(--ink-600)]">
+                          {emptyLine}
+                        </p>
+                        {hasFilters && !editing && (
+                          <button
+                            type="button"
+                            onClick={clearFilters}
+                            className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </StageCard>
                     ) : (
-                      result.count === 0 && (
+                      // Every approach counted, none with a landing: the
+                      // stage says why the court is bare (the honest zero),
+                      // not "nothing happened".
+                      notDrawnLine !== null &&
+                      result.dots.length === 0 && (
                         <StageCard>
-                          <p className="text-[12px] text-[var(--ink-600)]">
-                            {hasFilters
-                              ? `No ${result.noun} match these filters`
-                              : `No ${result.noun} recorded for ${subjectName} yet`}
+                          <p
+                            data-viz-not-drawn=""
+                            className="text-[12px] text-[var(--ink-600)]"
+                          >
+                            {notDrawnLine}
                           </p>
-                          {hasFilters && !editing && (
-                            <button
-                              type="button"
-                              onClick={clearFilters}
-                              className="cursor-pointer text-[11px] font-medium text-[var(--blue)] hover:text-[var(--blue-hover)]"
-                            >
-                              Clear
-                            </button>
-                          )}
                         </StageCard>
                       )
                     )}
@@ -1203,11 +1314,11 @@ export function VizLightboxShell({
                   </div>
 
                   {!isDraft && (
-                    <div>
+                    <div className="flex items-center justify-between gap-3 [&>*:first-child]:min-w-0">
                       {chart === "scatter" ? (
                         <LegendFilter
                           items={legend}
-                          counts={legendCounts(result.dots)}
+                          counts={legendCounts(resultMarks(result))}
                           pick={legendPick}
                           onPick={(next) => {
                             setLegendPick(next);
@@ -1233,6 +1344,33 @@ export function VizLightboxShell({
                                 <LegendMark item={item} />
                               </span>
                             ),
+                          )}
+                        </div>
+                      )}
+                      {(showNotDrawn || sentenceNote) && (
+                        <div className="flex shrink-0 items-center gap-3">
+                          {/* Some approaches drawn, some not: the same
+                              sentence as a quiet line at the legend's end, so
+                              the marks on court never read as every approach
+                              counted. */}
+                          {showNotDrawn && (
+                            <p
+                              data-viz-not-drawn=""
+                              className="text-micro m-0 leading-6 text-[var(--ink-600)] tabular-nums"
+                            >
+                              {notDrawnLine}
+                            </p>
+                          )}
+                          {/* A drawn mark's wing rests on a hand the match
+                              does not hold: said here, once, whether or not
+                              a filter strip is up. */}
+                          {sentenceNote && (
+                            <p
+                              data-viz-hand-assumed=""
+                              className="text-micro m-0 leading-6 text-[var(--ink-600)]"
+                            >
+                              {sentenceNote}
+                            </p>
                           )}
                         </div>
                       )}
@@ -1267,7 +1405,11 @@ export function VizLightboxShell({
                     {pane === "points" && pointList && !isDraft && (
                       <span
                         className="mono tabular text-[10px] text-[var(--ink-400)]"
-                        aria-label={`${matched.length} of ${pointList.total} points`}
+                        aria-label={draftCountLine(
+                          matched.length,
+                          pointList.total,
+                          listNoun,
+                        )}
                       >
                         {matched.length}{" "}
                         <span className="text-[var(--ink-300)]">/</span>{" "}
@@ -1288,7 +1430,7 @@ export function VizLightboxShell({
                         emptyLine:
                           cut === "serve" && dots.length > 0
                             ? `${dots.length} ${dots.length === 1 ? "serve" : "serves"} went out. A fault isn't a point, so there is no clip; the court shows where they landed.`
-                            : `No ${result.noun} match these filters.`,
+                            : emptyLine,
                       })
                     ) : (
                       // `-mx-2 px-2`: a row's hover wash hangs 8px past the
@@ -1300,6 +1442,7 @@ export function VizLightboxShell({
                         <LightboxStats
                           stats={stats}
                           cut={cut}
+                          emptyLine={emptyLine}
                           pick={activeStatPick}
                           onPick={(pick) => {
                             setSelectedMarkId(null);

@@ -77,6 +77,12 @@ const SHARED_ERRORS = {
     title: "Which did you mean?",
     detail: "Pick one, or type your own answer. Asking doesn't use a question.",
   },
+  // The title is the server's sentence naming the page; this one stands in
+  // only when it did not come.
+  app_help: {
+    title: "That's done on another page",
+    detail: "Asking doesn't use a question.",
+  },
 } as const;
 
 /** The personal page's copy: one player, their own matches. */

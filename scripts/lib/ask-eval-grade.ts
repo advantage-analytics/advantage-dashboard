@@ -35,6 +35,7 @@ const ERROR_CODES = {
   llm_unavailable: true,
   answer_failed: true,
   needs_clarification: true,
+  app_help: true,
 } satisfies Record<AskErrorCode, true>;
 export const ASK_EVAL_ERROR_CODES = Object.keys(ERROR_CODES) as AskErrorCode[];
 

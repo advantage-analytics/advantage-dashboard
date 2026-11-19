@@ -1,5 +1,5 @@
 /**
- * F4: the shared builder behind the ten default tiles (`DEFAULT_CUTS` × [you,
+ * F4: the shared builder behind the twelve default tiles (`DEFAULT_CUTS` × [you,
  * opp]) — extracted out of `viz-wall.tsx` so the wall and the focused view's
  * Views grid (a wrapping grid reached by scrolling the page, not a scrolling
  * row) draw the identical set of tiles, in the identical order, and can
@@ -61,9 +61,9 @@ export interface DefaultTile {
 }
 
 /**
- * The eight default tiles in wall order: your four (all serves, returns,
- * rally shots, unforced errors — or Errors, unjudged), then the opponent's
- * four. `hrefFor` is the caller's
+ * The twelve default tiles in wall order: your six (all serves, returns,
+ * return contact, rally shots, approaches, unforced errors — or Errors,
+ * unjudged), then the opponent's six. `hrefFor` is the caller's
  * `useVizState().hrefFor` (or an equivalent pure function in a test), applied
  * to each tile's own `VizState` to build its `href`.
  */

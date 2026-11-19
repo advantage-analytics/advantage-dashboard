@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { track } from "@/lib/analytics";
 import { saveProgramIntake } from "@/app/claim/team/about/actions";
 import {
   ACQUISITION_SOURCES,
@@ -48,9 +49,28 @@ export function ProgramIntakeForm({ programId }: { programId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
+  // The end of the coach path. Sent before the action, as the player's finish
+  // is: a saved intake redirects on the server, so nothing after the await is
+  // sure to run. Skip counts too — every answer here is optional. Once per
+  // visit: a refused save followed by a retry is still one coach finishing.
+  const tracked = useRef(false);
+  function trackFinished(skipped: boolean) {
+    if (tracked.current) return;
+    tracked.current = true;
+    track("onboarding_completed", {
+      path: "claim",
+      persona: "coach",
+      skipped,
+      roster_size_band: skipped ? null : rosterSizeBand,
+      weekly_film_band: skipped ? null : weeklyFilmBand,
+      acquisition_source: skipped ? null : acquisitionSource,
+    });
+  }
+
   function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
+    trackFinished(false);
     startTransition(async () => {
       // Success redirects on the server; a returned value is always a refusal.
       const result = await saveProgramIntake({
@@ -117,7 +137,11 @@ export function ProgramIntakeForm({ programId }: { programId: string }) {
             "Go to my team"
           )}
         </button>
-        <Link href="/dashboard/team" className={CLAIM_LINK}>
+        <Link
+          href="/dashboard/team"
+          onClick={() => trackFinished(true)}
+          className={CLAIM_LINK}
+        >
           Skip
         </Link>
       </ClaimActions>

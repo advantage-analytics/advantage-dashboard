@@ -1,5 +1,6 @@
 import { isUuid, UUID_RE } from "@/lib/admin/validation";
 import type { ChatMessage } from "@/lib/llm/adapter";
+import type { AskAppHelp } from "@/lib/services/ask/app-help";
 import {
   ASK_AGENT_BOUNDS,
   askAgentPromptAppendix,
@@ -316,8 +317,14 @@ export interface AskQuestionInput {
   previousPlan?: AskPreviousPlan | null;
   /** The conversation to append to, or null to start one. */
   conversationId: string | null;
-  /** From `reserveAskQuestion()`; null in mock mode. */
+  /** From `reserveAskQuestion()`; null in mock mode, and for an `appHelp` question. */
   reservation: AskReservation | null;
+  /**
+   * The route's `readAppHelp()` for this question, read before the cache and
+   * the reservation: when set, the question is answered with it and nothing
+   * else runs. Absent, the question is about the matches.
+   */
+  appHelp?: AskAppHelp | null;
   /** Whose matches the question is about; the route has already checked membership. */
   scope: AskScope;
   /**
@@ -941,6 +948,22 @@ export async function* askQuestion(
 
   try {
     yield { type: "status", stage: "planning" };
+
+    // A question about using the app ("I want to upload a match") has no
+    // answer in the views, and the planner could only refuse it. The route
+    // read it before reserving (`app-help.ts`); it is answered with the page
+    // that does it, before any model call, and nothing is spent.
+    const help = input.appHelp;
+    if (help) {
+      await release();
+      yield {
+        type: "error",
+        code: "app_help",
+        error: help.message,
+        ...(help.link ? { link: help.link } : {}),
+      };
+      return;
+    }
 
     // ── Plan, guard, run — with one retry ──────────────────────────────────
     // A plan the guard refuses, a reply that is not a plan, or a query the

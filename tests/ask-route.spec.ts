@@ -915,6 +915,43 @@ test.describe("POST /api/ask · the question limit", () => {
     expect(calls.llm).toBe(0);
   });
 
+  test("an upload question is answered with the upload page even at the limit — nothing reserved", async () => {
+    const { route, calls } = atLimit();
+    const response = await route.POST(
+      post({ ...QUESTION, question: "I want to upload a match" }),
+    );
+    expect(response.status).toBe(200);
+
+    const stream = await events(response);
+    expect(stream).toEqual([
+      { type: "status", stage: "planning" },
+      {
+        type: "error",
+        code: "app_help",
+        error: "You add a match from the upload page.",
+        link: {
+          href: "/dashboard/matches/new?return=ask",
+          label: "Upload a match",
+          kind: "upload",
+        },
+      },
+    ]);
+    // No cache read, no reservation, no release, no provider: only the run,
+    // which names no model since none was called.
+    expect(rpcNames(calls)).toEqual(["ask_record_run"]);
+    expect(calls.rpc[0]).toMatchObject({
+      args: {
+        p_run: expect.objectContaining({
+          outcome: "app_help",
+          plan_model: null,
+          answer_model: null,
+          model_calls: 0,
+        }),
+      },
+    });
+    expect(calls.llm).toBe(0);
+  });
+
   test("the count survives production, where a cause slug does not", async () => {
     await withEnv(["NODE_ENV"], { NODE_ENV: "production" }, async () => {
       const limited = atLimit();

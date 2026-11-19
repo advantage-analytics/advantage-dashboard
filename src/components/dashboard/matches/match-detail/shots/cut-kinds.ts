@@ -8,11 +8,15 @@
 import type { Cut } from "./viz-model";
 
 /** Cuts plotted where the ball LANDED, on the full-court landing frame
- * (rally placement, return placement, errors) — as against the contact-side
- * cuts. Serve lands too, but on its own service-box frame, so it is not here. */
+ * (rally placement, return placement, errors, approaches — where the
+ * approach shot landed) — as against the contact-side cuts. Serve lands too,
+ * but on its own service-box frame, so it is not here. */
 export function isPlacementCut(cut: Cut): boolean {
   return (
-    cut === "returnPlacement" || cut === "rallyPlacement" || cut === "errors"
+    cut === "returnPlacement" ||
+    cut === "rallyPlacement" ||
+    cut === "errors" ||
+    cut === "approaches"
   );
 }
 

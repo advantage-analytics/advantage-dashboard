@@ -33,6 +33,7 @@ import {
   VIEWER_COURT,
   projectViewerDot,
   viewerInitialTransform,
+  viewerApproachLabelScale,
   viewerFullCourtTransform,
   viewerLandingHalf,
   VIEWER_LANDING_FRAME,
@@ -46,7 +47,11 @@ import {
   viewerBandDrawableFt,
   SERVE_DEPTH_UNITS_PER_METER,
   viewerArtPoint,
+  FULL_COURT_VERTICAL,
+  fullVerticalToScreen,
+  projectApproachPair,
 } from "@/components/dashboard/matches/match-detail/shots/court-geometry";
+import { laneOf } from "@/components/dashboard/matches/match-detail/match-filters/approach";
 import { COURT_HALF_FT, resolveDepthDividersFt } from "@/lib/data/viz-bands";
 import {
   ZOOM_MIN,
@@ -1352,6 +1357,102 @@ test.describe("viewerInitialTransform", () => {
   });
 });
 
+/**
+ * T16: the Approaches cut draws a pair per point — a contact in the near half,
+ * a placement in the far half — so its 100% is the whole length, not the far
+ * landing half `isLandingCut` would otherwise send it to (which opened with
+ * every contact below the stage). Same stage sizes as the landing-cut test.
+ */
+test.describe("viewerInitialTransform — approaches", () => {
+  const stages = [
+    { w: 700, h: 900 },
+    { w: 1100, h: 640 },
+    { w: 820, h: 560 },
+  ];
+
+  test("both baselines are inside the stage, with apron beyond each, and the court is centred across", () => {
+    for (const s of stages) {
+      const t = viewerInitialTransform("approaches", s);
+      const toStageY = (y: number) => t.py + viewerArtPoint(0, y).y * t.z;
+      const far = toStageY(VIEWER_COURT.farBaselineY);
+      const near = toStageY(VIEWER_COURT.nearBaselineY);
+      expect(far).toBeGreaterThan(0);
+      expect(near).toBeLessThan(s.h);
+      // Room on the apron past each baseline for labels drawn there.
+      expect(far).toBeGreaterThan(20);
+      expect(s.h - near).toBeGreaterThan(20);
+      // Centred across, and the full length centred down the stage.
+      const centre = viewerArtPoint(VIEWER_COURT.centreX, 0);
+      expect(t.px + centre.x * t.z).toBeCloseTo(s.w / 2, 4);
+      expect((far + near) / 2).toBeCloseTo(s.h / 2, 4);
+      // Both sidelines (doubles) are on stage too.
+      const left = viewerArtPoint(VIEWER_COURT.doubles.x, 0);
+      const right = viewerArtPoint(
+        VIEWER_COURT.doubles.x + VIEWER_COURT.doubles.w,
+        0,
+      );
+      expect(t.px + left.x * t.z).toBeGreaterThan(0);
+      expect(t.px + right.x * t.z).toBeLessThan(s.w);
+      // "Full court" is still a step out from here, not the same view.
+      expect(viewerFullCourtTransform(s).z).toBeLessThan(t.z);
+      // A fixed point of clampPan: the seeded transform is already valid.
+      expect(clampPan(t, VIEWER_COURT.artPx, s)).toEqual(t);
+    }
+  });
+
+  test("the other cuts open where they did: landing cuts on the far half, contact cuts on the near baseline", () => {
+    for (const s of stages) {
+      const approach = viewerInitialTransform("approaches", s);
+      for (const cut of [
+        "serve",
+        "returnPlacement",
+        "rallyPlacement",
+        "errors",
+      ] as const) {
+        const t = viewerInitialTransform(cut, s);
+        const bottom = viewerArtPoint(
+          0,
+          VIEWER_LANDING_FRAME.minY + VIEWER_LANDING_FRAME.h,
+        );
+        expect(t.py + bottom.y * t.z).toBeCloseTo(s.h, 4);
+        // The landing half is closer in than the whole length.
+        expect(t.z).toBeGreaterThan(approach.z);
+      }
+      for (const cut of ["returnContact", "rallyPosition"] as const) {
+        const t = viewerInitialTransform(cut, s);
+        const nearBaseline = viewerArtPoint(0, VIEWER_COURT.nearBaselineY);
+        expect(t.py + nearBaseline.y * t.z).toBeCloseTo(s.h * (500 / 950), 3);
+      }
+    }
+  });
+});
+
+/**
+ * T23: the Approaches court's words are drawn larger by
+ * `viewerApproachLabelScale`, so at the two cuts' opening zooms a word of the
+ * same size reads the same on screen: scale × the Approaches zoom is the
+ * landing cuts' zoom, on every stage shape.
+ */
+test.describe("viewerApproachLabelScale", () => {
+  test("brings the Approaches opening zoom up to a landing cut's, and is 1 where both frames are width-bound", () => {
+    for (const s of [
+      { w: 700, h: 900 },
+      { w: 1100, h: 640 },
+      { w: 820, h: 560 },
+      { w: 360, h: 1400 },
+    ]) {
+      const scale = viewerApproachLabelScale(s);
+      expect(scale).toBeGreaterThanOrEqual(1);
+      expect(scale * viewerInitialTransform("approaches", s).z).toBeCloseTo(
+        viewerInitialTransform("returnPlacement", s).z,
+        6,
+      );
+    }
+    // Tall and narrow: the width decides both fits.
+    expect(viewerApproachLabelScale({ w: 360, h: 1400 })).toBeCloseTo(1, 6);
+  });
+});
+
 /* ── Phase 2B: depth/contact band geometry ───────────────────────────────── */
 
 /**
@@ -1648,5 +1749,240 @@ test.describe("viewerBandDrawableFt / capped viewerBandLayerY (fix round 1)", ()
         VIEWER_COURT.artPx.h,
       9,
     );
+  });
+});
+
+test.describe("FULL_COURT_VERTICAL — the Approaches frame", () => {
+  // An independent re-implementation of SVG's rotate(-90 cx cy): matrix
+  // [cos −sin; sin cos] with cos = 0, sin = −1, about (cx, cy).
+  function svgRotateMinus90(x: number, y: number, cx: number, cy: number) {
+    const dx = x - cx;
+    const dy = y - cy;
+    return { x: cx + dy, y: cy - dx };
+  }
+
+  test("is RETURN_COURT rotated -90° about its net centre", () => {
+    expect(FULL_COURT_VERTICAL.groupTransform).toBe(
+      `rotate(-90 ${RETURN_COURT.netX} ${RETURN_COURT.centerY})`,
+    );
+    for (const [x, y] of [
+      [RETURN_COURT.farBaselineX, RETURN_COURT.doublesTop],
+      [RETURN_COURT.nearBaselineX, RETURN_COURT.singlesBottom],
+      [RETURN_COURT.serviceLineFarX, RETURN_COURT.centerY],
+      [RETURN_COURT.netX, RETURN_COURT.netTopY],
+    ]) {
+      const want = svgRotateMinus90(
+        x,
+        y,
+        RETURN_COURT.netX,
+        RETURN_COURT.centerY,
+      );
+      const got = fullVerticalToScreen(x, y);
+      expect(got.x).toBeCloseTo(want.x, 9);
+      expect(got.y).toBeCloseTo(want.y, 9);
+    }
+  });
+
+  test("full length, the subject's baseline at the bottom, net between", () => {
+    const f = FULL_COURT_VERTICAL;
+    expect(f.subjectBaselineX).toBe(RETURN_COURT.farBaselineX);
+    expect(f.opponentBaselineX).toBe(RETURN_COURT.nearBaselineX);
+    expect(fullVerticalToScreen(f.subjectBaselineX, 0).y).toBe(
+      f.subjectBaselineY,
+    );
+    expect(fullVerticalToScreen(f.opponentBaselineX, 0).y).toBe(f.farBaselineY);
+    // Screen y grows downward: far baseline < net < subject's baseline.
+    expect(f.farBaselineY).toBeLessThan(f.netY);
+    expect(f.netY).toBeLessThan(f.subjectBaselineY);
+    // Baseline to baseline is the whole 400-unit (23.77 m) court.
+    expect(f.subjectBaselineY - f.farBaselineY).toBe(
+      RETURN_COURT.nearBaselineX - RETURN_COURT.farBaselineX,
+    );
+    expect(f.netY - f.farBaselineY).toBe(f.subjectBaselineY - f.netY);
+  });
+
+  test("matches the approved look's viewBoxes", () => {
+    expect(FULL_COURT_VERTICAL.viewBox).toEqual({
+      minX: 118,
+      minY: -142,
+      w: 244,
+      h: 482,
+    });
+    expect(FULL_COURT_VERTICAL.cardViewBox).toEqual({
+      minX: 130,
+      minY: -104,
+      w: 220,
+      h: 418,
+    });
+  });
+
+  test("both viewBoxes leave apron beyond both baselines and both doubles sidelines", () => {
+    const f = FULL_COURT_VERTICAL;
+    const left = fullVerticalToScreen(0, RETURN_COURT.doublesTop).x;
+    const right = fullVerticalToScreen(0, RETURN_COURT.doublesBottom).x;
+    for (const vb of [f.viewBox, f.cardViewBox]) {
+      expect(vb.minY).toBeLessThan(f.farBaselineY);
+      expect(vb.minY + vb.h).toBeGreaterThan(f.subjectBaselineY);
+      expect(vb.minX).toBeLessThan(left);
+      expect(vb.minX + vb.w).toBeGreaterThan(right);
+      // Centred on the court.
+      expect(vb.minX + vb.w / 2).toBe(f.centreX);
+    }
+  });
+
+  test("every label sits on the apron, outside the court", () => {
+    const f = FULL_COURT_VERTICAL;
+    const vb = f.viewBox;
+    expect(f.labels.placement.y).toBeLessThan(f.farBaselineY);
+    expect(f.labels.contact.y).toBeGreaterThan(f.subjectBaselineY);
+    for (const lane of ["left", "middle", "right"] as const) {
+      const l = f.labels.lanes[lane];
+      expect(l.y).toBeLessThan(f.farBaselineY);
+      expect(l.y).toBeGreaterThan(f.labels.placement.y);
+    }
+    for (const l of [
+      f.labels.placement,
+      f.labels.contact,
+      ...Object.values(f.labels.lanes),
+    ]) {
+      expect(l.y).toBeGreaterThan(vb.minY);
+      expect(l.y).toBeLessThan(vb.minY + vb.h);
+    }
+  });
+});
+
+test.describe("projectApproachPair", () => {
+  const f = FULL_COURT_VERTICAL;
+
+  test("puts the contact in the near (bottom) half and the placement in the far (top) half", () => {
+    for (const dot of [
+      // A typical approach: struck inside the baseline, landed deep.
+      { lateralM: 2, depthM: 9, pair: { lateralM: 1, depthM: -4 } },
+      // Serve and volley: struck behind the baseline, landed in the box.
+      { lateralM: -1.5, depthM: 5, pair: { lateralM: 0.3, depthM: 0.5 } },
+      // Drawn in: struck near the service line, landed short.
+      { lateralM: 0, depthM: 2, pair: { lateralM: -2, depthM: -7 } },
+    ]) {
+      const { placement, contact } = projectApproachPair(dot);
+      expect(contact).not.toBeNull();
+      expect(contact!.y).toBeGreaterThan(f.netY);
+      expect(contact!.y).toBeLessThan(f.viewBox.minY + f.viewBox.h);
+      expect(placement.y).toBeLessThan(f.netY);
+      expect(placement.y).toBeGreaterThan(f.viewBox.minY);
+    }
+  });
+
+  test("depth: placement on the far baseline, contact on the subject's own", () => {
+    const { placement, contact } = projectApproachPair({
+      lateralM: 0,
+      depthM: 11.885,
+      pair: { lateralM: 0, depthM: 0 },
+    });
+    expect(placement.y).toBeCloseTo(f.farBaselineY, 1);
+    expect(contact!.y).toBeCloseTo(f.subjectBaselineY, 9);
+    // A contact behind the baseline sits lower still; inside it, higher.
+    const behind = projectApproachPair({
+      lateralM: 0,
+      depthM: 6,
+      pair: { lateralM: 0, depthM: 1 },
+    }).contact!;
+    const inside = projectApproachPair({
+      lateralM: 0,
+      depthM: 6,
+      pair: { lateralM: 0, depthM: -1 },
+    }).contact!;
+    expect(behind.y).toBeCloseTo(f.subjectBaselineY + UNITS_PER_METER, 9);
+    expect(inside.y).toBeCloseTo(f.subjectBaselineY - UNITS_PER_METER, 9);
+  });
+
+  test("the hitter's right is screen right on both halves", () => {
+    const { placement, contact } = projectApproachPair({
+      lateralM: 4.115,
+      depthM: 6,
+      pair: { lateralM: 4.115, depthM: -2 },
+    });
+    const singlesRight = fullVerticalToScreen(0, RETURN_COURT.singlesBottom).x;
+    expect(placement.x).toBeCloseTo(singlesRight, 9);
+    expect(contact!.x).toBeCloseTo(singlesRight, 9);
+    expect(singlesRight).toBeGreaterThan(f.centreX);
+  });
+
+  test("no pair, no contact", () => {
+    expect(projectApproachPair({ lateralM: 0, depthM: 6 }).contact).toBeNull();
+  });
+
+  test("a wild out or a deep contact is pinned inside the opened view", () => {
+    const { placement, contact } = projectApproachPair({
+      lateralM: -20,
+      depthM: 30,
+      pair: { lateralM: 20, depthM: 15 },
+    });
+    const vb = f.viewBox;
+    for (const p of [placement, contact!]) {
+      expect(p.x).toBeGreaterThanOrEqual(vb.minX + RETURN_DOT_R);
+      expect(p.x).toBeLessThanOrEqual(vb.minX + vb.w - RETURN_DOT_R);
+      expect(p.y).toBeGreaterThanOrEqual(vb.minY + RETURN_DOT_R);
+      expect(p.y).toBeLessThanOrEqual(vb.minY + vb.h - RETURN_DOT_R);
+    }
+  });
+
+  test("lane thirds map to the three wing label positions", () => {
+    const lanes = ["left", "middle", "right"] as const;
+    // Sweep the singles court: each placement lands inside its own third's
+    // screen span, under that third's label, and agrees with `laneOf`.
+    for (let lateralM = -4.0; lateralM <= 4.0; lateralM += 0.25) {
+      const lane = laneOf(lateralM);
+      const { placement } = projectApproachPair({ lateralM, depthM: 8 });
+      const span = f.lanes[lane];
+      expect(placement.x).toBeGreaterThanOrEqual(span.x1);
+      expect(placement.x).toBeLessThanOrEqual(span.x2);
+      const nearest = lanes.reduce((best, l) =>
+        Math.abs(f.labels.lanes[l].x - placement.x) <
+        Math.abs(f.labels.lanes[best].x - placement.x)
+          ? l
+          : best,
+      );
+      expect(nearest).toBe(lane);
+      expect(placement.y).toBeGreaterThan(f.labels.lanes[lane].y);
+    }
+  });
+
+  test("a placement in the hitter's left third projects under the left label", () => {
+    const { placement } = projectApproachPair({ lateralM: -2.7, depthM: 9 });
+    const { left, middle, right } = f.labels.lanes;
+    expect(left.x).toBeLessThan(middle.x);
+    expect(middle.x).toBeLessThan(right.x);
+    expect(placement.x).toBeGreaterThan(f.lanes.left.x1);
+    expect(placement.x).toBeLessThan(f.lanes.left.x2);
+    expect(Math.abs(placement.x - left.x)).toBeLessThan(
+      (f.lanes.left.x2 - f.lanes.left.x1) / 2,
+    );
+    expect(placement.y).toBeGreaterThan(left.y);
+  });
+
+  test("the lane label positions are the three lane centres (approved look: 194, 240, 286)", () => {
+    expect(f.labels.lanes.left.x).toBeCloseTo(193.73, 1);
+    expect(f.labels.lanes.middle.x).toBe(240);
+    expect(f.labels.lanes.right.x).toBeCloseTo(286.27, 1);
+    expect(f.labels.lanes.middle.y).toBe(-105);
+    expect(f.labels.placement).toEqual({ x: 240, y: -124 });
+    expect(f.labels.contact).toEqual({ x: 240, y: 328 });
+  });
+
+  test("a backhand triangle on this frame has its apex as the topmost point", () => {
+    const { placement, contact } = projectApproachPair({
+      lateralM: -1,
+      depthM: 7,
+      pair: { lateralM: 1, depthM: -3 },
+    });
+    for (const p of [placement, contact!]) {
+      // Marks are drawn in screen space, outside the rotated court group, so
+      // the unrotated "serve" orientation is the right one here.
+      const [apex, baseLeft, baseRight] = parseTrianglePoints(
+        trianglePointsFor("serve", p.x, p.y, RETURN_DOT_R),
+      );
+      expect(apex.y).toBeLessThan(baseLeft.y);
+      expect(apex.y).toBeLessThan(baseRight.y);
+    }
   });
 });

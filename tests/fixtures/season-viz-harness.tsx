@@ -15,6 +15,7 @@ import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { SavedView } from "@/lib/data/saved-views-logic";
 import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/shots/viz-model";
+import { LOBBED, MATCH, PASSED_DTL, withoutLanding } from "./approach-points";
 import { RALLY_POINTS } from "./viz-rally-points";
 import { ASYMMETRIC_SERVES } from "./viz-serve-points";
 
@@ -36,7 +37,14 @@ import { ASYMMETRIC_SERVES } from "./viz-serve-points";
  * the season three matches, each the same points under its own ids, whose
  * opponents play right (Jordan Lee, Nov 3), left (Sam Ortiz, Oct 20) and
  * unknown (Riley Park, Oct 6) — the profile's "Opponent plays" and
- * "Matches" filters.
+ * "Matches" filters. `?landing=some` makes the season one match of net
+ * points (`approach-points.ts`) with the landing taken off two of the
+ * player's approaches (`PASSED_DTL`, `LOBBED`): they count, they draw no
+ * mark. `?nethands=mixed` makes the season two matches of those net points
+ * (whole, every landing kept) against a right-hander (Jordan Lee, Nov 3)
+ * and a left-hander (Sam Ortiz, Oct 20); `?nethands=left`, the same two
+ * matches with both opponents left-handed — the Approaches apron's lane
+ * words over mixed and shared hands.
  *
  * The view sits in the page's own `WidgetBoundary`, and the navigation
  * mock's `router.refresh()` re-renders this harness the way a refresh
@@ -103,24 +111,75 @@ const HANDS_SEASON: SeasonVizMatch[] = [
     courtType: "Indoor Hard Court",
   },
 ];
+const NO_LANDING: ReadonlySet<string> = new Set([PASSED_DTL.id, LOBBED.id]);
+const SOME_LANDING_SEASON: SeasonVizMatch[] = [
+  {
+    matchId: "m-1",
+    points: MATCH.map((point, i) => ({
+      ...(NO_LANDING.has(point.id) ? withoutLanding(point) : point),
+      pointNumber: i + 1,
+    })),
+    isPlayer1: true,
+    isDerived: false,
+    errorSplitJudged: true,
+    date: "2026-11-03",
+    opponent: "Jordan Lee",
+  },
+];
+const NET_HANDS = LOAD_PARAMS.get("nethands");
+/** One match of the net points under `matchId`'s own ids. */
+function netMatch(
+  matchId: string,
+  date: string,
+  opponent: string,
+  opponentHand: "right" | "left",
+): SeasonVizMatch {
+  return {
+    matchId,
+    points: prefixed(MATCH, matchId).map((point, i) => ({
+      ...point,
+      pointNumber: i + 1,
+    })),
+    isPlayer1: true,
+    isDerived: false,
+    errorSplitJudged: true,
+    date,
+    opponent,
+    opponentHand,
+    playerHand: "right",
+  };
+}
+const NET_HANDS_SEASON: SeasonVizMatch[] = [
+  netMatch(
+    "m-1",
+    "2026-11-03",
+    "Jordan Lee",
+    NET_HANDS === "left" ? "left" : "right",
+  ),
+  netMatch("m-2", "2026-10-20", "Sam Ortiz", "left"),
+];
 const SEASON: SeasonVizMatch[] = LOAD_PARAMS.has("empty")
   ? []
-  : LOAD_PARAMS.has("hands")
-    ? HANDS_SEASON
-    : [
-        {
-          matchId: "m-1",
-          points: LOAD_PARAMS.has("p1serves")
-            ? ALL_POINTS.filter((point) => point.serverIsPlayer1)
-            : ALL_POINTS,
-          isPlayer1: true,
-          isDerived: false,
-          errorSplitJudged: true,
-          date: "2026-11-03",
-          opponent: "Jordan Lee",
-          hasPlayableVideo: LOAD_PARAMS.has("video"),
-        },
-      ];
+  : NET_HANDS === "mixed" || NET_HANDS === "left"
+    ? NET_HANDS_SEASON
+    : LOAD_PARAMS.get("landing") === "some"
+      ? SOME_LANDING_SEASON
+      : LOAD_PARAMS.has("hands")
+        ? HANDS_SEASON
+        : [
+            {
+              matchId: "m-1",
+              points: LOAD_PARAMS.has("p1serves")
+                ? ALL_POINTS.filter((point) => point.serverIsPlayer1)
+                : ALL_POINTS,
+              isPlayer1: true,
+              isDerived: false,
+              errorSplitJudged: true,
+              date: "2026-11-03",
+              opponent: "Jordan Lee",
+              hasPlayableVideo: LOAD_PARAMS.has("video"),
+            },
+          ];
 const BANDS = { bands: DEFAULT_BANDS, unit: "ft" as const };
 const NAMES = { you: "Avery Kim", opponent: "Opponents" };
 const DELAY_MS = Number(LOAD_PARAMS.get("delay") ?? 400);

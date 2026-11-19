@@ -222,14 +222,30 @@ export function pointDetail(
     if (segments.length > 0) parts.push(segments.join(" "));
   }
 
-  if (point.isBreakPoint) parts.push("Break point");
-  if (point.isSetPoint) parts.push("Set point");
-  if (point.isMatchPoint) parts.push("Match point");
-  // The derivation had no score to read and named the winner from the last
-  // stroke (`winner_guessed`) — said in the row, so the mark is not read as fact.
-  if (point.winnerGuessed) parts.push("Winner estimated");
+  parts.push(...pointFlags(point));
 
   return parts.join(" · ") || "Rally";
+}
+
+/**
+ * The tail {@link pointDetail} ends with: the point's pressure, then whether
+ * its winner was estimated. Shared so another detail line (the Approaches
+ * cut's) says them in the same words.
+ */
+export function pointFlags(
+  point: Pick<
+    MatchPoint,
+    "isBreakPoint" | "isSetPoint" | "isMatchPoint" | "winnerGuessed"
+  >,
+): string[] {
+  const flags: string[] = [];
+  if (point.isBreakPoint) flags.push("Break point");
+  if (point.isSetPoint) flags.push("Set point");
+  if (point.isMatchPoint) flags.push("Match point");
+  // The derivation had no score to read and named the winner from the last
+  // stroke (`winner_guessed`) — said in the row, so the mark is not read as fact.
+  if (point.winnerGuessed) flags.push("Winner estimated");
+  return flags;
 }
 
 /** One shot's row in the "Current point" widget, one string per column. */

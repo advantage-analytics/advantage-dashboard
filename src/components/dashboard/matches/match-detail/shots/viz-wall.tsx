@@ -11,7 +11,7 @@ import { useMatchPlayerChipLabels } from "./use-match-player-chip-labels";
 import { LegendMark } from "./legend-mark";
 import { useVizState } from "./use-viz-state";
 import { buildDefaultTiles } from "./default-tiles";
-import { useMatchFilters } from "../match-filters/provider";
+import { useVizFilterContext } from "./use-viz-view";
 import { useVizBands } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
 import { wallLegendItems } from "./viz-labels";
 import { EMPTY_VIZ_FILTERS, type PlayerFilter } from "./viz-model";
@@ -60,8 +60,10 @@ export function VizWall({
   const chipLabels = useMatchPlayerChipLabels();
   const { setState, hrefFor } = useVizState();
   // The errors card's name, filter and error reading follow whether this
-  // match's errors are judged (`defaultCutsFor`, `errorKindOf`).
-  const { context: matchCtx } = useMatchFilters();
+  // match's errors are judged (`defaultCutsFor`, `errorKindOf`); the
+  // Approaches card reads lob keys off it. The lightbox's own context, so a
+  // card and the view it opens count the same points.
+  const matchCtx = useVizFilterContext();
   const { bands, unit } = useVizBands();
 
   const hasSaved = savedViewsBand != null;

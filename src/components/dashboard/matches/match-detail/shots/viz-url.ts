@@ -20,6 +20,7 @@ import {
   type PlayerFilter,
   type VizFilters,
 } from "./viz-model";
+import { DEFAULT_CUTS } from "./default-cuts";
 import {
   appliedValues,
   capitalizeFirst,
@@ -382,7 +383,77 @@ export const OPTIONS = {
     forced: "Forced errors",
     doubleFault: "Double faults",
   },
+  // The Approaches cut's three groups. Their order is the canonical order a
+  // selection is kept in (`canonicalOptionValues`), and the order the stats
+  // rows list them in.
+  entry: {
+    approach: "Approach",
+    "serve-volley": "Serve and volley",
+    "drawn-in": "Drawn in",
+  },
+  approachTo: {
+    backhand: "Their backhand",
+    middle: "Middle",
+    forehand: "Their forehand",
+  },
+  approachDir: {
+    Crosscourt: "Crosscourt",
+    Middle: "Middle",
+    "Down the Line": "Down the line",
+  },
 } as const;
+
+/**
+ * Where an applied-strip token words an option differently from its panel
+ * row. "Approach to" reads as a destination in the sentence ("To their
+ * backhand · Crosscourt"), which also keeps its Middle apart from
+ * Direction's: "To the middle" is where the ball went, "Middle" the line it
+ * took. Every other option's token is its `OPTIONS` label.
+ */
+const APPLIED_LABELS: Partial<
+  Record<OptionKey, Readonly<Record<string, string>>>
+> = {
+  approachTo: {
+    backhand: "To their backhand",
+    middle: "To the middle",
+    forehand: "To their forehand",
+  },
+};
+
+/**
+ * The few option values that travel in the URL under a shorter code than
+ * their model value: an approach direction is `shots.zone`'s own words,
+ * spaces and all, so "Down the Line" goes as `dtl` — the codes the stats
+ * rows already key on. Every other value travels as itself.
+ */
+const URL_VALUE_CODES: Partial<
+  Record<string, Readonly<Record<string, string>>>
+> = {
+  approachDir: {
+    Crosscourt: "crosscourt",
+    Middle: "middle",
+    "Down the Line": "dtl",
+  },
+};
+
+function codesFor(key: string): Readonly<Record<string, string>> | undefined {
+  return Object.hasOwn(URL_VALUE_CODES, key) ? URL_VALUE_CODES[key] : undefined;
+}
+
+/** The word a filter value is written as in the URL (see `URL_VALUE_CODES`). */
+export function urlValueFor(key: string, value: string): string {
+  const codes = codesFor(key);
+  return codes && Object.hasOwn(codes, value) ? codes[value] : value;
+}
+
+/** `urlValueFor` reversed: the model value a URL word names, or the word
+ *  itself for a key with no codes (`parseFilters` then validates it). */
+function modelValueFor(key: string, word: string): string | null {
+  const codes = codesFor(key);
+  if (!codes) return word;
+  const found = Object.entries(codes).find(([, code]) => code === word);
+  return found ? found[0] : null;
+}
 
 /**
  * The word for the one option an unjudged match's Error type offers in place
@@ -426,6 +497,9 @@ const ORDER = [
   "rally",
   "game",
   "error",
+  "entry",
+  "approachTo",
+  "approachDir",
 ] as const;
 
 /**
@@ -440,10 +514,51 @@ export const VIZ_MATCH_FILTERS_PARAM = "vf";
  * The URL param a filter key travels as. `error` is namespaced to `verr`
  * for the same reason `set` is to `vset` (below): a bare `?error=` is the
  * kind of name an auth or redirect flow puts on the page, and every viz
- * write would strip it.
+ * write would strip it. The Approaches cut's groups take the same `v`
+ * prefix, short: `ventry`, `vto` (approach to) and `vdir` (direction).
  */
+const NAMESPACED_PARAMS: Readonly<Record<string, string>> = {
+  error: "verr",
+  entry: "ventry",
+  approachTo: "vto",
+  approachDir: "vdir",
+};
+
 export function paramFor(key: string): string {
-  return key === "error" ? "verr" : key;
+  return Object.hasOwn(NAMESPACED_PARAMS, key) ? NAMESPACED_PARAMS[key] : key;
+}
+
+/**
+ * How the URL says a cut's floor was let go of: `cut=approaches&ventry=any`
+ * is every way to the net. A bare `cut=approaches` is the cut on its floor
+ * (approach shots only), so "nothing ticked" cannot go unsaid as it does for
+ * every other group. Never a model value: it parses to an empty group.
+ */
+export const FLOOR_LOOSENED_WORD = "any";
+
+/**
+ * A cut's floor (`DefaultCut.floor`): the filters it opens on because they
+ * are what the cut is — Approaches is approach shots. The same on a judged
+ * and an unjudged match, so `DEFAULT_CUTS` is read directly.
+ */
+export function cutFloor(cut: Cut): Partial<VizFilters> {
+  return DEFAULT_CUTS.find((c) => c.cut === cut)?.floor ?? {};
+}
+
+/**
+ * The filters a court lands on when a menu picks `cut` while `prevCut` is
+ * showing: what `carryFilters` keeps, then — only when the cut really
+ * changes — the new cut's floor, so Approaches picked from another cut opens
+ * on approach shots, as its card does. Picking the cut already showing
+ * leaves a loosened floor alone: the reader's untick is theirs.
+ */
+export function filtersForCut(
+  filters: VizFilters,
+  prevCut: Cut | null,
+  cut: Cut,
+): VizFilters {
+  const carried = carryFilters(filters, cut);
+  return cut === prevCut ? carried : { ...carried, ...cutFloor(cut) };
 }
 
 // `set` (bare) is NOT a viz key: the match report already owns it
@@ -620,6 +735,13 @@ export interface VizParseMatch {
  * chart. Omitted (saved-view validation, `saved-views-logic.ts`), the values
  * parse exactly as written: a saved view's `error` array is read, never
  * rewritten.
+ *
+ * With `match`, a cut that has a floor (`cutFloor`) also opens on it: a bare
+ * `cut=approaches` is approach shots only — the card's own state, so no
+ * filter reads as applied — and "every way in" is spelled out as
+ * `ventry=any` (`FLOOR_LOOSENED_WORD`). A `ventry` naming a way in is read
+ * as written. Without `match` nothing is filled in: a saved view stored with
+ * an empty `entry` stays every way in.
  */
 export function parseVizState(
   params: URLSearchParams,
@@ -633,7 +755,8 @@ export function parseVizState(
     cutParam === "returnContact" ||
     cutParam === "rallyPosition" ||
     cutParam === "rallyPlacement" ||
-    cutParam === "errors"
+    cutParam === "errors" ||
+    cutParam === "approaches"
   ) {
     cut = cutParam;
   }
@@ -669,7 +792,7 @@ export function parseVizState(
     match === undefined
       ? carried
       : {
-          ...carried,
+          ...withUnsaidFloor(carried, cut, params),
           error: collapseErrorFilter(carried.error, match.errorSplitJudged),
         };
 
@@ -743,6 +866,7 @@ export function vizStateQuery(
 
   // Serialize filters: only non-default keys that are in filterKeysFor(cut)
   const allowedKeys = new Set(filterKeysFor(state.cut));
+  const floor = cutFloor(state.cut);
 
   if (allowedKeys.has("set")) {
     for (const setNumber of state.filters.set) {
@@ -762,7 +886,12 @@ export function vizStateQuery(
 
     const values = state.filters[key] as readonly string[];
     for (const value of values) {
-      next.append(paramFor(key), value);
+      next.append(paramFor(key), urlValueFor(key, value));
+    }
+    // A floor group with nothing ticked is said out loud: left off, the
+    // reader's "every way in" would read back as the floor (`parseVizState`).
+    if (values.length === 0 && Object.hasOwn(floor, key)) {
+      next.append(paramFor(key), FLOOR_LOOSENED_WORD);
     }
   }
 
@@ -871,6 +1000,15 @@ export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
   // Error kinds only mean something on the errors cut.
   if (nextCut !== "errors" && filters.error?.length) {
     filters = { ...filters, error: [] };
+  }
+  // Nor do the approach groups off the Approaches cut.
+  if (
+    nextCut !== "approaches" &&
+    (filters.entry?.length ||
+      filters.approachTo?.length ||
+      filters.approachDir?.length)
+  ) {
+    filters = { ...filters, entry: [], approachTo: [], approachDir: [] };
   }
   // Every errors dot is a point the court's player lost on their own
   // error: anything carried in that asks for the court player's won points,
@@ -1031,6 +1169,27 @@ export function activeFilterEntries(
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 
+/**
+ * `filters` with `cut`'s floor filled into each floor group the URL left
+ * unsaid: empty after parsing, and not let go of by name
+ * (`FLOOR_LOOSENED_WORD`). The wall (`cut === null`) has no floor.
+ */
+function withUnsaidFloor(
+  filters: VizFilters,
+  cut: Cut | null,
+  params: URLSearchParams,
+): VizFilters {
+  if (cut === null) return filters;
+  let next = filters;
+  for (const [key, value] of Object.entries(cutFloor(cut))) {
+    const held = filters[key as keyof VizFilters];
+    if (!Array.isArray(held) || held.length > 0) continue;
+    if (params.getAll(paramFor(key)).includes(FLOOR_LOOSENED_WORD)) continue;
+    next = { ...next, [key]: value };
+  }
+  return next;
+}
+
 function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
   // Start with defaults from EMPTY_VIZ_FILTERS
   const filters: VizFilters = { ...EMPTY_VIZ_FILTERS };
@@ -1051,7 +1210,10 @@ function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
     const optionKey = key as MultiOptionKey;
     const raw = params
       .getAll(paramFor(key))
-      .filter((v) => Object.hasOwn(OPTIONS[optionKey], v));
+      .map((word) => modelValueFor(key, word))
+      .filter(
+        (v): v is string => v !== null && Object.hasOwn(OPTIONS[optionKey], v),
+      );
     if (raw.length === 0) continue;
     filters[key] = canonicalOptionValues(optionKey, raw) as never;
   }
@@ -1071,7 +1233,12 @@ function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
   return filters;
 }
 
+/** An applied-strip token's words: `APPLIED_LABELS`, else `OPTIONS`. */
 function getLabel(key: OptionKey, value: string): string {
+  const applied = Object.hasOwn(APPLIED_LABELS, key)
+    ? APPLIED_LABELS[key]
+    : undefined;
+  if (applied && Object.hasOwn(applied, value)) return applied[value];
   const options = OPTIONS[key] as Record<string, string>;
   return options[value] || value;
 }

@@ -150,7 +150,8 @@ export interface DbPlayerMatchRow {
   /** The opponent's stored id — the Opponents page's key when it is set. */
   opponent_player_id: string | null;
   /** Raw, unvalidated hands (`normalizePlayerHand`). The wizard writes
-   *  `player_*` for seat one and `opponent_*` for seat two. */
+   *  `player_*` for seat one and `opponent_*` for seat two; read them by
+   *  seat through `rowHandsBySeat`, which knows the legacy exception. */
   player_hand: string | null;
   opponent_hand: string | null;
 }

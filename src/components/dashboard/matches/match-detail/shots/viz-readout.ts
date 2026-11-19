@@ -153,7 +153,14 @@ export interface MarkReadout {
   /** The last line, under a hairline: what a click does here
    *  (`markClickHint`). `null` draws no hint. */
   hint: string | null;
+  /** Which mark of an Approaches pair the card is about — "Contact" (where
+   *  the approach was struck) or "Placement" (where it landed) — drawn as
+   *  the card's first line. Absent on every single-mark cut. */
+  part?: "Contact" | "Placement";
 }
+
+/** The two marks of an Approaches pair (`VizDot.pair`). */
+export type PairPart = "contact" | "placement";
 
 /**
  * The readout's last line: what clicking the mark does, said in the state
@@ -174,7 +181,12 @@ export function buildMarkReadout(
   outcome: "won" | "lost" | "miss",
   cut: Cut,
   where: string | null,
-  extra: { match?: string | null; hint?: string | null } = {},
+  extra: {
+    match?: string | null;
+    hint?: string | null;
+    /** The pair mark under the pointer, on the Approaches cut. */
+    part?: PairPart | null;
+  } = {},
 ): MarkReadout {
   const title = meta.isAce
     ? "Ace"
@@ -201,6 +213,9 @@ export function buildMarkReadout(
     where,
     match: extra.match ?? null,
     hint: extra.hint ?? null,
+    ...(extra.part
+      ? { part: extra.part === "contact" ? "Contact" : "Placement" }
+      : {}),
   };
 }
 
@@ -219,6 +234,7 @@ export function buildZoneReadout(
 
 /** What one of a cut's rows counts, singular and plural. */
 function rowNoun(cut: Cut, count: number): string {
+  if (cut === "approaches") return count === 1 ? "approach" : "approaches";
   const one =
     cut === "serve"
       ? "serve"
@@ -322,5 +338,73 @@ export function placeReadout(
     top: y + (below ? gap : -gap),
     width,
     below,
+  };
+}
+
+/** Where a pair's readout opens, relative to its mark (`placeApronReadout`). */
+export type ApronReadoutSide = "left" | "right" | "above" | "below";
+
+export interface ApronReadoutPlacement {
+  side: ApronReadoutSide;
+  /**
+   * In stage px. `left`/`right`: the card's near edge (its right edge on
+   * `"left"`, its left edge on `"right"`) and `top` its vertical centre.
+   * `above`/`below`: as `placeReadout` — the card's horizontal centre, and
+   * its bottom (above) or top (below) edge.
+   */
+  left: number;
+  top: number;
+  width: number;
+}
+
+/**
+ * The Approaches court's readout (`approach-map-v9.html`): a pair's marks sit
+ * in both halves of the court, so a card hung above a mark lands on the
+ * marks of the half beyond it. It opens OUTWARD instead, into the apron
+ * beside the court — left of a mark on the left half of the court, right of
+ * one on the right half — falls back to the other side when the stage has no
+ * room there, and sits above the mark (`placeReadout`, which itself drops
+ * below at the stage's top) only when neither side fits.
+ *
+ * Side cards are centred on the mark's height and slid along the stage's
+ * edge rather than run off it. The fit uses the same worst-case width and
+ * height as `placeReadout`, so a card never clips.
+ */
+export function placeApronReadout(
+  anchor: { x: number; y: number },
+  stage: { w: number; h: number },
+  /** The court's centre line, in stage px: which half the mark is in. */
+  courtCentreX: number,
+  /** Px between the anchor and the card (the selection ring's radius + 8). */
+  gap: number = READOUT_GAP,
+): ApronReadoutPlacement {
+  const width = Math.min(
+    READOUT_WIDTH,
+    Math.max(0, stage.w - READOUT_MARGIN * 2),
+  );
+  const fitsLeft = anchor.x - gap - width >= READOUT_MARGIN;
+  const fitsRight = anchor.x + gap + width <= stage.w - READOUT_MARGIN;
+  const preferred: "left" | "right" =
+    anchor.x < courtCentreX ? "left" : "right";
+  const other = preferred === "left" ? "right" : "left";
+  const fits = { left: fitsLeft, right: fitsRight };
+  const side = fits[preferred] ? preferred : fits[other] ? other : null;
+  if (side === null) {
+    const above = placeReadout(anchor, stage, gap);
+    return {
+      side: above.below ? "below" : "above",
+      left: above.left,
+      top: above.top,
+      width: above.width,
+    };
+  }
+  const lo = READOUT_MARGIN + Math.min(READOUT_MAX_HEIGHT, stage.h) / 2;
+  const hi = Math.max(lo, stage.h - lo);
+  const top = Math.max(lo, Math.min(anchor.y, hi));
+  return {
+    side,
+    left: side === "left" ? anchor.x - gap : anchor.x + gap,
+    top,
+    width,
   };
 }
