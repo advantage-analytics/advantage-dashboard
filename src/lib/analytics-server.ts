@@ -23,6 +23,13 @@ export interface ServerAnalyticsEvents {
   };
   program_claim_completed: { program_id: string };
   invite_accepted: { inviter_role: string | null; program_id: string };
+  /**
+   * The Google twin of the client's `login_completed { method: "password" }`
+   * (`login-form.tsx`): Google sign-in ends in `/callback`'s server redirect,
+   * and an MCP-connector sign-in lands on `/oauth/consent`, never reaching
+   * DashboardShell's identify — so nothing in the browser would report it.
+   */
+  login_completed: { method: "google" };
 }
 
 export function trackServer<E extends keyof ServerAnalyticsEvents>(
