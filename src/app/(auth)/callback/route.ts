@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/auth/safe-next";
 import { AUTH_NEXT_COOKIE } from "@/lib/auth/auth-next-cookie";
 import { toAuthError } from "@/lib/auth/error-messages";
+import { trackServer } from "@/lib/analytics-server";
 
 /**
  * OAuth landing route (Google).
@@ -18,6 +19,14 @@ import { toAuthError } from "@/lib/auth/error-messages";
  * Supabase's auth server logs. Both are clamped by `safeNext`, and the cookie
  * is cleared on every way out of this route, the failures included, so it
  * cannot steer a later sign-in.
+ *
+ * A successful exchange captures `login_completed { method: "google" }`
+ * server-side, keyed on the user id. The method is fixed rather than read
+ * from `user.app_metadata.provider`, which names the provider the account
+ * was FIRST created with (an email account that later signs in with Google
+ * still says "email"): the Google button is the only flow whose `redirectTo`
+ * is this route — email confirmations land on `/confirm` and password
+ * recovery on `/update-password`.
  */
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
@@ -38,7 +47,7 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
     // Translated: /error renders what it is handed, and raw Supabase text is
     // what the rebuild set out to stop showing users.
@@ -46,6 +55,9 @@ export async function GET(request: NextRequest) {
       `${origin}/error?error=${encodeURIComponent(toAuthError(error).message)}`,
     );
   }
+
+  const user = data.user ?? data.session?.user ?? null;
+  if (user) trackServer(user.id, "login_completed", { method: "google" });
 
   // Behind a load balancer the request origin is the internal host, so the
   // forwarded host is the only one the browser can follow back.
