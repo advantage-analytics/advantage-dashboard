@@ -2,7 +2,7 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ArrowRight, ChevronRight, Upload } from "lucide-react";
 import type { AskErrorCode } from "@/lib/services/ask/events";
 import type { AskFeedback } from "@/lib/services/ask/feedback";
 import { figureVideoHref } from "@/lib/services/ask/figure-video";
@@ -170,6 +170,8 @@ export function AskAnswer({
             copy={copy}
             onChoose={onChoose}
           />
+        ) : answer.status === "error" && answer.error?.code === "app_help" ? (
+          <AnswerHelp error={answer.error} copy={copy} />
         ) : answer.status === "error" ? (
           <AnswerError error={answer.error} copy={copy} />
         ) : (
@@ -218,7 +220,53 @@ function AnswerQuestion({
           ))}
         </div>
       )}
-      <p className="text-body-sm text-[var(--ink-500)]">{fallback.detail}</p>
+      <p className="text-body-sm text-[var(--ink-600)]">{fallback.detail}</p>
+    </div>
+  );
+}
+
+/**
+ * Ask pointing at the page that does what was asked ("I want to upload a
+ * match"): the sentence in the claim's place, then one row — the page as a
+ * quiet button (what it is for, and an arrow saying it goes somewhere) with
+ * the line that the question was free beside it. Not an alert, nothing
+ * failed; and not blue, the composer's send keeps the surface's one primary.
+ */
+function AnswerHelp({
+  error,
+  copy: { errors },
+}: {
+  error: NonNullable<AskAnswerState["error"]>;
+  copy: AskCopy;
+}) {
+  const fallback = errors.app_help;
+  const upload = error.link?.kind === "upload";
+  return (
+    <div data-ask-help="" className="flex flex-col gap-3">
+      <p className="text-title">{error.message || fallback.title}</p>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {error.link && (
+          <Link
+            href={error.link.href}
+            className={`${advButton("outline", "sm")} group`}
+          >
+            {upload && (
+              <Upload
+                className="size-3.5 shrink-0 text-[var(--ink-500)]"
+                strokeWidth={1.5}
+                aria-hidden="true"
+              />
+            )}
+            {error.link.label}
+            <ArrowRight
+              className="size-3.5 shrink-0 text-[var(--ink-500)] transition-transform duration-[var(--duration-hover)] group-hover:translate-x-0.5 motion-reduce:transition-none"
+              strokeWidth={1.5}
+              aria-hidden="true"
+            />
+          </Link>
+        )}
+        <p className="text-body-sm text-[var(--ink-600)]">{fallback.detail}</p>
+      </div>
     </div>
   );
 }

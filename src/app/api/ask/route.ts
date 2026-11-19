@@ -104,6 +104,7 @@ import {
 } from "@/lib/services/ask/cache";
 import { isAskAgentEnabled } from "@/lib/services/ask/agent";
 import { askCoachMode, isAskCoachModeEnabled } from "@/lib/services/ask/coach";
+import { askUploadAccess, readAppHelp } from "@/lib/services/ask/app-help";
 import { retrieveAskExamples } from "@/lib/services/ask/examples";
 import { askAdapterModel, askStageModels } from "@/lib/services/ask/model";
 import {
@@ -141,6 +142,7 @@ import { siteUrl } from "@/lib/site-url";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
+import type { Workspace } from "@/lib/workspace/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -368,6 +370,9 @@ export async function POST(request: Request): Promise<Response> {
   // Coach mode: the flag, a team scope and the viewer's role in the program,
   // the last read off the same workspace list as the membership (`coach.ts`).
   let coach = false;
+  // Team scope: the membership-checked workspace, for what this viewer may do
+  // on the program's upload page if the question asks (`app-help.ts`).
+  let teamWorkspace: Workspace | null = null;
   if (body.programId !== null) {
     // A read that failed is not an answer. Only a list that was read and
     // does not hold the program says "not a member"; a thrown read — or one
@@ -414,8 +419,22 @@ export async function POST(request: Request): Promise<Response> {
       scope,
       role: program.role,
     });
+    teamWorkspace = program;
   }
   const team = scope.kind === "team";
+
+  // A question about using the app ("I want to upload a match") is answered
+  // with the page that does it (`app-help.ts`). Read here, before the
+  // embedding, the cache and the reservation: it needs none of them, and a
+  // viewer with no questions left still gets the link.
+  // The upload rules are read lazily: only once the question has asked to
+  // upload, so a team question about the matches never reads them.
+  const uploadWorkspace = teamWorkspace;
+  const appHelp = readAppHelp(
+    body.question,
+    scope,
+    uploadWorkspace ? () => askUploadAccess(uploadWorkspace) : undefined,
+  );
 
   // The question's embedding, for the nearest rated examples (`examples.ts`).
   // Started here, beside the reads, since it needs nothing but the question;
@@ -423,11 +442,12 @@ export async function POST(request: Request): Promise<Response> {
   // Its own controller beside the request's, so a cache hit below can stop it:
   // a replayed answer has no use for the vector.
   const embeddingAbort = new AbortController();
-  const embedding: Promise<number[] | null> = isLLMConfigured()
-    ? embedText(body.question, {
-        signal: AbortSignal.any([request.signal, embeddingAbort.signal]),
-      }).catch(() => null)
-    : Promise.resolve(null);
+  const embedding: Promise<number[] | null> =
+    isLLMConfigured() && !appHelp
+      ? embedText(body.question, {
+          signal: AbortSignal.any([request.signal, embeddingAbort.signal]),
+        }).catch(() => null)
+      : Promise.resolve(null);
 
   // The answer cache's data version (see "The answer cache" below) needs
   // only the viewer's own client and the scope, so it starts here too, beside
@@ -436,7 +456,7 @@ export async function POST(request: Request): Promise<Response> {
   // to the session client. A read that throws is a miss, like one that
   // fails; on a refusal below its answer is simply never awaited.
   const dataVersionRead: Promise<string | null> =
-    isLLMConfigured() && !coach && !body.conversationId
+    isLLMConfigured() && !coach && !body.conversationId && !appHelp
       ? readAskDataVersion(
           { rpc: (fn, args) => supabase.rpc(fn, args) },
           scope,
@@ -599,22 +619,28 @@ export async function POST(request: Request): Promise<Response> {
     // The nearest examples, through the service client with this request's
     // viewer pinned — the fourth service-role call, explained in
     // `examples.ts`. Only on a miss, and beside the reservation.
-    const examplesRead = retrieveAskExamples({
-      service,
-      viewerId: user.id,
-      scope,
-      embedding,
-    });
+    const examplesRead = appHelp
+      ? undefined
+      : retrieveAskExamples({
+          service,
+          viewerId: user.id,
+          scope,
+          embedding,
+        });
     // Agent mode's toolbox lives beside the MCP server, whose SDK a route
     // without the flag has no use for: loaded only with it on, and before
     // the reservation, so a failed load spends nothing.
-    const agentTools = isAskAgentEnabled()
-      ? {
-          ...(await import("@/lib/services/mcp/server")),
-          ...(await import("@/lib/services/mcp/user-reads")),
-        }
-      : null;
-    const reserved = await reserveAskQuestion(db, model);
+    const agentTools =
+      isAskAgentEnabled() && !appHelp
+        ? {
+            ...(await import("@/lib/services/mcp/server")),
+            ...(await import("@/lib/services/mcp/user-reads")),
+          }
+        : null;
+    // An app-help answer spends nothing, so it reserves nothing.
+    const reserved = appHelp
+      ? ({ ok: true, reservation: null } as const)
+      : await reserveAskQuestion(db, model);
     if (!reserved.ok) {
       if (reserved.code === "ask_limit_reached") {
         return limitReached(reserved.detail);
@@ -639,6 +665,7 @@ export async function POST(request: Request): Promise<Response> {
         : null,
       conversationId: conversation?.id ?? null,
       reservation: reserved.reservation,
+      appHelp,
       scope,
       pageSeats: getAskPageSeats,
       // In flight: the orchestrator awaits it after the "planning" status.
@@ -665,8 +692,9 @@ export async function POST(request: Request): Promise<Response> {
     const recorded = (run: AskQuestionInput) =>
       recordAskRun(run, {
         preStreamMs: Date.now() - started,
-        planModel: stageModels.plan,
-        answerModel: stageModels.answer,
+        // A help answer calls no model, so its run names none.
+        planModel: appHelp ? null : stageModels.plan,
+        answerModel: appHelp ? null : stageModels.answer,
         onRun,
       });
     events = dataVersion

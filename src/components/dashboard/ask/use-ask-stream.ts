@@ -35,6 +35,7 @@ import type { AskFeedback } from "@/lib/services/ask/feedback";
 import {
   ASK_STATUS_STAGES,
   type AskEvent,
+  type AskHelpLink,
   type AskSourceMatch,
   type AskStatusStage,
   type AskVisual,
@@ -95,6 +96,8 @@ export interface AskAnswerError {
   code: string | null;
   /** `needs_clarification`: the answers the asker can pick. */
   options?: string[];
+  /** `app_help`: the page that does what was asked. */
+  link?: AskHelpLink;
 }
 
 export interface AskAnswerState {
@@ -280,6 +283,7 @@ function applyEvent(answer: AskAnswerState, event: AskEvent): AskAnswerState {
           message: event.error,
           code: event.code,
           ...(event.options ? { options: event.options } : {}),
+          ...(event.link ? { link: event.link } : {}),
         },
       };
   }
@@ -330,12 +334,19 @@ export function askThreadReducer(
       }
       if (event.type === "error") {
         // The failed exchange stays in the thread, carrying its error for the
-        // answer to explain, and the question goes back to the composer.
+        // answer to explain, and the question goes back to the composer — so
+        // it can be sent again, or answered when Ask asked which was meant.
+        // An `app_help` answer is not a failure: the request was answered with
+        // the page that does it, and sending it again would only repeat the
+        // bubble above, so the composer stays as the send left it.
         return {
           ...state,
           exchanges,
           inFlight: false,
-          draft: restoreDraft(state, current.question),
+          draft:
+            event.code === "app_help"
+              ? state.draft
+              : restoreDraft(state, current.question),
         };
       }
       return { ...state, exchanges };
@@ -402,6 +413,23 @@ export function askThreadReducer(
 function readSourceMatches(value: unknown): AskSourceMatch[] | null {
   if (!Array.isArray(value)) return null;
   return value.flatMap((row) => readAskSourceMatch(row) ?? []);
+}
+
+/**
+ * An `app_help` event's link, kept only when it stays inside the dashboard:
+ * the stream is the server's, but a link the page renders is never trusted
+ * to point anywhere else (a `//host` or `/dashboard/../` path is dropped).
+ */
+function helpLinkOf(value: unknown): { link: AskHelpLink } | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { href, label, kind } = value as Record<string, unknown>;
+  if (typeof href !== "string" || typeof label !== "string") return null;
+  if (!href.startsWith("/dashboard/") || href.includes("..")) return null;
+  if (label.trim() === "") return null;
+  // A kind this build does not draw is dropped; the link still stands.
+  return {
+    link: { href, label, ...(kind === "upload" ? { kind } : {}) },
+  };
 }
 
 /**
@@ -501,6 +529,7 @@ export function parseAskEvent(line: string): AskEvent | null {
             value.options.every((o) => typeof o === "string")
               ? { options: value.options as string[] }
               : {}),
+            ...(helpLinkOf(value.link) ?? {}),
           }
         : null;
     default:
