@@ -718,16 +718,17 @@ function ReturnCourtLines() {
 }
 
 // Apron labels on the Approaches frame (`approach-map-v9.html`): Roboto Mono,
-// capitals, dark ink. `--surface-dark` rather than `--ink-900`, because the
-// apron is the same green in both themes and `--ink-900` turns light in dark
-// mode. Exported for the opened court (`lightbox-court.tsx`), which draws
-// the same words on its own `VIEWER_COURT` apron.
-export const APPROACH_LABEL_INK = "var(--surface-dark)";
+// capitals, in the court's own white — the same ink as the depth bands'
+// "DEEP · 0–13 FT" labels beside them, so every word on the green reads as
+// one family. The apron is the same green in both themes, so white holds in
+// dark mode too. Exported for the opened court (`lightbox-court.tsx`), which
+// draws the same words on its own `VIEWER_COURT` apron.
+export const APPROACH_LABEL_INK = LINE_COLOR;
 export const APPROACH_SIDE_LABEL_SIZE = 7.4;
 export const APPROACH_SIDE_LABEL_OPACITY = 0.72;
 export const APPROACH_LANE_LABEL_SIZE = 6.8;
 export const APPROACH_LANE_LABEL_OPACITY = 0.5;
-export const APPROACH_LABEL_TRACKING = 0.9;
+export const APPROACH_LABEL_TRACKING = 1.05;
 
 /**
  * The words over each hitter's-view third, left to right: the opponent's
