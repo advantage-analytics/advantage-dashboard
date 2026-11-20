@@ -747,7 +747,16 @@ export function placementMissing(
  * placement". Gating it on the ball before having no bounce was measured and
  * left out: the November 2026 vendor files give every ball a bounce, fitted
  * where none was seen, so it only ever fires on older files.
+ *
+ * That missing bounce widens it instead (`noBounce`). On the 11 complete
+ * sessions seeded from the November 2026 files (2026-11-19), inside the
+ * service line it held at 57 volleys in 112 (51%). Past it, a groundstroke
+ * whose ball before has no landing at all was a volley 20 times in 28 out to
+ * `NO_BOUNCE_VOLLEY_M` (6.4–8 m 7/8, 8–10 m 13/20), against 22 in 79 at
+ * 6.4–8 m with a landing and under 1% everywhere else. About three a match.
  */
+export const NO_BOUNCE_VOLLEY_M = 10;
+
 export function groundstrokeAtNet(
   point: Pick<LabelPoint, "shots"> &
     Partial<Pick<LabelPoint, "ending" | "dismissed">>,
@@ -763,13 +772,25 @@ export function groundstrokeAtNet(
     if (serveAt !== -1 && i === serveAt + 1) continue;
     if (shot.eventId === null || shot.seed?.stroke !== stroke) continue;
     if (shot.contactY === null) continue;
-    if (Math.abs(shot.contactY - BASELINE_M) > SERVICE_LINE_M) continue;
+    const fromNet = Math.abs(shot.contactY - BASELINE_M);
+    if (fromNet > NO_BOUNCE_VOLLEY_M) continue;
+    // The ball it met, from the other player, with no landing anywhere.
+    const before = live[i - 1];
+    const noBounce =
+      before !== undefined &&
+      !isServeStroke(before.stroke) &&
+      (before.hitter === null || before.hitter !== shot.hitter) &&
+      (before.landingX === null || before.landingY === null);
+    if (fromNet > SERVICE_LINE_M && !noBounce) continue;
     if (point.dismissed?.includes(volleyKey(shot.id))) continue;
     return {
       code: "groundstroke_at_net",
       tier: "hint",
       scope: "shot",
-      params: { shotId: shot.id, stroke },
+      params:
+        fromNet > SERVICE_LINE_M
+          ? { shotId: shot.id, stroke, noBounce: true }
+          : { shotId: shot.id, stroke },
     };
   }
   return null;
@@ -1586,9 +1607,9 @@ function isDemoted(tone: MarkTone, items: readonly ReviewItem[]): boolean {
  * rate (2026-11-05); item 4
  * when a counted mark or "Was the last ball out?" for a locked game
  * (`last_ball_against_game`) sits under it, or the point's winner is the
- * player its strokes say lost; item 5 is always the score; item 6 only for "Game cut
- * differs" (unless it is on most of the match, `systemic`) or "Tiebreak
- * score, not 6–6" (the serve-side marks under it are data,
+ * player its strokes say lost; item 5 is always the score; item 6 for every
+ * member but a match-wide "Game cut differs" (`systemic`) — the serve-side
+ * marks under it are the score again since 2026-11-19 (marks.ts
  * `DATA_MARK_CODES`); items 7 and 8 never. Like the
  * flag (`foldReviewItems`), an item speaks for its open members while any is
  * open, and for all of them once none is: a settled "Check the ending" does
@@ -1636,11 +1657,10 @@ function reviewItemTone(
       return "score";
     case 6:
       // A match-wide "Game cut differs" (`systemic`) is the entered score
-      // more than the point, so it reads grey like the serve-side marks.
+      // more than the point, so it reads grey; every other member is amber.
       return members.some(
         ({ mark }) =>
-          mark.code === "tiebreak_score_off_six_all" ||
-          (mark.code === "segment_proposal_differs" && !mark.params.systemic),
+          mark.code !== "segment_proposal_differs" || !mark.params.systemic,
       )
         ? "score"
         : "data";

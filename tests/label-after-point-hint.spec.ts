@@ -1168,6 +1168,59 @@ test.describe("groundstrokeAtNet", () => {
     );
   });
 
+  test("past the service line, asked when the ball before has no landing", () => {
+    const met = (landing: { x: number; y: number } | null, depth: number) =>
+      groundstrokeAtNet(
+        rally(
+          serve,
+          hit("r", "backhand", -11, { hitter: "p2" }),
+          hit("a", "forehand", -9, {
+            hitter: "p1",
+            landingX: landing?.x ?? null,
+            landingY: landing?.y ?? null,
+          }),
+          hit("v", "forehand", depth, { hitter: "p2" }),
+        ),
+        true,
+      );
+    const noBounce = met(null, 8);
+    expect(noBounce?.params).toEqual({
+      shotId: "v",
+      stroke: "forehand",
+      noBounce: true,
+    });
+    expect(markHover(noBounce!, NAMES)).toContain(
+      "the ball before it has no bounce",
+    );
+    expect(met(null, 10)?.params.shotId).toBe("v");
+    // Beyond `NO_BOUNCE_VOLLEY_M`, or with a bounce before it: nothing.
+    expect(met(null, 10.5)).toBeNull();
+    expect(met({ x: 0, y: 3 }, 8)).toBeNull();
+    // Inside the service line it is asked either way, without `noBounce`.
+    expect(met({ x: 0, y: 3 }, 5)?.params).toEqual({
+      shotId: "v",
+      stroke: "forehand",
+    });
+  });
+
+  test("no landing on your own ball is a missing stroke, not a volley", () => {
+    expect(
+      groundstrokeAtNet(
+        rally(
+          serve,
+          hit("r", "backhand", -11, { hitter: "p2" }),
+          hit("a", "forehand", 9, {
+            hitter: "p2",
+            landingX: null,
+            landingY: null,
+          }),
+          hit("v", "forehand", 8, { hitter: "p2" }),
+        ),
+        true,
+      ),
+    ).toBeNull();
+  });
+
   test("never the return: a served ball bounces before it is met", () => {
     expect(
       groundstrokeAtNet(rally(serve, hit("r", "forehand", 4)), true),

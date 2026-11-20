@@ -446,7 +446,9 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
       }
     }
     case "groundstroke_at_net":
-      return `Typed as a ${mark.params.stroke}, but hit from inside the service line. Check the clip: if the ball didn’t bounce first, make it a volley; if it did, dismiss this.`;
+      return mark.params.noBounce
+        ? `Typed as a ${mark.params.stroke}, but the ball before it has no bounce. Check the clip: if the ball didn’t bounce first, make it a volley; if it did, dismiss this.`
+        : `Typed as a ${mark.params.stroke}, but hit from inside the service line. Check the clip: if the ball didn’t bounce first, make it a volley; if it did, dismiss this.`;
     case "phantom_strokes_dropped": {
       const count = mark.params.eventIds.length;
       if (count > 1) {
