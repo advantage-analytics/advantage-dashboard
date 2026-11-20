@@ -734,7 +734,9 @@ export function placementMissing(
 
 /**
  * "Volley?": a vendor groundstroke hit from inside the service line — within
- * `SERVICE_LINE_M` of the net by its contact, which is where the hitter stood.
+ * `SERVICE_LINE_M` of the net by its contact, which is where the hitter stood
+ * — or from up to `NO_BOUNCE_VOLLEY_M` when the vendor saw no bounce on the
+ * ball before it (`noBounce`, below).
  * The vendor most often misses a volley this way round: on the 37 complete
  * analyst sessions (2026-11-17) labellers turned 195 vendor groundstrokes
  * into volleys or overheads and only 11 the other way. One hit from inside
@@ -744,14 +746,16 @@ export function placementMissing(
  * Asked only while the stroke is still the vendor's: a stroke the labeller
  * added or retyped is their call. Not a return, which can't be volleyed, nor a
  * stroke the labeller dismissed: the next one is asked instead, like "Shot
- * placement". Gating it on the ball before having no bounce was measured and
- * left out: the November 2026 vendor files give every ball a bounce, fitted
- * where none was seen, so it only ever fires on older files.
+ * placement".
  *
- * That missing bounce widens it instead (`noBounce`). On the 11 complete
- * sessions seeded from the November 2026 files (2026-11-19), inside the
- * service line it held at 57 volleys in 112 (51%). Past it, a groundstroke
- * whose ball before has no landing at all was a volley 20 times in 28 out to
+ * The missing bounce widens the question rather than narrowing it. Requiring
+ * it INSIDE the service line was measured and left out (2026-11-17): the
+ * November 2026 vendor files give nearly every ball a bounce, fitted where
+ * none was seen, so it would rarely fire there. Past the service line it is
+ * what separates volleys: on the 11 complete sessions seeded from the
+ * November 2026 files (2026-11-19), inside the service line the question
+ * held at 57 volleys in 112 (51%); past it, a groundstroke after a vendor
+ * ball seeded with no landing was a volley 20 times in 28 out to
  * `NO_BOUNCE_VOLLEY_M` (6.4–8 m 7/8, 8–10 m 13/20), against 22 in 79 at
  * 6.4–8 m with a landing and under 1% everywhere else. About three a match.
  */
@@ -774,23 +778,28 @@ export function groundstrokeAtNet(
     if (shot.contactY === null) continue;
     const fromNet = Math.abs(shot.contactY - BASELINE_M);
     if (fromNet > NO_BOUNCE_VOLLEY_M) continue;
-    // The ball it met, from the other player, with no landing anywhere.
+    const pastServiceLine = fromNet > SERVICE_LINE_M;
+    // The ball it met: the other player's vendor stroke, seeded with no
+    // landing and given none since. A stroke the labeller added starts with
+    // no coordinates, and one whose landing they cleared had a bounce: neither
+    // is the vendor saying it saw none, which is all that was measured.
     const before = live[i - 1];
     const noBounce =
       before !== undefined &&
       !isServeStroke(before.stroke) &&
       (before.hitter === null || before.hitter !== shot.hitter) &&
+      before.seed !== null &&
+      (before.seed.landing_x === null || before.seed.landing_y === null) &&
       (before.landingX === null || before.landingY === null);
-    if (fromNet > SERVICE_LINE_M && !noBounce) continue;
+    if (pastServiceLine && !noBounce) continue;
     if (point.dismissed?.includes(volleyKey(shot.id))) continue;
     return {
       code: "groundstroke_at_net",
       tier: "hint",
       scope: "shot",
-      params:
-        fromNet > SERVICE_LINE_M
-          ? { shotId: shot.id, stroke, noBounce: true }
-          : { shotId: shot.id, stroke },
+      params: pastServiceLine
+        ? { shotId: shot.id, stroke, noBounce: true }
+        : { shotId: shot.id, stroke },
     };
   }
   return null;

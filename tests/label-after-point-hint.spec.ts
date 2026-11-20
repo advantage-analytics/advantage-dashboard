@@ -1203,6 +1203,34 @@ test.describe("groundstrokeAtNet", () => {
     });
   });
 
+  test("past the service line, only the vendor saying it saw no bounce counts", () => {
+    const after = (before: LabelShot) =>
+      groundstrokeAtNet(
+        rally(
+          serve,
+          hit("r", "backhand", -11, { hitter: "p2" }),
+          before,
+          hit("v", "forehand", 8, { hitter: "p2" }),
+        ),
+        true,
+      );
+    // A stroke the labeller added: no coordinates yet, and no seed.
+    expect(
+      after(
+        hit("a", "forehand", -9, {
+          hitter: "p1",
+          eventId: null,
+          seed: null,
+          landingX: null,
+          landingY: null,
+        }),
+      ),
+    ).toBeNull();
+    // A vendor stroke seeded with a bounce whose landing was cleared since.
+    const bounced = hit("a", "forehand", -9, { hitter: "p1" });
+    expect(after({ ...bounced, landingX: null, landingY: null })).toBeNull();
+  });
+
   test("no landing on your own ball is a missing stroke, not a volley", () => {
     expect(
       groundstrokeAtNet(
