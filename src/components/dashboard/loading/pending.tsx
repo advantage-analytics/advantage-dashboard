@@ -27,15 +27,22 @@ export function PendingBar({
    * `inverse` for a bar on the brand gradient (the header's Beta pill), where
    * the grey skeleton token all but vanishes: white at 30%, the same wash the
    * pill's own tag and ring track use.
+   *
+   * `dark` for a bar on the label console's black full screen, where the
+   * grey token would glare: white at 8%.
    */
-  tone?: "default" | "inverse";
+  tone?: "default" | "inverse" | "dark";
 }) {
   return (
     <span
       aria-hidden="true"
       className={cn(
         "block h-3 max-w-full rounded-[3px] motion-safe:animate-pulse",
-        tone === "inverse" ? "bg-white/30" : "bg-[var(--surface-skeleton)]",
+        tone === "inverse"
+          ? "bg-white/30"
+          : tone === "dark"
+            ? "bg-white/[0.08]"
+            : "bg-[var(--surface-skeleton)]",
         className,
       )}
       data-pending-bar=""

@@ -42,6 +42,20 @@ export function layoutAfterFullscreenRequest(
   return outcome === "refused" ? "overview" : "black";
 }
 
+// ── The film ────────────────────────────────────────────────────────────────
+
+/** What the court always keeps of the black stage's height. */
+const BLACK_COURT_MIN = "max(320px, 40cqh)";
+
+/**
+ * The film's width on the black stage (a size container): the stage's, or —
+ * where that would crowd the court out — 16:9 of the height the court leaves.
+ * Never under 16:9 of 120px, for a window too short to honour both. Shared by
+ * `LabelBlackView` and `/label/[sessionId]`'s skeleton, so the court does not
+ * jump when the console mounts.
+ */
+export const BLACK_VIDEO_WIDTH = `min(100cqw, max(calc((100cqh - ${BLACK_COURT_MIN}) * 16 / 9), 213px))`;
+
 // ── The rail ────────────────────────────────────────────────────────────────
 
 /** The least the points rail may be: its rows still read whole. */
