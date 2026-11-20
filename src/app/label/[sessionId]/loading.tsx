@@ -2,7 +2,10 @@ import {
   PendingBar,
   PendingRegion,
 } from "@/components/dashboard/loading/pending";
-import { RAIL_DEFAULT_PX } from "@/components/admin/labels/label-layout";
+import {
+  BLACK_VIDEO_WIDTH,
+  RAIL_DEFAULT_PX,
+} from "@/components/admin/labels/label-layout";
 
 /**
  * A labeller's match reads the session, its points and shots, the signed video
@@ -23,13 +26,15 @@ export default function LabelSessionLoading() {
     >
       <PendingRegion
         label="the match"
-        className="flex min-h-0 min-w-0 flex-1 flex-col"
-        innerClassName="flex min-h-0 flex-1 flex-col"
+        className="[container-type:size] flex min-h-0 min-w-0 flex-1 flex-col"
+        innerClassName="flex h-full min-h-0 flex-col"
       >
-        <PendingBar
-          tone="dark"
-          className="mx-auto aspect-video h-auto w-full max-w-[min(100%,calc((100dvh-220px)*16/9))] shrink-0 rounded-none"
-        />
+        <div
+          className="mx-auto aspect-video max-w-full shrink-0"
+          style={{ width: BLACK_VIDEO_WIDTH }}
+        >
+          <PendingBar tone="dark" className="h-full w-full rounded-none" />
+        </div>
         <div className="flex min-h-0 flex-1 items-center justify-center px-6 pt-3 pb-4">
           <PendingBar
             tone="dark"
