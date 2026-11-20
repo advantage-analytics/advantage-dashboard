@@ -69,11 +69,11 @@ test("it returns exactly the four columns", () => {
     "match_id uuid",
     "results_at timestamptz",
     "has_video boolean",
-    "labeling boolean",
+    "labelling boolean",
   ]);
 });
 
-test("the outer select names four expressions and no labeler or session", () => {
+test("the outer select names four expressions and no labeller or session", () => {
   // The select list, up to the outer FROM.
   const list = body.slice(0, body.indexOf(" from public.matches m"));
   expect(list).toMatch(
@@ -110,9 +110,9 @@ test("rows are limited to matches the caller can read, never a verified one", ()
   expect(body).not.toMatch(/left join/);
 });
 
-test("labeling is an assigned, open analyst session", () => {
+test("labelling is an assigned, open analyst session", () => {
   expect(body).toContain(
-    "exists ( select 1 from public.label_sessions s where s.match_id = m.id and s.kind = 'analyst' and s.status in ('labeling', 'submitted') and s.assigned_to is not null )",
+    "exists ( select 1 from public.label_sessions s where s.match_id = m.id and s.kind = 'analyst' and s.status in ('labelling', 'submitted') and s.assigned_to is not null )",
   );
 });
 

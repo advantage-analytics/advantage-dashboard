@@ -84,7 +84,7 @@ test("budget: no layout property transitions, no will-change, no animation libra
   }
   // The console's block of globals.css adds no colour of its own.
   const block = css.slice(
-    css.indexOf("/* ── The labeling console"),
+    css.indexOf("/* ── The labelling console"),
     css.indexOf(
       "@media (prefers-reduced-motion: reduce) {\n  .label-court-view-in",
     ),

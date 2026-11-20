@@ -390,7 +390,7 @@ test("processing: the started line, and no Cancel group", () => {
 
 test("canceled: a stopped step, its timing, and the resend action in blue", () => {
   const html = renderWith(CANCELLED);
-  expect(html).toMatch(/<h1[^>]*>Analysis cancelled<\/h1>/);
+  expect(html).toMatch(/<h1[^>]*>Analysis canceled<\/h1>/);
   const li = items(html)[2];
   // The grey stopped mark, never the Failed chip's red.
   expect(li).toContain('<span class="sr-only">Canceled:</span>');
@@ -544,7 +544,7 @@ test("another viewer: a canceled job offers no resend", () => {
     renderWith(CANCELLED, false),
     renderWired(CANCELLED, false),
   ]) {
-    expect(html).toMatch(/<h1[^>]*>Analysis cancelled<\/h1>/);
+    expect(html).toMatch(/<h1[^>]*>Analysis canceled<\/h1>/);
     expect(html).not.toContain("Send for analysis again");
   }
 });

@@ -13,10 +13,10 @@ const file = readdirSync(dir).find((name) =>
 );
 const sql = file ? readFileSync(`${dir}/${file}`, "utf8") : "";
 
-test("the refusal names admins and labelers", () => {
+test("the refusal names admins and labellers", () => {
   expect(file).toBeTruthy();
   expect(sql).toContain(
-    "'Only an Advantage admin or labeler can verify a match'",
+    "'Only an Advantage admin or labeller can verify a match'",
   );
   expect(sql).toContain("(u.is_admin or u.is_labeller)");
 });

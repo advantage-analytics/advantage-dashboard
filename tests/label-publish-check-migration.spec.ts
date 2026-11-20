@@ -68,7 +68,7 @@ test("it adds the four CHECKs", () => {
     "checked_at is null or status = 'complete'",
   );
   expect(checkSource("label_sessions_sent_back_open")).toBe(
-    "sent_back_at is null or status = 'labeling'",
+    "sent_back_at is null or status = 'labelling'",
   );
   expect(checkSource("label_sessions_sent_back_note")).toBe(
     "(sent_back_at is null) = (sent_back_note is null) and ( sent_back_note is null or char_length(btrim(sent_back_note)) between 1 and 2000 )",
@@ -115,7 +115,7 @@ test("the backfill marks completed sessions published and checked", () => {
   );
 });
 
-test("verify_match accepts an admin or a labeler", () => {
+test("verify_match accepts an admin or a labeller", () => {
   expect(verify).toMatch(
     /public\.verify_match\(p_match_id uuid, p_actor uuid, p_errors_judged boolean default false\)\s+returns timestamp with time zone\s+language plpgsql\s+security definer\s+set search_path = ''/,
   );
@@ -141,7 +141,7 @@ test("release_stale_label_claims skips a session that was ever published", () =>
   expect(release).toMatch(
     /set assigned_to = null,\s+assigned_at = null,\s+claimed_at = null/,
   );
-  expect(release).toContain("s.status = 'labeling'");
+  expect(release).toContain("s.status = 'labelling'");
   expect(release).toContain("s.kind = 'analyst'");
   expect(release).toContain("s.claimed_at is not null");
   expect(release).toContain(

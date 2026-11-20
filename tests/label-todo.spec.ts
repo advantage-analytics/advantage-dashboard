@@ -208,7 +208,7 @@ const ADMIN = { kind: "admin", id: ADMIN_ID } as LabelActor;
 const LABELLER = { kind: "labeller", id: OWNER } as LabelActor;
 
 test.describe("Add to To do", () => {
-  test("a labeler or a signed-out caller is refused before any read", async () => {
+  test("a labeller or a signed-out caller is refused before any read", async () => {
     const { db, calls } = fakeDb();
     let read = false;
     const readSource = async () => {
@@ -360,7 +360,7 @@ test.describe("the label_todo migration", () => {
       "create or replace function public.match_label_states(p_match_ids uuid[])",
     );
     expect(sql).toContain(
-      "returns table (match_id uuid, results_at timestamptz, has_video boolean, labeling boolean)",
+      "returns table (match_id uuid, results_at timestamptz, has_video boolean, labelling boolean)",
     );
     expect(sql).toContain("from public.label_todo t");
     expect(sql).not.toMatch(/\bdrop\b/i);
@@ -383,7 +383,7 @@ test.describe("the label_todo follow-up migration", () => {
     expect(sql).not.toContain("t.match_id = m.id");
     expect(sql).toContain("select pj.id,");
     expect(sql).toContain(
-      "returns table (match_id uuid, results_at timestamptz, has_video boolean, labeling boolean)",
+      "returns table (match_id uuid, results_at timestamptz, has_video boolean, labelling boolean)",
     );
   });
 

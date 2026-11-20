@@ -644,7 +644,7 @@ test("a failed marker write is the failed-recompute answer: the points are in, n
   const { calls, result } = await markComplete("forced", { failMarker: true });
   expect(result).toMatchObject({
     error: expect.stringMatching(
-      /^The labelled points are published, but the statistics could not be rebuilt \(Could not set errors_judged_at: marker refused\)\. Publish again to retry; /,
+      /^The labeled points are published, but the statistics could not be rebuilt \(Could not set errors_judged_at: marker refused\)\. Publish again to retry; /,
     ),
   });
   expect(at(calls, "calculate_match_stats")).toBe(-1);
