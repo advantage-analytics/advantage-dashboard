@@ -114,7 +114,7 @@ const released = (db, jobId) =>
     ])
     .then(({ rows }) => rows[0].released);
 
-test("a queued job owned by the caller is canceled and its quota row released", async () => {
+test("a queued job owned by the caller is cancelled and its quota row released", async () => {
   const db = await boot();
   try {
     await seed(db);
@@ -122,7 +122,7 @@ test("a queued job owned by the caller is canceled and its quota row released", 
     assert.equal(await cancel(db, QUEUED_JOB, OWNER), "cancelled");
     assert.deepEqual(await jobRow(db, QUEUED_JOB), {
       status: "cancelled",
-      error_code: "CANCELED",
+      error_code: "CANCELLED",
       completed: true,
     });
     assert.equal(await released(db, QUEUED_JOB), true);
@@ -168,7 +168,7 @@ test("a completed job returns null and is left untouched", async () => {
   }
 });
 
-test("a processing job is not canceled and its usage stays reserved", async () => {
+test("a processing job is not cancelled and its usage stays reserved", async () => {
   const db = await boot();
   try {
     await seed(db);
@@ -202,7 +202,7 @@ test("the migration is idempotent and pins rank, constraint and ACL", async () =
         (select pg_get_constraintdef(oid) from pg_constraint
           where conrelid = 'public.processing_jobs'::regclass
             and conname = 'processing_jobs_status_check') as constraint_def,
-        public.splitstep_status_rank('canceled') as cancelled_rank,
+        public.splitstep_status_rank('cancelled') as cancelled_rank,
         public.splitstep_status_rank('derivation_failed') as derivation_failed_rank,
         (select count(*)::int from pg_constraint
           where conrelid = 'public.processing_jobs'::regclass

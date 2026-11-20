@@ -698,7 +698,7 @@ export function buildTodoCandidates(
  * ---------------------------------------------------------------------- */
 
 const SESSION_COLUMNS =
-  "id, job_id, status, started_at, completed_at, open_counts, start_open_counts, assigned_to, assigned_at, claimed_at, submitted_at, checked_at, sent_back_at, sent_back_note, labeler, assignee:users!assigned_to(id, email, first_name, last_name, avatar_path)";
+  "id, job_id, status, started_at, completed_at, open_counts, start_open_counts, assigned_to, assigned_at, claimed_at, submitted_at, checked_at, sent_back_at, sent_back_note, labeller, assignee:users!assigned_to(id, email, first_name, last_name, avatar_path)";
 
 async function readQueueSessions(
   db: AdminClient,
