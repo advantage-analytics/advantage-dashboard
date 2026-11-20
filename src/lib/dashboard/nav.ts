@@ -77,10 +77,12 @@ export const PERSONAL_NAV: readonly NavLink[] = [
  * and lets `visible_match_ids()` decide who sees which rows — so the entry is
  * back, and inside a program players have a route to a match list again.
  *
- * The two carry different icons because they answer different questions —
- * the design's own pairing: `calendar` for Schedule, `gallery-horizontal-end`
- * for Matches. Matches keeps the same glyph `PERSONAL_NAV` gives it, so one
- * destination does not change shape when the workspace switcher moves.
+ * The two carry different icons because they answer different questions:
+ * `calendar` for Schedule, `calendar-days` for Matches (the same glyph as the
+ * Matches drawer). The two read close, so when `SCHEDULE_ENABLED` brings
+ * Schedule back beside Matches, give one of them a more distinct icon.
+ * Matches keeps the same glyph `PERSONAL_NAV` gives it, so one destination
+ * does not change shape when the workspace switcher moves.
  *
  * Schedule is a coming-soon page for now (`lib/schedule/availability.ts`), so
  * it sits below Roster with the other unfinished entries rather than beside
