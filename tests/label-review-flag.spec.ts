@@ -633,18 +633,19 @@ test.describe("tone", () => {
     expect(edited?.items.find((i) => i.id === 3)?.state).toBe("settled");
   });
 
-  test("item 6 is grey for the serve-side marks alone", () => {
-    expect(tone(flagOf([sample("score_side_mismatch")]), 6)).toBe("data");
-    expect(tone(flagOf([sample("service_court_repeat")]), 6)).toBe("data");
-    expect(
-      tone(
-        flagOf([
-          sample("service_court_repeat"),
-          sample("segment_proposal_differs"),
-        ]),
-        6,
-      ),
-    ).toBe("score");
+  test("item 6 is amber for the serve-side marks alone (2026-11-19)", () => {
+    expect(tone(flagOf([sample("score_side_mismatch")]), 6)).toBe("score");
+    expect(tone(flagOf([sample("service_court_repeat")]), 6)).toBe("score");
+    expect(flagOf([sample("service_court_repeat")])?.tone).toBe("score");
+    // A match-wide game cut stays grey alone, but not beside one of them.
+    const systemic = {
+      ...sample("segment_proposal_differs"),
+      params: { ...SAMPLES.segment_proposal_differs, systemic: true },
+    } as LabelMark;
+    expect(tone(flagOf([systemic]), 6)).toBe("data");
+    expect(tone(flagOf([systemic, sample("service_court_repeat")]), 6)).toBe(
+      "score",
+    );
   });
 
   test("items 5 and 6 are the score", () => {

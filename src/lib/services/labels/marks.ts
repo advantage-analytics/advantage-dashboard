@@ -277,11 +277,16 @@ export type LabelMarkCode = keyof typeof LABEL_MARK_META;
  * "Same side twice" join them. On the 78 points where they were the only
  * amber mark, the labeller changed the winner on 12. They stay counted, so
  * the point is still flagged and "Add point" still offered, but grey.
+ *
+ * 2026-11-19, on the 11 complete sessions seeded from the November 2026 ball
+ * model (1,390 points): both are amber again. On the 54 points where nothing
+ * else was amber, the winner was wrong or the point was taken away on 24
+ * (44%), against 11% for an unflagged point; 18 of their 78 points were
+ * combined away or deleted. One match (Batlanki v Gunawan) holds 15 of 21 on
+ * its own, and the rest still read about 40%.
  */
 export const DATA_MARK_CODES: ReadonlySet<LabelMarkCode> = new Set([
   POINT_FLAGS.SAME_PLAYER_CONSECUTIVE,
-  POINT_FLAGS.SCORE_SIDE_MISMATCH,
-  POINT_FLAGS.SERVICE_COURT_REPEAT,
 ]);
 
 /** Whether a mark is about the data, not the score (`DATA_MARK_CODES`). */
@@ -379,7 +384,15 @@ export interface LabelMarkParams {
     missing: PlacementGap;
   };
   /** The groundstroke to ask about, and which side: what "Make it a volley" writes. */
-  groundstroke_at_net: { shotId: string; stroke: "forehand" | "backhand" };
+  groundstroke_at_net: {
+    shotId: string;
+    stroke: "forehand" | "backhand";
+    /**
+     * Asked from beyond the service line because the ball before has no
+     * landing (marks-state.ts `NO_BOUNCE_VOLLEY_M`); absent inside it.
+     */
+    noBounce?: true;
+  };
   net_hit_contradicts_height: NoParams;
   phantom_strokes_dropped: {
     /** The rally's strokes the transcript has no shot for. */
