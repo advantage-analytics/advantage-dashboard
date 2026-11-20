@@ -335,10 +335,10 @@ for (const hand of ["right", "unknown"] as const) {
     );
     expect(all).toHaveLength(5);
     expect(lanes).toEqual(["Their FH", "Middle", "Their BH"]);
-    // Set in the mono face, in an existing token's ink.
+    // Set in the mono face, in the court's white.
     const group = stage.locator("[data-approach-labels]");
     await expect(group).toHaveAttribute("font-family", "var(--font-mono)");
-    await expect(group).toHaveAttribute("fill", "var(--surface-dark)");
+    await expect(group).toHaveAttribute("fill", "#FFFFFF");
     expect(errors).toEqual([]);
   });
 }

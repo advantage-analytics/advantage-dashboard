@@ -1346,9 +1346,11 @@ export const VIEWER_LANDING_FRAME = {
 // ≈2.1 m (7 ft) past each baseline. T23: 36, up from 32 — the apron words
 // open at a landing cut's type size now (`viewerApproachLabelScale`), and at
 // 32 "Placement" over the wing names left no room above it for the mono
-// face's ascent. Keep it under ~43, where this frame is as tall as
+// face's ascent. 43, up from 36: the apron words got more air between their
+// lines (`approachApronLayout`), and Contact now mirrors Placement out past
+// the near baseline. This is the ceiling — at 44 this frame is as tall as
 // `courtFrame` and "Full court" stops being a step out.
-const VIEWER_APPROACH_APRON = 36;
+const VIEWER_APPROACH_APRON = 43;
 export const VIEWER_APPROACH_FRAME = {
   minX: VIEWER_COURT.courtFrame.minX,
   minY: VIEWER_COURT.farBaselineY - VIEWER_APPROACH_APRON,

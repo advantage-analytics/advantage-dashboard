@@ -212,9 +212,9 @@ test("labels name Contact, Placement and the three wings on the opened view only
     .locator("[data-approach-lane]")
     .evaluateAll((nodes) => nodes.map((n) => Number(n.getAttribute("x"))));
   expect(laneX).toEqual([...laneX].sort((a, b) => a - b));
-  // Dark ink from a token, Roboto Mono.
+  // The court's white, Roboto Mono.
   const group = opened.locator("[data-approach-labels]");
-  await expect(group).toHaveAttribute("fill", "var(--surface-dark)");
+  await expect(group).toHaveAttribute("fill", "#FFFFFF");
   await expect(group).toHaveAttribute("font-family", "var(--font-mono)");
 
   // The wall card carries no text at all.
