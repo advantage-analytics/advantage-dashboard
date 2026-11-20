@@ -32,7 +32,7 @@ export function TableEmptyBody({
   title,
   action,
 }: {
-  /** The page's nav icon (`Calendar`, `GalleryHorizontalEnd`). */
+  /** The page's nav icon (`Calendar`, `CalendarDays`). */
   icon: LucideIcon;
   /** The cut, named: "No upcoming duals at home". */
   title: string;

@@ -1,7 +1,7 @@
 import {
   Home,
   Calendar,
-  GalleryHorizontalEnd,
+  CalendarDays,
   ChartLine,
   MessageSquare,
   UsersRound,
@@ -40,7 +40,7 @@ export type NavLink = {
 
 export const PERSONAL_NAV: readonly NavLink[] = [
   { name: "Home", href: "/dashboard", icon: Home },
-  { name: "Matches", href: "/dashboard/matches", icon: GalleryHorizontalEnd },
+  { name: "Matches", href: "/dashboard/matches", icon: CalendarDays },
   {
     name: "Statistics",
     href: "/dashboard/statistics",
@@ -114,7 +114,7 @@ export const PERSONAL_NAV: readonly NavLink[] = [
  */
 export const TEAM_NAV: readonly NavLink[] = [
   { name: "Team home", href: "/dashboard/team", icon: Home },
-  { name: "Matches", href: "/dashboard/matches", icon: GalleryHorizontalEnd },
+  { name: "Matches", href: "/dashboard/matches", icon: CalendarDays },
   { name: "Roster", href: "/dashboard/team/roster", icon: UsersRound },
   {
     name: "Schedule",
