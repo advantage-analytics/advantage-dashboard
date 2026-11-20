@@ -83,7 +83,7 @@ test.describe("suggestSchoolEmail", () => {
 });
 
 test.describe("editDistance", () => {
-  test("counts a neighbour swap as one edit", () => {
+  test("counts a neighbor swap as one edit", () => {
     expect(editDistance("utpb", "uptb")).toBe(1);
     expect(editDistance("utpb.edu", "utpd.edu")).toBe(1);
     expect(editDistance("", "abc")).toBe(3);

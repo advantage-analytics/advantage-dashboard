@@ -65,8 +65,8 @@ test.describe("eyes-on path spec", () => {
     expect(parsePathSpec("team:")).toBeNull();
   });
 
-  test("labeller: prefix signs in as the labeller and is stripped", () => {
-    expect(parsePathSpec("labeller:/label/guide")).toEqual({
+  test("labeler: prefix signs in as the labeler and is stripped", () => {
+    expect(parsePathSpec("labeler:/label/guide")).toEqual({
       team: false,
       labeller: true,
       path: "/label/guide",
@@ -74,7 +74,7 @@ test.describe("eyes-on path spec", () => {
     });
   });
 
-  test("a /label path is the labeller's without a prefix", () => {
+  test("a /label path is the labeler's without a prefix", () => {
     expect(parsePathSpec("/label")).toEqual({
       team: false,
       labeller: true,
@@ -89,7 +89,7 @@ test.describe("eyes-on path spec", () => {
     });
   });
 
-  test("team:/dashboard/team and a bare /dashboard are not labeller paths", () => {
+  test("team:/dashboard/team and a bare /dashboard are not labeler paths", () => {
     expect(parsePathSpec("team:/dashboard/team")).toEqual({
       team: true,
       labeller: false,
@@ -104,13 +104,13 @@ test.describe("eyes-on path spec", () => {
     });
   });
 
-  test("/labels and /admin/labels are not the labeller area", () => {
+  test("/labels and /admin/labels are not the labeler area", () => {
     expect(parsePathSpec("/labels")?.labeller).toBe(false);
     expect(parsePathSpec("/admin/labels")?.labeller).toBe(false);
   });
 
-  test("labeller: prefix on a dashboard path keeps it out of the team", () => {
-    expect(parsePathSpec("labeller:/dashboard/team")).toEqual({
+  test("labeler: prefix on a dashboard path keeps it out of the team", () => {
+    expect(parsePathSpec("labeler:/dashboard/team")).toEqual({
       team: false,
       labeller: true,
       path: "/dashboard/team",
@@ -119,9 +119,9 @@ test.describe("eyes-on path spec", () => {
   });
 
   test("the two prefixes do not combine", () => {
-    expect(parsePathSpec("labeller:team:/dashboard")).toBeNull();
-    expect(parsePathSpec("team:labeller:/label")).toBeNull();
-    expect(parsePathSpec("labeller:label")).toBeNull();
+    expect(parsePathSpec("labeler:team:/dashboard")).toBeNull();
+    expect(parsePathSpec("team:labeler:/label")).toBeNull();
+    expect(parsePathSpec("labeler:label")).toBeNull();
   });
 
   test("fillSessionId resolves a [sessionId] segment when an id is set", () => {

@@ -190,7 +190,7 @@ test.describe("a Volley? question beside an amber question", () => {
   const amber = marksOf({ [POINT]: [sample("pick_winner")] });
   const names = { p1: "Ann", p2: "Bea" };
 
-  test("item 8 is grey, off the amber chip, and in the grey list", () => {
+  test("item 8 is gray, off the amber chip, and in the gray list", () => {
     const flag = reviewFlag(atNet, amber, [atNet])!;
     expect(ids(flag)).toEqual([5, 8]);
     expect(flag.items.find((item) => item.id === 8)!.tone).toBe("data");
@@ -206,7 +206,7 @@ test.describe("a Volley? question beside an amber question", () => {
     ]);
   });
 
-  test("a grey jump asks it first, at its stroke, with a one-click volley", () => {
+  test("a gray jump asks it first, at its stroke, with a one-click volley", () => {
     expect(greyJumpFirstItem(atNet, amber, [atNet])).toBe(8);
     const asked = reviewStep(atNet, amber, [atNet], names, true, undefined, 8)!;
     expect(asked.item.id).toBe(8);
@@ -269,7 +269,7 @@ test.describe("a placement gap beside an amber question", () => {
     ]);
   });
 
-  test("a jump from the grey list asks the gap first, and then the amber question", () => {
+  test("a jump from the gray list asks the gap first, and then the amber question", () => {
     const names = { p1: "Ann", p2: "Bea" };
     const first = greyJumpFirstItem(gapped, amber, [gapped]);
     expect(first).toBe(7);
@@ -343,11 +343,11 @@ test.describe("a placement gap beside an amber question", () => {
     expect([asked.item.id, asked.target.shotId]).toEqual([6, "a"]);
   });
 
-  test("a point only in the grey list keeps its order", () => {
+  test("a point only in the gray list keeps its order", () => {
     expect(greyJumpFirstItem(gapped, marksOf({}), [gapped])).toBeUndefined();
   });
 
-  test("with nothing amber it is one grey flag, and the chip asks it", () => {
+  test("with nothing amber it is one gray flag, and the chip asks it", () => {
     const none = marksOf({});
     expect(
       openFlags([gapped], none).map((flag) => [
@@ -548,7 +548,7 @@ test.describe("tone", () => {
   const tone = (flag: ReviewFlag | null, id: number) =>
     flag?.items.find((item) => item.id === id)?.tone;
 
-  test("item 1 is markTone's call: grey mid-rally, amber near the end", () => {
+  test("item 1 is markTone's call: gray mid-rally, amber near the end", () => {
     const shots = ["a", "b", "c", "d", "e"].map((id, i) =>
       labelShot(id, POINT, { videoTime: i }),
     );
@@ -570,7 +570,7 @@ test.describe("tone", () => {
     );
   });
 
-  test("item 2 is never amber; a serve replayed after one in is the serves' question, grey too", () => {
+  test("item 2 is never amber; a serve replayed after one in is the serves' question, gray too", () => {
     expect(tone(flagOf([sample("shot_after_point_end")]), 2)).toBe("data");
     expect(tone(flagOf([sample("last_shot_untracked")]), 2)).toBe("data");
     const serves = flagOf([
@@ -591,7 +591,7 @@ test.describe("tone", () => {
     expect(tone(flagOf([sample("serves_from_both_sides")]), 3)).toBe("score");
   });
 
-  test("item 4 is amber with a counted member or a contradicted winner, else grey", () => {
+  test("item 4 is amber with a counted member or a contradicted winner, else gray", () => {
     expect(tone(flagOf([sample("ending_suspect_line")]), 4)).toBe("data");
     expect(
       tone(
@@ -611,7 +611,7 @@ test.describe("tone", () => {
     expect(tone(flag, 4)).toBe("score");
   });
 
-  test("item 6 is grey for a match-wide Game cut differs", () => {
+  test("item 6 is gray for a match-wide Game cut differs", () => {
     const systemic = {
       ...sample("segment_proposal_differs"),
       params: { ...SAMPLES.segment_proposal_differs, systemic: true },
@@ -633,7 +633,7 @@ test.describe("tone", () => {
     expect(edited?.items.find((i) => i.id === 3)?.state).toBe("settled");
   });
 
-  test("item 6 is grey for the serve-side marks alone", () => {
+  test("item 6 is gray for the serve-side marks alone", () => {
     expect(tone(flagOf([sample("score_side_mismatch")]), 6)).toBe("data");
     expect(tone(flagOf([sample("service_court_repeat")]), 6)).toBe("data");
     expect(
@@ -663,7 +663,7 @@ test.describe("tone", () => {
     ).toBe("score");
   });
 
-  test("a tone speaks for what is open: an answered amber question leaves a grey one grey", () => {
+  test("a tone speaks for what is open: an answered amber question leaves a gray one gray", () => {
     // The winner settled by an edit; the grey serve hint is still open.
     const across = flagOf(
       [sample("pick_winner"), sample("serve_in_landing_out")],
@@ -871,7 +871,7 @@ test.describe("state", () => {
         item.members.map((member) => [member.mark.code, member.state]),
       );
 
-    test("a checked point gets an open grey question where the strokes agree with the ending", () => {
+    test("a checked point gets an open gray question where the strokes agree with the ending", () => {
       const p = returnMissed();
       const flag = reviewFlag(p, marksOf({}), [p]);
       expect(members(flag)).toContainEqual([
@@ -922,7 +922,7 @@ test.describe("state", () => {
       ).toBe(false);
     });
 
-    test("a Dismiss closes it, for the labeller who has looked", () => {
+    test("a Dismiss closes it, for the labeler who has looked", () => {
       const p = {
         ...returnMissed(),
         dismissed: ["hint:ending_contradicts_winner"],
@@ -975,7 +975,7 @@ test.describe("demoted", () => {
   const hints = (...list: LabelMarkCode[]) =>
     flagOf(list.map((code) => sample(code)));
 
-  test("a grey flag open on item 4 alone with the one signature", () => {
+  test("a gray flag open on item 4 alone with the one signature", () => {
     for (const signature of [["ending_suspect_line"]] as LabelMarkCode[][]) {
       const flag = hints(...signature);
       expect(flag?.tone, signature.join("+")).toBe("data");
@@ -984,7 +984,7 @@ test.describe("demoted", () => {
     }
   });
 
-  test("its neighbours are kept", () => {
+  test("its neighbors are kept", () => {
     // "Close to the line" with the last landing unplaced.
     const unplaced = wonOnForehand({ shots: [forehand()] });
     const withLanding = reviewFlag(

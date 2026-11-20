@@ -717,7 +717,7 @@ export async function handleCancelUpload(
     return errorResponse(transportError("internal_error", "rpc_state"));
   }
 
-  console.log(`${LOG} cancelled`, {
+  console.log(`${LOG} canceled`, {
     matchId,
     attachmentId: cancelled.value.id,
   });

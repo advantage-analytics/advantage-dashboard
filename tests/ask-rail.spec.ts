@@ -825,7 +825,7 @@ test.describe("collapsing the rail", () => {
   const show = (page: Page) =>
     rail(page).getByRole("button", { name: "Show earlier questions" });
 
-  test("a click leaves a strip of two labelled buttons, and a click brings it back", async ({
+  test("a click leaves a strip of two labeled buttons, and a click brings it back", async ({
     page,
   }) => {
     await openFixture(page);

@@ -118,7 +118,7 @@ export const PERSONAL_ASK_COPY: AskCopy = {
   starters: "Questions to start with",
   followUps: "Ask next",
   sentNotice: (opponentName) =>
-    `${opponentName ? `Your match against ${opponentName}` : "Your match"} is being analysed. Once it is, you can ask about it here, and the email that says it is ready may carry a first answer.`,
+    `${opponentName ? `Your match against ${opponentName}` : "Your match"} is being analyzed. Once it is, you can ask about it here, and the email that says it is ready may carry a first answer.`,
   sendVideo: "Send a match video",
 };
 
@@ -161,7 +161,7 @@ const TEAM_ASK_COPY: Omit<AskCopy, "lead"> = {
   // No first answer is promised: Ask asks on arrival for personal matches
   // only (`arrival.ts`), and the team wizard does not hand off here today.
   sentNotice: (opponentName) =>
-    `${opponentName ? `The match against ${opponentName}` : "The match"} is being analysed. Ask about it once the video is processed.`,
+    `${opponentName ? `The match against ${opponentName}` : "The match"} is being analyzed. Ask about it once the video is processed.`,
   sendVideo: "Send match video",
 };
 
@@ -201,6 +201,6 @@ export function askDayZeroCopy(
   return {
     headline: "Ask opens with the program's first match.",
     conditions:
-      "Your coaching staff send the program's match video. Once a match is analysed, anyone on the team can ask about it.",
+      "Your coaching staff send the program's match video. Once a match is analyzed, anyone on the team can ask about it.",
   };
 }

@@ -84,7 +84,7 @@ test.describe("PREVIEW_* constants", () => {
 });
 
 test.describe("previewLeft", () => {
-  test("centres the box on the pointer", () => {
+  test("centers the box on the pointer", () => {
     const left = previewLeft({
       pointerX: 100,
       laneWidth: 800,
@@ -159,7 +159,7 @@ test.describe("previewLeft", () => {
 });
 
 test.describe("laneFraction", () => {
-  test("centred pointer gives 0.5", () => {
+  test("centered pointer gives 0.5", () => {
     expect(laneFraction(500, 100, 800)).toBeCloseTo(0.5, 10);
   });
 

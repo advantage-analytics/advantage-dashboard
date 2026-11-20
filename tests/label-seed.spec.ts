@@ -984,7 +984,7 @@ test.describe("seedLabelSession", () => {
     expect(clients).toBe(0);
   });
 
-  test("refuses a labeller: only an admin opens a session", async () => {
+  test("refuses a labeler: only an admin opens a session", async () => {
     let clients = 0;
     const result = await seedLabelSession(JOB_ID, {
       requireLabelActor: async () => ({
@@ -1008,7 +1008,7 @@ test.describe("seedLabelSession", () => {
     expect(result).toEqual({ error: "Invalid job id." });
   });
 
-  test("names the admin as labeller", async () => {
+  test("names the admin as labeler", async () => {
     const fake = fakeClient();
     const result = await seedLabelSession(JOB_ID, {
       requireLabelActor: async () => ({ id: ADMIN_ID, kind: "admin" as const }),

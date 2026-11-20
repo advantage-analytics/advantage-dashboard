@@ -4866,7 +4866,7 @@ export function LabelConsole({
               className={advButton("primary", "sm")}
               onClick={() => chooseLayout("black")}
             >
-              {status === "labelling" ? "Open labelling" : "Open full screen"}
+              {status === "labelling" ? "Open labeling" : "Open full screen"}
             </button>
             {/* Keyed: `headerAction` is built by the page (a Server
                 Component), and React's dev key check reads an element that

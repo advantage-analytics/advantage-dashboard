@@ -537,7 +537,7 @@ test.describe("POST /api/admin/splitstep/reprocess (handler)", () => {
     expect(w.sent).toEqual([{ jobId: "job-m1", requestedBy: "admin-1" }]);
   });
 
-  test("a label session still labelling is refused without force", async () => {
+  test("a label session still labeling is refused without force", async () => {
     const w = handlerWorld();
     const res = await w.post({ matchIds: [M1, M2] });
     const { results } = res.body as { results: Row[] };

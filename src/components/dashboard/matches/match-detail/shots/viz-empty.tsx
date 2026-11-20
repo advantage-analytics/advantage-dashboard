@@ -16,7 +16,7 @@ export function VizEmpty() {
     <ReportPaneEmpty
       testId="viz-empty"
       heading="Nothing to plot yet"
-      body="Serve and return placement is drawn from the points in a match. They arrive with a video analysed by Advantage Intelligence or a SwingVision export."
+      body="Serve and return placement is drawn from the points in a match. They arrive with a video analyzed by Advantage Intelligence or a SwingVision export."
       // The public share page has no Video view to open.
       action={
         meta.readOnly

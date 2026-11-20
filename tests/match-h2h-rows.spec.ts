@@ -53,7 +53,7 @@ function side(overrides: Partial<H2HStats> = {}): H2HStats {
 
 function byLabel(rows: H2HRow[], label: string): H2HRow {
   const row = rows.find((candidate) => candidate.label === label);
-  if (!row) throw new Error(`no row labelled "${label}"`);
+  if (!row) throw new Error(`no row labeled "${label}"`);
   return row;
 }
 
@@ -106,7 +106,7 @@ test.describe("the row configuration", () => {
 
 function byConfig(label: string): H2HRowConfig {
   const config = ALL_ROWS.find((candidate) => candidate.label === label);
-  if (!config) throw new Error(`no config labelled "${label}"`);
+  if (!config) throw new Error(`no config labeled "${label}"`);
   return config;
 }
 

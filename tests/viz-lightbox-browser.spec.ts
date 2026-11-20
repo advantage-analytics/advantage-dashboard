@@ -1355,7 +1355,7 @@ test("contact cuts keep their framing: 1.6× the whole court's fit, near baselin
   expect(t.py + nearBaselineArtY * t.z).toBeCloseTo(s.height * (500 / 950), 0);
 });
 
-test("clicking a mark glides it to the stage centre at 150%; a click on the empty court deselects and stays put", async ({
+test("clicking a mark glides it to the stage center at 150%; a click on the empty court deselects and stays put", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });

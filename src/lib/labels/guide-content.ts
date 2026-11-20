@@ -74,7 +74,7 @@ export const HOW_TO_SECTIONS: readonly GuideSection[] = [
       p("Above the points, the rail keeps two flag lists:"),
       list(
         "Amber flags are things that can change the score. ] goes to the next amber stop and [ to the previous one. Amber stops also include the slots drawn between rows, such as a game that is already won or not finished, and a set whose score does not add up.",
-        "Grey flags are wrong data that rarely changes the score. ' goes to the next one and ; to the previous one. A grey flag goes when its point is checked.",
+        "Gray flags are wrong data that rarely changes the score. ' goes to the next one and ; to the previous one. A gray flag goes when its point is checked.",
       ),
       p(
         "When no amber flag is left, the rail asks about errors: each missed last shot can be marked forced (E) or unforced (U). With no amber flag open, ] and [ walk through the errors still to mark.",
@@ -184,7 +184,7 @@ export const HOW_TO_SECTIONS: readonly GuideSection[] = [
 
 /** The six rules, verbatim: the check holds a published match to these. */
 const CLEANING_STANDARD_RULES = [
-  "Structure and amber flags first, then grey, then forced/unforced error marks.",
+  "Structure and amber flags first, then gray, then forced/unforced error marks.",
   "Watch the whole match: a clean flag count does not mean a correct match — a hitter swap raises no flag.",
   "Never delete a rally. If you are unsure, it is a point.",
   "Do not adjust shot coordinates.",
@@ -205,7 +205,7 @@ export const CLEANING_STANDARD_SECTIONS: readonly GuideSection[] = [
       list(
         "Fix the structure: game boundaries, the server, players at the wrong end, and points that need combining or splitting.",
         "Clear the amber stops with ] until none are left.",
-        "Clear the grey flags with '.",
+        "Clear the gray flags with '.",
         "Mark each error forced or unforced.",
         "Watch the match through once more, checking each point with ⌘ Enter.",
         "Publish.",

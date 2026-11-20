@@ -88,7 +88,7 @@ export const STEPPER_COPY = {
     deriving: "Adding your stats",
     failed: "Analysis didn't finish",
     statsFailed: "Stats couldn't be added",
-    cancelled: "Analysis cancelled",
+    cancelled: "Analysis canceled",
     paused: UPLOAD_PAUSED_LABEL,
   },
   steps: {
@@ -101,7 +101,7 @@ export const STEPPER_COPY = {
     analysisDone: "Video analyzed",
     stats: "Stats",
     statsNow: "Adding your stats",
-    cancelled: "Analysis cancelled",
+    cancelled: "Analysis canceled",
   },
   /**
    * How long the vendor's analysis runs once it starts. Basis: the 6 completed
@@ -264,7 +264,7 @@ function cancelledMeta(analysis: MatchAnalysis, now: number | null) {
   // The cancel is the row's last write, so `updated_at` is when it happened.
   const since = secondsSince(analysis.updatedAt, now);
   return metaLine(
-    since === undefined ? undefined : `Cancelled ${ago(since)}`,
+    since === undefined ? undefined : `Canceled ${ago(since)}`,
     analysis.reservedSeconds === undefined
       ? undefined
       : `${formatDuration(analysis.reservedSeconds)} returned`,

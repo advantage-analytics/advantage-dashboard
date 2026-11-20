@@ -238,7 +238,7 @@ export function StepMark({
             strokeWidth={2.25}
             aria-hidden="true"
           />
-          <span className="sr-only">Cancelled:</span>
+          <span className="sr-only">Canceled:</span>
         </span>
       );
     case "wait":

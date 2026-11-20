@@ -25,7 +25,7 @@ const { SCORE_FLOW_TITLE } = loader.load(
 
 const html = renderToStaticMarkup(React.createElement(ScoreFlowPending));
 
-test("one loading status, labelled for the result form", () => {
+test("one loading status, labeled for the result form", () => {
   expect(html.match(/role="status"/g)?.length).toBe(1);
   expect(html).toContain('role="status" aria-label="Loading result form"');
 });
@@ -49,7 +49,7 @@ test("the flow's chrome is mirrored: one-step indicator, pinned strip, 64px foot
   ).toBe(4);
 });
 
-test("nothing is interactive and no colour is a hex", () => {
+test("nothing is interactive and no color is a hex", () => {
   expect(html).not.toContain("<button");
   expect(html).not.toContain("<a ");
   expect(html).not.toContain("<input");

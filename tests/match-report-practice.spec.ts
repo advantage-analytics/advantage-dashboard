@@ -406,7 +406,7 @@ test.describe("practice set against a teammate", () => {
     expect(html).not.toContain("Match complete");
   });
 
-  test("rail: a grey Teammate pill right after the opponent's name", () => {
+  test("rail: a gray Teammate pill right after the opponent's name", () => {
     const html = render(
       DETAIL + "report-scoreboard.tsx",
       "MatchReportScoreboard",

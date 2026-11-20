@@ -677,7 +677,7 @@ test.describe("notifyAnalysisVerified", () => {
     expect(run.sentTags).toEqual([{ type: "analysis_verified" }]);
   });
 
-  test("the match was analysed again after the session was seeded: the announced job is the one followed up", async () => {
+  test("the match was analyzed again after the session was seeded: the announced job is the one followed up", async () => {
     const run = loadNotifyAnalysisVerified({
       sent: ["analysis_ready:job-2"],
     });

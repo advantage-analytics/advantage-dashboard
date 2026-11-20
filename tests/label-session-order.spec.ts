@@ -81,7 +81,7 @@ test.describe("isGhostShot", () => {
     ).toBe(false);
   });
 
-  test("the labeller's own delete wins over the site's removal", () => {
+  test("the labeler's own delete wins over the site's removal", () => {
     expect(isGhostShot({ ...ghost, status: "deleted" })).toBe(false);
   });
 

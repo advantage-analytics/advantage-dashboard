@@ -270,7 +270,7 @@ test("chainAttempts: the newest job's chain only, root plus descendants", () => 
   ).toBe(2);
 });
 
-test("chainAttempts: cancelled rows spend no attempt", () => {
+test("chainAttempts: canceled rows spend no attempt", () => {
   // j4 (failed) ← j3 (cancelled) ← j2 (cancelled) ← j1 (failed): the two
   // cancels were the athlete's decision, not vendor failures.
   const rows = [

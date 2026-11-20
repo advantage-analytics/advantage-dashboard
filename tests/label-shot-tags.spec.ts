@@ -258,7 +258,7 @@ test.describe("the shots well", () => {
   });
 });
 
-test.describe("a labeller's view (shot kinds are admin-only)", () => {
+test.describe("a labeler's view (shot kinds are admin-only)", () => {
   const WELL = "src/components/admin/labels/label-black-shot-row.tsx";
   const { BlackShotsWell, SHOT_TRACKS, SHOT_TRACKS_NO_KIND } =
     createLoader().load(WELL) as {
@@ -314,7 +314,7 @@ test.describe("a labeller's view (shot kinds are admin-only)", () => {
     expect(html).toContain(SHOT_TRACKS);
   });
 
-  test("the sheet: the kinds' G / L / D / P for an admin, never for a labeller", () => {
+  test("the sheet: the kinds' G / L / D / P for an admin, never for a labeler", () => {
     const rowsOf = (groups: typeof LABEL_SHORTCUT_GROUPS) =>
       groups.flatMap((g) =>
         g.items.map((i) => `${i.keys.join("")} ${i.action}`),
@@ -334,7 +334,7 @@ test.describe("a labeller's view (shot kinds are admin-only)", () => {
   });
 });
 
-test.describe("the labeller's actions refuse shot kinds", () => {
+test.describe("the labeler's actions refuse shot kinds", () => {
   const read = (file: string) =>
     readFileSync(path.resolve(__dirname, "..", file), "utf8");
 
@@ -352,7 +352,7 @@ test.describe("the labeller's actions refuse shot kinds", () => {
     expect(labellerShotPatchError(null)).toBeNull();
   });
 
-  test("both labeller shot writes check before writing; the admin's do not", () => {
+  test("both labeler shot writes check before writing; the admin's do not", () => {
     const labeller = read("src/app/label/actions.ts");
     for (const name of ["updateLabelShot", "updateLabelShots"]) {
       const start = labeller.indexOf(`export async function ${name}(`);

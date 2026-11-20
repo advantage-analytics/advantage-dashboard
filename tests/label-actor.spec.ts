@@ -127,13 +127,13 @@ test.describe("requireLabelReader", () => {
     expect(d.reads).toEqual([]);
   });
 
-  test("the assigned labeller reads a labelling session", async () => {
+  test("the assigned labeler reads a labeling session", async () => {
     expect(
       await readerFor({ status: "labelling", assignedTo: LABELLER }),
     ).toEqual({ id: LABELLER, kind: "labeller" });
   });
 
-  test("the assigned labeller reads their submitted session, which the actor gate refuses", async () => {
+  test("the assigned labeler reads their submitted session, which the actor gate refuses", async () => {
     expect(
       await readerFor({ status: "submitted", assignedTo: LABELLER }),
     ).toEqual({ id: LABELLER, kind: "labeller" });
@@ -157,7 +157,7 @@ test.describe("requireLabelReader", () => {
     );
   });
 
-  test("a complete session is refused, even to its labeller", async () => {
+  test("a complete session is refused, even to its labeler", async () => {
     expect(
       await readerFor({ status: "complete", assignedTo: LABELLER }),
     ).toBeNull();
@@ -200,7 +200,7 @@ test.describe("requireLabelActor", () => {
     expect(d.adminClients()).toBe(0);
   });
 
-  test("a labeller is refused on an unassigned session", async () => {
+  test("a labeler is refused on an unassigned session", async () => {
     const d = deps({
       admin: { ok: false, status: 403 },
       uid: LABELLER,
@@ -212,7 +212,7 @@ test.describe("requireLabelActor", () => {
     expect(await requireLabelActor(SESSION_A, d.deps)).toBeNull();
   });
 
-  test("a labeller is refused on a session assigned to someone else", async () => {
+  test("a labeler is refused on a session assigned to someone else", async () => {
     const d = deps({
       admin: { ok: false, status: 403 },
       uid: LABELLER,
@@ -224,7 +224,7 @@ test.describe("requireLabelActor", () => {
     expect(await requireLabelActor(SESSION_A, d.deps)).toBeNull();
   });
 
-  test("a labeller is refused once the session is submitted", async () => {
+  test("a labeler is refused once the session is submitted", async () => {
     const d = deps({
       admin: { ok: false, status: 403 },
       uid: LABELLER,
@@ -236,7 +236,7 @@ test.describe("requireLabelActor", () => {
     expect(await requireLabelActor(SESSION_A, d.deps)).toBeNull();
   });
 
-  test("a labeller is refused on a complete session", async () => {
+  test("a labeler is refused on a complete session", async () => {
     const d = deps({
       admin: { ok: false, status: 403 },
       uid: LABELLER,
@@ -260,7 +260,7 @@ test.describe("requireLabelActor", () => {
     expect(await requireLabelActor(SESSION_A, d.deps)).toBeNull();
   });
 
-  test("a labeller assigned to a labelling session gets through", async () => {
+  test("a labeler assigned to a labeling session gets through", async () => {
     const d = deps({
       admin: { ok: false, status: 403 },
       uid: LABELLER,
@@ -277,7 +277,7 @@ test.describe("requireLabelActor", () => {
     expect(d.reads.sort()).toEqual(["label_sessions", "users"]);
   });
 
-  test("a session that does not exist refuses a labeller", async () => {
+  test("a session that does not exist refuses a labeler", async () => {
     const d = deps({
       admin: { ok: false, status: 403 },
       uid: LABELLER,
@@ -351,7 +351,7 @@ test.describe("requireLabelActorFor", () => {
     expect(d.adminClients()).toBe(0);
   });
 
-  test("a labeller is gated on the session the shot belongs to", async () => {
+  test("a labeler is gated on the session the shot belongs to", async () => {
     const tables = {
       users: users(true),
       label_sessions: [session("labelling", LABELLER)],
@@ -368,7 +368,7 @@ test.describe("requireLabelActorFor", () => {
     });
   });
 
-  test("a batch across two sessions refuses a labeller assigned to one", async () => {
+  test("a batch across two sessions refuses a labeler assigned to one", async () => {
     const tables = {
       users: users(true),
       label_sessions: [session("labelling", LABELLER)],

@@ -138,7 +138,7 @@ export function RowLifecycle({
   // analysis behind it — hand-scored, or stats our derivation refused — gets
   // the solid "nothing coming" ring.
   if (status === "cancelled") {
-    return <AnalysisStatusLine mark="stopped">Cancelled</AnalysisStatusLine>;
+    return <AnalysisStatusLine mark="stopped">Canceled</AnalysisStatusLine>;
   }
   if (status === "manual") {
     return <AnalysisStatusLine mark="none">Not analyzed</AnalysisStatusLine>;

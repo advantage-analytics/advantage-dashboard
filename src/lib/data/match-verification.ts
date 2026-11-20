@@ -25,7 +25,7 @@ import {
 export const VERIFIED_BY_ADVANTAGE = "Verified by Advantage";
 
 /** What a re-analysis says to the owner of a verified match, and to an admin. */
-export const VERIFIED_MATCH_REFUSAL = `This match is ${VERIFIED_BY_ADVANTAGE}, so it can't be analysed again.`;
+export const VERIFIED_MATCH_REFUSAL = `This match is ${VERIFIED_BY_ADVANTAGE}, so it can't be analyzed again.`;
 
 /** The longest "Something still wrong?" note, read by the form and the action. */
 export const MATCH_ISSUE_MAX_LENGTH = 2000;

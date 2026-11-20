@@ -102,7 +102,7 @@ test.describe("requireLabelViewerOrNotFound", () => {
     expect(deps.calls).not.toContain("notFound");
   });
 
-  test("returns { id, kind: 'labeller' } for a labeller", async () => {
+  test("returns { id, kind: 'labeler' } for a labeler", async () => {
     const deps = viewerDeps(
       { id: VIEWER },
       { is_admin: false, is_labeller: true },

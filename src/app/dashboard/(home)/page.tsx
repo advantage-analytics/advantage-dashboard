@@ -285,7 +285,7 @@ async function Insight({ resources }: { resources: HomeResources }) {
     return (
       <FocusCard
         showStatisticsLink={false}
-        footer={{ left: "One thing to work on, once a match is analysed." }}
+        footer={{ left: "One thing to work on, once a match is analyzed." }}
       >
         <FocusEmpty />
       </FocusCard>

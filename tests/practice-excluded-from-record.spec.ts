@@ -239,7 +239,7 @@ test.describe("getOverallPerformance (the figures /api/home-insight quotes)", ()
     expect(withPractice.performanceProfile).toEqual(without.performanceProfile);
   });
 
-  test("a practice report still counts as an analysed report", () => {
+  test("a practice report still counts as an analyzed report", () => {
     const without = build(COMPETITIVE, COMPETITIVE_STATS);
     const withPractice = build(WITH_PRACTICE, WITH_PRACTICE_STATS);
     expect(without.analyzedMatchCount).toBe(3);

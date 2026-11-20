@@ -140,7 +140,7 @@ export function joinRequestOwnerNoticeEmail(
       label: "Review the request",
       url: `${emailOrigin()}/dashboard/team/roster`,
     },
-    note: `You decide who joins, not us. If you don't recognise this person, declining is the whole of what you need to do. ${preferenceNote("Team activity")}`,
+    note: `You decide who joins, not us. If you don't recognize this person, declining is the whole of what you need to do. ${preferenceNote("Team activity")}`,
   };
 
   return {

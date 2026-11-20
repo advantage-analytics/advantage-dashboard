@@ -512,7 +512,7 @@ test.describe("FiltersPanel draft", () => {
 });
 
 test.describe("FiltersPanel header, summaries and footer", () => {
-  test("48px header: the trigger's title and an X labelled Close filters", () => {
+  test("48px header: the trigger's title and an X labeled Close filters", () => {
     const html = render(fullAvailability());
     const close =
       html.match(

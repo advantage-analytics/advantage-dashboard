@@ -39,7 +39,7 @@ const clean = loadFixture("clean-match.json");
 const degraded = loadFixture("degraded-match.json");
 
 test.describe("court conversion", () => {
-  test("maps vendor metres onto the database court frame", () => {
+  test("maps vendor meters onto the database court frame", () => {
     // y = 0 at one baseline, 11.885 at the net, 23.77 at the other. Confirmed
     // against live SwingVision: in-serve landing_y occupies exactly the two
     // service boxes, 5.49-11.87 and 11.93-18.29.
@@ -71,7 +71,7 @@ test.describe("court conversion", () => {
     expect(serveZone(metersToCourtFrame(3.5, 5.0).x)).toBe("Wide");
   });
 
-  test("direction is decided by crossing the centre line, hitter to bounce", () => {
+  test("direction is decided by crossing the center line, hitter to bounce", () => {
     expect(directionZone(0.5, -3.0)).toBe("Middle");
     expect(directionZone(3.0, -3.0)).toBe("Crosscourt");
     expect(directionZone(-3.0, -3.0)).toBe("Down the Line");

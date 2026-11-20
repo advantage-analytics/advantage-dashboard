@@ -244,7 +244,7 @@ test.describe("recordLabelWorkBeat", () => {
     expect(table.writes).toEqual([]);
   });
 
-  test("the real gate refuses a labeller the session is not assigned to", async () => {
+  test("the real gate refuses a labeler the session is not assigned to", async () => {
     const table = fakeBeatsTable();
     // A service-role client for the gate's two reads: the caller is a
     // labeller, the session is labelling but assigned to someone else.
@@ -294,7 +294,7 @@ test.describe("recordLabelWorkBeat", () => {
   });
 });
 
-test("listLabelJobs counts every labeller's beats and no reviewer's, in one read", async () => {
+test("listLabelJobs counts every labeler's beats and no reviewer's, in one read", async () => {
   const JOB_A = "55555555-5555-4555-8555-555555555551";
   const JOB_B = "55555555-5555-4555-8555-555555555552";
   const JOB_C = "55555555-5555-4555-8555-555555555553";

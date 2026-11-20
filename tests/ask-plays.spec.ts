@@ -264,7 +264,7 @@ test.describe("the query", () => {
       "count(*) filter (where has_shots and i_won = false)",
     );
   });
-  test("is recognised as the server's own", () => {
+  test("is recognized as the server's own", () => {
     expect(isLosingPlaysSql(losingPlaysSql("mine"))).toBe(true);
     expect(isLosingPlaysSql("select 1")).toBe(false);
   });

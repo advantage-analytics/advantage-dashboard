@@ -166,7 +166,7 @@ test("the DB frame lands on the C2 court box's lines", () => {
   expect(toCourtPercent(5.485, 0, true)).toEqual({ x: 94, y: 97 });
 });
 
-test("a landing on the far baseline centre is { x: 50, y: 3 }", () => {
+test("a landing on the far baseline center is { x: 50, y: 3 }", () => {
   const marks = at(11, [shot("a", true, [0, 0], [0, LENGTH])]);
   const bounce = bounceOf(marks, "a")!;
   expect({ x: bounce.x, y: bounce.y }).toEqual({ x: 50, y: 3 });

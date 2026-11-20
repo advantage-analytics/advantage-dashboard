@@ -131,7 +131,7 @@ test("the field shows what an event pick writes", () => {
 const PRACTICE_COPY =
   "Practice. Shows on Ace's profile under Practice. Win–loss, the season record, head-to-head and season statistics all leave it out.";
 
-test("Practice brings the grey notice naming the player", () => {
+test("Practice brings the gray notice naming the player", () => {
   const html = renderToStaticMarkup(
     React.createElement(mod.PracticeNotice, {
       matchType: "Practice",

@@ -286,7 +286,7 @@ test.describe("a full answer", () => {
     await expect(prose).toHaveClass(/tabular-nums/);
   });
 
-  test("figure tiles are ink, never an outcome colour", async ({ page }) => {
+  test("figure tiles are ink, never an outcome color", async ({ page }) => {
     await openFixture(page, "?case=full");
 
     // No stylesheet is served here, so a computed colour would only be the
@@ -883,7 +883,7 @@ test.describe("the visual block", () => {
     expect(markup).not.toMatch(/NaN|Infinity|undefined/);
   });
 
-  test("only the form strip names an outcome colour", async ({ page }) => {
+  test("only the form strip names an outcome color", async ({ page }) => {
     for (const kind of [
       "bars",
       "table",

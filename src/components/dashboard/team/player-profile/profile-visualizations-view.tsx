@@ -412,7 +412,7 @@ function SeasonWall({
               <EmptyWall>
                 No analyzed matches yet. Serve, return and rally placement is
                 drawn from the points in {firstName}&rsquo;s matches, as each
-                one is analysed.
+                one is analyzed.
               </EmptyWall>
             ) : visible.length > 0 ? (
               <div
@@ -508,7 +508,7 @@ function SavedWall({
     body = (
       <EmptyWall>
         No analyzed matches yet. Saved views are drawn from the points in{" "}
-        {firstName}&rsquo;s matches, as each one is analysed.
+        {firstName}&rsquo;s matches, as each one is analyzed.
       </EmptyWall>
     );
   } else if (visible.length === 0) {

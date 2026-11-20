@@ -23,7 +23,7 @@ const { DashboardPagePending } = loader.load(
 
 const html = renderToStaticMarkup(React.createElement(DashboardPagePending));
 
-test("one loading status, labelled for the page", () => {
+test("one loading status, labeled for the page", () => {
   expect(html.match(/role="status"/g)?.length).toBe(1);
   expect(html).toContain('role="status" aria-label="Loading page"');
 });
@@ -35,7 +35,7 @@ test("exactly one skeleton bar, hidden and pulsing motion-safe", () => {
   expect(bar).toContain("bg-[var(--surface-skeleton)]");
 });
 
-test("nothing is interactive, no colour is a hex, nothing spins", () => {
+test("nothing is interactive, no color is a hex, nothing spins", () => {
   expect(html).not.toContain("<button");
   expect(html).not.toContain("<a ");
   expect(html).not.toContain("<input");

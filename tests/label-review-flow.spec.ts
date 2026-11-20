@@ -228,7 +228,7 @@ test.describe("runReplay", () => {
     expect(calls).toEqual(["seek 11.5", "play", "pause"]);
   });
 
-  test("the labeller's own seek lets the replay go without a pause", () => {
+  test("the labeler's own seek lets the replay go without a pause", () => {
     const { calls, clock, deps } = fakePlayer();
     const handle = runReplay({ start: 11.5, stop: 15 }, deps);
     clock.set(11.5);

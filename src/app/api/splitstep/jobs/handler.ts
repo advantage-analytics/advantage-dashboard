@@ -465,7 +465,7 @@ export async function handleSubmitJob(
 
   if (!built.ok) {
     return NextResponse.json(
-      { error: "This match cannot be analysed yet.", details: built.errors },
+      { error: "This match cannot be analyzed yet.", details: built.errors },
       { status: 422 },
     );
   }

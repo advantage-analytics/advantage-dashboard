@@ -127,12 +127,12 @@ const VOID = new Set(["br", "hr", "img", "input", "meta", "link"]);
 for (const { name, component, label } of PAGES) {
   const html = renderToStaticMarkup(React.createElement(component));
 
-  test(`${name}: one loading status, labelled for the page`, () => {
+  test(`${name}: one loading status, labeled for the page`, () => {
     expect(html.match(/role="status"/g)?.length).toBe(1);
     expect(html).toContain(`role="status" aria-label="${label}"`);
   });
 
-  test(`${name}: nothing is interactive, no colour is a hex, nothing spins`, () => {
+  test(`${name}: nothing is interactive, no color is a hex, nothing spins`, () => {
     expect(html).not.toContain("<button");
     expect(html).not.toContain("<a ");
     expect(html).not.toContain("<input");

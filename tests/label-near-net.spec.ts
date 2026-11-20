@@ -38,7 +38,7 @@ const endingOn = (last: Partial<LabelShot>) =>
   });
 
 test.describe("lastBallNearNet", () => {
-  test("a last rally ball called in, down within a metre past the net, is asked", () => {
+  test("a last rally ball called in, down within a meter past the net, is asked", () => {
     expect(NEAR_NET_M).toBe(1);
     expect(lastBallNearNet(endingOn({}), true)).toEqual({
       code: "net_by_trajectory",
@@ -53,7 +53,7 @@ test.describe("lastBallNearNet", () => {
     ).toBe("net_by_trajectory");
   });
 
-  test("not a deeper ball, one on the hitter's own side, a miss, a call the labeller made, or a serve", () => {
+  test("not a deeper ball, one on the hitter's own side, a miss, a call the labeler made, or a serve", () => {
     for (const last of [
       { landingY: NET + 1.2 },
       // Did not clear: the landing already reads Net.
@@ -86,7 +86,7 @@ test.describe("lastBallNearNet", () => {
       p1: "Lee",
       p2: "Vargas",
     });
-    expect(hover).toContain("within a metre of the net");
+    expect(hover).toContain("within a meter of the net");
   });
 });
 

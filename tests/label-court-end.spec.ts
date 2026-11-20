@@ -118,7 +118,7 @@ test.describe("players at the wrong end", () => {
     );
   });
 
-  test("an unsettled set says nothing until the labeller locks the game", () => {
+  test("an unsettled set says nothing until the labeler locks the game", () => {
     const rows = setOne({ swappedGame3: [0, 1, 2] });
     expect(courtEndSwaps(rows, UNSETTLED)).toEqual([]);
     const locked = setOne({ swappedGame3: [0, 1, 2], lockGame3: true });
@@ -186,7 +186,7 @@ test.describe("players at the wrong end", () => {
     ).toHaveLength(1);
   });
 
-  test("a hitter the labeller gave stands: the point is theirs", () => {
+  test("a hitter the labeler gave stands: the point is theirs", () => {
     const rows = setOne({ swappedGame3: [1] });
     const point = rows.find((p) => p.id === "set1-g3-p2")!;
     const [first, ...rest] = point.shots;
@@ -201,7 +201,7 @@ test.describe("players at the wrong end", () => {
     expect(courtEndSwaps(out, SETTLED)).toEqual([]);
   });
 
-  test("an added stroke makes the point the labeller's too", () => {
+  test("an added stroke makes the point the labeler's too", () => {
     const rows = setOne({ swappedGame3: [1] }).map((p) =>
       p.id === "set1-g3-p2"
         ? {
@@ -373,7 +373,7 @@ test.describe("players at the wrong end", () => {
     expect(swap.pointIds).toHaveLength(4);
   });
 
-  test("settled sets: the labelled games make the entered score", () => {
+  test("settled sets: the labeled games make the entered score", () => {
     expect(
       settledSetNumbers(
         [

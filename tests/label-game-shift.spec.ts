@@ -1039,7 +1039,7 @@ test.describe("writeLabelGameShift", () => {
     ).toMatchObject({ error: expect.stringContaining("nothing to move on") });
   });
 
-  test("a complete session is refused before any read of its points; one labelled without marks is not", async () => {
+  test("a complete session is refused before any read of its points; one labeled without marks is not", async () => {
     const complete = fakeClient({
       session: { status: "complete", ad_scoring: true, job_id: null },
     });
@@ -1403,7 +1403,7 @@ test.describe("gameUnderflow", () => {
     expect(gameUnderflow(sets, true)).toEqual([]);
   });
 
-  test("the session's last game is never listed: the rail reads it as still being played, whatever the labeller has said of the video", () => {
+  test("the session's last game is never listed: the rail reads it as still being played, whatever the labeler has said of the video", () => {
     const tail = match([
       { game: 1, server: "p1", winners: ["p1", "p1", "p1", "p1"] },
       { game: 2, server: "p2", winners: ["p2", "p2", "p1"] },
@@ -2500,7 +2500,7 @@ test.describe("a locked game on the rail", () => {
   });
 });
 
-test.describe("combine a game with its neighbour", () => {
+test.describe("combine a game with its neighbor", () => {
   // Three games of one set: the vendor cut game 1 in two (games 1 and 2),
   // so game 3 is really the set's second.
   const cut = () =>
@@ -2559,7 +2559,7 @@ test.describe("combine a game with its neighbour", () => {
     ).toBe(false);
   });
 
-  test("refused with no neighbour, across a set, and with a tiebreak", () => {
+  test("refused with no neighbor, across a set, and with a tiebreak", () => {
     const points = cut();
     expect(planGameCombine(points, "1·1", "above", false)).toEqual({
       error: "There is no game above this one to combine it with.",

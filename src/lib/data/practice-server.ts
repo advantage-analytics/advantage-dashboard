@@ -669,7 +669,7 @@ export async function getLabelPayReport(
         .select("id, email, first_name, last_name")
         .in("id", payees)
         .order("id"),
-      "Could not read labellers",
+      "Could not read labelers",
     ),
   ]);
   const minutesBySession = new Map<string, string[]>();

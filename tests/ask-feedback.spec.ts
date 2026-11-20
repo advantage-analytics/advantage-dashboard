@@ -167,7 +167,7 @@ test("the migration lists the same reasons as the code", () => {
   ).toEqual([...ASK_FEEDBACK_REASONS]);
 });
 
-test("a missing ask_feedback embed is recognised so the thread still loads", () => {
+test("a missing ask_feedback embed is recognized so the thread still loads", () => {
   // The exact error PostgREST returned in PostHog issue 01a13bf3 / 01a13bf2.
   expect(
     isMissingEmbed({

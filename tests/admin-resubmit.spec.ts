@@ -572,11 +572,11 @@ test("a match Verified by Advantage is refused before resubmitJob", async () => 
   expect(await h.run()).toEqual({
     ok: false,
     error:
-      "This match is Verified by Advantage, so it can't be analysed again.",
+      "This match is Verified by Advantage, so it can't be analyzed again.",
     code: "verified",
   });
   expect(VERIFIED_MATCH_REFUSAL).toBe(
-    "This match is Verified by Advantage, so it can't be analysed again.",
+    "This match is Verified by Advantage, so it can't be analyzed again.",
   );
   expect(h.resubmits).toEqual([]);
   expectNothingSent(h);
@@ -588,7 +588,7 @@ test("a job that is not failed is refused, and an admin retry is never a reproce
 
     expect(await h.run()).toEqual({
       ok: false,
-      error: `Only a failed or cancelled analysis can be sent again; this one is ${status}.`,
+      error: `Only a failed or canceled analysis can be sent again; this one is ${status}.`,
       code: "not_failed",
     });
     expectNothingSent(h);
@@ -601,7 +601,7 @@ test("an athlete's cancel is not undone by an admin", async () => {
 
   expect(await h.run()).toEqual({
     ok: false,
-    error: "A cancelled analysis is only sent again by the athlete.",
+    error: "A canceled analysis is only sent again by the athlete.",
     code: "not_failed",
   });
   expectNothingSent(h);

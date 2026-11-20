@@ -78,7 +78,7 @@ test.describe("Wrong side for the score", () => {
     expect(marks.suggestions).toEqual([]);
   });
 
-  test("a serve from the wrong side for the labelled score is flagged, with that score", () => {
+  test("a serve from the wrong side for the labeled score is flagged, with that score", () => {
     const { points, serveSides } = game(
       ["p1", "p2", "p1"],
       ["deuce", "deuce", "ad"],
@@ -640,7 +640,7 @@ test.describe("Same side twice after a replayed serve", () => {
 
 // ── The labeller's serve side before the vendor's ──────────────────────────
 
-test.describe("the serve side the labeller set wins", () => {
+test.describe("the serve side the labeler set wins", () => {
   // Label contacts sit 11.885 m up the length from the vendor's frame: a near
   // server stands at y ≈ 24.4, a far one at y ≈ -0.6. From the near end the
   // deuce court is x < 0; from the far end, x > 0.
@@ -686,7 +686,7 @@ test.describe("the serve side the labeller set wins", () => {
     );
   });
 
-  test("an untouched contact, or one on the centre mark, defers to serve_side, then the vendor", () => {
+  test("an untouched contact, or one on the center mark, defers to serve_side, then the vendor", () => {
     const untouched = serve(
       "p1",
       NEAR_AD,

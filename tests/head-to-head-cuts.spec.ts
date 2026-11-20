@@ -237,7 +237,7 @@ test.describe("head-to-head cuts", () => {
 
 function byConfig(label: string): H2HRowConfig {
   const row = ALL_ROWS.find((r) => r.label === label);
-  if (!row) throw new Error(`no row labelled "${label}"`);
+  if (!row) throw new Error(`no row labeled "${label}"`);
   return row;
 }
 
@@ -669,7 +669,7 @@ const DERIVED_ROWS: H2HRowConfig[] = DERIVED_H2H_GROUPS.flatMap(
 
 function derivedConfig(label: string): H2HRowConfig {
   const row = DERIVED_ROWS.find((r) => r.label === label);
-  if (!row) throw new Error(`no derived row labelled "${label}"`);
+  if (!row) throw new Error(`no derived row labeled "${label}"`);
   return row;
 }
 
@@ -827,7 +827,7 @@ test.describe("error rows follow the match's split", () => {
     const row = h2hGroups(false, judged)
       .flatMap((g) => g.configs)
       .find((r) => r.label === label);
-    if (!row) throw new Error(`no row labelled "${label}"`);
+    if (!row) throw new Error(`no row labeled "${label}"`);
     return row;
   };
   const ids = (cut: FilmCut) =>

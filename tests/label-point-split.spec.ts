@@ -653,7 +653,7 @@ test.describe("writeLabelPointSplit", () => {
     expect(raced.calls.map((c) => c.op).slice(4)).toEqual(["rpc"]);
   });
 
-  test("a session labelled without marks takes a split — a manual edit", async () => {
+  test("a session labeled without marks takes a split — a manual edit", async () => {
     const fake = fakeClient({
       session: { status: "labelling", marks_enabled: false },
     });

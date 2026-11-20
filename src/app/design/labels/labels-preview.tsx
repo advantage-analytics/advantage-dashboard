@@ -54,8 +54,8 @@ export function LabelsDesignPreview() {
         <h1 className="text-display">Labels</h1>
         <p className="max-w-[72ch] text-[13px] leading-[1.6] text-[var(--ink-600)]">
           The real components on a made-up match. Nothing here is read from the
-          database, and the point links and labelling buttons go nowhere:
-          outside this page they open full screen on that point.
+          database, and the point links and labeling buttons go nowhere: outside
+          this page they open full screen on that point.
         </p>
       </header>
 
@@ -65,9 +65,9 @@ export function LabelsDesignPreview() {
             A match’s overview
           </h2>
           <p className="text-[13px] text-[var(--ink-600)]">
-            {NAMES.p1} vs {NAMES.p2}, as the admin reads it. One centred column:
-            the flags left, the publish checklist, and what was entered at
-            upload.
+            {NAMES.p1} vs {NAMES.p2}, as the admin reads it. One centered
+            column: the flags left, the publish checklist, and what was entered
+            at upload.
           </p>
         </div>
         {/* The dashboard bleeds 56px into the admin page's right gutter;

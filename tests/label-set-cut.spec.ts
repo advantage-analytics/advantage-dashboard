@@ -152,7 +152,7 @@ test.describe("setCut", () => {
     ]);
   });
 
-  test("no start score: a set the labeller gave an extra game is cut the same way", () => {
+  test("no start score: a set the labeler gave an extra game is cut the same way", () => {
     const extra = match([...won(1, "1111112"), ...won(2, "111111")]);
     expect(
       setCut(

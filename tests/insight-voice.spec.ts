@@ -54,7 +54,7 @@ test("a name typed lowercase is raised where it opens a sentence, so the card st
   });
 });
 
-test("a match summarised before the observer voice keeps its wording for a signed-in observer", () => {
+test("a match summarized before the observer voice keeps its wording for a signed-in observer", () => {
   expect(
     insightSummaryFor({ summary: INSIGHT.summary }, "observer", NAMES),
   ).toBe(INSIGHT.summary);

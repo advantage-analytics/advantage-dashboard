@@ -323,7 +323,7 @@ export async function POST(request: NextRequest) {
     payload.nextStatus === "completed" && record.job_status === "cancelled";
   if (completedOnCancelledJob) {
     pipelineLog.warn(
-      `${LOG} SKIPPED — job_completed for a cancelled job; nothing secured or derived`,
+      `${LOG} SKIPPED — job_completed for a canceled job; nothing secured or derived`,
       {
         deliveryId: record.delivery_id,
         jobId: record.matched_job_id,

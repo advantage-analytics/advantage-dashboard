@@ -964,7 +964,7 @@ test("a refused completion still discards the cut", async ({ page }) => {
   ]);
 });
 
-test("cancelling mid-upload discards the cut", async ({ page }) => {
+test("canceling mid-upload discards the cut", async ({ page }) => {
   const matchId = matchIdFor("held");
   await armAdd(page, matchId, "00:00:00.500", {
     query: `${CUT_QUERY}&prepare=cut`,
@@ -983,7 +983,7 @@ test("cancelling mid-upload discards the cut", async ({ page }) => {
   expect(await savedEvents(page)).toEqual([]);
 });
 
-test("cancelling mid-cut stops the cut and reserves nothing", async ({
+test("canceling mid-cut stops the cut and reserves nothing", async ({
   page,
 }) => {
   const matchId = matchIdFor("ok");
@@ -1386,7 +1386,7 @@ test("the leave guard is armed while trimming and uploading, and released on sav
   expect(await clickChromeLink(page)).toBe(false);
 });
 
-test("the leave guard is released when the upload is cancelled", async ({
+test("the leave guard is released when the upload is canceled", async ({
   page,
 }) => {
   const matchId = matchIdFor("ok");
@@ -1435,7 +1435,7 @@ async function startHeldUpload(page: Page, matchId: string) {
   );
 }
 
-test("cancelling aborts the upload, retires the attempt, and shows no error", async ({
+test("canceling aborts the upload, retires the attempt, and shows no error", async ({
   page,
 }) => {
   const matchId = matchIdFor("held");

@@ -471,7 +471,7 @@ function TailSection() {
           <div className="flex flex-col gap-1">
             <h3 className="text-body font-medium">Centring, at 3×</h3>
             <p className="text-body-sm max-w-[70ch]">
-              Top: the icons on the text box&apos;s centre, as shipped. Bottom:
+              Top: the icons on the text box&apos;s center, as shipped. Bottom:
               half a pixel lower, on the middle the eye reads between the
               capitals and the lowercase.
             </p>
@@ -1044,7 +1044,7 @@ const COMPACT: {
     id: "link",
     name: "I · Just the link",
     summary:
-      "The list is gone. One line: a play glyph and 'Watch the 16 points', which opens the Video tab on them as a playlist, with where they fall and how long they run beside it in grey. The answer's own words already say what the points are.",
+      "The list is gone. One line: a play glyph and 'Watch the 16 points', which opens the Video tab on them as a playlist, with where they fall and how long they run beside it in gray. The answer's own words already say what the points are.",
     render: () => <JustTheLink />,
   },
   {
@@ -1277,7 +1277,7 @@ const QUIET: {
     id: "lines",
     name: "E · Plain lines",
     summary:
-      "Nothing but the points. One line each: the result, and the score going in at the edge. No card, no marks, no rules. Who won is ink: Lindqvist's points are dark, Hale's grey. A game is a muted label and a breath of space, with the server said once.",
+      "Nothing but the points. One line each: the result, and the score going in at the edge. No card, no marks, no rules. Who won is ink: Lindqvist's points are dark, Hale's gray. A game is a muted label and a breath of space, with the server said once.",
     render: () => <PlainLines />,
   },
   {
@@ -1339,7 +1339,7 @@ function QuietHead() {
         </h4>
         <p className="text-micro">
           <span style={{ color: "var(--ink-900)" }}>{YOU}</span>&apos;s points
-          in ink, {OPP}&apos;s in grey
+          in ink, {OPP}&apos;s in gray
         </p>
       </div>
       <WatchAll />

@@ -97,11 +97,11 @@ export function LabelJobListRow({
   const opponent = owner?.opponentName ?? job.player2Name;
   const verb =
     state === "todo"
-      ? "Start labelling"
+      ? "Start labeling"
       : job.session?.status === "submitted"
         ? "Review"
         : state === "doing"
-          ? "Continue labelling"
+          ? "Continue labeling"
           : "View";
   const label = `${verb} ${player} vs ${opponent}`;
 
@@ -260,7 +260,7 @@ function AssignMenu({
       <FloatMenu
         open={open}
         onOpenChange={setOpen}
-        label="Assign to a labeller"
+        label="Assign to a labeler"
         align="start"
         width={240}
         className="max-h-[360px] overflow-y-auto"
@@ -787,7 +787,7 @@ export function AdminLaneRow({
       {toCheck ? (
         <div className="flex flex-col gap-2 px-3 pt-0.5 pb-3">
           <p className="min-w-0 truncate text-[12px] text-[var(--ink-500)] tabular-nums">
-            {row.labellerName ?? "No labeller"}
+            {row.labellerName ?? "No labeler"}
             {row.publishedAt
               ? ` · published ${agoText(row.publishedAt, now)}`
               : null}

@@ -617,7 +617,7 @@ export async function uploadAndSubmitVideo({
       uploadErr instanceof UploadAbortedError ||
       uploadErr instanceof TrimCancelledError;
     console[cancelled ? "log" : "error"](
-      cancelled ? "Upload cancelled by the user" : "❌ Video upload error:",
+      cancelled ? "Upload canceled by the user" : "❌ Video upload error:",
       cancelled ? "" : uploadErr,
     );
 

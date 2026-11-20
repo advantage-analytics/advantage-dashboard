@@ -249,7 +249,7 @@ test.describe("hasComparisonBaseline", () => {
     expect(hasComparisonBaseline({ baseline })).toBe(false);
   });
 
-  test("a second analysed match makes the baseline non-empty", () => {
+  test("a second analyzed match makes the baseline non-empty", () => {
     const { baseline } = buildKpiHistory(
       [currentMatch(70), firstServe("a", daysBefore(2), 60)],
       MATCH_ID,

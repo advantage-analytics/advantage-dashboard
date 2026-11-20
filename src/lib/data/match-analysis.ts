@@ -684,7 +684,7 @@ export const ANALYSIS_LABEL: Record<AnalysisStatus, string> = {
   derivation_failed: "Stats failed",
   imported: "Imported",
   manual: "Stats unavailable",
-  cancelled: "Cancelled",
+  cancelled: "Canceled",
 };
 
 /**

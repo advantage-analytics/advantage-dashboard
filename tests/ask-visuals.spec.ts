@@ -75,7 +75,7 @@ const COURTS: AskServeVisual = {
 };
 
 test.describe("ServeVisual", () => {
-  test("two courts labelled Deuce and Ad draw the court; a zone with no serves has no column", () => {
+  test("two courts labeled Deuce and Ad draw the court; a zone with no serves has no column", () => {
     const markup = renderServe(COURTS);
     expect(markup).toContain('data-ask-serve-court=""');
     expect(markup.match(/data-ask-zone="/g)).toHaveLength(5);
@@ -106,7 +106,7 @@ test.describe("ServeVisual", () => {
     expect(markup.match(/data-ask-side="ad"/g)).toHaveLength(2);
   });
 
-  test("any other labelling is one bar per court", () => {
+  test("any other labeling is one bar per court", () => {
     for (const labels of [
       ["First serves", "Second serves"],
       ["Deuce", "Deuce"],
@@ -602,7 +602,7 @@ test.describe("tableDelta", () => {
     cellNumber: (cell: string) => number | null;
   };
 
-  test("the arrow is the number's direction, the colour whether that is good", () => {
+  test("the arrow is the number's direction, the color whether that is good", () => {
     expect(
       tableDelta("Difference", "First serves in", "−20.7", "37.5%", "58.2%"),
     ).toEqual({ arrow: "↓", text: "20.7", tone: "bad" });

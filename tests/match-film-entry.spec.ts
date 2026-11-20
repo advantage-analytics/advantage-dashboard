@@ -760,7 +760,7 @@ const PAGE = readFileSync(
 // must decide from one function, so the expressions are pinned where they live.
 const ANALYSIS = readFileSync("src/lib/data/match-analysis.ts", "utf8");
 
-test("the analysing short-circuit still returns before any Film entry", () => {
+test("the analyzing short-circuit still returns before any Film entry", () => {
   // Guardrails §3.3. The gate, its condition and its early return are intact,
   // and the Video view — with its actions — is below it, so an in-flight match
   // still renders hero + progress and nothing else.

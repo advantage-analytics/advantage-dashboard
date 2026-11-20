@@ -84,12 +84,12 @@ for (const { name, component, label } of SKELETONS) {
   const html = renderToStaticMarkup(React.createElement(component));
 
   test.describe(name, () => {
-    test("one loading status, labelled for the page", () => {
+    test("one loading status, labeled for the page", () => {
       expect(html.match(/role="status"/g)?.length).toBe(1);
       expect(html).toContain(`role="status" aria-label="${label}"`);
     });
 
-    test("nothing is interactive and no colour is a hex", () => {
+    test("nothing is interactive and no color is a hex", () => {
       expect(html).not.toContain("<button");
       expect(html).not.toContain("<a ");
       expect(html).not.toContain("<input");

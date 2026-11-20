@@ -113,7 +113,7 @@ const VARIANTS: readonly {
   },
   {
     id: "cancelled",
-    label: "Cancelled — send for analysis again",
+    label: "Canceled — send for analysis again",
     analysis: {
       ...BASE,
       status: "cancelled",
@@ -218,7 +218,7 @@ export function AnalysisStepsPreview() {
       </h2>
       <p className="mt-1 max-w-[60ch] text-[12px] leading-[1.6] text-[var(--ink-600)]">
         Every state of a match page while its analysis is in flight, has failed
-        or was cancelled, drawn as the upload wizard&apos;s final screen: the
+        or was canceled, drawn as the upload wizard&apos;s final screen: the
         same card-free column, title, match line and stepper. Fixed inputs and a
         fixed clock; the actions render but are not wired to a real job.
       </p>

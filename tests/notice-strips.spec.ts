@@ -46,7 +46,7 @@ test("the two upload flows are where the strips live", () => {
 });
 
 for (const file of files) {
-  test(`no error or warning glyph on a grey strip — ${file}`, () => {
+  test(`no error or warning glyph on a gray strip — ${file}`, () => {
     const offenders = strips(readFileSync(file, "utf8")).filter(
       (s) =>
         // `NOTE_CLS` is SourceStepContent's local name for the grey strip.
@@ -57,7 +57,7 @@ for (const file of files) {
   });
 }
 
-test("a red strip's glyph takes the strip's colour, not its own", () => {
+test("a red strip's glyph takes the strip's color, not its own", () => {
   for (const file of files) {
     const source = readFileSync(file, "utf8");
     // `--error` is the inline field-error red; on a notice strip it is the

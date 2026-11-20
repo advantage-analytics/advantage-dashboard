@@ -50,7 +50,7 @@ export function DayZeroHome({
        * rather than a fade.
        */}
       <DayZeroGrade
-        description="Once your first match is analysed this page fills with your serve numbers, your recent matches, one thing to work on, and a map of where your serves land. Nothing below is real data yet."
+        description="Once your first match is analyzed this page fills with your serve numbers, your recent matches, one thing to work on, and a map of where your serves land. Nothing below is real data yet."
         className="flex flex-1 flex-col gap-4"
       >
         {kpiStrip}

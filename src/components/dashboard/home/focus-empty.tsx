@@ -92,11 +92,11 @@ export function teamInsightBand(matchCount: number, analyzedCount = 0) {
   return {
     title:
       matchCount === 0
-        ? "Nothing here until a match is analysed"
+        ? "Nothing here until a match is analyzed"
         : analyzedCount === 0
-          ? "Waiting on your first analysed match"
+          ? "Waiting on your first analyzed match"
           : "No finding worth reporting yet",
     description:
-      "Advantage Intelligence reads each analysed match and writes one thing to work on, with the numbers behind it.",
+      "Advantage Intelligence reads each analyzed match and writes one thing to work on, with the numbers behind it.",
   };
 }

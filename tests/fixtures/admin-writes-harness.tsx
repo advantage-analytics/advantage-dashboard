@@ -46,7 +46,7 @@ function StartLabelling() {
   return (
     <>
       <button type="button" onClick={start}>
-        Start labelling
+        Start labeling
       </button>
       {error && <p role="alert">{error}</p>}
     </>

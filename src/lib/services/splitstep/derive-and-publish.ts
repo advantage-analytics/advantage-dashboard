@@ -144,8 +144,8 @@ export async function deriveAndPublish(params: {
       .select("id");
     if (moveError) throw new Error(moveError.message);
     if (!moved || moved.length === 0) {
-      console.warn(`${LOG} skipped — job is cancelled or missing`, { jobId });
-      return { ok: false, reason: "job is cancelled" };
+      console.warn(`${LOG} skipped — job is canceled or missing`, { jobId });
+      return { ok: false, reason: "job is canceled" };
     }
 
     const written = await persistTranscript({

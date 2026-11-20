@@ -551,7 +551,7 @@ test.describe("writeLabelSessionComplete", () => {
     ).toMatchObject({ ok: true, status: "complete" });
   });
 
-  test("a session labelled without marks completes like any other", async () => {
+  test("a session labeled without marks completes like any other", async () => {
     const blind = fakeClient({
       session: {
         status: "labelling",
@@ -626,7 +626,7 @@ test.describe("writeLabelSessionComplete", () => {
 });
 
 test.describe("writeLabelSessionReopen", () => {
-  test("a complete session back to labelling, completed_at and the admin's check cleared, matched on the complete status", async () => {
+  test("a complete session back to labeling, completed_at and the admin's check cleared, matched on the complete status", async () => {
     const fake = fakeClient({
       session: { status: "complete", match_id: MATCH_ID, completed_at: "x" },
     });
@@ -673,7 +673,7 @@ test.describe("writeLabelSessionReopen", () => {
         supabase: open.supabase,
         sessionId: SESSION_ID,
       }),
-    ).toEqual({ error: "This session is already open for labelling." });
+    ).toEqual({ error: "This session is already open for labeling." });
     expect(updates(open)).toEqual([]);
 
     expect(
@@ -686,7 +686,7 @@ test.describe("writeLabelSessionReopen", () => {
       }),
     ).toEqual({ error: ANOTHER_SESSION_OPEN });
     expect(ANOTHER_SESSION_OPEN).toContain(
-      "Another labelling session is open for this match",
+      "Another labeling session is open for this match",
     );
 
     expect(
@@ -722,7 +722,7 @@ test("both entry points refuse without an admin, before a client is built", asyn
   }
 });
 
-test("both entry points refuse a labeller, even one the gate admits to the session", async () => {
+test("both entry points refuse a labeler, even one the gate admits to the session", async () => {
   for (const entry of [completeLabelSession, reopenLabelSession]) {
     let built = 0;
     const asked: unknown[] = [];
@@ -850,9 +850,9 @@ test.describe("completeWarnings", () => {
       "2 points of 3 not checked",
       "Game 1 unfinished (15–15)",
       "Game 2 unfinished (0–0)",
-      "Set 1 labelled 0–0, the match record says 6–3 — it publishes as labelled",
+      "Set 1 labeled 0–0, the match record says 6–3 — it publishes as labeled",
       // The fixture's open point: its strokes disagree with its winner.
-      "Point 4's strokes say player 2 won, not the labelled winner — it publishes with the labelled winner",
+      "Point 4's strokes say player 2 won, not the labeled winner — it publishes with the labeled winner",
     ]);
   });
 
@@ -969,7 +969,7 @@ test.describe("completeWarnings", () => {
       }),
     ).toEqual([
       "2 points of 3 not checked",
-      "Point 4's strokes say player 2 won, not the labelled winner — it publishes with the labelled winner",
+      "Point 4's strokes say player 2 won, not the labeled winner — it publishes with the labeled winner",
     ]);
   });
 
@@ -1031,7 +1031,7 @@ test.describe("completeWarnings", () => {
     expect(unmarked(1).title).toBe("Publish with 1 error unmarked?");
   });
 
-  test("a labeller's Publish: the same title, saying the player sees it at once and an admin may send it back", () => {
+  test("a labeler's Publish: the same title, saying the player sees it at once and an admin may send it back", () => {
     const copy = labelConfirmCopy(
       {
         kind: "complete-session",
@@ -1319,7 +1319,7 @@ function headerOf(html: string): string {
 test.describe("the console header", () => {
   const BOTH = ["completeSession", "reopenSession", "updateSessionFields"];
 
-  test("a labelling session offers Publish, not Reopen — and a render writes nothing", () => {
+  test("a labeling session offers Publish, not Reopen — and a render writes nothing", () => {
     const { called, operations } = counting(BOTH);
     const head = headerOf(
       renderConsole(labelSessionFixture(), operations).html,

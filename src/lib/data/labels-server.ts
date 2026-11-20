@@ -214,7 +214,7 @@ export async function listLabelJobs(
       // the column: `labeller` also points at `users`), so the names cost no
       // extra round trip.
       .select(
-        "id, job_id, status, started_at, open_counts, assigned_at, submitted_at, labeller, assignee:users!assigned_to(id, email, first_name, last_name)",
+        "id, job_id, status, started_at, open_counts, assigned_at, submitted_at, labeler, assignee:users!assigned_to(id, email, first_name, last_name)",
       )
       .in("job_id", jobIds)
       // Practice copies are graded on their own page, never the job's session.

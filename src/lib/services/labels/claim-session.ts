@@ -40,11 +40,11 @@ import {
 
 const LOG = "[labels:claim]";
 
-export const CLAIM_LABELLER_REQUIRED = "Only a labeller can claim a match.";
+export const CLAIM_LABELLER_REQUIRED = "Only a labeler can claim a match.";
 export const CLAIM_HOLDING = "Submit your match before you claim another.";
 export const CLAIM_NOT_NEXT = "That match is not one of the next three due.";
 export const CLAIM_TAKEN = "Someone claimed that match first.";
-export const CLAIM_NOT_LABELLER = "You are no longer a labeller.";
+export const CLAIM_NOT_LABELLER = "You are no longer a labeler.";
 /** Anything that went wrong that is not one of the refusals above. */
 export const CLAIM_FAILED =
   "Something went wrong claiming that match. Try again, or ask an admin.";

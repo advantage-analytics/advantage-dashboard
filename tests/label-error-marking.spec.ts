@@ -266,7 +266,7 @@ test.describe("when it asks", () => {
     expect(
       errorMarkingReady(0, [
         "12 points of 98 not checked",
-        "Set 1 labelled 6–3, the match record says 6–4 — it publishes as labelled",
+        "Set 1 labeled 6–3, the match record says 6–4 — it publishes as labeled",
       ]),
     ).toBe(true);
     expect(partialPublishWarnings(["12 points of 98 not checked"])).toEqual([]);

@@ -29,7 +29,7 @@ const TABLE_CARD =
 const TABLE_INNER = "min-w-[640px] px-6 pb-3";
 
 /** The column labels; every column after Labeller is a number, flush right. */
-const PAY_COLUMNS = ["Labeller", "Paid video", "Time worked"] as const;
+const PAY_COLUMNS = ["Labeler", "Paid video", "Time worked"] as const;
 
 /**
  * A row that opens: the surface-muted wash on a rounded row inset 8px past
@@ -48,8 +48,8 @@ export function PayReportHeading() {
       <h1 className="text-display">Pay report</h1>
       <p className="text-body-sm mt-[9px] max-w-[620px]">
         Paid video is the match video an admin first checked in this range,
-        credited to the labeller who first published it. Time worked is that
-        labeller&rsquo;s own active minutes on those matches.
+        credited to the labeler who first published it. Time worked is that
+        labeler&rsquo;s own active minutes on those matches.
       </p>
     </div>
   );

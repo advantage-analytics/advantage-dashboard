@@ -59,7 +59,7 @@ for (const { name, pinned, step } of VARIANTS) {
   const heading = { ...STEP_CONFIG[step], ...STEP_CONFIG_PROCESSING[step] };
 
   test.describe(name, () => {
-    test("one loading status, labelled for the wizard", () => {
+    test("one loading status, labeled for the wizard", () => {
       expect(html.match(/role="status"/g)?.length).toBe(1);
       expect(html).toContain(
         'role="status" aria-label="Loading upload wizard"',
@@ -95,7 +95,7 @@ for (const { name, pinned, step } of VARIANTS) {
       expect(html).toContain("flex h-16 items-center gap-4");
     });
 
-    test("nothing is interactive and no colour is a hex", () => {
+    test("nothing is interactive and no color is a hex", () => {
       expect(html).not.toContain("<button");
       expect(html).not.toContain("<a ");
       expect(html).not.toContain("<input");

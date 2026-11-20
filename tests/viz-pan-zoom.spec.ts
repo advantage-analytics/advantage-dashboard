@@ -110,7 +110,7 @@ test("zoomAbout: the art point under the cursor stays under it (anchor invarianc
   expect(stageY).toBeCloseTo(anchor.y, 6);
 });
 
-test("zoomAbout: BUTTON_STEP zoom-in then zoom-out at centre round-trips z", () => {
+test("zoomAbout: BUTTON_STEP zoom-in then zoom-out at center round-trips z", () => {
   const stage = { w: 1000, h: 1000 };
   const art = { w: 1000, h: 1000 };
   const start = { z: 1, px: 0, py: 0 };

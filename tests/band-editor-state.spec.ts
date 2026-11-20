@@ -168,7 +168,7 @@ test.describe("clamps", () => {
     expect(bandEditorBounds("contact", "ft")).toEqual([-18, 23]);
   });
 
-  test("contact bounds in metres are half-metre grid points, rounded inward", () => {
+  test("contact bounds in meters are half-metre grid points, rounded inward", () => {
     const [lo, hi] = bandEditorBounds("contact", "m");
     expect(lo).toBeCloseTo(-5 * FT_PER_M, 9); // −18.01 ft = −5.49 m → −5 m
     // 2026-09-21: the widened apron pushed the drawn upper bound from ≈7.73
@@ -502,7 +502,7 @@ test.describe("fix round 1: payload over the CURRENT bands", () => {
 });
 
 test.describe("final review: metric bounds are grid positions", () => {
-  test("depth in metres: 0.5 m … 11.5 m, never 0.5 ft", () => {
+  test("depth in meters: 0.5 m … 11.5 m, never 0.5 ft", () => {
     const [lo, hi] = bandEditorBounds("depth", "m");
     expect(lo).toBeCloseTo(0.5 * FT_PER_M, 9);
     expect(hi).toBeCloseTo(11.5 * FT_PER_M, 9);

@@ -61,7 +61,7 @@ export default async function ClaimReadyPage({
         titlePadTop={8}
       />
       <p className="text-body max-w-[56ch]">
-        We recognised your address on the program&#39;s staff list, so there was
+        We recognized your address on the program&#39;s staff list, so there was
         nothing to check. The workspace is open and video can go in whenever
         you&#39;re ready.
       </p>

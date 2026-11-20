@@ -33,7 +33,7 @@ export const CANCEL_DIALOG_COPY = {
   note: "goes back to this month's analysis time.",
   confirm: "Cancel analysis",
   keep: "Keep in line",
-  pending: "Cancelling…",
+  pending: "Canceling…",
 } as const;
 
 export type JobActionResult = { ok: true } | { ok: false; error: string };

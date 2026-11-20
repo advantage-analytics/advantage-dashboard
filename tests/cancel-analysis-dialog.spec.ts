@@ -98,7 +98,7 @@ const mod = loader.load(DIALOG) as {
 const JOB = "00000000-0000-4000-8000-000000000001";
 
 /** The cancel route's own refusal sentences (T2's handler). */
-const STARTED = "It started a moment ago and can't be cancelled now.";
+const STARTED = "It started a moment ago and can't be canceled now.";
 const VENDOR = "Couldn't reach Advantage Intelligence. Try again.";
 
 function render(props: Partial<ConfirmProps> = {}) {
@@ -136,7 +136,7 @@ test("the copy, the red tone and the three labels", () => {
   expect(html).toContain('<button data-cancel="">Keep in line</button>');
   expect(html).toContain('<button data-confirm="">Cancel analysis</button>');
   expect(render({ pending: true })).toContain(
-    '<button data-confirm="">Cancelling…</button>',
+    '<button data-confirm="">Canceling…</button>',
   );
 });
 
@@ -158,7 +158,7 @@ test("no error until one is given; then the route's sentence shows", () => {
   const html = render({ error: STARTED });
   expect(html).toContain('role="alert"');
   expect(html).toContain(
-    "It started a moment ago and can&#x27;t be cancelled now.",
+    "It started a moment ago and can&#x27;t be canceled now.",
   );
 });
 

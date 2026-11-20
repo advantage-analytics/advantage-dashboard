@@ -190,7 +190,7 @@ test("a webhook that lands first wins over the list", async () => {
   expect(rows[0].vendor_started_at).toBeUndefined();
 });
 
-test("a job cancelled before the list is read is never moved or stamped", async () => {
+test("a job canceled before the list is read is never moved or stamped", async () => {
   const rows = [row("a")];
   const { refresh } = load(() => list(["a", "job_processing"]));
 

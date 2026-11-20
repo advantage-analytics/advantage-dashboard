@@ -100,7 +100,7 @@ test("no match-date reader treats the day as a moment", () => {
   expect(stale, "ALLOWED entries that excuse nothing any more").toEqual([]);
 });
 
-test("the check sees the shapes it is for, and not their neighbours", () => {
+test("the check sees the shapes it is for, and not their neighbors", () => {
   for (const bad of [
     "const d = new Date(match.date);",
     "new Date(row.date).getFullYear()",

@@ -460,7 +460,7 @@ export default function HelpCenterPage() {
                     your iPhone lists it.
                   </Step>
                   <Step number="02" title="HDR Video off">
-                    It&rsquo;s on by default, and HDR colour can&rsquo;t survive
+                    It&rsquo;s on by default, and HDR color can&rsquo;t survive
                     the conversion before upload, so the saved video looks paler
                     and flatter than on your phone. Analysis isn&rsquo;t
                     affected.
@@ -616,7 +616,7 @@ export default function HelpCenterPage() {
                 <span className={blockLabelClass}>Changing your mind</span>
                 <p className={proseClass}>
                   The wizard saves a draft as you go — pick it up from the
-                  Matches list with Continue. A queued analysis can be cancelled
+                  Matches list with Continue. A queued analysis can be canceled
                   from the match page until it starts; the video stays saved and
                   you can send it again. Fixing the score with Edit match on an
                   analyzed match offers Save and rebuild, which checks the
@@ -639,7 +639,7 @@ export default function HelpCenterPage() {
                   </Link>{" "}
                   and last {CREDIT_VALIDITY_MONTHS} months; free hours are used
                   first. A match uses the length of its trim, taken when you
-                  submit. A failed or cancelled analysis gives the hours back.
+                  submit. A failed or canceled analysis gives the hours back.
                   Team uploads draw on the program&apos;s hours, never yours.
                   What&apos;s left is on{" "}
                   <Link href="/dashboard/settings/usage" className={linkClass}>

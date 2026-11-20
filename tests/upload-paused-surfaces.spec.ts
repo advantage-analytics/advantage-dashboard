@@ -184,7 +184,7 @@ test("starting again ends the paused job first, keyed on the job and on its bein
 
 // ─── The Matches row ───────────────────────────────────────────────────────
 
-test("the Matches row says paused with a still grey bar, and uploading while it moves", () => {
+test("the Matches row says paused with a still gray bar, and uploading while it moves", () => {
   const loader = createLoader();
   const { RowLifecycle } = loader.load(
     "src/components/dashboard/matches/row-state.tsx",

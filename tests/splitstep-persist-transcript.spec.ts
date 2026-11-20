@@ -47,7 +47,7 @@ test.describe("resolveAdScoring", () => {
     expect(resolveAdScoring(undefined, { ad_scoring: false })).toBe(false);
   });
 
-  test("a labeller's correction beats the job and the match format", () => {
+  test("a labeler's correction beats the job and the match format", () => {
     expect(resolveAdScoring(false, { ad_scoring: false }, true)).toBe(true);
     expect(resolveAdScoring(true, { ad_scoring: true }, false)).toBe(false);
   });
@@ -192,7 +192,7 @@ test.describe("buildTranscriptForJob", () => {
     expect(pressure(transcript)).toEqual(pressure(foldedUnder(false)));
   });
 
-  test("a labeller's correction beats the job, so a rebuild counts it", async () => {
+  test("a labeler's correction beats the job, so a rebuild counts it", async () => {
     const { selects, supabase } = stubClient({
       job: { ...JOB, ad_scoring: false },
       match: { ...MATCH, format: { ad_scoring: false, best_of: 3 } },

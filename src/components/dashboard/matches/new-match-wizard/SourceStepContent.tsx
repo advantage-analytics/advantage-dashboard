@@ -132,10 +132,10 @@ type FieldName = "workspace" | "for" | "source" | "format";
  */
 const FORMAT_COPY = {
   processing: {
-    closed: "Doubles can't be analysed yet",
-    notYet: "Not analysed yet",
+    closed: "Doubles can't be analyzed yet",
+    notYet: "Not analyzed yet",
     refusal:
-      "We can't analyse doubles yet. With two players each side, shots get credited to the wrong player. Choose a singles match to continue. No hours have been used.",
+      "We can't analyze doubles yet. With two players each side, shots get credited to the wrong player. Choose a singles match to continue. No hours have been used.",
   },
   import: {
     closed: "Doubles exports can't be read yet",

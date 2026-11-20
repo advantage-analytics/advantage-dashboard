@@ -1233,7 +1233,7 @@ test.describe("a flag jump lands on the point's review step", () => {
     expect(stepShot).toContain("selectShot(shots[next].id);");
   });
 
-  test("the flag keys step from the last flag landed on until the labeller moves off it", () => {
+  test("the flag keys step from the last flag landed on until the labeler moves off it", () => {
     const stepFlag = consoleSource.slice(
       consoleSource.indexOf("stepToFlag.current = (direction, kind) => {"),
       consoleSource.indexOf("stepShot.current = (direction) => {"),
@@ -1337,7 +1337,7 @@ test.describe("review mode: the step asked inline in the rail", () => {
       consoleSource.indexOf(to, consoleSource.indexOf(from)),
     );
 
-  test("a flag jump enters it; the labeller's own selection ends it", () => {
+  test("a flag jump enters it; the labeler's own selection ends it", () => {
     expect(consoleSource).toContain(
       "const [reviewMode, setReviewMode] = useState(initialReviewMode);",
     );
@@ -2127,7 +2127,7 @@ test.describe("the admin's overview, read off the design fixture", () => {
     expect(raised).toContain('aria-valuemax="2"');
   });
 
-  test("the labeller's overview draws no flags-resolved line, start or none", () => {
+  test("the labeler's overview draws no flags-resolved line, start or none", () => {
     const { html } = page("labeller", false, {
       startOpenCounts: { amber: 8, grey: 70 },
     });
@@ -2145,7 +2145,7 @@ test.describe("the admin's overview, read off the design fixture", () => {
     expect(out).toContain("Published");
   });
 
-  test("the labeller's overview keeps its cards and Every point checked", () => {
+  test("the labeler's overview keeps its cards and Every point checked", () => {
     const { html } = page("labeller");
     expect(
       [...html.matchAll(/data-dashboard-card="([^"]*)"/g)].map((m) => m[1]),

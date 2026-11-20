@@ -16,7 +16,7 @@ export function LabelHeader() {
       <div className="flex min-w-0 items-center gap-2.5">
         <Link
           href="/label"
-          aria-label="Advantage — your labelling sessions"
+          aria-label="Advantage — your labeling sessions"
           className="flex items-center rounded-[var(--radius-button)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
         >
           <Image

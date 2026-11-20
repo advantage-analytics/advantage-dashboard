@@ -87,7 +87,7 @@ test("claim_label_session answers all four words", () => {
   }
 });
 
-test("claim_label_session locks the labeller, then checks, then claims", () => {
+test("claim_label_session locks the labeler, then checks, then claims", () => {
   expect(claim).toMatch(
     /select u\.is_labeller into labeller\s+from public\.users u\s+where u\.id = p_user_id\s+for update;/,
   );
@@ -122,7 +122,7 @@ test("release_stale_label_claims measures idleness by the claimer's beats", () =
   expect(release).toMatch(
     /set assigned_to = null,\s+assigned_at = null,\s+claimed_at = null/,
   );
-  expect(release).toContain("s.status = 'labelling'");
+  expect(release).toContain("s.status = 'labeling'");
   expect(release).toContain("s.kind = 'analyst'");
   expect(release).toContain("s.claimed_at is not null");
   expect(release).toMatch(

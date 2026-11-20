@@ -279,7 +279,7 @@ test.describe("splitstep webhook — failed branch gated on the job row", () => 
   });
 });
 
-test.describe("splitstep webhook — completed branch gated on a cancelled row", () => {
+test.describe("splitstep webhook — completed branch gated on a canceled row", () => {
   const completion = {
     event: "job_completed",
     job_id: EXTERNAL_JOB,
@@ -288,7 +288,7 @@ test.describe("splitstep webhook — completed branch gated on a cancelled row",
       "https://splitstepclientvideos.blob.core.windows.net/out/strokes.json?sig=x",
   };
 
-  test("job_completed for a job the row holds as cancelled → 200, nothing secured, graded or derived", async () => {
+  test("job_completed for a job the row holds as canceled → 200, nothing secured, graded or derived", async () => {
     const { calls, deliver } = loadRoute(record("cancelled"), {
       completedPath: true,
     });
@@ -356,7 +356,7 @@ test.describe("splitstep webhook — a signed delivery we cannot read is alerted
     await deliver({ job_id: EXTERNAL_JOB, status: "job_heartbeat" });
     expect(calls.unreadable).toHaveLength(1);
     expect(calls.unreadable[0]).toMatchObject({
-      reason: "it carries no status we recognise",
+      reason: "it carries no status we recognize",
       externalJobId: EXTERNAL_JOB,
     });
   });

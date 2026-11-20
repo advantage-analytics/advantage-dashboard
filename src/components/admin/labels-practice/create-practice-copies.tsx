@@ -121,10 +121,10 @@ export function CreatePracticeCopies({
       </div>
 
       <fieldset className="mt-5">
-        <legend className="eyebrow-sm">Labellers</legend>
+        <legend className="eyebrow-sm">Labelers</legend>
         {labellers.length === 0 ? (
           <p className="text-body-sm mt-2">
-            No one is a labeller yet. Give an account the labeller role first.
+            No one is a labeler yet. Give an account the labeler role first.
           </p>
         ) : (
           <ul className="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">

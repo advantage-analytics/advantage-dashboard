@@ -126,7 +126,7 @@ export function ChartMenu({
       )}
       <FloatMenuItem
         label="Scatter"
-        description="Every landing point, coloured by outcome"
+        description="Every landing point, colored by outcome"
         chosen={state.chart === "scatter"}
         icon={<ChartRowIcon icon={ScatterChart} />}
         onSelect={() => selectChart("scatter")}

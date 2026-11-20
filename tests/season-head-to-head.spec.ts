@@ -139,7 +139,7 @@ test.describe("SeasonHeadToHeadCard", () => {
       expect(html).toContain(`>${title}</span>`);
   });
 
-  test("judged season: Unforced + Forced errors; the leader is emphasised, counts to one decimal", () => {
+  test("judged season: Unforced + Forced errors; the leader is emphasized, counts to one decimal", () => {
     const html = render({
       playerName: "Maya Chen",
       analyzed: 2,

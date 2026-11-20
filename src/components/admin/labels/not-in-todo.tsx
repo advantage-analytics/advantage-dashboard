@@ -120,7 +120,7 @@ export function NotInTodoList({ rows }: { rows: readonly TodoCandidate[] }) {
             Not in To do
           </h2>
           <p className="mt-1 text-[13px] text-[var(--ink-700)]">
-            Analysed matches nobody is labelling, newest first. Add the ones
+            Analyzed matches nobody is labeling, newest first. Add the ones
             worth checking.
           </p>
         </div>
@@ -167,7 +167,7 @@ export function NotInTodoList({ rows }: { rows: readonly TodoCandidate[] }) {
 
       {rows.length === 0 ? (
         <LaneEmpty>
-          Every analysed match is in To do, being labelled or already checked.
+          Every analyzed match is in To do, being labeled or already checked.
         </LaneEmpty>
       ) : filtered.length === 0 ? (
         <LaneEmpty>No match from this workspace is waiting.</LaneEmpty>
@@ -192,7 +192,7 @@ export function NotInTodoList({ rows }: { rows: readonly TodoCandidate[] }) {
                   aria-label="Select every row shown"
                 />
               </span>
-              <span role="columnheader">Analysed</span>
+              <span role="columnheader">Analyzed</span>
               <span role="columnheader">Match</span>
               <span role="columnheader">Workspace</span>
               <span role="columnheader">Video</span>
@@ -273,7 +273,7 @@ export function NotInTodoList({ rows }: { rows: readonly TodoCandidate[] }) {
 
       <p className="text-[12px] text-[var(--ink-500)]">
         A match you add is due 36 h from when you add it. Remove on a To do row
-        puts it back here; once someone is labelling it, it stays theirs.
+        puts it back here; once someone is labeling it, it stays theirs.
       </p>
     </section>
   );

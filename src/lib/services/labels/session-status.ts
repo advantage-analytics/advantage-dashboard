@@ -72,7 +72,7 @@ const plural = (n: number, one: string, many = `${one}s`) =>
 export const PUBLISHED_PAST_TAILS = {
   leftOut: ", so it is left out",
   noEnding: " — it publishes with no ending",
-  labelledWinner: " — it publishes with the labelled winner",
+  labelledWinner: " — it publishes with the labeled winner",
 } as const;
 
 /**
@@ -175,7 +175,7 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
     if (mismatch) {
       warnings.push(
         // Marks off, the publish takes the score as it is (apply-session.ts).
-        `Set ${mismatch.setNumber} labelled ${mismatch.labelled}, the match record says ${mismatch.entered}${marks ? " — it publishes as labelled" : ""}`,
+        `Set ${mismatch.setNumber} labeled ${mismatch.labelled}, the match record says ${mismatch.entered}${marks ? " — it publishes as labeled" : ""}`,
       );
     }
   }
@@ -195,7 +195,7 @@ export function completeWarnings(input: CompleteWarningInput): string[] {
       resolved.winner !== point.winner
     ) {
       warnings.push(
-        `${at}'s strokes say ${names[resolved.winner]} won, not the labelled winner${PUBLISHED_PAST_TAILS.labelledWinner}`,
+        `${at}'s strokes say ${names[resolved.winner]} won, not the labeled winner${PUBLISHED_PAST_TAILS.labelledWinner}`,
       );
     } else if (resolved.kind === "derived") {
       warnings.push(

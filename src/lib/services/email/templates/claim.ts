@@ -297,7 +297,7 @@ export function claimDeclinedEmail(input: ClaimDeclinedInput): EmailMessage {
       // No apology and no euphemism. The most likely reason by far is an
       // address we could not tie to the school, which is a fixable thing
       // rather than a judgement about the person.
-      "This usually means we couldn't confirm the address you used belongs to the program. It isn't a judgement about whether you coach there.",
+      "This usually means we couldn't confirm the address you used belongs to the program. It isn't a judgment about whether you coach there.",
       "If someone from your program already runs the workspace, asking them for an invite is the fastest way in — it takes them one click.",
     ],
     facts: [

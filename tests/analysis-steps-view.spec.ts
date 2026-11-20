@@ -285,7 +285,7 @@ test("processing: started clock and the hour, and no Cancel", () => {
   );
 });
 
-test("cancelled: saved and uploaded, the analysis stopped, and the way back", () => {
+test("canceled: saved and uploaded, the analysis stopped, and the way back", () => {
   const view = analysisStepsView(
     {
       ...BASE,
@@ -296,18 +296,18 @@ test("cancelled: saved and uploaded, the analysis stopped, and the way back", ()
     },
     NOW,
   );
-  expect(view.title).toBe("Analysis cancelled");
+  expect(view.title).toBe("Analysis canceled");
   expect(shape(view)).toEqual([
     "saved:done",
     "video:done",
     "analysis:stopped",
     "stats:later",
   ]);
-  expect(view.steps[2].label).toBe("Analysis cancelled");
+  expect(view.steps[2].label).toBe("Analysis canceled");
   expect(view.steps[2].body).toEqual({
     kind: "note",
     text: "Your video is still stored. Nothing was charged.",
-    meta: "Cancelled 4 min ago · 1h 29m returned",
+    meta: "Canceled 4 min ago · 1h 29m returned",
     resend: { reservedSeconds: 5340 },
   });
   expect(view.failure).toBeUndefined();
@@ -544,7 +544,7 @@ test("every state draws the same four steps in the same order", () => {
   }
 });
 
-test("waiting: only while the job moves on its own — never paused, stalled, failed, cancelled or gated", () => {
+test("waiting: only while the job moves on its own — never paused, stalled, failed, canceled or gated", () => {
   const moving: MatchAnalysis["status"][] = [
     "uploading",
     "uploaded",

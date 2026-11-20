@@ -608,7 +608,7 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
       {
         name: "serve_t",
         type: "integer",
-        meaning: "Serves by this side placed down the T (the centre line).",
+        meaning: "Serves by this side placed down the T (the center line).",
       },
       {
         name: "return_cross_court",
@@ -1019,14 +1019,14 @@ export const ASK_SCHEMA: readonly AskViewSchema[] = [
         name: "contact_x",
         type: "number",
         meaning:
-          "Where the hitter struck the ball, across the court: metres from the centre line, positive to the player's right as they face the net from their own baseline. The frame is turned to the player for every point, so end changes need no handling; null when not measured.",
+          "Where the hitter struck the ball, across the court: meters from the center line, positive to the player's right as they face the net from their own baseline. The frame is turned to the player for every point, so end changes need no handling; null when not measured.",
         mcpOnly: true,
       },
       {
         name: "contact_y",
         type: "number",
         meaning:
-          "Where the hitter struck the ball, along the court: metres from the player's own baseline (0), through the net (11.885), to the opponent's baseline (23.77); below 0 or above 23.77 is behind a baseline. Turned to the player like contact_x; null when not measured.",
+          "Where the hitter struck the ball, along the court: meters from the player's own baseline (0), through the net (11.885), to the opponent's baseline (23.77); below 0 or above 23.77 is behind a baseline. Turned to the player like contact_x; null when not measured.",
         mcpOnly: true,
       },
       {

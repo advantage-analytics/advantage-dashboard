@@ -75,7 +75,7 @@ test("programs before personal matches, the one with the most to label first", (
   expect(groups[2].name).toBe("Personal matches");
 });
 
-test("a player's matches sit together: needs labelling first, then newest", () => {
+test("a player's matches sit together: needs labeling first, then newest", () => {
   const [program] = groupLabelJobs(
     [
       job("done", "m1", DONE),
@@ -126,10 +126,10 @@ test("a job with no owner row still lists, under its own player 1", () => {
 
 test("a group's state reads as a sentence, with only what it has", () => {
   expect(countsSentence({ todo: 2, doing: 1, done: 3 })).toBe(
-    "2 need labelling · 1 in progress · 3 labelled",
+    "2 need labeling · 1 in progress · 3 labeled",
   );
   expect(countsSentence({ todo: 1, doing: 0, done: 0 })).toBe(
-    "1 needs labelling",
+    "1 needs labeling",
   );
   expect(countsSentence({ todo: 0, doing: 0, done: 0 })).toBe("");
 });
@@ -149,7 +149,7 @@ test("the entered score and the program read as the upload wrote them", () => {
   expect(programLabel({ school_name: null, team: "mens" })).toBeNull();
 });
 
-test("a match's stored flags sort into amber and grey by the rail's own table", () => {
+test("a match's stored flags sort into amber and gray by the rail's own table", () => {
   expect(
     classifyFlags([
       ["winner_disputed", "phantom_strokes_dropped"],

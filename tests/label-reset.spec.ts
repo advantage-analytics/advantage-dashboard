@@ -576,7 +576,7 @@ test("the loader carries each row's seed, and no seed for a bad one", () => {
 });
 
 test.describe("the session's ad scoring", () => {
-  test("the labeller's answer wins, then the job's, then the match's format, then ad scoring", () => {
+  test("the labeler's answer wins, then the job's, then the match's format, then ad scoring", () => {
     expect(resolveLabelAdScoring(false, true)).toBe(false);
     expect(resolveLabelAdScoring(true, false)).toBe(true);
     expect(resolveLabelAdScoring(null, false)).toBe(false);

@@ -217,7 +217,7 @@ test.describe("creating and deleting practice copies", () => {
     }
   });
 
-  test("validates the set and the labeller list before reading", async () => {
+  test("validates the set and the labeler list before reading", async () => {
     const deps = {
       requireAdmin: async () => ({ id: ADMIN }),
       createAdminClient: () => {
@@ -235,7 +235,7 @@ test.describe("creating and deleting practice copies", () => {
         { sourceSessionId: KEY_ID, setNumber: 1, labellerIds: [] },
         deps,
       ),
-    ).toEqual({ error: "Pick at least one labeller." });
+    ).toEqual({ error: "Pick at least one labeler." });
   });
 
   test("delete is matched on kind = 'practice', so it can never take the key", async () => {

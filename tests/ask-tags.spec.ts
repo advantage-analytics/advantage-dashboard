@@ -587,7 +587,7 @@ test.describe("the Ask entry points (`entry.ts`)", () => {
     );
   });
 
-  test("the page reads back only what its menu can tag, labelled as the menu would", () => {
+  test("the page reads back only what its menu can tag, labeled as the menu would", () => {
     expect(
       askTagsFromQuery(
         { match: "m1", opponent: "marcus hale", player: "p1" },

@@ -30,7 +30,7 @@ const OPFS_PREFIX = "prepared-video-";
 
 export class TrimCancelledError extends Error {
   constructor() {
-    super("Preparing the video was cancelled");
+    super("Preparing the video was canceled");
     this.name = "TrimCancelledError";
   }
 }

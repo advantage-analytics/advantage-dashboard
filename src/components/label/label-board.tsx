@@ -172,7 +172,7 @@ function TodoLane({
   return (
     <Lane id="label-board-todo" title="To do" count={laneCount(rows)}>
       {rows.length === 0 ? (
-        <LaneEmpty>Nothing is waiting to be labelled.</LaneEmpty>
+        <LaneEmpty>Nothing is waiting to be labeled.</LaneEmpty>
       ) : (
         <div className="flex flex-col gap-1">
           <div
@@ -318,7 +318,7 @@ function MineCard({ row, now }: { row: LabellerSessionRow; now: number }) {
           href={`/label/${row.sessionId}`}
           className={cn(advButton("primary", "md"), "w-full gap-1")}
         >
-          Continue labelling
+          Continue labeling
           <ChevronRight
             className="size-3.5"
             strokeWidth={1.5}

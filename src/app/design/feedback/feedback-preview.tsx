@@ -45,7 +45,7 @@ const DIRECTIONS: readonly {
   {
     id: "strip",
     label: "Strip",
-    note: "Not a dialog. A grey strip at the top of whichever dashboard page the player lands on, the scale inline, nothing dimmed. The tap saves the rating on its own; the strip then asks for a note and goes away. The quietest ask that still gets a number from one click.",
+    note: "Not a dialog. A gray strip at the top of whichever dashboard page the player lands on, the scale inline, nothing dimmed. The tap saves the rating on its own; the strip then asks for a note and goes away. The quietest ask that still gets a number from one click.",
   },
   {
     id: "corner",

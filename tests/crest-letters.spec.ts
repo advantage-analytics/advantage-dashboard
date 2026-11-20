@@ -24,7 +24,7 @@ test.describe("crestLetters", () => {
     expect(crestLetters(null, "Stanford").length).toBeLessThanOrEqual(3);
   });
 
-  test("whitespace is trimmed and case normalised", () => {
+  test("whitespace is trimmed and case normalized", () => {
     expect(crestLetters("  uci ", "UC Irvine")).toBe("UCI");
     expect(crestLetters("uc", "UC Irvine")).toBe("UC");
   });

@@ -168,10 +168,10 @@ test("an old match, never added to To do, still gets the control", () => {
 test("a refusal's sentence shows under the control", () => {
   const { html } = render(
     { labelJobId: JOB },
-    { error: "Only an admin can start labelling." },
+    { error: "Only an admin can start labeling." },
   );
   expect(html).toContain('role="alert"');
-  expect(html).toContain("Only an admin can start labelling.");
+  expect(html).toContain("Only an admin can start labeling.");
 });
 
 // ── labelJobIdFor: which job the row carries ─────────────────────────────────
@@ -206,7 +206,7 @@ test("labelJobIdFor picks the newest completed job with a results file", () => {
   ).toBe(OLDER_JOB);
 });
 
-test("labelJobIdFor is null when no job can be labelled", () => {
+test("labelJobIdFor is null when no job can be labeled", () => {
   expect(labelJobIdFor([])).toBeNull();
   expect(
     labelJobIdFor([

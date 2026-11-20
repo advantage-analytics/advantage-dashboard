@@ -22,7 +22,7 @@ test.describe("formatDistance", () => {
     expect(formatDistance("ft", 2.5)).toBe("2.5 ft");
   });
 
-  test("converts to metres", () => {
+  test("converts to meters", () => {
     // 5 ft -> exactly 1.524 m
     expect(formatDistance("m", 5)).toBe("1.5 m");
   });

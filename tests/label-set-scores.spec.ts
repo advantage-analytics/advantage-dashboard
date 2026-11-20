@@ -188,7 +188,7 @@ test.describe("labelSetScores", () => {
     expect(setsOf([{ ...won(1, 1, "p1"), setNumber: null }])).toEqual([]);
   });
 
-  test("formatSets writes the labelled sets as the publish script prints them", () => {
+  test("formatSets writes the labeled sets as the publish script prints them", () => {
     expect(formatSets(setsOf(twoSets()))).toBe("2–1, 0–1");
     expect(formatSets([])).toBe("");
   });
@@ -228,7 +228,7 @@ test.describe("enteredScore", () => {
 test.describe("scoreMismatch", () => {
   const labelled = () => setsOf(twoSets());
 
-  test("names the first set whose pair differs, with the labelled and entered pairs, the set's first point and its reasons", () => {
+  test("names the first set whose pair differs, with the labeled and entered pairs, the set's first point and its reasons", () => {
     expect(
       scoreMismatch(labelled(), [
         [2, 1],
@@ -332,13 +332,13 @@ test.describe("the chip's sentence", () => {
       extra: 2,
     };
     expect(scoreMismatchSentence(mismatch([short]))).toBe(
-      "Set 2: labelled 4–5, entered 4–6 · game 5 unfinished (30–40)",
+      "Set 2: labeled 4–5, entered 4–6 · game 5 unfinished (30–40)",
     );
     expect(scoreMismatchSentence(mismatch([short, over]))).toBe(
-      "Set 2: labelled 4–5, entered 4–6 · game 5 unfinished (30–40) · game 3 has 2 extra points",
+      "Set 2: labeled 4–5, entered 4–6 · game 5 unfinished (30–40) · game 3 has 2 extra points",
     );
     expect(scoreMismatchSentence(mismatch([]))).toBe(
-      "Set 2: labelled 4–5, entered 4–6",
+      "Set 2: labeled 4–5, entered 4–6",
     );
     expect(scoreReasonText({ ...over, extra: 1 })).toBe(
       "game 3 has 1 extra point",

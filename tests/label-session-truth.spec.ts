@@ -73,7 +73,7 @@ test("a single-id point joins its rally and maps sides to names", () => {
   expect(rows[0].proposed).toBeNull();
 });
 
-test("a multi-id point joins on its first id; the rest are the labeller's merge", () => {
+test("a multi-id point joins on its first id; the rest are the labeler's merge", () => {
   const labels = [label({ pointIndex: 2, vendorRallyIds: [11, 12] })];
   const { rows } = joinSessionTruth({
     labels,

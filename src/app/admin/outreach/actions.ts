@@ -516,7 +516,7 @@ export async function cancelOutreachSend(
   if (!send || send.status !== "scheduled" || !send.resend_id) {
     return {
       ok: false,
-      message: "Only a scheduled email that hasn't gone out can be cancelled.",
+      message: "Only a scheduled email that hasn't gone out can be canceled.",
     };
   }
   if (
@@ -535,7 +535,7 @@ export async function cancelOutreachSend(
     .update({ status: "cancelled", updated_at: new Date().toISOString() })
     .eq("id", send.id);
   revalidatePath(PAGE);
-  return { ok: true, message: "Cancelled. It won't go out." };
+  return { ok: true, message: "Canceled. It won't go out." };
 }
 
 // ── Edit the email ────────────────────────────────────────────────────────

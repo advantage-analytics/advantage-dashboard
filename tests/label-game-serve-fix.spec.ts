@@ -106,7 +106,7 @@ test.describe("gameServeFix", () => {
     expect(fix).toMatchObject({ kind: "server", server: "p1" });
   });
 
-  test("a game split between two servers is left for the labeller to cut", () => {
+  test("a game split between two servers is left for the labeler to cut", () => {
     expect(
       gameServeFix([
         served(0, "p1"),
@@ -157,7 +157,7 @@ test.describe("gameServeFix", () => {
     ).toBeNull();
   });
 
-  test("a serve the labeller gave its hitter stands", () => {
+  test("a serve the labeler gave its hitter stands", () => {
     // "Only this shot": the serve handed to player 2 by hand, off its seed.
     const byHand = point(1, "p1", ["p2", "p2", "p1"]);
     byHand.shots[0] = {

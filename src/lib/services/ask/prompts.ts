@@ -367,7 +367,7 @@ export const ASK_PLAN_REPLY_SCHEMA = {
       asks_for_advice: {
         type: "boolean",
         description:
-          "True when the question asks what to do, change, practise or work on.",
+          "True when the question asks what to do, change, practice or work on.",
       },
       state: {
         type: "object",
@@ -777,7 +777,7 @@ Shape D, a comparison the app computes itself (see "Comparisons" below):
 - One SELECT that returns the single column match_id from the ask views: the matches the question is about.
 - No tags and no filter in the question: select match_id from ask.matches
 - A tagged match or opponent: restrict to exactly the match ids listed for it under "Tags on this question", with match_id in ('...', '...').
-- An opponent named in the question text without a tag: select match_id from ask.matches where opponent_name ilike '%name%'. You are not shown the player's opponents, so a name you do not recognise is still a name: use the first four or five letters of it as typed, between % signs, and let the data decide. NEVER answer shape B because a name is unfamiliar or looks misspelt.
+- An opponent named in the question text without a tag: select match_id from ask.matches where opponent_name ilike '%name%'. You are not shown the player's opponents, so a name you do not recognize is still a name: use the first four or five letters of it as typed, between % signs, and let the data decide. NEVER answer shape B because a name is unfamiliar or looks misspelt.
 - A period ("this year", "last five matches", "since June"): filter or order ask.matches by played_on, using today's date under "This question". "My last match" is order by played_on desc nulls last, match_id desc limit 1.
 - It may not read ${SCOPE_NAME}.
 
@@ -810,7 +810,7 @@ For these questions you write NO sql. The app runs its own fixed query over the 
 
 ### The review (shape C)
 
-"How can I improve", "how can I improve for my next match", "what should I work on", "what do I need to fix", "what should I practise", "what went wrong in my last match", "where am I slipping", "what got worse", "where has my game slipped recently": a question about getting better or about what has gone wrong that names NO statistic, NO opponent and NO tagged match. Reply with shape C and write no sql. The app runs its own fixed query: the player's last match, measure by measure, against the average of the five matches before it and of every earlier match.
+"How can I improve", "how can I improve for my next match", "what should I work on", "what do I need to fix", "what should I practice", "what went wrong in my last match", "where am I slipping", "what got worse", "where has my game slipped recently": a question about getting better or about what has gone wrong that names NO statistic, NO opponent and NO tagged match. Reply with shape C and write no sql. The app runs its own fixed query: the player's last match, measure by measure, against the average of the five matches before it and of every earlier match.
 - scope_sql is every match those averages may be drawn from: select match_id from ask.matches, narrowed only by a period the question names ("this season"). NEVER limit it to the last match; the app finds the last match itself.
 - asks_for_advice is true in shape C.
 - A question that names a statistic ("how can I improve my second serve"), an opponent ("how do I beat this opponent") or a tagged match, or that asks why one match was won or lost, is NOT a review: it is shape A or shape D.
@@ -842,12 +842,12 @@ ${ASK_PRACTICE_RULE}
 - The question is not about the player's tennis matches at all.
 - Never for a question that is short, vague or misspelt: those get shape D over all matches.
 - Never for where serves or returns went on big points, break points, set points or match points: ask.points carries the pressure flags and ask.point_plays (serve_zone, court) or ask.shots (zone) the placement — join them on match_id and point_number, shape A.
-- Never for "what should I practise / work on / fix / improve / do differently": that is the review, shape C.
+- Never for "what should I practice / work on / fix / improve / do differently": that is the review, shape C.
 - cannot_answer is one plain sentence to the player, in the second person, saying what their matches do not record. No digits, no apology, no suggestion.
 
 ### asks_for_advice
 
-- true when the question asks what to do: what to work on, improve, practise, change or fix, how to beat someone, which tactic or strategy to use, or whether something is good enough.
+- true when the question asks what to do: what to work on, improve, practice, change or fix, how to beat someone, which tactic or strategy to use, or whether something is good enough.
 - false when it only asks what happened.
 - A question that asks for advice is ALWAYS answered with shape A, C or D whenever the views hold facts on its subject: plan the factual part and set asks_for_advice to true. "How do I beat this opponent?" is shape D, "compare": "opponent", over the matches against them. "What should I work on?" is the review, shape C. Never choose shape B only because advice was asked.
 
@@ -1233,7 +1233,7 @@ The rules below are the product's promise to the player, not style preferences. 
 - Write ordinals as words: "second serve", "first set", "third game". Never "2nd". Never spell out a value from the result in words in place of a reference.
 - COMPARISONS ARE COMPUTED BY THE QUERY, NEVER IN PROSE. Do not subtract, add, average, round or rank. You may say which of two referenced values is higher as the statements give it, and for me_ and opp_ columns you may say which measures differ most. You may say by how much only when the result has a column that holds that difference.
 - COMPARATIVE WORDS FOLLOW THE STATEMENTS. Higher, lower, more, fewer, better, worse, rose, fell, climbed, dropped, improved, declined, best, worst, most, least, equal, level, exceeds, ahead, behind: use one only when a statement under "What the numbers show" gives that direction for those figures, and use the direction it gives. Where no statement compares two figures, put them side by side with no comparative word. A figure the statements call missing is never compared, and a count the statements give for one row is never given to another.
-- NO ADVICE. No recommendation, drill, tactic, strategy, encouragement or praise. Never "you should", "try", "focus on", "work on", "keep it up", "well done". If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologise.
+- NO ADVICE. No recommendation, drill, tactic, strategy, encouragement or praise. Never "you should", "try", "focus on", "work on", "keep it up", "well done". If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologize.
 - THE MATCH COUNT IS ${ASK_SCOPE_COUNT_COLUMN}. Nowhere else. The headline never mentions sample size, and the body remarks on it at most once, in its last sentence, only when the scope says it may.
 - Say only what the result shows. No cause the result does not hold, no guess about the opponent, no claim about matches outside it.
 ${ASK_ERRORS_RULE}
@@ -1444,7 +1444,7 @@ Shape D, a comparison the app computes itself (see "Comparisons" below):
 - One SELECT that returns the single column match_id from the ask views: the matches the question is about.
 - No tags and no filter in the question: select match_id from ask.matches
 - A tagged match, player or opponent: restrict to exactly the match ids listed for it under "Tags on this question", with match_id in ('...', '...').
-- A player named in the question text without a tag: select match_id from ask.matches where player_name ilike '%name%'. You are not shown the roster, so a name you do not recognise is still a name: use the first four or five letters of it and let the data decide. A name could also be an opponent's; when the question says "against" or "versus" a name, filter opponent_name ilike instead. NEVER answer shape B because a name is unfamiliar or looks misspelt.
+- A player named in the question text without a tag: select match_id from ask.matches where player_name ilike '%name%'. You are not shown the roster, so a name you do not recognize is still a name: use the first four or five letters of it and let the data decide. A name could also be an opponent's; when the question says "against" or "versus" a name, filter opponent_name ilike instead. NEVER answer shape B because a name is unfamiliar or looks misspelt.
 - A period ("this season", "last five matches", "since September"): filter or order ask.matches by played_on, using today's date under "This question". A season starts on August 1. "Our last match" is order by played_on desc nulls last, match_id desc limit 1.
 - It may not read ${SCOPE_NAME}.
 
@@ -1519,7 +1519,7 @@ ${ASK_PRACTICE_RULE}
 
 ### asks_for_advice
 
-- true when the question asks what to do: what to work on, improve, practise, change or fix, how to beat someone, which lineup, tactic or strategy to use, or whether something is good enough.
+- true when the question asks what to do: what to work on, improve, practice, change or fix, how to beat someone, which lineup, tactic or strategy to use, or whether something is good enough.
 - false when it only asks what happened.
 - A question that asks for advice is ALWAYS answered with shape A, C or D whenever the views hold facts on its subject: plan the factual part and set asks_for_advice to true. "How do we beat this opponent?" and "how should PlayerA play against OpponentX?" are shape D, "compare": "opponent", over the matches against them. "What should we work on?" is the review, shape C. Never choose shape B only because advice was asked.
 
@@ -1636,7 +1636,7 @@ ROW: First serves in ${S} {{r1.first_serve_pct}} ${S} {{r1.team_first_serve_pct}
 ROW: Second-serve points won ${S} {{r1.second_serve_won_pct}} ${S} {{r1.team_second_serve_won_pct}}`,
   },
   table: {
-    when: `players side by side (one ROW per player, labelled with the player's name), the program's players against their opponents, or several unlike numbers side by side — counts next to percentages, a team column or a difference column. 2 to ${MAX_ASK_TABLE_COLUMNS} columns, up to ${ASK_TABLE_ROWS} rows. COLUMNS lists ONLY the value columns; the row label has no heading, so never start COLUMNS with Player, Measure, Metric, Stat or any other name for the labels. Every ROW has a label and then EXACTLY one cell per column heading, separated by ${S}; a row with fewer or more cells is left out. One column of one player's numbers is not a table (use figure lines, or add the opponents' or the team's column).`,
+    when: `players side by side (one ROW per player, labeled with the player's name), the program's players against their opponents, or several unlike numbers side by side — counts next to percentages, a team column or a difference column. 2 to ${MAX_ASK_TABLE_COLUMNS} columns, up to ${ASK_TABLE_ROWS} rows. COLUMNS lists ONLY the value columns; the row label has no heading, so never start COLUMNS with Player, Measure, Metric, Stat or any other name for the labels. Every ROW has a label and then EXACTLY one cell per column heading, separated by ${S}; a row with fewer or more cells is left out. One column of one player's numbers is not a table (use figure lines, or add the opponents' or the team's column).`,
     rows: [
       {
         [ASK_SCOPE_COUNT_COLUMN]: 1,
@@ -1702,7 +1702,7 @@ ${ASK_VISUAL_PLOT_PREFIX} i_won`,
 };
 
 /** The team answer prompt's no-advice rule, word for word as it was: the spec pins it. */
-export const ASK_TEAM_NO_ADVICE_RULE = `- NO ADVICE. No recommendation, drill, lineup, tactic, strategy, encouragement or praise. Never "you should", "the team should", "try", "focus on", "work on", "keep it up", "well done". If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologise.`;
+export const ASK_TEAM_NO_ADVICE_RULE = `- NO ADVICE. No recommendation, drill, lineup, tactic, strategy, encouragement or praise. Never "you should", "the team should", "try", "focus on", "work on", "keep it up", "well done". If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologize.`;
 
 /**
  * Coach mode's replacement for it (roadmap 4.3, `coach.ts`): the one rule
@@ -1753,7 +1753,7 @@ The app draws a block from cells of the result; you choose its kind and write it
 ${ASK_VISUAL_LINE_SYNTAX}
 A cell is exactly one ${ASK_CELL_REFERENCE_SYNTAX} and nothing else. A label or caption is a few plain words with no digits; it may hold a reference ("From {{r1.${ASK_SCOPE_COUNT_COLUMN}}} matches"). After a ROW label comes ${S}, never an equals sign. A ${ASK_VISUAL_PLOT_PREFIX} line names columns of the result, not cells: the app reads them from every row, so you never write a reference per match.
 
-A result with one row per player is drawn as a table with one ROW per player, labelled with the player's name copied from that row's player_name, the rows in the order the result gives them, and at most ${ASK_TABLE_ROWS} of them. A result with me_ and opp_ columns is drawn as a table whose first column is headed with the player's name when the result is about one player, or "Team" when it covers several, and whose second is the opponent's name or "Opponents" — never "You". It holds the four to six measures that differ most between the two, the largest difference first. Leave out a measure whose cells are null. In each row the first cell is the me_ column and the second is the opp_ column of the SAME measure: never two me_ columns in one row, and never a percentage beside a count.
+A result with one row per player is drawn as a table with one ROW per player, labeled with the player's name copied from that row's player_name, the rows in the order the result gives them, and at most ${ASK_TABLE_ROWS} of them. A result with me_ and opp_ columns is drawn as a table whose first column is headed with the player's name when the result is about one player, or "Team" when it covers several, and whose second is the opponent's name or "Opponents" — never "You". It holds the four to six measures that differ most between the two, the largest difference first. Leave out a measure whose cells are null. In each row the first cell is the me_ column and the second is the opp_ column of the SAME measure: never two me_ columns in one row, and never a percentage beside a count.
 
 ${renderVisualCatalogue(ASK_TEAM_VISUAL_EXAMPLES)}
 

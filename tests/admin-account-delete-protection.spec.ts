@@ -175,7 +175,7 @@ test("ordinary actor reaches existing owner refusal after protection check", asy
   });
   expect(h.effects).toEqual(["prepare"]);
 });
-test("a labelled personal match refuses in the prepare step, before anything is released", async () => {
+test("a labeled personal match refuses in the prepare step, before anything is released", async () => {
   const h = harness({
     prepare: { code: "22023", message: "label-session-protected" },
   });

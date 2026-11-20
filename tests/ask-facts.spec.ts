@@ -167,7 +167,7 @@ test.describe("computeAskFacts — pairs within a row", () => {
   });
 });
 
-test.describe("computeAskFacts — extremes across labelled rows", () => {
+test.describe("computeAskFacts — extremes across labeled rows", () => {
   const ROWS = [
     { player_name: "Mara Sokolov", second_serve_won_pct: 58.4 },
     { player_name: "Jo Reyes", second_serve_won_pct: 51.9 },
@@ -369,7 +369,7 @@ test.describe("computeAskFacts — the cap", () => {
     expect(facts[2]).toContain("EQUAL in every row");
   });
 
-  test("more than twenty labelled rows are not ranked", () => {
+  test("more than twenty labeled rows are not ranked", () => {
     const rows = Array.from({ length: 21 }, (_, n) => ({
       opponent_name: `P${n}`,
       aces: n,
@@ -538,7 +538,7 @@ test.describe("withOrderSummary — the first, last, lowest and highest on the f
     expect(first.end_aces).toBe(4);
   });
 
-  test("at most three measures are summarised", () => {
+  test("at most three measures are summarized", () => {
     const rows = [1, 2].map((n) => ({
       played_on: `2026-0${n}-01`,
       a: n,

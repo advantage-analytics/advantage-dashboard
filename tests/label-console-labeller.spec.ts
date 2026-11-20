@@ -91,7 +91,7 @@ function consoleProps(overrides: Props = {}): Props {
 
 const NAMES = ["Jordan Lee", "Elena Vargas", "Lee", "Vargas"];
 
-test.describe("viewerKind=labeller", () => {
+test.describe("viewerKind=labeler", () => {
   for (const mode of ["overview", "black"] as const) {
     test(`no player, program, admin link or derivation; Player 1 and Player 2; Publish (${mode})`, () => {
       const html = render(
@@ -127,7 +127,7 @@ test.describe("viewerKind=labeller", () => {
     expect(html).not.toMatch(/>Far</);
   });
 
-  test("a labeller can still switch a stroke's hitter, between Player 1 and Player 2", () => {
+  test("a labeler can still switch a stroke's hitter, between Player 1 and Player 2", () => {
     const session = labellerSession(labelSessionFixture());
     const point = session.points.find((p) => p.shots.length > 0)!;
     const html = render(
@@ -271,7 +271,7 @@ test.describe("viewerKind=admin", () => {
     `</span>`,
     `<button type="button" data-mark-complete="" class="${OUTLINE}">Publish`,
     `</button>`,
-    `<button type="button" data-open-labelling="" class="${PRIMARY}">Open labelling`,
+    `<button type="button" data-open-labelling="" class="${PRIMARY}">Open labeling`,
     `</button>`,
     `<a href="/admin/labels">Back to Labels`,
     `</a>`,
@@ -279,7 +279,7 @@ test.describe("viewerKind=admin", () => {
     `</div>`,
   ].join("");
 
-  test("the header is byte-identical to before for a labelling session", () => {
+  test("the header is byte-identical to before for a labeling session", () => {
     const props = consoleProps({
       upload: UPLOAD,
       headerAction: React.createElement(
@@ -309,7 +309,7 @@ test.describe("viewerKind=admin", () => {
   });
 });
 
-test.describe("the point the labeller page opens on", () => {
+test.describe("the point the labeler page opens on", () => {
   const mark = (code: LabelMarkCode): LabelMark => {
     const meta = LABEL_MARK_META[code];
     return {
@@ -356,7 +356,7 @@ test.describe("the point the labeller page opens on", () => {
     expect(firstAmberStop(session(), null)).toBeNull();
   });
 
-  test("a grey flag is not a stop", () => {
+  test("a gray flag is not a stop", () => {
     expect(
       firstAmberStop(
         session(),
@@ -395,7 +395,7 @@ test.describe("the point the labeller page opens on", () => {
 });
 
 test.describe("the overview checklist", () => {
-  test("a labeller's overview says Before you publish, never submit", () => {
+  test("a labeler's overview says Before you publish, never submit", () => {
     const html = render(
       consoleProps({ viewerKind: "labeller", initialLayoutMode: "overview" }),
     );

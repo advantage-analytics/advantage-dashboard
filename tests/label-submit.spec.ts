@@ -129,7 +129,7 @@ const fixture = labelSessionFixture();
 const readFixture = async () => ({ session: fixture });
 
 test.describe("writeLabelSubmit", () => {
-  test("on a labelling session: the snapshot first, then the status, both stamped alike", async () => {
+  test("on a labeling session: the snapshot first, then the status, both stamped alike", async () => {
     const fake = client({ session: sessionRow("labelling") });
     const now = Date.parse("2026-11-03T21:00:00.000Z");
     expect(
@@ -300,7 +300,7 @@ test.describe("submitLabelSession", () => {
     expect(built).toBe(0);
   });
 
-  test("asks the gate about the session, for a labeller and an admin alike", async () => {
+  test("asks the gate about the session, for a labeler and an admin alike", async () => {
     for (const kind of ["labeller", "admin"] as const) {
       const asked: unknown[] = [];
       const fake = client({ session: sessionRow("labelling") });
@@ -363,7 +363,7 @@ test.describe("submitLabelSession", () => {
     ]);
   });
 
-  test("a real session is published: lease, snapshot, publish, verify as the labeller, then a close with no check", async () => {
+  test("a real session is published: lease, snapshot, publish, verify as the labeler, then a close with no check", async () => {
     const fake = client({ session: sessionRow("labelling") });
     const now = Date.parse("2026-11-14T09:00:00.000Z");
     const order: string[] = [];
@@ -535,7 +535,7 @@ test.describe("submitLabelSession", () => {
     });
   });
 
-  test("a refused publish leaves the snapshot, releases the lease and leaves the session labelling", async () => {
+  test("a refused publish leaves the snapshot, releases the lease and leaves the session labeling", async () => {
     const fake = client({ session: sessionRow("labelling") });
     expect(
       await submitLabelSession(SESSION_ID, as("labeller", fake), {
@@ -581,7 +581,7 @@ test.describe("submitLabelSession", () => {
     expect(writes(fake.calls).some((c) => c.values?.status)).toBe(false);
   });
 
-  test("a labeller reads a failure after the gate as the fixed sentence; an admin reads it whole", async () => {
+  test("a labeler reads a failure after the gate as the fixed sentence; an admin reads it whole", async () => {
     const sentence = `Match ${MATCH_ID} not found`;
     const answers: Record<string, unknown> = {};
     const logged = captureErrors();
@@ -604,13 +604,13 @@ test.describe("submitLabelSession", () => {
     expect(JSON.stringify(answers.labeller)).not.toContain(MATCH_ID);
     // The raw text is logged once, for the labeller's answer.
     const refusals = logged.calls.filter(
-      ([line]) => line === "[labels:submit] refused a labeller",
+      ([line]) => line === "[labels:submit] refused a labeler",
     );
     expect(refusals).toHaveLength(1);
     expect(JSON.stringify(refusals)).toContain(sentence);
   });
 
-  test("a labeller never reads the database's words: a failed snapshot, a failed read, a thrown publish", async () => {
+  test("a labeler never reads the database's words: a failed snapshot, a failed read, a thrown publish", async () => {
     const logged = captureErrors();
     const snapshot = client({
       session: sessionRow("labelling"),
@@ -651,7 +651,7 @@ test.describe("submitLabelSession", () => {
     );
   });
 
-  test("a labeller still reads the deliberate refusals as they are", async () => {
+  test("a labeler still reads the deliberate refusals as they are", async () => {
     const refused = client({ session: sessionRow("labelling") });
     expect(
       await submitLabelSession(SESSION_ID, as("labeller", refused), {
@@ -703,7 +703,7 @@ test.describe("the admin paths on a submitted session", () => {
     ).toBe(FROZEN);
   });
 
-  test("Reopen from submitted: back to labelling with submitted_at cleared, matched on submitted, and no RPC", async () => {
+  test("Reopen from submitted: back to labeling with submitted_at cleared, matched on submitted, and no RPC", async () => {
     const fake = client({ session: sessionRow("submitted") });
     expect(
       await writeLabelSessionReopen({
@@ -791,7 +791,7 @@ test.describe("the admin paths on a submitted session", () => {
     expect(fake.calls.some((c) => c.table === "label_submissions")).toBe(false);
   });
 
-  test("Mark complete refuses a labeller before any read, even on a session they submitted", async () => {
+  test("Mark complete refuses a labeler before any read, even on a session they submitted", async () => {
     let built = 0;
     expect(
       await completeLabelSession(SESSION_ID, {

@@ -2001,7 +2001,7 @@ test("removal: a second DELETE is harmless and answers the same", async () => {
   expect(h.store.rows.get(row.id)!.retired_at).toBe(retiredAt);
 });
 
-test("removal: a pending attempt is cancelled, not removed — 409", async () => {
+test("removal: a pending attempt is canceled, not removed — 409", async () => {
   const h = removalHarness(R_PLAYER);
   const row = h.store.seed(R_PLAYER_MATCH, R_PLAYER, "pending");
   const { response, json } = await removeVideo(h, R_PLAYER_MATCH, {

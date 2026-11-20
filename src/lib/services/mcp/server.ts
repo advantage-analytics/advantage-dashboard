@@ -190,7 +190,7 @@ const MAX_SQL_LENGTH = 20_000;
 /** How many of the scope's matches a query result lists back. */
 const MAX_LISTED_SOURCES = 100;
 
-const INSTRUCTIONS = `Advantage Ask: the signed-in player's own tennis match data (or one program's, with program_id). When a team or program is mentioned, call list_workspaces first: it is where a program_id comes from. Call list_matches to see what is in scope, get_match before summarising one match (its statistics, the AI summary and key moments, and links to open or share it), opponent_scouting for a record against an opponent, describe_views once to learn the five ask views and the query rules, run_query for a read-only SELECT over the views, open_visualization for a link to one court chart of a match (or of a team player's season) with filters applied, find_points for a link that plays chosen points of a match in its Video tab (by situation, serve, how the point ended, or how long the rally was), and ask to have Advantage answer a whole question (it saves the exchange to the player's Ask history and spends one of their monthly questions). Two more tools write: update_match fixes a match's details (never its score), and prepare_video_upload saves a draft and returns the link where the player picks the video and finishes — confirm what the player wants before calling either. Before setting an opponent's school, call search_programs and pass the program's id to update_match as opponent_program_id; send opponent_school text only for a school the directory does not hold. Practice never counts: a match whose match_type is practice (any case or padding) is left out of every record, win–loss count, head-to-head and season statistic unless the player asks about practice — opponent_scouting already leaves practice out, and a record you count from list_matches or run_query must too. Every number you report must come from a tool result; the views hold nobody else's data, except the matches of teams the player belongs to.`;
+const INSTRUCTIONS = `Advantage Ask: the signed-in player's own tennis match data (or one program's, with program_id). When a team or program is mentioned, call list_workspaces first: it is where a program_id comes from. Call list_matches to see what is in scope, get_match before summarizing one match (its statistics, the AI summary and key moments, and links to open or share it), opponent_scouting for a record against an opponent, describe_views once to learn the five ask views and the query rules, run_query for a read-only SELECT over the views, open_visualization for a link to one court chart of a match (or of a team player's season) with filters applied, find_points for a link that plays chosen points of a match in its Video tab (by situation, serve, how the point ended, or how long the rally was), and ask to have Advantage answer a whole question (it saves the exchange to the player's Ask history and spends one of their monthly questions). Two more tools write: update_match fixes a match's details (never its score), and prepare_video_upload saves a draft and returns the link where the player picks the video and finishes — confirm what the player wants before calling either. Before setting an opponent's school, call search_programs and pass the program's id to update_match as opponent_program_id; send opponent_school text only for a school the directory does not hold. Practice never counts: a match whose match_type is practice (any case or padding) is left out of every record, win–loss count, head-to-head and season statistic unless the player asks about practice — opponent_scouting already leaves practice out, and a record you count from list_matches or run_query must too. Every number you report must come from a tool result; the views hold nobody else's data, except the matches of teams the player belongs to.`;
 
 const PROGRAM_NOT_FOUND =
   "That program isn't in the directory. Find its id with search_programs.";
@@ -523,7 +523,7 @@ const READ_TOOL_DESCRIPTIONS = {
   list_matches:
     "The matches in scope — the signed-in player's own, or one program's with program_id — newest first, with each match's id, date (played_on, UTC), opponent, the opponent's school (opponent_school: the linked program's name or the text typed), opponent_program_id and opponent_conference, score from the player's seat, result (i_won), source (video, swingvision, or null when entered by hand), tournament, match type and whether statistics exist for it. These are exactly the rows a query can read. Practice sessions (match_type practice, any case or padding) are listed too: leave them out when counting a record or a win–loss from this list, unless the question is about practice.",
   get_match:
-    "One match in full, with no SQL: its ask.matches row (date, opponent and their school, score from the player's seat, result, source, tournament), both sides of ask.match_stats (me and opponent — every count, percentage and rating the views carry), the AI summary with strengths and weaknesses for each side and the key moments where analysis produced them, the match page's URL, and its public share link when one has been created in the app. Call it before summarising a match.",
+    "One match in full, with no SQL: its ask.matches row (date, opponent and their school, score from the player's seat, result, source, tournament), both sides of ask.match_stats (me and opponent — every count, percentage and rating the views carry), the AI summary with strengths and weaknesses for each side and the key moments where analysis produced them, the match page's URL, and its public share link when one has been created in the app. Call it before summarizing a match.",
   opponent_scouting:
     "The Opponents page's record, one entry per opponent the player (or the program, with program_id) has faced: hand and backhand, matches played, wins and losses, the last five results as form, the most recent meeting, up to six recent meetings with the player's side of four measures (total points won, first-serve points won, first-return points won, break points converted), and each measure's recent average with its trend against earlier meetings. In a program scope each entry also says which roster players faced them. Practice sessions and teammates faced in practice are left out of it: practice never counts toward a record. Pass opponent to filter by name. Tendencies beyond these four measures — serve zones, rally lengths, return depth against one opponent — are a run_query away.",
   describe_views:
@@ -1247,7 +1247,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     {
       title: "Prepare a video upload",
       description:
-        "Start a new match from what the player tells you, and hand them the link to finish it: this saves an upload-wizard draft with the opponent, date, score and event filled in, and returns a URL to /dashboard/matches/new that resumes it. The player opens the link, picks the video file (or the SwingVision export), and answers the questions only they can — which player was at the top of the frame, ad scoring, a fixed camera — before the match is created and analysis is spent. Nothing is created or charged by this call. The score is a hint the wizard shows for confirmation, not a result. Singles only: ask whether it was singles or doubles and pass format — a doubles match is refused, since it cannot be analysed or read.",
+        "Start a new match from what the player tells you, and hand them the link to finish it: this saves an upload-wizard draft with the opponent, date, score and event filled in, and returns a URL to /dashboard/matches/new that resumes it. The player opens the link, picks the video file (or the SwingVision export), and answers the questions only they can — which player was at the top of the frame, ad scoring, a fixed camera — before the match is created and analysis is spent. Nothing is created or charged by this call. The score is a hint the wizard shows for confirmation, not a result. Singles only: ask whether it was singles or doubles and pass format — a doubles match is refused, since it cannot be analyzed or read.",
       inputSchema: {
         program_id: PROGRAM_ID,
         provider: z
@@ -1259,7 +1259,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           )
           .optional()
           .describe(
-            "advantage_intelligence (default): a video to analyse. swingvision: a SwingVision .xlsx export.",
+            "advantage_intelligence (default): a video to analyze. swingvision: a SwingVision .xlsx export.",
           ),
         opponent_name: z.string().trim().min(1).max(120),
         date: z
@@ -1288,7 +1288,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           .enum(["singles", "doubles"])
           .optional()
           .describe(
-            "singles or doubles, if the player said. Only singles can be analysed or read: doubles is refused. Left out, the wizard asks it before the file.",
+            "singles or doubles, if the player said. Only singles can be analyzed or read: doubles is refused. Left out, the wizard asks it before the file.",
           ),
       },
       annotations: {
@@ -1318,7 +1318,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
         if (format === "doubles") {
           throw refusal(
             "doubles_unsupported",
-            "Advantage can't analyse doubles yet, so there is no upload to prepare. Singles matches only for now.",
+            "Advantage can't analyze doubles yet, so there is no upload to prepare. Singles matches only for now.",
           );
         }
         const scope = await resolveScope(program_id);
@@ -1577,7 +1577,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
     "find_points",
     {
       title: "Find points to watch",
-      description: `A link that plays chosen points of one match in its Video tab. Two ways to choose, which combine: filters the tab applies itself (the set, the situation, who served and where, how the return and the point ended), and a point list — pass rally_min and/or rally_max to pick points by how many shots the rally had (the serve counts as one), or point_numbers from a run_query over ask.points for anything the filters do not cover. The answer has the url to give the person, and for a point list the numbers and how many there are; with filters alone the tab does the choosing, so count them with run_query if a number is needed. At most ${MAX_POINT_SET} points fit in one link. has_video says whether there is one to play: likely for an analysed match (its video is kept until the retention period ends), unknown for a SwingVision import (it has video only when one was attached in the app), and no — with no url — for a match entered by hand.`,
+      description: `A link that plays chosen points of one match in its Video tab. Two ways to choose, which combine: filters the tab applies itself (the set, the situation, who served and where, how the return and the point ended), and a point list — pass rally_min and/or rally_max to pick points by how many shots the rally had (the serve counts as one), or point_numbers from a run_query over ask.points for anything the filters do not cover. The answer has the url to give the person, and for a point list the numbers and how many there are; with filters alone the tab does the choosing, so count them with run_query if a number is needed. At most ${MAX_POINT_SET} points fit in one link. has_video says whether there is one to play: likely for an analyzed match (its video is kept until the retention period ends), unknown for a SwingVision import (it has video only when one was attached in the app), and no — with no url — for a match entered by hand.`,
       inputSchema: {
         match_id: UUID().describe("A match id from list_matches."),
         program_id: PROGRAM_ID,
@@ -1738,7 +1738,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
         const notes = [
           ...(source === "video"
             ? [
-                "An analysed match keeps its video only until its retention period ends; an old match may have none left to play.",
+                "An analyzed match keeps its video only until its retention period ends; an old match may have none left to play.",
               ]
             : [
                 "A SwingVision match has video only when one was attached in the app; without it the link has nothing to play.",

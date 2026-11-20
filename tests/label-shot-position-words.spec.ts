@@ -13,14 +13,14 @@ test("depth reads against the nearer baseline, the service box or the net", () =
   expect(depthWords(3)).toBe("3.00 m inside the near baseline");
 });
 
-test("a set position names the spot, how far off centre, and what a click does", () => {
+test("a set position names the spot, how far off center, and what a click does", () => {
   expect(positionWords("hit", 1.42, -0.65, true)).toEqual({
     label: "Hit 0.65 m behind the near baseline",
-    detail: ["1.42 m right of centre", "Click to move it on the court"],
+    detail: ["1.42 m right of center", "Click to move it on the court"],
   });
   expect(positionWords("landed", 4.91, 4.86, false)).toEqual({
     label: "Landed 4.86 m inside the near baseline",
-    detail: ["4.91 m right of centre, outside the singles line"],
+    detail: ["4.91 m right of center, outside the singles line"],
   });
 });
 
@@ -44,7 +44,7 @@ test("placement gives the bucket and the rule that chose it", () => {
     }),
   ).toEqual({
     label: "Wide serve",
-    detail: ["Bounced 4.91 m from the centre line. Wide is past 2.74 m"],
+    detail: ["Bounced 4.91 m from the center line. Wide is past 2.74 m"],
   });
   expect(
     placementWords("Crosscourt", {
@@ -55,8 +55,8 @@ test("placement gives the bucket and the rule that chose it", () => {
   ).toEqual({
     label: "Crosscourt",
     detail: [
-      "Hit left of centre, landed right",
-      "The ball crossed the centre line",
+      "Hit left of center, landed right",
+      "The ball crossed the center line",
     ],
   });
   expect(
@@ -66,6 +66,6 @@ test("placement gives the bucket and the rule that chose it", () => {
       landingX: 0.4,
     }).detail,
   ).toEqual([
-    "Bounced 0.40 m from the centre line. Anything within 1 m is middle",
+    "Bounced 0.40 m from the center line. Anything within 1 m is middle",
   ]);
 });

@@ -159,7 +159,7 @@ test.describe("cancel job handler", () => {
     expect(body.code).toBe("already_started");
   });
 
-  test("vendor 2xx → markCancelled, then 200 { status: cancelled }", async () => {
+  test("vendor 2xx → markCancelled, then 200 { status: canceled }", async () => {
     const h = harness({ job: jobRow({ status: "submitting" }) });
     const { status, body, cacheControl } = await run(h);
     expect(status).toBe(200);

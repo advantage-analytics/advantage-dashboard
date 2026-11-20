@@ -604,7 +604,7 @@ test("a failed transfer also retires its attempt", async () => {
   expect(h.calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
 });
 
-test("a committed attachment is never cancelled", async () => {
+test("a committed attachment is never canceled", async () => {
   const h = harness();
   const result = await run(h);
 

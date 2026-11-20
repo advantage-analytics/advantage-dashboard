@@ -1195,7 +1195,7 @@ test.describe("approaches cut URL state", () => {
     });
   });
 
-  test("applied tokens: one labelled entry per ticked value of each group", () => {
+  test("applied tokens: one labeled entry per ticked value of each group", () => {
     const entries = activeFilterEntries({
       cut: "approaches",
       chart: "scatter",

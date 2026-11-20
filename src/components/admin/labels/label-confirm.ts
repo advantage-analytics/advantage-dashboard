@@ -387,9 +387,9 @@ export function labelConfirmCopy(
     case "reopen-session":
       if (confirm.from === "submitted") {
         return {
-          title: "Reopen for labelling?",
+          title: "Reopen for labeling?",
           description:
-            "The labeller can edit this match again and submit it once more. Nothing was published, so the athlete's match is unchanged.",
+            "The labeler can edit this match again and submit it once more. Nothing was published, so the athlete's match is unchanged.",
           confirmLabel: "Reopen",
           pendingLabel: "Reopening…",
           tone: "primary",

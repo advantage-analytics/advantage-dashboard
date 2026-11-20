@@ -495,10 +495,10 @@ test.describe("selectCompareMeasures", () => {
 // ── Routing the planner cannot get wrong ─────────────────────────────────────
 
 test.describe("mechanical routing", () => {
-  test("asksWhatToWorkOn: practise, work on, fix, improve, do differently — unless the subject is not recorded", () => {
+  test("asksWhatToWorkOn: practice, work on, fix, improve, do differently — unless the subject is not recorded", () => {
     for (const question of [
       "What should Rudy practice?",
-      "What should I practise this week?",
+      "What should I practice this week?",
       "What do we need to work on?",
       "What should she fix?",
       "What can Emon improve?",
@@ -1134,7 +1134,7 @@ test.describe("an answer that ends with no figure", () => {
     expect(events.at(-1)).toEqual({ type: "text", delta: statedRows(SETS) });
   });
 
-  test("a claim over several labelled rows ends with each row's figures", async () => {
+  test("a claim over several labeled rows ends with each row's figures", async () => {
     const { result } = await rendered(
       "You do better on hard courts.\n\nThe gap is wide.",
       GROUPS,
@@ -1674,7 +1674,7 @@ test.describe("players, end to end", () => {
   });
 });
 
-test.describe("what should … practise", () => {
+test.describe("what should … practice", () => {
   const reviewRows = ASK_REVIEW_MEASURES.map((measure, index) => ({
     ord: index + 1,
     measure: measure.key,

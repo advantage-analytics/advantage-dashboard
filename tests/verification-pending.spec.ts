@@ -22,7 +22,7 @@ import { groupMatchesIntoEvents } from "@/lib/data/home-recent-data";
 const RESULTS = "2026-11-10T09:00:00Z";
 
 test.describe("verificationPendingFor", () => {
-  test("waiting on a labeller (held, or in To do) is pending", () => {
+  test("waiting on a labeler (held, or in To do) is pending", () => {
     expect(
       verificationPendingFor({
         results_at: RESULTS,
@@ -50,7 +50,7 @@ test.describe("verificationPendingFor", () => {
     ).toBe(false);
   });
 
-  test("no video is never pending, labelling or not", () => {
+  test("no video is never pending, labeling or not", () => {
     for (const labelling of [true, false]) {
       expect(
         verificationPendingFor({
@@ -315,7 +315,7 @@ test.describe("Home recent rows", () => {
     expect(event.verificationPending).toBe(false);
   });
 
-  test("an analysing match is not pending", () => {
+  test("an analyzing match is not pending", () => {
     const [event] = groupMatchesIntoEvents(
       [recent("b", false)],
       ["viewer"],

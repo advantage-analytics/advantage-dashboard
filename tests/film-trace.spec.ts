@@ -76,7 +76,7 @@ test("a remount mid-seek is reported as one", () => {
   });
 });
 
-test("a list with no seek summarises to nothing", () => {
+test("a list with no seek summarizes to nothing", () => {
   expect(summariseSeek([{ type: "playing", t: 1 }])).toEqual({
     seekToSeekedMs: null,
     seekToPlayingMs: null,

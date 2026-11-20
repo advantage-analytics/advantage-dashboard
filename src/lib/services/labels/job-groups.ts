@@ -84,8 +84,8 @@ export function jobStatusText(job: {
     total?: number;
   } | null;
 }): string {
-  if (job.session === null) return "Needs labelling";
-  if (job.session.status === "complete") return "Labelled";
+  if (job.session === null) return "Needs labeling";
+  if (job.session.status === "complete") return "Labeled";
   if (job.session.status === "submitted") return "Submitted for review";
   return `In progress · ${job.session.checked ?? 0} of ${job.session.total ?? 0}`;
 }
@@ -198,10 +198,10 @@ export function groupLabelJobs<J extends GroupableJob>(
 export function countsSentence(counts: StateCounts): string {
   const parts = [
     counts.todo > 0
-      ? `${counts.todo} ${counts.todo === 1 ? "needs" : "need"} labelling`
+      ? `${counts.todo} ${counts.todo === 1 ? "needs" : "need"} labeling`
       : null,
     counts.doing > 0 ? `${counts.doing} in progress` : null,
-    counts.done > 0 ? `${counts.done} labelled` : null,
+    counts.done > 0 ? `${counts.done} labeled` : null,
   ].filter(Boolean);
   return parts.join(" · ");
 }

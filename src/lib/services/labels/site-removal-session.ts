@@ -44,7 +44,7 @@ export type LabelSiteRemovalRestoreResult = LabelOpResult<
 
 const RACED = racedMessage("row");
 const BLIND =
-  "This session is labelled without the site's marks, so there is nothing to restore.";
+  "This session is labeled without the site's marks, so there is nothing to restore.";
 
 interface GhostRow {
   id: string;

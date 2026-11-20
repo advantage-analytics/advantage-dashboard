@@ -262,7 +262,7 @@ test.describe("depthBandRows", () => {
   // follows the preference. Labels stay "Deep"/"Mid"/"Short"; only
   // `rangeLabel` picks up the unit, one decimal, trailing ".0" dropped
   // (13 ft → 3.9624 m → "4 m", not "3.96 m" or "4.0 m").
-  test("thirds in metres: same buckets, ranges follow the preference", () => {
+  test("thirds in meters: same buckets, ranges follow the preference", () => {
     const ft = depthBandRows(DEFAULT_BANDS, "ft");
     const m = depthBandRows(DEFAULT_BANDS, "m");
     expect(m.map((r) => r.label)).toEqual(["Deep", "Mid", "Short"]);
@@ -298,7 +298,7 @@ test.describe("contactBandRows", () => {
   // Stage 2C: the design's own worked example — DEFAULT_BANDS in metres.
   // 5 ft is EXACTLY 1.524 m (`FT_PER_M` is the exact conversion), which
   // rounds to one decimal as "1.5 m" — never "1.524 m".
-  test("defaults in metres: '1.5 m', never '1.524 m'", () => {
+  test("defaults in meters: '1.5 m', never '1.524 m'", () => {
     const rows = contactBandRows(DEFAULT_BANDS, "m");
     expect(rows.map((r) => r.label)).toEqual([
       "Inside the baseline",
@@ -388,11 +388,11 @@ test.describe("contactReadout", () => {
   test("behind", () => expect(contactReadout("ft", 3)).toBe("3 ft behind"));
 
   // Stage 2C.
-  test("inside, metres", () =>
+  test("inside, meters", () =>
     expect(contactReadout("m", -5)).toBe("1.5 m inside"));
-  test("at the line, metres", () =>
+  test("at the line, meters", () =>
     expect(contactReadout("m", 0)).toBe("at the line"));
-  test("behind, metres", () =>
+  test("behind, meters", () =>
     expect(contactReadout("m", 3 * FT_PER_M)).toBe("3 m behind"));
 });
 
@@ -659,7 +659,7 @@ test.describe("deepMidShortDescription", () => {
     );
   });
 
-  test("metres: the same bands, in the viewer's unit", () => {
+  test("meters: the same bands, in the viewer's unit", () => {
     expect(deepMidShortDescription("m")).toBe(
       "Coach default — 3 m, 4.3 m, then the rest",
     );

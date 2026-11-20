@@ -1777,7 +1777,7 @@ test.describe("the black shots well", () => {
     expect(stopped).toBe(2);
   });
 
-  test("a stroke the labeller added and then deleted leaves no row", () => {
+  test("a stroke the labeler added and then deleted leaves no row", () => {
     const { BlackShotsWell } = well();
     const point = rally();
     const withdrawn = {

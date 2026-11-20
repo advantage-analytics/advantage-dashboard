@@ -101,7 +101,7 @@ test("a net fault stays on the server's side when contact is available", () => {
   }
 });
 
-test("home and team zone thirds and near-line faults agree with source metres", () => {
+test("home and team zone thirds and near-line faults agree with source meters", () => {
   const third = 4.115 / 3;
   for (const highEnd of [false, true]) {
     for (const [lateral, zone] of [

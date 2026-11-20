@@ -131,7 +131,7 @@ export function MatchesDayZero(
       />
 
       <DayZeroShape
-        description="Once a match is analysed this page lists every report by opponent, event and date. Nothing below is real data yet."
+        description="Once a match is analyzed this page lists every report by opponent, event and date. Nothing below is real data yet."
         className="flex flex-col gap-3"
       >
         {/* The toolbar, at rest and at zero. The chips are the real component;

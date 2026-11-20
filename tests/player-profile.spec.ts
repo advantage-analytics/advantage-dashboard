@@ -324,7 +324,7 @@ test.describe("kpiSeries", () => {
   });
 });
 
-test.describe("the statistic catalogue", () => {
+test.describe("the statistic catalog", () => {
   test("every key is offered once, and the defaults are the first five", () => {
     const keys = SEASON_KPI_SPECS.map((s) => s.key);
     expect(new Set(keys).size).toBe(keys.length);
@@ -336,7 +336,7 @@ test.describe("the statistic catalogue", () => {
     expect(SEASON_KPI_MIN).toBeLessThan(SEASON_KPI_MAX);
   });
 
-  test("every tile the catalogue names is built, in catalogue order", () => {
+  test("every tile the catalog names is built, in catalog order", () => {
     // The picker renders the catalogue and looks each tile up by key; a spec
     // with no tile behind it would silently drop a chosen statistic.
     const tiles = seasonKpis([], {

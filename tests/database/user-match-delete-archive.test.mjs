@@ -46,7 +46,7 @@ async function fixture() {
   await db.exec(`
     insert into matches(id, score, match_type, player1_name, player2_name) values ('${match}', '[[6,4]]', 'Singles', 'A Player', 'B Opponent');
     insert into processing_jobs values ('${job}', '${match}');
-    insert into label_sessions values ('${session}', '${match}', 'analyst', 'complete'), ('${selfSession}', '${match}', 'self', 'labelling');
+    insert into label_sessions values ('${session}', '${match}', 'analyst', 'complete'), ('${selfSession}', '${match}', 'self', 'labeling');
     insert into label_points values ('${point}', '${session}', 1);
     insert into label_shots(id, session_id, label_point_id, vendor, created_at) values
       (gen_random_uuid(), '${session}', '${point}', '{"pred_player_id":"A Player","speed_kmh":120}', '2026-01-01'),

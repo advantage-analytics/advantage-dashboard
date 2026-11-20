@@ -299,7 +299,7 @@ export function unreadableWebhookReason(
 ): string | null {
   if (parsedJson === null) return "the body is not valid JSON";
   if (!payload.externalJobId) return "it names no job id";
-  if (!payload.nextStatus) return "it carries no status we recognise";
+  if (!payload.nextStatus) return "it carries no status we recognize";
   return null;
 }
 

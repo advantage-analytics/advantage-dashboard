@@ -290,7 +290,7 @@ function stepSubLine(
       }
       if (step.name === "Results landed")
         return ANALYSIS_LABEL[analysis.status];
-      if (step.name === "Being labelled") return "In progress";
+      if (step.name === "Being labeled") return "In progress";
       return "";
     case "todo":
       return step.name === "Published"
@@ -300,7 +300,7 @@ function stepSubLine(
       break;
   }
 
-  if (step.name === "Being labelled") {
+  if (step.name === "Being labeled") {
     return row.labelState === "submitted" ? "Submitted for checking" : "";
   }
   if (!step.at) return "";

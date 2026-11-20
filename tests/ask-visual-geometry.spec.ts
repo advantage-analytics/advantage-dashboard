@@ -221,7 +221,7 @@ test.describe("serveCourtSides", () => {
     ).toEqual({ deuce: 1, ad: 0 });
   });
 
-  test("any other labelling is bars, not a court", () => {
+  test("any other labeling is bars, not a court", () => {
     expect(
       serveCourtSides([{ label: "First serves" }, { label: "Second serves" }]),
     ).toBeNull();
@@ -262,7 +262,7 @@ test.describe("serveCourtCells", () => {
     }
   });
 
-  test("the ad box is the right one, T at the centre line and wide at the sideline", () => {
+  test("the ad box is the right one, T at the center line and wide at the sideline", () => {
     const cells = serveCourtCells("ad", { t: 1, body: 1, wide: 1 });
     const byZone = Object.fromEntries(cells.map((cell) => [cell.zone, cell]));
     expect(byZone.t.x).toBeCloseTo(CENTER_X, 2);

@@ -195,7 +195,7 @@ test.describe("profile Statistics tab — no analyzed matches", () => {
     expect(insight).toContain(
       "No Advantage Intelligence summary for Maya&#x27;s season yet.",
     );
-    expect(insight).toContain("is analysed.");
+    expect(insight).toContain("is analyzed.");
     // A status, not a finding: no toggle and no link.
     expect(insight).not.toContain("<button");
     expect(insight).not.toContain("<a ");
@@ -244,7 +244,7 @@ test.describe("Game profile, with matches", () => {
     expect(html).not.toContain("<button");
   });
 
-  test("more than five matches: a labelled swap with a dark tooltip", () => {
+  test("more than five matches: a labeled swap with a dark tooltip", () => {
     const html = renderCard([61, 73, 50, 47, 69, 48]);
     expect(html).toMatch(/<button[^>]*aria-label="Show last 5 matches"/);
     expect(html).toContain('<span data-tip="">Show last 5 matches</span>');
@@ -273,7 +273,7 @@ test.describe("Game profile readouts and legend", () => {
     expect(gameProfileDelta(50, null)).toBeNull();
   });
 
-  test("the readout hangs from its own side near an edge, centred otherwise", () => {
+  test("the readout hangs from its own side near an edge, centered otherwise", () => {
     const { gameProfileReadoutAlign } = card();
     expect(gameProfileReadoutAlign(40)).toBe("start");
     expect(gameProfileReadoutAlign(210)).toBe("center");

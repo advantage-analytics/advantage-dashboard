@@ -52,7 +52,7 @@ export type LabelAssignResult = LabelOpResult<{
 export type ListLabellersResult =
   { ok: true; labellers: Labeller[] } | { error: string };
 
-export const NOT_A_LABELLER = "That person is not a labeller.";
+export const NOT_A_LABELLER = "That person is not a labeler.";
 export const NO_SUCH_USER = "No such user.";
 export const ASSIGN_FROZEN =
   "This session is complete. Reopen it before assigning it.";
@@ -165,7 +165,7 @@ export async function listLabellers(
       .select("id, email, first_name, last_name")
       .eq("is_labeller", true)
       .returns<Omit<DbUser, "is_labeller">[]>();
-    if (error) return { error: `Could not list labellers: ${error.message}` };
+    if (error) return { error: `Could not list labelers: ${error.message}` };
     const labellers = (data ?? [])
       .map((user) => ({
         id: user.id,
@@ -177,6 +177,6 @@ export async function listLabellers(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`${LOG} list threw`, { message });
-    return { error: `Could not list labellers: ${message}` };
+    return { error: `Could not list labelers: ${message}` };
   }
 }

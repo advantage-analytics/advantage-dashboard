@@ -111,7 +111,7 @@ test.describe("Event cell", () => {
     );
   });
 
-  test("Practice is recognised through isPracticeMatch, any case", () => {
+  test("Practice is recognized through isPracticeMatch, any case", () => {
     expect(row(match({ match_type: " practice " }))).toMatch(
       /<span class="min-w-0 truncate">Practice<\/span>/,
     );
@@ -141,7 +141,7 @@ test.describe("Teammate pill", () => {
     player2: { ...m.player2, profileId: p2 },
   });
 
-  test("team scope, both seats on the roster: a grey Teammate pill after the opponent", () => {
+  test("team scope, both seats on the roster: a gray Teammate pill after the opponent", () => {
     const html = row(both(match(), "prof-1", "prof-2"), "team");
     // StatePill's outlined variant — Draft's grammar: grey ink, hairline ring.
     expect(html).toMatch(

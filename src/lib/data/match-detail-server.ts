@@ -522,7 +522,7 @@ export async function resolveAnalysedWindowSeconds(
     .limit(5);
 
   if (error) {
-    console.error("[match-detail] could not read the analysed window", {
+    console.error("[match-detail] could not read the analyzed window", {
       matchId: dbRow.id,
       message: error.message,
     });

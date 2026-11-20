@@ -72,7 +72,7 @@ test("a sub dropped into a full lineup bumps an empty line before a player", () 
   ).toEqual(["t1", "sub"]);
 });
 
-test("the keyboard crosses the bench line like any neighbour", () => {
+test("the keyboard crosses the bench line like any neighbor", () => {
   const sequence = ["t1", "t2", BENCH, "sub"];
   const up = moveToken(sequence, "sub", -1);
   expect(up).toEqual(["t1", "t2", "sub", BENCH]);

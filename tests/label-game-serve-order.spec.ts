@@ -166,7 +166,7 @@ test.describe("the same server two games in a row", () => {
     expect(gameServeRepeats(odd).map((r) => r.game.gameNumber)).toEqual([4]);
   });
 
-  test("a game the labeller emptied into its neighbours was on the video: the games around it still alternate", () => {
+  test("a game the labeler emptied into its neighbors was on the video: the games around it still alternate", () => {
     // Games 1 and 3 on the rows, both served by p1 — but one of game 3's
     // points was seeded in game 2: two games were made one, none is missing.
     const merged = [...game(0, 1, "p1", "p1"), ...game(2, 3, "p1", "p1")].map(

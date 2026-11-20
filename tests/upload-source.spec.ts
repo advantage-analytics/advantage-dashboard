@@ -855,14 +855,14 @@ test("without the offer the menu opens on Someone new, as it always did", () => 
 
 const FORMAT_MENU = "Players on court";
 
-test("Format opens on Singles, and says doubles can't be analysed while closed", () => {
+test("Format opens on Singles, and says doubles can't be analyzed while closed", () => {
   const html = render();
   const rows = menu(html, FORMAT_MENU);
   expect(rows.map((r) => r.text.split(" ")[0])).toEqual(["Singles", "Doubles"]);
   expectSharedTreatment(rows, 0);
   // The closed row carries the limit, for the many who never open the menu.
   expect(strip(html)).toContain(
-    "One player each side · Doubles can't be analysed yet",
+    "One player each side · Doubles can't be analyzed yet",
   );
   expect(html).not.toContain(errorStripCls);
 });
@@ -872,7 +872,7 @@ test("Doubles is an ordinary, pickable row: no lock, no Coming soon", () => {
   expect(doubles.html).toContain('role="option"');
   expect(doubles.html).not.toContain("disabled");
   expect(doubles.html).not.toContain('data-icon="Lock"');
-  expect(doubles.text).toContain("Two players each side · Not analysed yet");
+  expect(doubles.text).toContain("Two players each side · Not analyzed yet");
   expect(doubles.text).not.toMatch(/coming soon/i);
 });
 
@@ -881,7 +881,7 @@ test("Doubles chosen brings the red refusal strip, in the video words", () => {
   expect(html).toContain(errorStripCls);
   expect(html).toContain('role="alert"');
   expect(strip(html)).toContain(
-    "We can't analyse doubles yet. With two players each side, shots get credited to the wrong player. Choose a singles match to continue. No hours have been used.",
+    "We can't analyze doubles yet. With two players each side, shots get credited to the wrong player. Choose a singles match to continue. No hours have been used.",
   );
   expectSharedTreatment(menu(html, FORMAT_MENU), 1);
 });

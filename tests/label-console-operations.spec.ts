@@ -856,7 +856,7 @@ async function labellerPublish(
   return { html, dialog, submitted, completed, navigated, calls };
 }
 
-test("a labeller's Publish: the same confirm, through submitSession, then back to /label", async () => {
+test("a labeler's Publish: the same confirm, through submitSession, then back to /label", async () => {
   const { html, dialog, submitted, completed, navigated, calls } =
     await labellerPublish(labelSessionFixture(), {
       ok: true,
@@ -878,7 +878,7 @@ test("a labeller's Publish: the same confirm, through submitSession, then back t
   expect(navigated).toEqual(["/label"]);
 });
 
-test("a labeller's refused Publish stays on the page", async () => {
+test("a labeler's refused Publish stays on the page", async () => {
   const { submitted, navigated } = await labellerPublish(
     labelSessionFixture(),
     {

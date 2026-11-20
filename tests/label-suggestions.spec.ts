@@ -692,7 +692,7 @@ test.describe("writeLabelSuggestionDismiss", () => {
     ).toEqual({ ok: true, dismissed: [KEY] });
   });
 
-  test("a session labelled without marks, and a complete one, are refused before anything is written", async () => {
+  test("a session labeled without marks, and a complete one, are refused before anything is written", async () => {
     const blind = fakeClient({
       point: POINT_ROW,
       session: { status: "labelling", marks_enabled: false },
@@ -705,7 +705,7 @@ test.describe("writeLabelSuggestionDismiss", () => {
       }),
     ).toEqual({
       error:
-        "This session is labelled without the site's marks, so there is nothing to dismiss.",
+        "This session is labeled without the site's marks, so there is nothing to dismiss.",
     });
     expect(updates(blind)).toEqual([]);
 

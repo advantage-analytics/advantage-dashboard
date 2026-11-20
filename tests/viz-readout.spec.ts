@@ -299,7 +299,7 @@ test.describe("placeApronReadout (the Approaches pair's readout)", () => {
     });
   });
 
-  test("a side card is centred on its mark and kept off the stage's top and bottom", () => {
+  test("a side card is centered on its mark and kept off the stage's top and bottom", () => {
     expect(placeApronReadout({ x: 400, y: 20 }, stage, centre).top).toBe(88);
     expect(placeApronReadout({ x: 400, y: 790 }, stage, centre).top).toBe(712);
   });

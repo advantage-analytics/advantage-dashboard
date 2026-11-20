@@ -8,7 +8,7 @@ import { isClientDisconnect } from "../src/lib/client-disconnect";
  * reports every other error.
  */
 
-test("recognises React's client-closed abort", () => {
+test("recognizes React's client-closed abort", () => {
   expect(
     isClientDisconnect(new Error("The destination stream closed early.")),
   ).toBe(true);

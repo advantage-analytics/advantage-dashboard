@@ -399,10 +399,10 @@ function successView(
       };
     case "cancelled":
       return {
-        title: "Upload cancelled",
+        title: "Upload canceled",
         steps: [
           saved,
-          { key: "video", state: "fail", label: "Upload cancelled" },
+          { key: "video", state: "fail", label: "Upload canceled" },
           later,
         ],
         busy: false,

@@ -63,7 +63,7 @@ export interface BlockUploadOptions {
 /** Thrown when `signal` fires. Distinct so callers can tell it from a failure. */
 export class UploadAbortedError extends Error {
   constructor() {
-    super("Upload cancelled");
+    super("Upload canceled");
     this.name = "UploadAbortedError";
   }
 }

@@ -519,7 +519,7 @@ test("a media error is an alert, and does not masquerade as a play refusal", asy
   await expect(page.getByTestId("alignment-play")).toBeDisabled();
 });
 
-test("a saved attachment plays from its URL with the same labelled controls", async ({
+test("a saved attachment plays from its URL with the same labeled controls", async ({
   page,
 }) => {
   await open(page, { scenario: "correction", mode: "align", source: "saved" });

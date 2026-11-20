@@ -426,7 +426,7 @@ function TodayRow({
                       >
                         {/* "Open" in `todayActions`, which the row's own link
                         now is; the button is what starts the session. */}
-                        {labelling.isPending ? "Opening…" : "Start labelling"}
+                        {labelling.isPending ? "Opening…" : "Start labeling"}
                       </button>
                     );
                   case "resubmit":

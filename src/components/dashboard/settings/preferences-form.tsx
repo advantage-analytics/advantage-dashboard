@@ -42,7 +42,7 @@ const UNIT_OPTIONS: readonly {
   },
   {
     value: "m",
-    label: "Metres",
+    label: "Meters",
     description: "Distances read 3.5 m",
   },
 ];

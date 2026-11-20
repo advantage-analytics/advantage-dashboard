@@ -97,7 +97,7 @@ test("a quiet month keeps the card and says so", () => {
   });
   expect(out).toContain("Usage in September");
   expect(out).toContain("0 videos");
-  expect(out).toContain("No video analysed yet this month.");
+  expect(out).toContain("No video analyzed yet this month.");
 });
 
 test("the footer never prints the canvas' false ordering", () => {

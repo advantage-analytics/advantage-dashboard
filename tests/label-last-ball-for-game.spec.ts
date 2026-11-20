@@ -224,7 +224,7 @@ test.describe("Was the last ball out? for a locked game", () => {
     ).toBeNull();
   });
 
-  test("never against a call the labeller made: answering “Was the last ball out?” is not asked back as in", () => {
+  test("never against a call the labeler made: answering “Was the last ball out?” is not asked back as in", () => {
     // Lee's last ball, called out by the labeller (a hint's yes, the Result
     // menu): the game needs Lee, and the opposite call would give it — but
     // the labeller has just said what the ball did.

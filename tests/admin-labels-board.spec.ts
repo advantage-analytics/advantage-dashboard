@@ -288,7 +288,7 @@ test.describe("the admin's Labels board", () => {
       "These are already live for the player. Matches you publish yourself skip this list.",
     );
     // No date line any more: what is not in To do waits in its own list.
-    expect(text(html)).not.toContain("The board shows matches analysed from");
+    expect(text(html)).not.toContain("The board shows matches analyzed from");
   });
 
   test("a row reads 'Player vs Player · Team', with hours, urgency and due text", () => {
@@ -305,7 +305,7 @@ test.describe("the admin's Labels board", () => {
     );
   });
 
-  test("an In progress row names its labeller and reads '3 of 10 flags resolved'", () => {
+  test("an In progress row names its labeler and reads '3 of 10 flags resolved'", () => {
     const html = rowHtml(render(board()), "job-3");
     expect(text(html)).toContain("Ines Okafor");
     expect(text(html)).toContain("3 of 10 flags resolved");
@@ -324,7 +324,7 @@ test.describe("the admin's Labels board", () => {
     expect(text(html)).not.toContain("no work in");
   });
 
-  test("a Submitted row names its labeller", () => {
+  test("a Submitted row names its labeler", () => {
     const html = rowHtml(render(board()), "job-5");
     expect(text(html)).toContain("Maya Rao");
     // Flags are an In progress fact only.
@@ -356,7 +356,7 @@ test.describe("the admin's Labels board", () => {
 
   test("an empty lane says so; an empty Submitted lane is not drawn", () => {
     const html = render(board({ inProgress: [], toCheck: [], submitted: [] }));
-    expect(html).toContain("Nobody is labelling a match.");
+    expect(html).toContain("Nobody is labeling a match.");
     expect(html).toContain("Nothing published is waiting for a check.");
     expect(html).toContain("0 matches · 0.00 h");
     expect(html).not.toContain(">Submitted</span>");
@@ -367,7 +367,7 @@ test.describe("the admin's Labels board", () => {
     );
   });
 
-  test("a to-check row reads its labeller, when it was published, and how it kept time", () => {
+  test("a to-check row reads its labeler, when it was published, and how it kept time", () => {
     const html = rowHtml(render(board()), "job-6");
     expect(text(html)).toContain(`Hollis Varga vs Tomasz Moreau · ${TEAM}`);
     expect(text(html)).toContain("1.25 h");
@@ -427,7 +427,7 @@ test.describe("the admin's Labels board", () => {
     expect(canSendBack(" Set 2 ")).toBe(true);
   });
 
-  test("a sent-back In progress row reads 'Sent back', its labeller, when, and the note", () => {
+  test("a sent-back In progress row reads 'Sent back', its labeler, when, and the note", () => {
     const html = rowHtml(
       render(
         board({

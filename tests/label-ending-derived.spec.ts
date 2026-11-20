@@ -221,7 +221,7 @@ test.describe("deriveEnding", () => {
     });
   });
 
-  test("the last ball in, by the point's labelled loser, is still its hitter's winner", () => {
+  test("the last ball in, by the point's labeled loser, is still its hitter's winner", () => {
     expect(deriveEnding(point([serve(), p2(), p1()], "p2"), GHOSTS)).toEqual({
       ending: "winner",
       endedBy: "p1",
@@ -229,7 +229,7 @@ test.describe("deriveEnding", () => {
     });
   });
 
-  test("a last ball with no result yet reads the labelled winner and settles none", () => {
+  test("a last ball with no result yet reads the labeled winner and settles none", () => {
     // By the labelled winner (or with none labelled): a winner.
     expect(
       deriveEnding(point([serve(), p2({ result: null })], "p2"), GHOSTS),
@@ -309,7 +309,7 @@ test.describe("endingPatchForShotChange", () => {
     expect(patch).toEqual({ ending: "winner", ended_by: "p1", winner: "p1" });
   });
 
-  test("deleting a trailing stroke so the new last one is in by the labelled loser hands it the point", () => {
+  test("deleting a trailing stroke so the new last one is in by the labeled loser hands it the point", () => {
     // Lee (p1) won on his last ball; delete it and Vargas's return, which
     // stayed in, is the last stroke.
     const deleted = rally.map((s, i) =>
@@ -324,7 +324,7 @@ test.describe("endingPatchForShotChange", () => {
     ).toEqual({ ending: "winner", ended_by: "p2", winner: "p2" });
   });
 
-  test("a flip to out when the labelled winner is already the opponent leaves the winner alone", () => {
+  test("a flip to out when the labeled winner is already the opponent leaves the winner alone", () => {
     expect(
       endingPatchForShotChange(
         point(rally, "p2", "error", "p1"),
@@ -667,7 +667,7 @@ test.describe("isMarkableError", () => {
     expect(isMarkableError(point([serve({ result: "out" })]))).toBe(false);
   });
 
-  test("a last ball with no result reads the labelled winner", () => {
+  test("a last ball with no result reads the labeled winner", () => {
     // p2 hit last with no result; p1 is labelled the winner → an error by p2.
     const unresolved = point([serve(), p2({ result: null })], "p1");
     expect(isMarkableError(unresolved)).toBe(true);

@@ -23,7 +23,7 @@ export const MATCH_PROGRESS_STEP_NAMES = [
   "Uploaded",
   "Sent for analysis",
   "Results landed",
-  "Being labelled",
+  "Being labeled",
   "Published",
   "Checked",
 ] as const;
@@ -142,7 +142,7 @@ export function matchProgressSteps(
       state: results,
       at: results === "done" ? row.resultsLandedAt : null,
     },
-    { name: "Being labelled", state: labelling, at: null },
+    { name: "Being labeled", state: labelling, at: null },
     {
       name: "Published",
       state: publishedAt ? "done" : "todo",

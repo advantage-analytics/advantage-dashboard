@@ -1102,7 +1102,7 @@ function BlackWinnerCell({
   const { names } = edit;
   const name = point.winner
     ? `Point ${number} won by ${names[point.winner]}`
-    : `Point ${number} winner not labelled`;
+    : `Point ${number} winner not labeled`;
   // A let or a non-point keeps its winner — so counting it again restores a
   // whole point — but nobody won it: the mark steps back.
   const uncounted = isNonPointEnding(point.ending);

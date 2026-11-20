@@ -323,7 +323,7 @@ test.describe("the chip on the point row", () => {
 });
 
 test.describe("a closed row draws only what can change the score", () => {
-  test("hints are the flag's too: a grey chip unless demoted, and one question beside a counted mark", () => {
+  test("hints are the flag's too: a gray chip unless demoted, and one question beside a counted mark", () => {
     const point = fixturePoint();
     const shot = point.shots[0];
     // "No landing on the last shot" alone: a grey, filled chip asking item 4.
@@ -396,7 +396,7 @@ test.describe("a closed row draws only what can change the score", () => {
     expect(chip.tag).toContain("rail-amber");
   });
 
-  test("an ending the strokes agree with but the winner cannot have keeps a grey chip once checked", () => {
+  test("an ending the strokes agree with but the winner cannot have keeps a gray chip once checked", () => {
     // The ace is the server's, the strokes say so, and the point's server is
     // the other player: "Different ending?" has nothing to say.
     const point = fixturePoint({
@@ -735,7 +735,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     ]);
   });
 
-  test("“Volley?” sits under its groundstroke, grey, and makes it a volley in one write", () => {
+  test("“Volley?” sits under its groundstroke, gray, and makes it a volley in one write", () => {
     const { pointHints } = createLoader().load(MARK) as { pointHints: Hints };
     const patched: unknown[][] = [];
     const edit = {
@@ -999,7 +999,7 @@ test.describe("the hints read off the rows, with their answers", () => {
     expect(tag(html, 'data-row="suggested-end"')).toContain("outline-dashed");
   });
 
-  test("“No placement” is drawn grey, unlike the amber questions beside it", () => {
+  test("“No placement” is drawn gray, unlike the amber questions beside it", () => {
     const base = fixturePoint();
     const [serve] = base.shots;
     const point = {

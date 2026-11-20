@@ -252,13 +252,13 @@ test.describe("analysisAction: failed row follows the recovery class", () => {
   });
 });
 
-test.describe("cancelled: settled, never analysed, never Ready", () => {
+test.describe("canceled: settled, never analyzed, never Ready", () => {
   test("the job status maps to its own word", () => {
     expect(STATUS_MAP.cancelled).toBe("cancelled");
     // derivation_version is irrelevant — only `completed` reads it.
     expect(resolveAnalysisStatus("cancelled", null)).toBe("cancelled");
     expect(resolveAnalysisStatus("cancelled", "0.6.0")).toBe("cancelled");
-    expect(ANALYSIS_LABEL.cancelled).toBe("Cancelled");
+    expect(ANALYSIS_LABEL.cancelled).toBe("Canceled");
   });
 
   test("it is in none of the in-flight, failed or ready sets", () => {
@@ -327,7 +327,7 @@ test.describe("queuedAt, vendorStartedAt and reservedSeconds", () => {
     ]);
   });
 
-  test("the realtime patch carries the same three fields and the cancelled status", () => {
+  test("the realtime patch carries the same three fields and the canceled status", () => {
     const loader = createLoader({
       stubs: {
         "@/lib/supabase/client": {
@@ -375,7 +375,7 @@ test.describe("queuedAt, vendorStartedAt and reservedSeconds", () => {
     const cancelled = liveAnalysisPatch({
       ...row,
       status: "cancelled",
-      error_code: "CANCELLED",
+      error_code: "CANCELED",
       vendor_started_at: null,
     });
     expect(cancelled?.status).toBe("cancelled");

@@ -100,10 +100,10 @@ const CASES: {
     },
   },
   {
-    name: "Start labelling",
+    name: "Start labeling",
     surface: "labelling",
     run: async (page) => {
-      await page.getByRole("button", { name: "Start labelling" }).click();
+      await page.getByRole("button", { name: "Start labeling" }).click();
       return page.locator("body");
     },
   },

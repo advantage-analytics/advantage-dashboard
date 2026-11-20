@@ -113,7 +113,7 @@ const ROUTES: Route[] = [
       "From",
       "To",
       "Show",
-      "Labeller",
+      "Labeler",
       "Paid video",
       "Time worked",
     ],

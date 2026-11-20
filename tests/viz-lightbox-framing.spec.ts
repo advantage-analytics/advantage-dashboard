@@ -126,7 +126,7 @@ test.describe("glide", () => {
     expect(glideEase(0.25)).toBeGreaterThan(0.6);
   });
 
-  test("centreOn puts the point at the stage centre; the glide ends exactly there", () => {
+  test("centreOn puts the point at the stage center; the glide ends exactly there", () => {
     const home = viewerInitialTransform("serve", stage);
     const p = projectViewerDot("serve", {
       lateralM: 2,

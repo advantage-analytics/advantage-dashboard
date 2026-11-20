@@ -145,7 +145,7 @@ test.describe("return frame — contact", () => {
   // + translate chain puts on-screen-right when y DECREASES toward
   // `singlesTop` — see `projectReturnDot`'s doc comment for the full
   // derivation. So positive lateralM must map to the SMALLER y.
-  test("lateral 0 lands on the centre line", () => {
+  test("lateral 0 lands on the center line", () => {
     const { cy } = projectReturnDot("contact", { lateralM: 0, depthM: 0 });
     expect(cy).toBe(RETURN_COURT.centerY);
     expect(cy).toBe(104.5);
@@ -451,7 +451,7 @@ function parseTrianglePointsLoose(
  * read straight off.
  */
 test.describe("heatDotRadiusFor", () => {
-  test("RETURN_HEAT_DOT_RADIUS is 0.55 real metres on the return frame's own depth scale", () => {
+  test("RETURN_HEAT_DOT_RADIUS is 0.55 real meters on the return frame's own depth scale", () => {
     expect(RETURN_HEAT_DOT_RADIUS).toBeCloseTo(0.55 * UNITS_PER_METER, 6);
   });
 
@@ -488,7 +488,7 @@ test.describe("heatDotRadiusFor", () => {
 test.describe("heatRampChannelTable", () => {
   const RAMP_HEX = ["#F2F2F2", "#B8D4F9", "#6AABFF", "#3B82F6"];
 
-  test("each channel's table has one 0..1 value per ramp colour", () => {
+  test("each channel's table has one 0..1 value per ramp color", () => {
     for (const channel of ["r", "g", "b"] as const) {
       const values = heatRampChannelTable(channel).split(" ").map(Number);
       expect(values).toHaveLength(RAMP_HEX.length);
@@ -829,7 +829,7 @@ test.describe("RETURN_COURT viewBox extension (fix round 4B)", () => {
     expect(RETURN_COURT.netX - RETURN_HEAT_BOUNDS.xMin).toBeGreaterThan(1);
   });
 
-  test("a net-gutter mark's full radius (RETURN_DOT_R, the one source court-art.tsx also reads) lies inside RETURN_HEAT_BOUNDS, not just its centre", () => {
+  test("a net-gutter mark's full radius (RETURN_DOT_R, the one source court-art.tsx also reads) lies inside RETURN_HEAT_BOUNDS, not just its center", () => {
     const gutter = netGutterFor("returnPlacement");
     expect(gutter.cx! - RETURN_DOT_R).toBeGreaterThan(RETURN_HEAT_BOUNDS.xMin);
     expect(gutter.cx! + RETURN_DOT_R).toBeLessThan(RETURN_HEAT_BOUNDS.xMax);
@@ -930,7 +930,7 @@ test.describe("projectViewerDot — serve / returnPlacement (landing, far half)"
       expect(y).toBeCloseTo(VIEWER_COURT.farBaselineY, 0);
     });
 
-    test(`${cut}: lateral -5.485 (the doubles sideline) lands left of centre, matching projectServeMetricDot`, () => {
+    test(`${cut}: lateral -5.485 (the doubles sideline) lands left of center, matching projectServeMetricDot`, () => {
       const { x } = projectViewerDot(cut, {
         lateralM: -5.485,
         depthM: 6.4,
@@ -984,7 +984,7 @@ test.describe("projectViewerDot — returnContact / rallyPosition (contact, near
       expect(y).toBeLessThan(VIEWER_COURT.nearBaselineY);
     });
 
-    test(`${cut}: lateral +4.115 (the returner's right) lands right of centre, matching projectReturnDot's final on-screen sense for both "contact" and "placement"`, () => {
+    test(`${cut}: lateral +4.115 (the returner's right) lands right of center, matching projectReturnDot's final on-screen sense for both "contact" and "placement"`, () => {
       const { x } = projectViewerDot(cut, {
         lateralM: 4.115,
         depthM: 0,
@@ -1128,7 +1128,7 @@ test.describe("projectViewerDot composed mirror invariant (full transform chain,
 
   for (const { kind, cut } of cases) {
     for (const lateralM of [4.115, -4.115]) {
-      test(`${cut}: lateralM=${lateralM} — the FULLY COMPOSED in-shell screen-x agrees with projectViewerDot's side of centre`, () => {
+      test(`${cut}: lateralM=${lateralM} — the FULLY COMPOSED in-shell screen-x agrees with projectViewerDot's side of center`, () => {
         const shell = projectReturnDot(kind, { lateralM, depthM: 0 });
         const composedX = composedReturnScreenX(kind, shell.cy);
         const svgCentreX =
@@ -1208,7 +1208,7 @@ test.describe("viewerInitialTransform", () => {
   const frameHpx = frame.h * pxPerUnit;
   const fitZ = Math.min(stage.w / frameWpx, stage.h / frameHpx);
 
-  test("landing cuts open on the FAR half: the half frame fitted, net (+ gutter) on the stage's bottom edge, centred across", () => {
+  test("landing cuts open on the FAR half: the half frame fitted, net (+ gutter) on the stage's bottom edge, centered across", () => {
     for (const s of [stage, { w: 1100, h: 640 }, { w: 820, h: 560 }]) {
       for (const cut of [
         "serve",
@@ -1243,7 +1243,7 @@ test.describe("viewerInitialTransform", () => {
     }
   });
 
-  test("Full court fits the whole court FRAME (not the widened art), centred on both axes, and reads below a landing cut's 100%", () => {
+  test("Full court fits the whole court FRAME (not the widened art), centered on both axes, and reads below a landing cut's 100%", () => {
     const t = viewerFullCourtTransform(stage);
     expect(t.z).toBeCloseTo(fitZ, 6);
     const frameCentre = viewerArtPoint(
@@ -1279,7 +1279,7 @@ test.describe("viewerInitialTransform", () => {
     expect(viewerLandingHalf("rallyPosition")).toBeNull();
   });
 
-  test("returnContact/rallyPosition (contact cuts): zooms to 1.6x the FRAME's fit, near baseline at 500/950 of stage height, horizontally centred", () => {
+  test("returnContact/rallyPosition (contact cuts): zooms to 1.6x the FRAME's fit, near baseline at 500/950 of stage height, horizontally centered", () => {
     for (const cut of ["returnContact", "rallyPosition"] as const) {
       const t = viewerInitialTransform(cut, stage);
       expect(t.z).toBeCloseTo(fitZ * 1.6, 6);
@@ -1370,7 +1370,7 @@ test.describe("viewerInitialTransform — approaches", () => {
     { w: 820, h: 560 },
   ];
 
-  test("both baselines are inside the stage, with apron beyond each, and the court is centred across", () => {
+  test("both baselines are inside the stage, with apron beyond each, and the court is centered across", () => {
     for (const s of stages) {
       const t = viewerInitialTransform("approaches", s);
       const toStageY = (y: number) => t.py + viewerArtPoint(0, y).y * t.z;
@@ -1761,7 +1761,7 @@ test.describe("FULL_COURT_VERTICAL — the Approaches frame", () => {
     return { x: cx + dy, y: cy - dx };
   }
 
-  test("is RETURN_COURT rotated -90° about its net centre", () => {
+  test("is RETURN_COURT rotated -90° about its net center", () => {
     expect(FULL_COURT_VERTICAL.groupTransform).toBe(
       `rotate(-90 ${RETURN_COURT.netX} ${RETURN_COURT.centerY})`,
     );
@@ -1960,7 +1960,7 @@ test.describe("projectApproachPair", () => {
     expect(placement.y).toBeGreaterThan(left.y);
   });
 
-  test("the lane label positions are the three lane centres (approved look: 194, 240, 286)", () => {
+  test("the lane label positions are the three lane centers (approved look: 194, 240, 286)", () => {
     expect(f.labels.lanes.left.x).toBeCloseTo(193.73, 1);
     expect(f.labels.lanes.middle.x).toBe(240);
     expect(f.labels.lanes.right.x).toBeCloseTo(286.27, 1);

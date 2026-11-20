@@ -56,7 +56,7 @@ const CANCELLABLE_STATUSES: ReadonlySet<string> = new Set([
 export const MARK_CANCELLED_RETRIES = 2;
 
 export const ALREADY_STARTED_MESSAGE =
-  "It started a moment ago and can't be cancelled now.";
+  "It started a moment ago and can't be canceled now.";
 export const NOT_READY_MESSAGE =
   "It's still being handed off. Try again in a moment.";
 export const VENDOR_UNAVAILABLE_MESSAGE =
@@ -136,7 +136,7 @@ const notCancellable = (detail: string) =>
   refusal(
     "not_cancellable",
     409,
-    "This analysis can't be cancelled any more.",
+    "This analysis can't be canceled any more.",
     detail,
   );
 
@@ -299,7 +299,7 @@ async function settle(
     // Between our read and this write the row moved on (a webhook landed,
     // another tab cancelled). Nothing to release twice; report it as no
     // longer cancellable.
-    pipelineLog.warn(`${LOG} row moved on before it could be cancelled`, {
+    pipelineLog.warn(`${LOG} row moved on before it could be canceled`, {
       jobId,
       via,
       status: marked.status,
@@ -307,6 +307,6 @@ async function settle(
     return notCancellable(`row_moved_on_${via}`);
   }
 
-  pipelineLog.info(`${LOG} cancelled`, { jobId, via });
+  pipelineLog.info(`${LOG} canceled`, { jobId, via });
   return jsonResponse({ status: "cancelled" });
 }

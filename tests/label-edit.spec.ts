@@ -1867,7 +1867,7 @@ test.describe("readSessionGate", () => {
 });
 
 test.describe("the edit entry points' gate", () => {
-  test("each names its own row as the target, and a labeller the gate admits writes", async () => {
+  test("each names its own row as the target, and a labeler the gate admits writes", async () => {
     const targets: LabelActorTarget[] = [];
     const fake = fakeClient({ shot: shotRow() });
     const deps = {
@@ -1884,7 +1884,7 @@ test.describe("the edit entry points' gate", () => {
     expect(targets).toEqual([{ shotId: SHOT_ID }, { pointId: POINT_ID }]);
   });
 
-  test("the refusal does not ask a labeller to become an administrator", async () => {
+  test("the refusal does not ask a labeler to become an administrator", async () => {
     const result = await editLabelShot(
       SHOT_ID,
       { result: "out" },

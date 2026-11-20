@@ -388,15 +388,15 @@ test("processing: the started line, and no Cancel group", () => {
   expect(html).not.toContain("<button");
 });
 
-test("cancelled: a stopped step, its timing, and the resend action in blue", () => {
+test("canceled: a stopped step, its timing, and the resend action in blue", () => {
   const html = renderWith(CANCELLED);
   expect(html).toMatch(/<h1[^>]*>Analysis cancelled<\/h1>/);
   const li = items(html)[2];
   // The grey stopped mark, never the Failed chip's red.
-  expect(li).toContain('<span class="sr-only">Cancelled:</span>');
+  expect(li).toContain('<span class="sr-only">Canceled:</span>');
   expect(li).not.toContain("--danger");
   expect(li).toContain("Your video is still stored. Nothing was charged.");
-  expect(li).toContain(`${META}Cancelled 4 min ago · 1h 29m returned</p>`);
+  expect(li).toContain(`${META}Canceled 4 min ago · 1h 29m returned</p>`);
 
   const { button, line } = quietAction(li, "Send for analysis again");
   expect(line).toBe("Uses about 1h 29m of this month&#x27;s analysis time");
@@ -483,7 +483,7 @@ test("the Cancel action opens the dialog for this job; resend posts the resubmit
   expect(column).not.toContain("useRouter");
 });
 
-test("cancelled: the resend action is live, with no dialog mounted", () => {
+test("canceled: the resend action is live, with no dialog mounted", () => {
   const html = renderWired(CANCELLED);
   const { button } = quietAction(items(html)[2], "Send for analysis again");
   expect(button).not.toContain("disabled");
@@ -539,7 +539,7 @@ test("another viewer: a queued job shows its note and timing, but no Cancel", ()
   }
 });
 
-test("another viewer: a cancelled job offers no resend", () => {
+test("another viewer: a canceled job offers no resend", () => {
   for (const html of [
     renderWith(CANCELLED, false),
     renderWired(CANCELLED, false),
@@ -617,7 +617,7 @@ test("team (showSampleLink off), or personal without canAct: no sample-report li
   expect(renderSample(false, false)).not.toContain(SAMPLE_LINE);
 });
 
-test("the line shows while the job moves: uploading, in line, analysing", () => {
+test("the line shows while the job moves: uploading, in line, analyzing", () => {
   const uploading = CASES.find((c) => c.id === "uploading")!.analysis;
   for (const analysis of [uploading, QUEUED, PROCESSING]) {
     expect(renderSample(true, true, analysis), analysis.status).toContain(

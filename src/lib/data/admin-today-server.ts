@@ -584,7 +584,7 @@ async function jobDrafts(db: AdminClient, nowMs: number): Promise<Draft[]> {
     const match = matches.get(job.match_id);
     const message = job.error_message?.trim();
     const body = stuck
-      ? "The video finished uploading but was never handed to Advantage Intelligence, so nothing is analysing it."
+      ? "The video finished uploading but was never handed to Advantage Intelligence, so nothing is analyzing it."
       : job.status === "derivation_failed"
         ? "The vendor’s results came back, and turning them into points and shots failed."
         : message && showsStoredNote(job.error_code)
@@ -699,7 +699,7 @@ async function labelDrafts(db: AdminClient): Promise<Draft[]> {
       since: job.completed_at as string,
       cell: matchCell(match),
       title: matchTitle(match),
-      body: `Nobody has started labelling this match, and the analysis flagged ${points} with a mark that can change the score.`,
+      body: `Nobody has started labeling this match, and the analysis flagged ${points} with a mark that can change the score.`,
       actions: todayActions({ kind: "label", jobId: job.id }),
       link: {
         label: "Open match",

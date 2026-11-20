@@ -395,7 +395,7 @@ function Score({ reading, onOpen }: WidgetProps) {
           <thead>
             <tr className="text-micro" style={INK[500]}>
               <Th>Set</Th>
-              <Th>Labelled</Th>
+              <Th>Labeled</Th>
               <Th>Match record</Th>
               <Th />
             </tr>
@@ -457,7 +457,7 @@ function LeftToCheck({ points, marks, reading, onOpen }: WidgetProps) {
     <Card title="Left to check">
       {!marks ? (
         <Quiet>
-          This session is labelled without marks, so nothing is flagged.
+          This session is labeled without marks, so nothing is flagged.
         </Quiet>
       ) : reading.flagged.length === 0 ? (
         <Quiet>
@@ -542,7 +542,7 @@ function FlagList({
         {first ? (
           <PointLink
             onClick={() => onOpen(first.pointId)}
-            label={`Open labelling on the first of these, point ${first.pointNumber}`}
+            label={`Open labeling on the first of these, point ${first.pointNumber}`}
             className="text-body-sm ml-auto inline-flex items-center gap-1"
           >
             Start here
@@ -872,7 +872,7 @@ function publishChecks(
               detail: differing
                 .map(
                   (d) =>
-                    `Set ${d.set.setNumber} is labelled ${d.labelled} against a record of ${d.record}`,
+                    `Set ${d.set.setNumber} is labeled ${d.labelled} against a record of ${d.record}`,
                 )
                 .join(". "),
               pointId: differing[0].set.lastPointId,
@@ -884,7 +884,7 @@ function publishChecks(
           : {
               state: "done",
               title: "Score adds up",
-              detail: "Every labelled set matches the match record.",
+              detail: "Every labeled set matches the match record.",
             },
     partial.length > 0
       ? {
@@ -1134,7 +1134,7 @@ function FlagsLeft({
     <section data-dashboard-card="Progress" aria-label="Progress">
       <p data-flags-left="" className="text-body tabular" style={INK[600]}>
         {!marks ? (
-          "This session is labelled without marks, so nothing is flagged."
+          "This session is labeled without marks, so nothing is flagged."
         ) : left === 0 ? (
           <span className="text-title" style={INK[900]}>
             No flags left
@@ -1358,7 +1358,7 @@ function PublishCheck(props: WidgetProps) {
                 {check.pointId ? (
                   <PointLink
                     onClick={() => onOpen(check.pointId)}
-                    label={`Open labelling: ${check.title}`}
+                    label={`Open labeling: ${check.title}`}
                   >
                     Open
                   </PointLink>
@@ -1498,7 +1498,7 @@ function UploadFacts({
     ],
     [names.p1, playerStyle(upload.player1)],
     [names.p2, playerStyle(upload.player2)],
-    ["Analysed window", window_],
+    ["Analyzed window", window_],
     ["Vendor confidence", upload.confidence],
   ];
   const by = [upload.uploadedBy, day(upload.submittedAt)]

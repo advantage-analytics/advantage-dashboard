@@ -185,7 +185,7 @@ test("team workspace: crest title, used / cap, rows by count, footnote", () => {
   expect(t).toContain("Added Oct 23, 2025");
 
   expect(MATCH_VIDEOS_FOOTNOTE).toBe(
-    "Film added to SwingVision matches, for playback only: it isn't analysed and uses no hours. A video nobody watches for a year is removed; the match and its statistics stay.",
+    "Film added to SwingVision matches, for playback only: it isn't analyzed and uses no hours. A video nobody watches for a year is removed; the match and its statistics stay.",
   );
   expect(t).toContain(MATCH_VIDEOS_FOOTNOTE);
 });

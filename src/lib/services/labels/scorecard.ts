@@ -636,7 +636,7 @@ function combinedInto(
 }
 
 /** The label of the demoted-flag row of the per-item table. */
-const DEMOTED_QUESTION = "Demoted: grey, open on item 4 alone";
+const DEMOTED_QUESTION = "Demoted: gray, open on item 4 alone";
 
 /** Sort key of an item row: the items by id, the demoted row after them. */
 const itemOrder = (id: ScorecardItemRow["id"]): number =>
@@ -996,9 +996,9 @@ export function renderScorecard(
   const out: string[] = [`# ${title}`, ""];
   const { live, added, deleted, changed } = card.points;
   out.push(
-    `${live} live points (${added} added by the labeller), ${deleted} deleted; ${changed} changed in some way.`,
+    `${live} live points (${added} added by the labeler), ${deleted} deleted; ${changed} changed in some way.`,
     "",
-    "## Marks, against what the labeller changed",
+    "## Marks, against what the labeler changed",
     "",
     "A `count` mark is the amber chip the header counts, a `hint` a word on the open point's quiet line, a `hidden` mark is drawn nowhere. Shares are of the code's own marks.",
     "",
@@ -1027,9 +1027,9 @@ export function renderScorecard(
           ]),
         ),
     "",
-    "## Items, against what the labeller changed",
+    "## Items, against what the labeler changed",
     "",
-    "The same marks folded into the review flag's items, as the session opened: a point counts once per item it carries, however many of the item's marks it has, amber items before grey. Live row marks (a stale ending, a missing last landing) are not in the opening marks, so they add no members here, except Shot placement and Volley?, read off the seed. The demoted row is the points whose flag is grey and open on item 4 alone for the evidence-only codes; they are also counted in their item 4 row.",
+    "The same marks folded into the review flag's items, as the session opened: a point counts once per item it carries, however many of the item's marks it has, amber items before gray. Live row marks (a stale ending, a missing last landing) are not in the opening marks, so they add no members here, except Shot placement and Volley?, read off the seed. The demoted row is the points whose flag is gray and open on item 4 alone for the evidence-only codes; they are also counted in their item 4 row.",
     "",
     card.items.length === 0
       ? "No items."
@@ -1054,7 +1054,7 @@ export function renderScorecard(
     "",
     "## Changed with no `count` mark on the point",
     "",
-    "A vendor point whose winner, ending, ended-by, server or game the labeller changed, or any of whose strokes they edited, deleted or added, with no amber chip on it.",
+    "A vendor point whose winner, ending, ended-by, server or game the labeler changed, or any of whose strokes they edited, deleted or added, with no amber chip on it.",
     "",
   );
   out.push(
@@ -1081,10 +1081,10 @@ export function renderScorecard(
       isMissedResult(row.labelled),
     ).length;
     out.push(
-      `${total} ${total === 1 ? "stroke" : "strokes"}; the labeller made ${share(moved, total)} Out or Net.`,
+      `${total} ${total === 1 ? "stroke" : "strokes"}; the labeler made ${share(moved, total)} Out or Net.`,
       "",
       table(
-        ["Point", "Coordinates say", "Labelled"],
+        ["Point", "Coordinates say", "Labeled"],
         card.seededInLastStrokes.map((row) => [
           row.number,
           row.byCoordinates,
@@ -1093,7 +1093,7 @@ export function renderScorecard(
       ),
     );
   }
-  out.push("", "## Strokes the labeller deleted", "");
+  out.push("", "## Strokes the labeler deleted", "");
   out.push(
     card.deletedShots.length === 0
       ? "None."
@@ -1132,7 +1132,7 @@ export function renderScorecard(
   out.push(
     "## Games",
     "",
-    "Read off the labelled rows by the session's scoring: a game is in the set's order, its match game number is the vendor's. Tiebreaks are not read.",
+    "Read off the labeled rows by the session's scoring: a game is in the set's order, its match game number is the vendor's. Tiebreaks are not read.",
     "",
     ...gameLines(
       "**Games undecided after their last point**",
@@ -1156,7 +1156,7 @@ export function renderScorecard(
     out.push(
       "",
       table(
-        ["Seeded winner", "Labelled winner", "Points"],
+        ["Seeded winner", "Labeled winner", "Points"],
         card.winnerFlips.map((row) => [
           sideName(row.from, names),
           sideName(row.to, names),
@@ -1185,7 +1185,7 @@ export function renderScorecard(
       `${resultChanged} points whose last live stroke has a result other than its seeded one; ${share(moved, resultChanged)} went in→out or net, and the vendor's own call on ${share(vendorOut, moved)} of those was already out.`,
       "",
       table(
-        ["Seeded", "Labelled", "Points", "Vendor already said out"],
+        ["Seeded", "Labeled", "Points", "Vendor already said out"],
         card.lastResultChanges.map((row) => [
           row.from ?? "no result",
           row.to ?? "no result",
@@ -1218,12 +1218,12 @@ export function renderScorecard(
             share(landings.vendorPlaceholder, n),
           ],
           ["Vendor called it a net hit", share(landings.netHits, n)],
-          ["Stroke added by the labeller", share(landings.added, n)],
+          ["Stroke added by the labeler", share(landings.added, n)],
         ],
       ),
       "",
       table(
-        ["What the labeller did", "Points"],
+        ["What the labeler did", "Points"],
         [
           ["Placed the landing", share(landings.placed, n)],
           ["Left it empty, result in", share(landings.remaining.in, n)],
@@ -1249,10 +1249,10 @@ export function renderScorecard(
       card.outCallTails.filter((row) => row.outcome === outcome).length;
     const n = card.outCallTails.length;
     out.push(
-      `${n} checked points where the vendor's last non-serve stroke called out is followed by one or two more strokes. The labeller removed the whole tail on ${share(count("removed"), n)}, part of it on ${share(count("partly"), n)}, and kept it on ${share(count("kept"), n)}.`,
+      `${n} checked points where the vendor's last non-serve stroke called out is followed by one or two more strokes. The labeler removed the whole tail on ${share(count("removed"), n)}, part of it on ${share(count("partly"), n)}, and kept it on ${share(count("kept"), n)}.`,
       "",
       table(
-        ["Point", "Strokes after the out call", "Labeller"],
+        ["Point", "Strokes after the out call", "Labeler"],
         card.outCallTails.map((row) => [row.number, row.tail, row.outcome]),
       ),
     );
@@ -1267,7 +1267,7 @@ export function renderScorecard(
     "",
     `Points with a let serve: ${pointList(card.serves.lets)}.`,
     "",
-    `Points where a serve follows a serve the labeller called in: ${pointList(card.serves.serveAfterIn)}.`,
+    `Points where a serve follows a serve the labeler called in: ${pointList(card.serves.serveAfterIn)}.`,
     "",
   );
   return out.join("\n");

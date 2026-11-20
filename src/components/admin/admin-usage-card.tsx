@@ -94,7 +94,7 @@ export function AdminUsageCard({
             page that failed to load rather than a quiet month. */}
         {usage.lines.length === 0 && (
           <p className="border-t border-[var(--border-hairline)] py-3 text-[12px] text-[var(--ink-500)]">
-            No video analysed yet this month.
+            No video analyzed yet this month.
           </p>
         )}
       </div>

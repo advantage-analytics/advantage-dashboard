@@ -1017,7 +1017,7 @@ test("an identical retry reuses the attempt: 200, same id, fresh credential", as
   expect(h.mintCalls).toHaveLength(2);
 });
 
-test("a second attempt with a different request id conflicts until the first is cancelled", async () => {
+test("a second attempt with a different request id conflicts until the first is canceled", async () => {
   const h = harness();
   const first = await run(h, PERSONAL_MATCH, validBody());
   expect(first.response.status).toBe(201);
@@ -1866,7 +1866,7 @@ test("renewal after finalization has begun is denied, and mints nothing", async 
   expect(h.renewCalls).toHaveLength(1);
 });
 
-test("renewal of a retired attempt is mode_conflict — a cancelled upload never resumes", async () => {
+test("renewal of a retired attempt is mode_conflict — a canceled upload never resumes", async () => {
   const store = new FakeReservations();
   const id = store.seedPending(PERSONAL_MATCH);
 
@@ -1916,7 +1916,7 @@ test("cancellation retires the caller's pending attempt and says so", async () =
   expect(h.store.rows.get(id)?.state).toBe("retired");
 });
 
-test("cancelling twice is one cancellation: the retry is a 200, not a 404 or a second retire", async () => {
+test("canceling twice is one cancellation: the retry is a 200, not a 404 or a second retire", async () => {
   const store = new FakeReservations();
   const id = store.seedPending(PERSONAL_MATCH);
 
@@ -1997,7 +1997,7 @@ test("cancellation preserves an active video: the published attachment is refuse
   expect(store.rows.get(activeId)?.retiredAt).toBeUndefined();
 });
 
-test("cancelling a pending attempt leaves an active attachment on the same match alone", async () => {
+test("canceling a pending attempt leaves an active attachment on the same match alone", async () => {
   const store = new FakeReservations();
   const activeId = randomUUID();
   store.activate(PERSONAL_MATCH, activeId, 1);
@@ -2107,7 +2107,7 @@ test("a non-UUID attachment id is refused before cancellation reaches the databa
   expect(h.cancelCalls).toHaveLength(0);
 });
 
-test("cancelling frees the match for a fresh attempt", async () => {
+test("canceling frees the match for a fresh attempt", async () => {
   // The end-to-end reason cancellation exists: one pending attempt per match
   // per uploader, so the abandoned one must be retired before a retry.
   const store = new FakeReservations();

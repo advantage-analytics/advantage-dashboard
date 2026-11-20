@@ -831,7 +831,7 @@ test("a player whose only earlier matches are practice gets no comparison", asyn
 });
 
 for (const matchType of ["Practice", "  practice "]) {
-  test(`a match typed ${JSON.stringify(matchType)} is summarised as a practice set that does not count`, async () => {
+  test(`a match typed ${JSON.stringify(matchType)} is summarized as a practice set that does not count`, async () => {
     const { requests } = await runWithReplies([GOOD_REPLY], undefined, {
       match: { ...JUDGED_MATCH, match_type: matchType },
       stats: ERROR_STATS(9, 3),

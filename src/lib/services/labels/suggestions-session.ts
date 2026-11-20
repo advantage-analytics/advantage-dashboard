@@ -26,7 +26,7 @@ export type LabelDismissSuggestionResult = LabelOpResult<{
 }>;
 
 const BLIND =
-  "This session is labelled without the site's marks, so there is nothing to dismiss.";
+  "This session is labeled without the site's marks, so there is nothing to dismiss.";
 
 interface DismissRow {
   id: string;

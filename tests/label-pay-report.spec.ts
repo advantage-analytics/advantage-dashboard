@@ -139,8 +139,8 @@ function fakeDb(
 }
 
 const users: Row[] = [
-  { id: ANA, email: "ana@labellers.test", first_name: "Ana", last_name: "A" },
-  { id: BEN, email: "ben@labellers.test", first_name: "Ben", last_name: "B" },
+  { id: ANA, email: "ana@labelers.test", first_name: "Ana", last_name: "A" },
+  { id: BEN, email: "ben@labelers.test", first_name: "Ben", last_name: "B" },
 ];
 
 function submission(sessionId: string, by: string, at: string): Row {
@@ -214,7 +214,7 @@ test.describe("label pay report", () => {
       {
         labellerId: ANA,
         name: expect.any(String),
-        email: "ana@labellers.test",
+        email: "ana@labelers.test",
         paidSessions: 1,
         paidVideoMinutes: 60,
         workedMinutes: 0,
@@ -394,7 +394,7 @@ test.describe("label pay report", () => {
     }
   });
 
-  test("time worked is the paid labeller's own minutes, in sittings split by a long gap", async () => {
+  test("time worked is the paid labeler's own minutes, in sittings split by a long gap", async () => {
     const beat = (sessionId: string, by: string, minute: string): Row => ({
       session_id: sessionId,
       user_id: by,

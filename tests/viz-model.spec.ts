@@ -405,7 +405,7 @@ test.describe("computeViz — return cuts", () => {
     expect(place.noun).toBe("returns");
   });
 
-  test("return dots carry metres, not the legacy pixel frame", () => {
+  test("return dots carry meters, not the legacy pixel frame", () => {
     const place = computeViz([ret], "returnPlacement", EMPTY_VIZ_FILTERS, true);
     // Task 2: end detection reads secondShotContactY (23.0, far half, so
     // farEnd=true): lateralM = -landingX = -1.2; depthM = NET(11.885) -
@@ -729,7 +729,7 @@ test.describe("computeVizStats — return placement", () => {
   // "Short") are static text, not numbers, so they read the same in either
   // unit — only a band's `rangeLabel` (drawn on the overlay/editor, not
   // this stat card) follows the preference.
-  test("depth thirds in metres: identical counts to feet — a unit switch never moves a ball between bands", () => {
+  test("depth thirds in meters: identical counts to feet — a unit switch never moves a ball between bands", () => {
     const pts = [
       returnPoint({ secondShotLandingX: 0, secondShotLandingY: 0 }), // short
       returnPoint({ secondShotLandingX: 0, secondShotLandingY: DEPTH_THIRD_M }), // mid (boundary, inclusive)
@@ -855,7 +855,7 @@ test.describe("computeVizStats — return contact", () => {
   // labels (unlike Depth's thirds group, a contact row's label IS the
   // number — `contactRow` in viz-bands.ts) read as the design's worked
   // example: "Inside the baseline" / "0–1.5 m behind" / "1.5 m+ behind".
-  test("contact depth bands in metres: same buckets, labels read '0–1.5 m behind' / '1.5 m+ behind'", () => {
+  test("contact depth bands in meters: same buckets, labels read '0–1.5 m behind' / '1.5 m+ behind'", () => {
     const REAL_COURT_LENGTH = 23.77;
     const atDepth = (depthM: number) =>
       contactPoint({ secondShotContactY: REAL_COURT_LENGTH + depthM });

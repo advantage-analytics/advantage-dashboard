@@ -109,7 +109,7 @@ test.describe("an air stroke after a ball the vendor's bounce reads out", () => 
     });
   }
 
-  test("a miss the labeller called stands, and so does a serve, the same hitter, and an air stroke with no contact", () => {
+  test("a miss the labeler called stands, and so does a serve, the same hitter, and an air stroke with no contact", () => {
     const stroke = "overhead" as const;
     expect(
       edit([lob({ resultCalled: true }), smash()], "b", { stroke }),

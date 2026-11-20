@@ -1902,7 +1902,7 @@ test.describe("score flags: tiebreak off 6-6, score vs serve side", () => {
     expect(sideMismatch({ predPointScore: "3-2", playerX: 1 })).toBe(true);
   });
 
-  test("no flag at the centre mark, without a position, or on a no-ad 40-40", () => {
+  test("no flag at the center mark, without a position, or on a no-ad 40-40", () => {
     expect(sideMismatch({ predPointScore: "0-15", playerX: 0.05 })).toBe(false);
     // Just past the mark is a stance: many players serve deuce 0.15 m off it.
     expect(sideMismatch({ predPointScore: "0-15", playerX: 0.15 })).toBe(true);

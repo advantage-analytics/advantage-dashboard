@@ -136,7 +136,7 @@ test("no files at all is no video", async () => {
   ).toBeNull();
 });
 
-test.describe('prefer "vendor-copy" (the labelling console)', () => {
+test.describe('prefer "vendor-copy" (the labeling console)', () => {
   const job = {
     video_object_key: "videos/u/m/original.mp4",
     trimmed_object_key: "trimmed/u/m/j.mp4",

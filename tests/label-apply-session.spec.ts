@@ -75,7 +75,7 @@ test("a score mismatch not accepted, or no points: refused, nothing touched", as
   expect(mismatch).toEqual({
     ok: false,
     error:
-      "Not published: Set 1: labelled 4–5, entered 3–6. Fix the set, mark the video as ending early, or correct the match record.",
+      "Not published: Set 1: labeled 4–5, entered 3–6. Fix the set, mark the video as ending early, or correct the match record.",
   });
 
   expect(await refuse(plan({ points: 0 }))).toEqual({
@@ -569,7 +569,7 @@ function partlyMarkedContext(kind: LabelPoint["errorKind"]): ApplyContext {
 const at = (calls: Recorded[], table: string, op = "rpc") =>
   calls.findIndex((c) => c.table === table && c.op === op);
 
-test("planApply: a partly marked session plans only Unforced strings, and the overview keeps the labeller's forced count", () => {
+test("planApply: a partly marked session plans only Unforced strings, and the overview keeps the labeler's forced count", () => {
   const context = partlyMarkedContext("forced");
   const plan = planApply(context);
   expect(plan.errorsJudged).toBe(false);
@@ -734,7 +734,7 @@ test("the script's publish is unchanged for the summary: asked after the stats, 
   ).toMatchObject({ ok: true, insightsRequested: false });
 });
 
-test("a publish answers the report's fold note from the labelled score", () => {
+test("a publish answers the report's fold note from the labeled score", () => {
   // Matching score, or a video marked as ending early: the note goes away.
   expect(labelFold(plan({}))).toEqual({ reconciled: true, source: "labels" });
   // A mismatch published anyway (Mark complete accepts it): the note stays.
@@ -814,7 +814,7 @@ test("restoring forced strings onto a cleared marker counts them: the undercount
   expect(fake.state.stats?.forced_errors).toBe(1);
 });
 
-test("restoring the vendor's original clears a marker the labelled publish set", async () => {
+test("restoring the vendor's original clears a marker the labeled publish set", async () => {
   const fake = await restore(
     backupOf([UNFORCED_POINT], { errorsJudgedAt: null }),
     { errorsJudgedAt: "2026-10-29T20:00:00+00:00" },

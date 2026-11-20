@@ -21,7 +21,7 @@ import {
  * breadcrumb can still say "Upload video"; it is a step inside the upload
  * flow, not a place the rail sends you, so `DESTINATIONS` must leave it out.
  */
-test.describe("isDestination recognises every rail entry", () => {
+test.describe("isDestination recognizes every rail entry", () => {
   // Every array `DESTINATIONS` spreads, so adding a rail row adds its test
   // rather than needing one written by hand.
   //

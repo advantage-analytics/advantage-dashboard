@@ -302,7 +302,7 @@ test("Pressure = raw 30-30 or 40-40, or a break/set/match point", () => {
   ]);
 });
 
-test("Points grid matches the raw score server-first, with AD normalised to Ad", () => {
+test("Points grid matches the raw score server-first, with AD normalized to Ad", () => {
   const points = [
     pt({ id: "AD-40", pointScoreRaw: "AD-40" }),
     pt({ id: "40-ad", pointScoreRaw: " 40 - ad " }),

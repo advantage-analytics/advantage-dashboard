@@ -493,7 +493,7 @@ function jobRow(matchId: string, status: string, createdAt: string): Row {
   };
 }
 
-test("analyzed is the report's own gate: a match still analysing is not folded, but is played", async () => {
+test("analyzed is the report's own gate: a match still analyzing is not folded, but is played", async () => {
   // m-b's job finished; m-d was sent again and its new job is queued, though
   // its points from the earlier attempt are still there.
   const { client, sides } = await adaSides(
@@ -969,7 +969,7 @@ test("opponentsCount counts the rows the Faced-by page would list for this playe
   expect(season.opponentsCount).toBe(2);
 });
 
-test("seasonOpponentCount keys like the Opponents page: stored id first, else the normalised name", () => {
+test("seasonOpponentCount keys like the Opponents page: stored id first, else the normalized name", () => {
   const side = (
     overrides: Partial<DbPlayerMatchRow> & { id: string },
     isPlayer1 = true,

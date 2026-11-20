@@ -328,7 +328,7 @@ export function findGapDescription(
 ): string {
   return reachesSet
     ? `Goes to the first point of set ${setNumber}. The entered score is a set total, so the gap can’t be placed at a game.`
-    : `The points never reach set ${setNumber}: goes to the last point labelled.`;
+    : `The points never reach set ${setNumber}: goes to the last point labeled.`;
 }
 
 /**
@@ -389,7 +389,7 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
       return "No ball was tracked off the last shot. Most often it isn’t a shot at all, just a swing at a dead ball: delete it, and the point ends on the shot before.";
     case "net_by_trajectory":
       if (mark.params.by === "landing") {
-        return "The last ball is called in but came down within a metre of the net. About four times in five that is a ball into the net: watch it, and make it net if it stayed on this side.";
+        return "The last ball is called in but came down within a meter of the net. About four times in five that is a ball into the net: watch it, and make it net if it stayed on this side.";
       }
       return "The ball crossed the net barely above the tape, but nothing calls it a net ball. Watch the net: if the ball hit it and stayed on this side, change the result to net.";
     case "pick_winner":

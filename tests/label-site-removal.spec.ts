@@ -322,7 +322,7 @@ test.describe("writeLabelSiteRemovalRestore", () => {
     ]);
   });
 
-  test("a session labelled without marks is refused before anything is written", async () => {
+  test("a session labeled without marks is refused before anything is written", async () => {
     const fake = fakeClient({
       shot: GHOST_ROW,
       session: { status: "labelling", marks_enabled: false },
@@ -334,7 +334,7 @@ test.describe("writeLabelSiteRemovalRestore", () => {
       }),
     ).toEqual({
       error:
-        "This session is labelled without the site's marks, so there is nothing to restore.",
+        "This session is labeled without the site's marks, so there is nothing to restore.",
     });
     expect(updates(fake)).toEqual([]);
   });

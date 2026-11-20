@@ -662,7 +662,7 @@ test.describe("the row roll-up", () => {
     ).toMatchObject({ text: null, count: 2, state: "dismissed" });
   });
 
-  test("a demoted flag draws no chip; a grey one that is not stays grey", () => {
+  test("a demoted flag draws no chip; a gray one that is not stays gray", () => {
     expect(chipOf([sample("ending_suspect_line")])).toBe("demoted");
     expect(chipOf([sample("last_landing_missing")])).toMatchObject({
       text: "How did the last ball end?",
@@ -671,7 +671,7 @@ test.describe("the row roll-up", () => {
     });
   });
 
-  test("grey for the data, amber for the score: a missing shot is the score's only at the rally's end", () => {
+  test("gray for the data, amber for the score: a missing shot is the score's only at the rally's end", () => {
     const missing = sample("same_player_consecutive");
     const shots = ["s1", "s2", "s3", "s4", "s5", "s6"].map((id) => ({
       id,

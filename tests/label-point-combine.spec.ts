@@ -66,7 +66,7 @@ function combined(): LabelPoint[] {
 // ── The plan ───────────────────────────────────────────────────────────────
 
 test.describe("combineNeighbour", () => {
-  test("the nearest live point that way, in the same set — a tombstone is skipped, the next game's point is a neighbour", () => {
+  test("the nearest live point that way, in the same set — a tombstone is skipped, the next game's point is a neighbor", () => {
     expect(combineNeighbour(points(), P2, "above")?.id).toBe(P1);
     expect(combineNeighbour(points(), P1, "below")?.id).toBe(P2);
     expect(combineNeighbour(points(), P1, "above")).toBeNull();
@@ -138,7 +138,7 @@ test.describe("planPointCombine", () => {
     });
   });
 
-  test("refused: a missing or deleted point, and no live neighbour of the same set that way", () => {
+  test("refused: a missing or deleted point, and no live neighbor of the same set that way", () => {
     expect(planPointCombine(points(), "nope", "above")).toEqual({
       error: "The point to combine is not a point of this session.",
     });
@@ -1135,7 +1135,7 @@ test.describe("writeLabelPointCombine", () => {
     });
   });
 
-  test("refused before anything is written: a bad id or direction, a missing point, a complete session, no neighbour", async () => {
+  test("refused before anything is written: a bad id or direction, a missing point, a complete session, no neighbor", async () => {
     const bad = fakeClient({});
     expect(
       await writeLabelPointCombine({
@@ -1268,7 +1268,7 @@ function menuActions(
 }
 
 test.describe("the ⋯ menu", () => {
-  test("Combine with point above / below: only towards a live neighbour of the same set, each naming the two numbers", () => {
+  test("Combine with point above / below: only towards a live neighbor of the same set, each naming the two numbers", () => {
     const two = menuActions(pointOf(P2), points());
     expect(two.combineAbove?.description).toBe("Point 2's shots join point 1");
     expect(two.combineBelow?.description).toBe("Point 4's shots join point 2");

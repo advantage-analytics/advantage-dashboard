@@ -17,7 +17,7 @@ export function StatisticsEmpty() {
     <ReportPaneEmpty
       testId="statistics-empty"
       heading="No point-by-point data for this match"
-      body="Head to head, performance tracker, rally length and how points ended are built from the points in a match. They arrive with a video analysed by Advantage Intelligence or a SwingVision export."
+      body="Head to head, performance tracker, rally length and how points ended are built from the points in a match. They arrive with a video analyzed by Advantage Intelligence or a SwingVision export."
       // The public share page has no Video view to open (`meta.readOnly`).
       action={
         meta.readOnly

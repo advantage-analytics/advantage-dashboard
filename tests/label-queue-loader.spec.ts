@@ -76,7 +76,7 @@ function session(
 
 const assignee = (id: string, first: string, last: string) => ({
   id,
-  email: `${first.toLowerCase()}@labellers.test`,
+  email: `${first.toLowerCase()}@labelers.test`,
   first_name: first,
   last_name: last,
   avatar_path: `${id}/face.png`,
@@ -312,7 +312,7 @@ function fixture() {
   return entries;
 }
 
-test.describe("the labeller's board", () => {
+test.describe("the labeler's board", () => {
   test("never names whose match a row is", () => {
     const entries = fixture();
     // The names are in the queue the board is built from.
@@ -644,7 +644,7 @@ test.describe("published, checked and sent back", () => {
     expect(board.todo).toEqual([]);
   });
 
-  test("the labeller sees the published lane, and only their own note", () => {
+  test("the labeler sees the published lane, and only their own note", () => {
     const board = toLabellerBoard(publishFixture(), VIEWER, true);
     expect(board.published.map((row) => [row.mine, row.publishedAt])).toEqual([
       [true, "2026-12-08T08:00:00Z"],
@@ -668,7 +668,7 @@ test.describe("published, checked and sent back", () => {
     expect(board.submitted).toHaveLength(1);
   });
 
-  test("another labeller's sent-back note appears nowhere on the board", () => {
+  test("another labeler's sent-back note appears nowhere on the board", () => {
     const text = JSON.stringify(
       toLabellerBoard(publishFixture(), VIEWER, true),
     );

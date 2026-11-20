@@ -299,7 +299,7 @@ export function scoreReasonText(reason: LabelScoreReason): string {
  * the set has no unfinished or run-over game.
  */
 export function scoreMismatchSentence(mismatch: LabelScoreMismatch): string {
-  const head = `Set ${mismatch.setNumber}: labelled ${mismatch.labelled}, entered ${mismatch.entered}`;
+  const head = `Set ${mismatch.setNumber}: labeled ${mismatch.labelled}, entered ${mismatch.entered}`;
   return [head, ...mismatch.reasons.map(scoreReasonText)].join(" · ");
 }
 

@@ -45,7 +45,7 @@ export function SendBackDialog({
       open={open}
       onOpenChange={onOpenChange}
       title={`Send ${players} back?`}
-      description={`It goes back to ${labellerName ?? "its labeller"} to fix. The published version stays live for the player until they publish again.`}
+      description={`It goes back to ${labellerName ?? "its labeler"} to fix. The published version stays live for the player until they publish again.`}
       confirmLabel="Send back"
       pendingLabel="Sending back…"
       pending={pending}

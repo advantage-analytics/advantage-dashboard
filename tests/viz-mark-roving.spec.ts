@@ -6,7 +6,7 @@ import {
 
 /* ── Which keys the mark group owns ──────────────────────────────────────── */
 
-test("the six roving keys are recognised and nothing else is", () => {
+test("the six roving keys are recognized and nothing else is", () => {
   for (const key of [
     "ArrowRight",
     "ArrowDown",

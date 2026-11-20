@@ -134,7 +134,7 @@ export function LabelGuide() {
   return (
     <div className="flex w-full max-w-[660px] flex-col gap-10">
       <div>
-        <h1 className="text-display">Labelling guide</h1>
+        <h1 className="text-display">Labeling guide</h1>
         <p className="mt-[9px] text-[13px] text-[var(--ink-600)]">
           How the console works, and the standard a finished match meets.
           <span className="text-[var(--ink-400)]"> · </span>

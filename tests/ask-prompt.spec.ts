@@ -230,7 +230,7 @@ test.describe("ASK_SCHEMA", () => {
     }
   });
 
-  test("names every percentage the way the answer renderer recognises one", () => {
+  test("names every percentage the way the answer renderer recognizes one", () => {
     for (const view of ASK_SCHEMA) {
       for (const column of view.columns) {
         if (
@@ -369,7 +369,7 @@ test.describe("buildPlanPrompt", () => {
       "A follow-up that names no match, opponent or period of its own keeps the scope of the previous player turn — reuse its match ids, or its opponent with opponent_name ilike.",
     );
     expect(prompt).toContain(
-      "- An opponent named in the question text without a tag: select match_id from ask.matches where opponent_name ilike '%name%'. You are not shown the player's opponents, so a name you do not recognise is still a name: use the first four or five letters of it as typed, between % signs, and let the data decide. NEVER answer shape B because a name is unfamiliar or looks misspelt.",
+      "- An opponent named in the question text without a tag: select match_id from ask.matches where opponent_name ilike '%name%'. You are not shown the player's opponents, so a name you do not recognize is still a name: use the first four or five letters of it as typed, between % signs, and let the data decide. NEVER answer shape B because a name is unfamiliar or looks misspelt.",
     );
     expect(prompt).toContain(
       'and a one-word or very short question ("serve?", "returns", "clay"). It sets the player against the OPPONENTS; it never sets one group of matches against another.',
@@ -378,7 +378,7 @@ test.describe("buildPlanPrompt", () => {
       "- Never for a question that is short, vague or misspelt: those get shape D over all matches.",
     );
     expect(prompt).toContain(
-      '- Never for "what should I practise / work on / fix / improve / do differently": that is the review, shape C.',
+      '- Never for "what should I practice / work on / fix / improve / do differently": that is the review, shape C.',
     );
     expect(prompt).toContain(ASK_FOLLOW_UP_KEEPS_SHAPE);
   });
@@ -653,7 +653,7 @@ test.describe("buildAnswerPrompt", () => {
       "- NO ADVICE. No recommendation, drill, tactic, strategy, encouragement or praise.",
     );
     expect(prompt).toContain(
-      "If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologise.",
+      "If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologize.",
     );
     expect(prompt).toContain("no exclamation marks");
   });
@@ -815,7 +815,7 @@ test.describe("buildAnswerPrompt", () => {
   });
 });
 
-test.describe("buildAnswerPrompt — the visual catalogue", () => {
+test.describe("buildAnswerPrompt — the visual catalog", () => {
   const prompt = buildAnswerPrompt(ANSWER_INPUT);
 
   test("lists exactly the six kinds, each with when it fits, its syntax and its example", () => {
@@ -832,7 +832,7 @@ test.describe("buildAnswerPrompt — the visual catalogue", () => {
     expect(prompt).toContain(ASK_VISUAL_LINE_SYNTAX);
   });
 
-  test("momentum and tree are the server's alone: kinds the renderer knows and the catalogue never offers", () => {
+  test("momentum and tree are the server's alone: kinds the renderer knows and the catalog never offers", () => {
     for (const kind of ["momentum", "tree"]) {
       expect(ASK_VISUAL_KINDS).toContain(kind);
       expect(ASK_MODEL_VISUAL_KINDS).not.toContain(kind);
@@ -1625,7 +1625,7 @@ test.describe("buildAnswerPrompt — team scope", () => {
       "- NO ADVICE. No recommendation, drill, lineup, tactic, strategy, encouragement or praise.",
     );
     expect(prompt).toContain(
-      "If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologise.",
+      "If the question asks what to do, report the facts the result holds on that subject and stop: do not say what to do, do not explain that you cannot, and do not apologize.",
     );
     for (const rule of [
       "- NEVER TYPE A NUMBER.",
@@ -1680,7 +1680,7 @@ test.describe("buildAnswerPrompt — team scope", () => {
     );
   });
 
-  test("the catalogue is the team's: every kind, none of them addressing the player", () => {
+  test("the catalog is the team's: every kind, none of them addressing the player", () => {
     expect(Object.keys(ASK_TEAM_VISUAL_EXAMPLES)).toEqual([
       ...ASK_MODEL_VISUAL_KINDS,
     ]);
@@ -1889,7 +1889,7 @@ test.describe("the plan prompts — the review, shape C", () => {
 
   test("says exactly when: improvement or what went wrong, naming no statistic, opponent or tagged match", () => {
     expect(personal).toContain(
-      '"How can I improve", "how can I improve for my next match", "what should I work on", "what do I need to fix", "what should I practise", "what went wrong in my last match", "where am I slipping", "what got worse", "where has my game slipped recently": a question about getting better or about what has gone wrong that names NO statistic, NO opponent and NO tagged match.',
+      '"How can I improve", "how can I improve for my next match", "what should I work on", "what do I need to fix", "what should I practice", "what went wrong in my last match", "where am I slipping", "what got worse", "where has my game slipped recently": a question about getting better or about what has gone wrong that names NO statistic, NO opponent and NO tagged match.',
     );
     expect(personal).toContain(
       '- A question that names a statistic ("how can I improve my second serve"), an opponent ("how do I beat this opponent") or a tagged match, or that asks why one match was won or lost, is NOT a review: it is shape A or shape D.',

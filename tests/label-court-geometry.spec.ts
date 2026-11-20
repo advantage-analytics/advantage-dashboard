@@ -96,7 +96,7 @@ test.describe("the half-court zoom (board 08i)", () => {
     expect(width / height).toBeCloseTo(276 / 222, 3);
   });
 
-  test("the surround is court too: a corner of the box is metres off the lines", () => {
+  test("the surround is court too: a corner of the box is meters off the lines", () => {
     // Bottom-left of the near half: wide of the sideline, behind the baseline.
     const out = toCourtInHalf("near", { sx: 0, sy: 100 });
     expect(out.x).toBeCloseTo(-10.085, 9);
@@ -162,7 +162,7 @@ test.describe("slid windows: the half's box size, moved", () => {
     expect(behindBaseline("near", 3)).toBe(-3);
   });
 
-  test("a click is never clamped: the box's edge and past it are metres too", () => {
+  test("a click is never clamped: the box's edge and past it are meters too", () => {
     const top = runoffWindowTop("near", 5.5);
     for (const point of [
       { x: 0, y: -5.4 },

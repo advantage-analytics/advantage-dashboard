@@ -742,7 +742,7 @@ function parseBlock(
 
   const [header, ...body] = lines;
   const kind = kindOf(header);
-  if (!kind) return drop("unknown_kind", null, "kind is not in the catalogue");
+  if (!kind) return drop("unknown_kind", null, "kind is not in the catalog");
 
   const headerBody = header.slice(ASK_VISUAL_LINE_PREFIX.length);
   const cut = headerBody.indexOf(ASK_VISUAL_FIELD_SEPARATOR);

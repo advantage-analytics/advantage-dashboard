@@ -24,7 +24,7 @@ function render() {
   return renderToStaticMarkup(React.createElement(AnalysisStepsPending));
 }
 
-test("one status role, labelled Loading analysis progress", () => {
+test("one status role, labeled Loading analysis progress", () => {
   const html = render();
   const statusMatches = html.match(/role="status"/g) ?? [];
   expect(statusMatches.length).toBe(1);

@@ -123,7 +123,7 @@ const marksOf = (
   shots: Record<string, LabelMark[]> = {},
 ): LabelMarks => ({ points, shots, suggestions: [], serveSides: {} });
 
-test.describe("what the labeller changed on a point", () => {
+test.describe("what the labeler changed on a point", () => {
   test("nothing: a point and its strokes at their seed", () => {
     expect(pointChange(point("a", 0, [shot("s1")]))).toEqual({
       winner: false,
@@ -444,7 +444,7 @@ test.describe("last strokes seeded In whose coordinates say Out or Net", () => {
     ]);
   });
 
-  test("the order is the SEEDED one: a stroke the labeller re-timed is still where it was seeded", () => {
+  test("the order is the SEEDED one: a stroke the labeler re-timed is still where it was seeded", () => {
     const retimed = point("a", 0, [
       // Seeded last (t=2), since moved to the front by the labeller.
       shot("a2", { video_time: 2, ...LONG }, { videoTime: 0.5 }),
@@ -456,7 +456,7 @@ test.describe("last strokes seeded In whose coordinates say Out or Net", () => {
   });
 });
 
-test.describe("strokes the labeller deleted", () => {
+test.describe("strokes the labeler deleted", () => {
   test("the two dead-ball reasons are one; each is counted with whether it followed an out or net by seeded coordinates", () => {
     expect(deleteReasonGroup("dead_ball_after_fault")).toBe(AFTER_POINT_ENDED);
     expect(deleteReasonGroup("dead_ball_after_point")).toBe(AFTER_POINT_ENDED);
@@ -497,7 +497,7 @@ test.describe("strokes the labeller deleted", () => {
     ]);
   });
 
-  test("a stroke the site removed is not a hand deletion until the labeller deletes it", () => {
+  test("a stroke the site removed is not a hand deletion until the labeler deletes it", () => {
     const ghost = shot(
       "a2",
       { video_time: 2 },
@@ -800,7 +800,7 @@ test.describe("last-stroke result changes", () => {
 });
 
 test.describe("last landings", () => {
-  test("where the seed's landing went and what the labeller did with it", () => {
+  test("where the seed's landing went and what the labeler did with it", () => {
     const noLanding = { landing_x: null, landing_y: null };
     const rows = [
       // Vendor bounce, placed by the labeller.
@@ -880,7 +880,7 @@ test.describe("last landings", () => {
 
 test.describe("out-call tails", () => {
   const out = facts({ in: false });
-  test("one or two vendor strokes after the vendor's last non-serve out call, on checked points; whether the labeller removed them", () => {
+  test("one or two vendor strokes after the vendor's last non-serve out call, on checked points; whether the labeler removed them", () => {
     const checked = { checkedAt: "2026-10-07T10:00:00Z" };
     const rows = [
       // Out call, then one stroke the labeller deleted: removed.
@@ -1113,7 +1113,7 @@ test.describe("the per-item table", () => {
     ]);
   });
 
-  test("amber rows come before grey, and the demoted points get a row", () => {
+  test("amber rows come before gray, and the demoted points get a row", () => {
     const a = point("a", 0, [shot("a1")], { ending: "error" });
     const b = point("b", 1, [shot("b1")]);
     const card = buildScorecard(
@@ -1146,7 +1146,7 @@ test.describe("the per-item table", () => {
       buildScorecard([a], marksOf({ a: [DISPUTED, GUESSED] })),
       { title: "Scorecard", names: { p1: "Lee", p2: "Vargas" } },
     );
-    expect(text).toContain("## Items, against what the labeller changed");
+    expect(text).toContain("## Items, against what the labeler changed");
     expect(text).toContain("| Item | Tone | Points |");
     expect(text).toMatch(/\| 4\. .* \| amber \| 1 \| 0 \(0%\) \|/);
     expect(text).toMatch(/\| 5\. .* \| amber \| 1 \|/);
@@ -1167,11 +1167,11 @@ test.describe("the markdown", () => {
       { title: "Scorecard", names: { p1: "Lee", p2: "Vargas" } },
     );
     for (const heading of [
-      "## Marks, against what the labeller changed",
-      "## Items, against what the labeller changed",
+      "## Marks, against what the labeler changed",
+      "## Items, against what the labeler changed",
       "## Changed with no `count` mark on the point",
       "## Last strokes seeded In whose coordinates say Out or Net",
-      "## Strokes the labeller deleted",
+      "## Strokes the labeler deleted",
       "## Games",
       "## Winner flips by direction",
       "## Last-stroke result changes",

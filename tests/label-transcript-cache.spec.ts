@@ -329,7 +329,7 @@ test.describe("buildJobMarks reads the cache before building", () => {
     expect(edited.upserts).toBe(1);
   });
 
-  test("a labeller's correction misses, and undoing it misses again", async () => {
+  test("a labeler's correction misses, and undoing it misses again", async () => {
     const noAdJob = { ...JOB_ROW, ad_scoring: false };
     const fake = fakeClient(noAdJob);
     await buildJobMarks(fake.db, JOB_ID);

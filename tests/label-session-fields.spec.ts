@@ -395,7 +395,7 @@ test.describe("writeLabelSessionFields", () => {
     for (const call of fake.calls) expect(call.table).toBe("label_sessions");
   });
 
-  test("a session labelled without marks, and a complete one, are refused before anything is written", async () => {
+  test("a session labeled without marks, and a complete one, are refused before anything is written", async () => {
     const blind = fakeClient({
       session: { status: "labelling", marks_enabled: false },
     });
@@ -407,7 +407,7 @@ test.describe("writeLabelSessionFields", () => {
       }),
     ).toEqual({
       error:
-        "This session is labelled without the site's marks, so its score is not held against the entered one.",
+        "This session is labeled without the site's marks, so its score is not held against the entered one.",
     });
     expect(updates(blind)).toEqual([]);
 
@@ -426,7 +426,7 @@ test.describe("writeLabelSessionFields", () => {
     expect(updates(frozen)).toEqual([]);
   });
 
-  test("the scoring is written on a session labelled without marks, and only while it is open", async () => {
+  test("the scoring is written on a session labeled without marks, and only while it is open", async () => {
     const blind = fakeClient({
       session: { status: "labelling", marks_enabled: false },
     });
@@ -639,7 +639,7 @@ test.describe("a score that doesn't add up, in the flag list", () => {
    * 6–3 — and the list says which games fall short.
    */
   const SENTENCE =
-    "Set 1: labelled 0–0, entered 6–3 · game 1 unfinished (15–15) · game 2 unfinished (0–0)";
+    "Set 1: labeled 0–0, entered 6–3 · game 1 unfinished (15–15) · game 2 unfinished (0–0)";
   const mismatch = {
     setNumber: 1,
     labelled: "0–0",
@@ -677,14 +677,14 @@ test.describe("a score that doesn't add up, in the flag list", () => {
     expect(chevron).toContain('aria-expanded="false"');
   });
 
-  test("gone once the labeller has said the video ends early", () => {
+  test("gone once the labeler has said the video ends early", () => {
     const session = { ...labelSessionFixture(), videoEndsEarly: true };
     expect(header(black(session, EMPTY_MARKS))).not.toContain(
       "data-score-mismatch",
     );
   });
 
-  test("gone when the labelled points agree with the score — the match record first", () => {
+  test("gone when the labeled points agree with the score — the match record first", () => {
     // A stored reading that matches the rows does not hide a record that
     // does not: the record is the source of truth.
     const stored = { ...labelSessionFixture(), finalScore: [[0, 0]] };
@@ -783,7 +783,7 @@ test.describe("a score that doesn't add up, in the flag list", () => {
     expect(tag(html, 'data-game-band="1-1"')).toContain('data-game-key="1·1"');
   });
 
-  test("never without marks: a session labelled blind shows no list and no total", () => {
+  test("never without marks: a session labeled blind shows no list and no total", () => {
     for (const html of [
       black(labelSessionFixture(), null),
       black({ ...labelSessionFixture(), marksEnabled: false }, null),
@@ -824,7 +824,7 @@ test.describe("a score that doesn't add up, in the flag list", () => {
 });
 
 test.describe("the header's total", () => {
-  test("thin tracking says so once beside the grey count, not on an ordinary match", () => {
+  test("thin tracking says so once beside the gray count, not on an ordinary match", () => {
     const session = { ...labelSessionFixture(), matchScore: null };
     const [point] = session.points;
     const [shot] = point.shots;

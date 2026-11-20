@@ -171,7 +171,7 @@ test.describe("LabelBoard", () => {
     expect(html).toContain("Publish yours to claim the next one.");
   });
 
-  test("no Claim button for an admin who is not a labeller", () => {
+  test("no Claim button for an admin who is not a labeler", () => {
     expect(claimButtons(render(board(), false))).toBe(0);
   });
 
@@ -195,7 +195,7 @@ test.describe("LabelBoard", () => {
     expect(html).toContain('aria-valuemax="40"');
     expect(html).toContain("31 of 40</span> flags resolved");
     expect(html).toContain(`href="/label/${MY_SESSION}"`);
-    expect(html).toContain("Continue labelling");
+    expect(html).toContain("Continue labeling");
   });
 
   test("a card with no starting count reads 'N flags left' and no bar", () => {
@@ -214,7 +214,7 @@ test.describe("LabelBoard", () => {
     expect(html).not.toContain('role="progressbar"');
   });
 
-  test("other labellers' rows show a first name and an avatar", () => {
+  test("other labelers' rows show a first name and an avatar", () => {
     const html = render(board());
     expect(html).toContain('data-name="Tobi"');
     expect(html).toContain('data-name="Maya"');
@@ -357,7 +357,7 @@ test.describe("LabelBoard", () => {
     expect(html).toMatch(
       new RegExp(`href="/label/${MY_SESSION}"[^>]*>Fix and publish again`),
     );
-    expect(html).not.toContain("Continue labelling");
+    expect(html).not.toContain("Continue labeling");
     expect(html).toContain(
       "A match was sent back to you. Fix and publish it again to claim the next one.",
     );

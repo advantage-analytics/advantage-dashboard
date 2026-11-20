@@ -39,12 +39,12 @@ const html = renderToStaticMarkup(React.createElement(EditMatchPending));
 const TAG = /<(\/?)([a-zA-Z0-9]+)([^>]*?)(\/?)>/g;
 const VOID = new Set(["br", "hr", "img", "input", "meta", "link"]);
 
-test("one loading status, labelled for the match", () => {
+test("one loading status, labeled for the match", () => {
   expect(html.match(/role="status"/g)?.length).toBe(1);
   expect(html).toContain('role="status" aria-label="Loading match"');
 });
 
-test("nothing is interactive, no colour is a hex, nothing spins", () => {
+test("nothing is interactive, no color is a hex, nothing spins", () => {
   expect(html).not.toContain("<button");
   expect(html).not.toContain("<a ");
   expect(html).not.toContain("<input");

@@ -3059,7 +3059,7 @@ test.describe("a label for a known measure is the server's, not the model's", ()
     });
   });
 
-  test("a row labelled with a row of the result is a row label and is left alone", async () => {
+  test("a row labeled with a row of the result is a row label and is left alone", async () => {
     const result = await run([
       "Headline.\nCHART: table | By surface.\nCOLUMNS: Total points won\nROW: Hard | {{r1.total_points_won_pct}}\nROW: Clay | {{r2.total_points_won_pct}}\n",
     ]);
@@ -3895,7 +3895,7 @@ test.describe("renderAskAnswer — a block the rows themselves fit", () => {
     ).toBeNull();
   });
 
-  test("labelled rows with a few measures are a table, a match id never its label; rows that fit nothing are nothing", async () => {
+  test("labeled rows with a few measures are a table, a match id never its label; rows that fit nothing are nothing", async () => {
     expect(
       visualFromRows([
         { surface: "Hard", wins: 6, losses: 2, matches_in_scope: 12 },
@@ -4078,7 +4078,7 @@ test.describe("renderAskAnswer — when the question asked for a chart", () => {
       "Can you graph it?",
       "plot my return points won by match",
       "Visualize how my serve has changed",
-      "Show me a visualisation of my break points",
+      "Show me a visualization of my break points",
       "Draw me my serve placement",
       "draw a picture of where I serve",
       "I'd like a diagram of my serve +1",

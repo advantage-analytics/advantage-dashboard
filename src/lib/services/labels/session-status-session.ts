@@ -171,8 +171,8 @@ const RACED = racedMessage("session");
 /** The unique index's refusal, as `seed-session.ts` reads it. */
 const UNIQUE_VIOLATION = "23505";
 export const ANOTHER_SESSION_OPEN =
-  "Another labelling session is open for this match. Complete or remove it before reopening this one.";
-const ALREADY_OPEN = "This session is already open for labelling.";
+  "Another labeling session is open for this match. Complete or remove it before reopening this one.";
+const ALREADY_OPEN = "This session is already open for labeling.";
 
 /** Publish a labelling session to its match, verify it, then close it. Never throws. */
 export async function writeLabelSessionComplete(params: {

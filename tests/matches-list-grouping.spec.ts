@@ -69,7 +69,7 @@ test.describe("matchListGroup", () => {
     expect(matchListGroup(analysis)).toBe("Not analyzed");
   });
 
-  test("a cancelled row groups under Not analyzed beside a manual one, never Ready", () => {
+  test("a canceled row groups under Not analyzed beside a manual one, never Ready", () => {
     const cancelled: MatchAnalysis = { status: "cancelled", providerId: null };
     const manual: MatchAnalysis = { status: "manual", providerId: null };
     expect(matchListGroup(cancelled)).toBe("Not analyzed");

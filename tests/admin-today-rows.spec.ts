@@ -133,7 +133,7 @@ test.describe("todayActions", () => {
     expect(actions.some((a) => a.type === "resubmit")).toBe(false);
   });
 
-  test("a label starts labelling, then Resolve", () => {
+  test("a label starts labeling, then Resolve", () => {
     expect(todayActions({ kind: "label", jobId: ID })).toEqual([
       { type: "label", label: "Open", startLabellingJobId: ID },
       { type: "resolve", label: "Resolve" },

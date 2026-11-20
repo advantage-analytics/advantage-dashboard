@@ -488,7 +488,7 @@ test.describe("the slid court and the estimate", () => {
     expect(usual).toContain('viewBox="-10.085 -3.5 20.17 16.224"');
   });
 
-  test("a half's own box draws its run-off guides by default, labelled", () => {
+  test("a half's own box draws its run-off guides by default, labeled", () => {
     // Nothing placed yet, no slide: the far half's own 3.5 m run-off.
     const html = render({ placement: startPlacement("s-return", "far") });
     expect(html).not.toContain("data-court-slide");

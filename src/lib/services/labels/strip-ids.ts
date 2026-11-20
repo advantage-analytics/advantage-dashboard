@@ -37,6 +37,6 @@ export function forLabeller(
   },
 ): string {
   if (isBusiness(sentence)) return stripIds(sentence);
-  console.error(`${log} refused a labeller`, { ...context, detail: sentence });
+  console.error(`${log} refused a labeler`, { ...context, detail: sentence });
   return fallback;
 }

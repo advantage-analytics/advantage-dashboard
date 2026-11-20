@@ -339,7 +339,7 @@ test.describe("a dual line whose match carries its slot as the round", () => {
   });
 });
 
-test.describe("a cancelled analysis keeps its video", () => {
+test.describe("a canceled analysis keeps its video", () => {
   // Cancelled while queued: the video is stored, nothing was analysed. It is
   // not `no-video` (which offers "Add video" for a file the line already
   // has) and not `ready` (there is no report).

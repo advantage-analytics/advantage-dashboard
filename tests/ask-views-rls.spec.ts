@@ -452,7 +452,7 @@ test.describe("ask_run_query: scope and guards (live)", () => {
     );
   });
 
-  test("pg_sleep(30) is cancelled by the role's statement timeout", async () => {
+  test("pg_sleep(30) is canceled by the role's statement timeout", async () => {
     const started = Date.now();
     await expectRefused("pg_sleep", "select pg_sleep(30)", [QUERY_CANCELED]);
     // The role's 8 s, not the 30 s the query asked for.

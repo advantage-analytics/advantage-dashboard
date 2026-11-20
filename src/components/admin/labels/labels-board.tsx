@@ -66,13 +66,13 @@ const LANES: readonly {
     lane: "todo",
     id: "admin-labels-todo",
     title: "To do",
-    empty: "Nothing is waiting to be labelled.",
+    empty: "Nothing is waiting to be labeled.",
   },
   {
     lane: "inProgress",
     id: "admin-labels-in-progress",
     title: "In progress",
-    empty: "Nobody is labelling a match.",
+    empty: "Nobody is labeling a match.",
   },
   {
     lane: "toCheck",

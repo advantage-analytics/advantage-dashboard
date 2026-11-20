@@ -33,9 +33,9 @@ test.describe("unreadableWebhookReason", () => {
     expect(reason('{"status": "job_completed"}')).toBe("it names no job id");
   });
 
-  test("a job id but no status we recognise", () => {
+  test("a job id but no status we recognize", () => {
     expect(reason('{"job_id": "a", "status": "job_exploded"}')).toBe(
-      "it carries no status we recognise",
+      "it carries no status we recognize",
     );
   });
 

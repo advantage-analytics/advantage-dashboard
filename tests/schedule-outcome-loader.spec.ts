@@ -267,7 +267,7 @@ test("a single-event read scopes outcomes to that event", async () => {
   });
 });
 
-test("a match waiting on a labeller reads Verification pending, and only through the reader's loader", async () => {
+test("a match waiting on a labeler reads Verification pending, and only through the reader's loader", async () => {
   const matchRow = (id: string) => ({
     id,
     event_entry_id: "entry-b",

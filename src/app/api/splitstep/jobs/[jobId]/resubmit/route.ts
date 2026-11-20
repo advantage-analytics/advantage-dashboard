@@ -144,7 +144,7 @@ export async function POST(
     return NextResponse.json(
       {
         error:
-          "This match is Verified by Advantage, so it can't be analysed again.",
+          "This match is Verified by Advantage, so it can't be analyzed again.",
       },
       { status: 409 },
     );

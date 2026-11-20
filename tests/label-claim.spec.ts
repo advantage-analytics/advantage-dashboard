@@ -78,7 +78,7 @@ function captureErrors() {
 }
 
 test.describe("claimLabelMatch", () => {
-  test("a caller who is not a labeller is refused before anything is read", async () => {
+  test("a caller who is not a labeler is refused before anything is read", async () => {
     const h = harness({ viewer: null });
     expect(await claimLabelMatch(job(1), h.deps)).toEqual({
       error: CLAIM_LABELLER_REQUIRED,
@@ -155,7 +155,7 @@ test.describe("claimLabelMatch", () => {
     ]);
   });
 
-  test("a seed's database error reaches the labeller as the fixed sentence, logged in full", async () => {
+  test("a seed's database error reaches the labeler as the fixed sentence, logged in full", async () => {
     const matchId = "0b5f1c2a-3d4e-4f60-8a71-92b3c4d5e6f7";
     const detail = `Could not create the session: insert on table "label_sessions" violates foreign key constraint "label_sessions_match_id_fkey" Key (match_id)=(${matchId}) is not present`;
     const h = harness({ seeded: { error: detail } });

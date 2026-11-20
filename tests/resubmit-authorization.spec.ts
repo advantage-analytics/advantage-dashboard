@@ -866,12 +866,12 @@ test("an automatic retry of a downloading_video failure is not refused by the ne
 
 // ── "Send for analysis again": a cancelled parent ─────────────────────────
 
-test("a cancelled parent resubmits manually and reserves the month's time anew", async () => {
+test("a canceled parent resubmits manually and reserves the month's time anew", async () => {
   // The cancel released the parent's reservation, so the child reserves again
   // — exactly as for a failed parent. The cancelled parent must not count as
   // an analysis in flight, or it would refuse its own resend.
   const h = harness({
-    job: parentJob({ status: "cancelled", error_code: "CANCELLED" }),
+    job: parentJob({ status: "cancelled", error_code: "CANCELED" }),
   });
   const r = await manual(h);
   expect(r.ok).toBe(true);
@@ -891,18 +891,18 @@ test("a cancelled parent resubmits manually and reserves the month's time anew",
   expect(h.released).toEqual([]);
 });
 
-test("a cancelled parent is never resent automatically", async () => {
+test("a canceled parent is never resent automatically", async () => {
   const h = harness({
-    job: parentJob({ status: "cancelled", error_code: "CANCELLED" }),
+    job: parentJob({ status: "cancelled", error_code: "CANCELED" }),
   });
   expectRefused(h, await auto(h), "not_failed");
 });
 
-test("a cancelled parent with no video is refused before any blob check", async () => {
+test("a canceled parent with no video is refused before any blob check", async () => {
   const h = harness({
     job: parentJob({
       status: "cancelled",
-      error_code: "CANCELLED",
+      error_code: "CANCELED",
       video_object_key: null,
     }),
   });
@@ -924,7 +924,7 @@ function withChain(h: Harness, rows: Row[]): Harness {
   return h;
 }
 
-test("a chain with two cancelled links still allows a manual resend", async () => {
+test("a chain with two canceled links still allows a manual resend", async () => {
   // j-a (failed) ← j-b (failed) ← j-c (cancelled) ← j-parent (cancelled):
   // four rows, but only the two failures spent an attempt, so the ceiling of
   // three is not reached and "Send for analysis again" goes through.
@@ -932,7 +932,7 @@ test("a chain with two cancelled links still allows a manual resend", async () =
     harness({
       job: parentJob({
         status: "cancelled",
-        error_code: "CANCELLED",
+        error_code: "CANCELED",
         resubmitted_from_job_id: "j-c",
       }),
     }),
@@ -1122,7 +1122,7 @@ test.describe("a retry's ad scoring", () => {
     expect(await sent({ parent: true, format: false })).toBe(false);
   });
 
-  test("a labeller's correction beats Edit match and the attempt", async () => {
+  test("a labeler's correction beats Edit match and the attempt", async () => {
     expect(await sent({ parent: false, format: false, corrected: true })).toBe(
       true,
     );
@@ -1190,7 +1190,7 @@ test.describe("retryWouldRun", () => {
       ...overrides,
     }) as unknown as RetryCandidateRow;
 
-  test("a failed or cancelled job of the viewer's with its video can retry", () => {
+  test("a failed or canceled job of the viewer's with its video can retry", () => {
     expect(retryWouldRun([row()], VIEWER)).toBe(true);
     expect(retryWouldRun([row({ status: "cancelled" })], VIEWER)).toBe(true);
   });
@@ -1232,7 +1232,7 @@ test.describe("retryWouldRun", () => {
     }
   });
 
-  test("the attempt ceiling closes it, and cancelled rows spend none", () => {
+  test("the attempt ceiling closes it, and canceled rows spend none", () => {
     const chain = (status: string) => [
       row({ id: "c", resubmitted_from_job_id: "b" }),
       row({ id: "b", status, resubmitted_from_job_id: "a" }),

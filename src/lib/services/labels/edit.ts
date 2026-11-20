@@ -337,7 +337,7 @@ export function parseLabelShotPatch(
     const vx = finite(input[x]);
     const vy = finite(input[y]);
     if (vx === undefined || vy === undefined) {
-      return { error: `${name} must be two numbers, in metres.` };
+      return { error: `${name} must be two numbers, in meters.` };
     }
     if ((vx === null) !== (vy === null)) {
       return { error: `${name} must be set or cleared as a pair.` };

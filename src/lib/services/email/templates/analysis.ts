@@ -263,7 +263,7 @@ export function analysisFailedEmail(input: AnalysisFailedInput): EmailMessage {
     showsStoredNote(errorCode) && errorMessage ? errorMessage : null;
 
   const content: EmailContent = {
-    preheader: `We couldn't finish analysing ${matchTitle}.`,
+    preheader: `We couldn't finish analyzing ${matchTitle}.`,
     eyebrow: "Analysis failed",
     heading: copy.title,
     body: [copy.cardBody],

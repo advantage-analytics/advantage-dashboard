@@ -83,7 +83,7 @@ test.describe("deriveShotResult", () => {
     expect(deriveShotResult(serve({ x: -4.5, y: 16 }))).toBe("out");
   });
 
-  test("a server on the centre mark may hit either box", () => {
+  test("a server on the center mark may hit either box", () => {
     expect(deriveShotResult(serve({ x: 2, y: 16 }, { contact_x: 0 }))).toBe(
       "in",
     );
@@ -192,7 +192,7 @@ test.describe("positionPatch", () => {
     });
   });
 
-  test("a moved end hands the call back to the ends: the labeller's flag clears", () => {
+  test("a moved end hands the call back to the ends: the labeler's flag clears", () => {
     expect(
       positionPatch(rally({ x: 1, y: 18 }, { result: "net" }), "landing", {
         x: 1,
@@ -251,7 +251,7 @@ test.describe("effectiveShotResult", () => {
     expect(effectiveShotResult({})).toBeNull();
   });
 
-  test("a call the labeller set outranks the ends; the seed's call does not", () => {
+  test("a call the labeler set outranks the ends; the seed's call does not", () => {
     const seed = {
       stroke: "forehand" as const,
       hitter: "p1" as const,

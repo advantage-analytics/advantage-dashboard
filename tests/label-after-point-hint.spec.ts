@@ -85,7 +85,7 @@ test.describe("pointEndedEarly", () => {
     expect(three).toBeNull();
   });
 
-  test("a miss the labeller called, anywhere, with any number of strokes after it", () => {
+  test("a miss the labeler called, anywhere, with any number of strokes after it", () => {
     // Marked out by the labeller (the stored call left its seed): three
     // strokes after it are more than the edit removes on its own.
     const called = { status: "edited", result: "out" } as const;
@@ -1068,7 +1068,7 @@ test.describe("servesFromBothSides", () => {
     ).toEqual({ shotId: "c" });
   });
 
-  test("nothing from the same side, near the centre mark, unplaced, by two players, or where the serve-after-a-serve-in hint asks", () => {
+  test("nothing from the same side, near the center mark, unplaced, by two players, or where the serve-after-a-serve-in hint asks", () => {
     const none = (shots: LabelShot[]) =>
       expect(servesFromBothSides({ shots }, true)).toBeNull();
     none([serve("a", 1.25), serve("b", 0.7, { stroke: "second_serve" })]);
@@ -1174,7 +1174,7 @@ test.describe("groundstrokeAtNet", () => {
     ).toBeNull();
   });
 
-  test("only the vendor's own call: an added or retyped stroke is the labeller's", () => {
+  test("only the vendor's own call: an added or retyped stroke is the labeler's", () => {
     const base = [serve, hit("r", "backhand", 11)];
     expect(
       groundstrokeAtNet(

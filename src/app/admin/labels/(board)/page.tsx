@@ -54,15 +54,15 @@ function ledeText(toCheck: number, overdue: number, sentBack: number): string {
   if (overdue > 0) {
     parts.push(
       overdue === 1
-        ? "1 match is overdue for labelling."
-        : `${overdue} matches are overdue for labelling.`,
+        ? "1 match is overdue for labeling."
+        : `${overdue} matches are overdue for labeling.`,
     );
   }
   if (sentBack > 0) {
     parts.push(
       sentBack === 1
-        ? "1 is back with its labeller for fixes."
-        : `${sentBack} are back with their labellers for fixes.`,
+        ? "1 is back with its labeler for fixes."
+        : `${sentBack} are back with their labelers for fixes.`,
     );
   }
   return parts.join(" ");

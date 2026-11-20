@@ -422,7 +422,7 @@ test.describe("buildLabelMarks on the clean fixture", () => {
     expect(apart.suggestions).toEqual(others(cleanMarks));
   });
 
-  test("no missing_point suggestion comes from the file: it is read off the labelled rows (score-marks.ts)", () => {
+  test("no missing_point suggestion comes from the file: it is read off the labeled rows (score-marks.ts)", () => {
     expect(
       cleanMarks.suggestions.filter((s) => s.kind === "missing_point"),
     ).toHaveLength(0);

@@ -54,7 +54,7 @@ export const MAX_PRACTICE_COPIES = 20;
 export const PRACTICE_SOURCE_NOT_KEY =
   "Practice copies are made from a completed analyst session only.";
 export const PRACTICE_NO_SET =
-  "The answer key has no labelled points in that set.";
+  "The answer key has no labeled points in that set.";
 
 export interface PracticeDependencies {
   requireAdmin: () => Promise<{ id: string } | null>;
@@ -229,7 +229,7 @@ export async function createPracticeCopies(
     return { error: "Pick a set from 1 to 5, or the whole match." };
   }
   if (!Array.isArray(input.labellerIds) || input.labellerIds.length === 0) {
-    return { error: "Pick at least one labeller." };
+    return { error: "Pick at least one labeler." };
   }
   const labellerIds = [
     ...new Set(input.labellerIds.map((id) => normaliseId(id))),
@@ -261,7 +261,7 @@ export async function createPracticeCopies(
       .select("id, email, first_name, last_name, is_labeller")
       .in("id", labellerIds as string[]);
     if (usersError)
-      return { error: `Could not read the labellers: ${usersError.message}` };
+      return { error: `Could not read the labelers: ${usersError.message}` };
     const userById = new Map(
       (
         (users ?? []) as {
@@ -364,7 +364,7 @@ export async function createPracticeCopies(
           labellerId,
           name,
           ok: false,
-          error: "That person is not a labeller.",
+          error: "That person is not a labeler.",
         });
         continue;
       }

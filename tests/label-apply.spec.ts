@@ -51,7 +51,7 @@ test.describe("vocabulary: the seed's mappings, inverted", () => {
     expect(resultTypeOf(null, "forehand")).toBeNull();
   });
 
-  test("an error's result_type carries the labeller's forced/unforced mark", () => {
+  test("an error's result_type carries the labeler's forced/unforced mark", () => {
     // [last stroke, error kind, result_type]. An unmarked error (null) is
     // still unforced — what every reader counted before the split; a volley
     // names no side, as for a winner. The SQL twin is

@@ -128,7 +128,7 @@ test.describe("openFlags", () => {
     expect(open[0].items.map((i) => i.id)).toEqual([3, 4, 5]);
   });
 
-  test("a demoted point has none; a grey one kept is data", () => {
+  test("a demoted point has none; a gray one kept is data", () => {
     const rows = [labelPoint("x", 0), labelPoint("y", 1)];
     expect(openFlags(rows, marksOf({ x: ["ending_suspect_line"] }))).toEqual(
       [],

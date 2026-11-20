@@ -131,7 +131,7 @@ async function activeOption(page: Page) {
 }
 
 test.describe("what the composer renders", () => {
-  test("a labelled textarea, the tag button, the count and Send", async ({
+  test("a labeled textarea, the tag button, the count and Send", async ({
     page,
   }) => {
     await openFixture(page);

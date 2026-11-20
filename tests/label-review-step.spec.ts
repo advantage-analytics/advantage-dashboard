@@ -177,7 +177,7 @@ test.describe("down the rally", () => {
   const placement = (shotId: string) =>
     mark("placement_missing", { shotId, stroke: "shot", missing: "landing" });
 
-  test("a grey gap on an early stroke is asked before the last ball's amber question", () => {
+  test("a gray gap on an early stroke is asked before the last ball's amber question", () => {
     const p = rally({}, ["b", { landingX: null, landingY: null }]);
     const marks = marksOf(
       {
@@ -210,7 +210,7 @@ test.describe("down the rally", () => {
   });
 });
 
-test.describe("a grey jump across two gaps", () => {
+test.describe("a gray jump across two gaps", () => {
   const placement = (shotId: string, kind: "serve" | "shot") =>
     mark("placement_missing", { shotId, stroke: kind, missing: "landing" });
   const unplaced = { landingX: null, landingY: null };

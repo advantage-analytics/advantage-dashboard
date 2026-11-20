@@ -419,7 +419,7 @@ export function LabelFlagSummary({
             {notice ? `${notice.detail} ` : null}
             {data
               ? "Wrong data that rarely moves the score. Each goes when its point is checked."
-              : "Only what can move the score. Wrong data is the grey list beside this one."}
+              : "Only what can move the score. Wrong data is the gray list beside this one."}
           </FloatMenuNote>
         ) : null}
       </FloatMenu>

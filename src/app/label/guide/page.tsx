@@ -9,7 +9,7 @@ import { requireLabelViewerOrNotFound } from "@/lib/services/programs/admin-guar
  * Gated by `label/layout.tsx`; the call here is that same gate re-run, as
  * every page beneath the layout does rather than trusting that it ran.
  */
-export const metadata = { title: "Labelling guide" };
+export const metadata = { title: "Labeling guide" };
 
 export default async function LabelGuidePage() {
   await requireLabelViewerOrNotFound();

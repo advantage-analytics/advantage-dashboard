@@ -54,7 +54,7 @@ export function ProfileInsightEmpty({
         </p>
         <p className="text-[11px] leading-[1.6] [text-wrap:pretty] text-[var(--ink-500)]">
           {unwritten
-            ? "One is written once a match of theirs is analysed."
+            ? "One is written once a match of theirs is analyzed."
             : "It couldn't be written just now. The figures below still stand; reload to try again."}
         </p>
         <div className="mt-1 flex h-6 items-center gap-[7px] border-t border-[var(--border-hairline)] pt-2.5">

@@ -422,7 +422,7 @@ const SEASON = [MATCH_A, MATCH_B];
 
 function row(groups: SeasonGroup[], label: string): SeasonRow {
   const found = groups.flatMap((g) => g.rows).find((r) => r.label === label);
-  if (!found) throw new Error(`no season row labelled "${label}"`);
+  if (!found) throw new Error(`no season row labeled "${label}"`);
   return found;
 }
 

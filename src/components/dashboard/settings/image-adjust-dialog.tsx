@@ -437,7 +437,7 @@ const ARROWS: Record<string, [number, number]> = {
 
 const SWATCHES = [
   { label: "White", value: "#FFFFFF" },
-  { label: "Light grey", value: "#F5F5F5" },
+  { label: "Light gray", value: "#F5F5F5" },
   { label: "Ink", value: "#0D0D0D" },
 ];
 

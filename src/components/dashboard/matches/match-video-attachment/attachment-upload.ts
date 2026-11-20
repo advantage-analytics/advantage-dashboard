@@ -253,7 +253,7 @@ export interface AttachmentTransferOptions {
 /** The signal fired. Distinct so it is never mistaken for a failure to retry. */
 export class TransferAborted extends Error {
   constructor() {
-    super("Upload cancelled");
+    super("Upload canceled");
     this.name = "TransferAborted";
   }
 }

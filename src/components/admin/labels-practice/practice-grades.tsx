@@ -153,7 +153,7 @@ export function PracticeGrades({
             No practice copies yet.
           </p>
           <p className="mt-1.5 text-[12px] text-[var(--ink-500)]">
-            A copy is graded here once its labeller submits it.
+            A copy is graded here once its labeler submits it.
           </p>
         </div>
       ) : (
@@ -162,7 +162,7 @@ export function PracticeGrades({
             <div
               className={`${GRID} border-b border-[var(--border-hairline)] pt-3.5 pb-2.5`}
             >
-              <span className="eyebrow-sm">Labeller</span>
+              <span className="eyebrow-sm">Labeler</span>
               <span className="eyebrow-sm">Status</span>
               <span className="eyebrow-sm text-right">Accuracy</span>
               <span className="eyebrow-sm text-right">Fixes caught</span>
@@ -256,7 +256,7 @@ export function PracticeGrades({
         open={deleting !== null}
         onOpenChange={(next) => !next && setDeleting(null)}
         title="Delete this practice copy?"
-        description={`${deleting?.labeller?.name ?? "This labeller"}’s copy and everything they labelled on it are deleted. The answer key and the match are not touched.`}
+        description={`${deleting?.labeller?.name ?? "This labeler"}’s copy and everything they labeled on it are deleted. The answer key and the match are not touched.`}
         confirmLabel="Delete copy"
         pendingLabel="Deleting…"
         tone="danger"

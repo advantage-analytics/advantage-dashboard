@@ -1635,7 +1635,7 @@ test("cancellation is refused while a completion holds the lease, allowed once t
   expect(h.events).not.toContain("activate");
 });
 
-test("a cancelled attempt never publishes even when the copy already succeeded", async () => {
+test("a canceled attempt never publishes even when the copy already succeeded", async () => {
   const h = harness();
   h.container.copyMode = "instant";
   const scenario = replacement(h);

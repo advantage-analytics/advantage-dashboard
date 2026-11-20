@@ -28,8 +28,8 @@ const m = (n: number) => `${Math.abs(n).toFixed(2)} m`;
 
 /** "1.42 m right of centre", or "on the centre line". */
 export function acrossWords(x: number): string {
-  if (Math.abs(x) < 0.005) return "on the centre line";
-  return `${m(x)} ${x > 0 ? "right" : "left"} of centre`;
+  if (Math.abs(x) < 0.005) return "on the center line";
+  return `${m(x)} ${x > 0 ? "right" : "left"} of center`;
 }
 
 /** "0.65 m behind the near baseline", "in the far service box, 3.10 m from the net". */
@@ -106,14 +106,14 @@ export function placementWords(
           : `Wide is past ${BODY_EDGE} m`;
     return {
       label: `${placement} serve`,
-      detail: [`Bounced ${from} from the centre line. ${rule}`],
+      detail: [`Bounced ${from} from the center line. ${rule}`],
     };
   }
   if (placement === "Middle") {
     return {
       label: "Middle",
       detail: [
-        `Bounced ${m(landingX)} from the centre line. Anything within ${MIDDLE_EDGE} m is middle`,
+        `Bounced ${m(landingX)} from the center line. Anything within ${MIDDLE_EDGE} m is middle`,
       ],
     };
   }
@@ -123,10 +123,10 @@ export function placementWords(
     label: placement,
     detail: [
       hitSide === null
-        ? `Landed ${landSide} of centre`
-        : `Hit ${hitSide} of centre, landed ${landSide}`,
+        ? `Landed ${landSide} of center`
+        : `Hit ${hitSide} of center, landed ${landSide}`,
       placement === "Crosscourt"
-        ? "The ball crossed the centre line"
+        ? "The ball crossed the center line"
         : "The ball stayed on the hitter's side",
     ],
   };

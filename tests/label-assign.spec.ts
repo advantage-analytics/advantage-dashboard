@@ -292,7 +292,7 @@ test.describe("the Labels list's session fields", () => {
         session: { status: "labelling", checked: 3, total: 9 },
       }),
     ).toBe("In progress · 3 of 9");
-    expect(jobStatusText({ session: null })).toBe("Needs labelling");
-    expect(jobStatusText({ session: { status: "complete" } })).toBe("Labelled");
+    expect(jobStatusText({ session: null })).toBe("Needs labeling");
+    expect(jobStatusText({ session: { status: "complete" } })).toBe("Labeled");
   });
 });

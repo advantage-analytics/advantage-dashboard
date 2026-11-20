@@ -366,12 +366,12 @@ test.describe("resolvePlayerInsight", () => {
 
   test("fills each key with the fold's display text, set tabular", () => {
     const insight = resolvePlayerInsight(
-      `Maya wins the long exchanges.\nMaya takes {${won}} of points to the opponents' {${lost}}. Longer rallies favour building points from the baseline.`,
+      `Maya wins the long exchanges.\nMaya takes {${won}} of points to the opponents' {${lost}}. Longer rallies favor building points from the baseline.`,
       figures,
     );
     expect(insight!.claim).toBe("Maya wins the long exchanges.");
     expect(insight!.description!.map((p) => p.text).join("")).toBe(
-      "Maya takes 53% of points to the opponents' 47%. Longer rallies favour building points from the baseline.",
+      "Maya takes 53% of points to the opponents' 47%. Longer rallies favor building points from the baseline.",
     );
     expect(
       insight!.description!.filter((p) => p.tabular).map((p) => p.text),
@@ -398,12 +398,12 @@ test.describe("resolvePlayerInsight", () => {
 
   test("a one-line answer splits at its first sentence", () => {
     const insight = resolvePlayerInsight(
-      `Maya wins the long exchanges. Maya takes {${won}} of points to the opponents' {${lost}}. Longer rallies favour their baseline game.`,
+      `Maya wins the long exchanges. Maya takes {${won}} of points to the opponents' {${lost}}. Longer rallies favor their baseline game.`,
       figures,
     );
     expect(insight!.claim).toBe("Maya wins the long exchanges.");
     expect(insight!.description!.map((p) => p.text).join("")).toBe(
-      "Maya takes 53% of points to the opponents' 47%. Longer rallies favour their baseline game.",
+      "Maya takes 53% of points to the opponents' 47%. Longer rallies favor their baseline game.",
     );
   });
 

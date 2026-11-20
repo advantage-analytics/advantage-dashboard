@@ -200,7 +200,7 @@ function InsightEmpty() {
           No Advantage Intelligence summary for this match.
         </p>
         <p className="text-[11px] leading-[1.6] [text-wrap:pretty] text-[var(--ink-500)]">
-          One is written when a match is analysed from video or imported from
+          One is written when a match is analyzed from video or imported from
           SwingVision: the claim first, then the numbers behind it.
         </p>
         <div className="mt-1 flex h-6 items-center gap-[7px] border-t border-[var(--border-hairline)] pt-2.5">

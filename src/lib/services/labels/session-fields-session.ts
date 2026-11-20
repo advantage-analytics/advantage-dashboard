@@ -32,7 +32,7 @@ export type LabelSessionFieldsResult = LabelOpResult<{
 }>;
 
 const BLIND =
-  "This session is labelled without the site's marks, so its score is not held against the entered one.";
+  "This session is labeled without the site's marks, so its score is not held against the entered one.";
 const RACED = racedMessage("session");
 
 /** Validate, check the session, write the one row. Never throws. */

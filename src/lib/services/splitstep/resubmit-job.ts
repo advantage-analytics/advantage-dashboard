@@ -468,7 +468,7 @@ export async function resubmitJob(params: {
     return {
       ok: false,
       reason: "not_failed",
-      message: `Only a failed or cancelled analysis can be sent again; this one is ${parent.status}.`,
+      message: `Only a failed or canceled analysis can be sent again; this one is ${parent.status}.`,
     };
   }
 
@@ -479,7 +479,7 @@ export async function resubmitJob(params: {
     return {
       ok: false,
       reason: "not_failed",
-      message: "A cancelled analysis is only sent again by the athlete.",
+      message: "A canceled analysis is only sent again by the athlete.",
     };
   }
 
@@ -771,7 +771,7 @@ export async function resubmitJob(params: {
     return {
       ok: false,
       reason: "invalid_metadata",
-      message: `This match cannot be analysed: ${built.errors.join("; ")}`,
+      message: `This match cannot be analyzed: ${built.errors.join("; ")}`,
     };
   }
 

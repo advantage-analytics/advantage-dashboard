@@ -49,7 +49,7 @@ export { SEND_BACK_NOTE_MAX };
 export const NOT_WAITING_FOR_CHECK =
   "This session is not waiting for a check. Reload to see where it stands.";
 export const SEND_BACK_NOTE_REQUIRED =
-  "Write a note for the labeller saying what to fix.";
+  "Write a note for the labeler saying what to fix.";
 export const SEND_BACK_NOTE_TOO_LONG = `Keep the note to ${SEND_BACK_NOTE_MAX} characters or fewer.`;
 /**
  * Send back on a session nobody is assigned to: there is no labeller to read
@@ -57,14 +57,14 @@ export const SEND_BACK_NOTE_TOO_LONG = `Keep the note to ${SEND_BACK_NOTE_MAX} c
  * sit in In progress with nobody able to take it.
  */
 export const SEND_BACK_NOBODY =
-  "Nobody is assigned to this match, so there is no labeller to send it back to. Reopen it instead.";
+  "Nobody is assigned to this match, so there is no labeler to send it back to. Reopen it instead.";
 /**
  * Send back on a session its assigned labeller never published (no
  * `label_submissions` row by them for it): an admin published the match
  * themselves, so the note would reach someone with nothing of theirs to fix.
  */
 export const SEND_BACK_ADMIN_PUBLISHED =
-  "An admin published this match, not its labeller, so there is nothing to send back. Reopen it instead.";
+  "An admin published this match, not its labeler, so there is nothing to send back. Reopen it instead.";
 
 /** The trimmed note, or the sentence that refuses it. */
 export function parseSendBackNote(

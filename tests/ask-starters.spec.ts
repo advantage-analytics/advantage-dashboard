@@ -143,7 +143,7 @@ test.describe("askStarters — team", () => {
  * to the same builders as the `@` menu. These pin what that buys, over the
  * real builders and with the rows the loader would keep.
  */
-test.describe("askStarters — over the analysed rows only", () => {
+test.describe("askStarters — over the analyzed rows only", () => {
   const ME = "11111111-1111-4111-8111-111111111111";
 
   function row(

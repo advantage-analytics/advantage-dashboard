@@ -93,8 +93,8 @@ export function TeamDayZeroHome({
 
       <p className="sr-only">
         {SCHEDULE_ENABLED
-          ? "Once the program's first match is analysed, this page shows its season numbers, weekend dual, top movers, court record, and dual history. Nothing below is real data yet."
-          : "Once the program's first match is analysed, this page shows its season numbers, top movers, and program insight. Nothing below is real data yet."}
+          ? "Once the program's first match is analyzed, this page shows its season numbers, weekend dual, top movers, court record, and dual history. Nothing below is real data yet."
+          : "Once the program's first match is analyzed, this page shows its season numbers, top movers, and program insight. Nothing below is real data yet."}
       </p>
 
       <div

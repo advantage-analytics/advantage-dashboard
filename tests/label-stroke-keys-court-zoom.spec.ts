@@ -896,7 +896,7 @@ test.describe("court zoom", () => {
   // jumped 14.5 m to the far service box (y ≈ 14.9 m under the centre) — a
   // spot nobody zoomed to. A slide (27.27 → 30) likewise shifted the centre
   // 2.7 m. The placed point itself was right; the view after it was not.
-  test("a placing click's near ↔ far flip, or a slide, keeps the zoomed-to court spot under the centre", () => {
+  test("a placing click's near ↔ far flip, or a slide, keeps the zoomed-to court spot under the center", () => {
     const near = halfTopY("near");
     const far = halfTopY("far");
     const centre = (z: typeof NO_ZOOM, top: number) =>
@@ -1392,7 +1392,7 @@ test.describe("a click on a placed end selects it", () => {
     ).toEqual({ shotId: "s1", end: "contact" });
   });
 
-  test("under the labeller's zoom the radius stays in screen pixels", () => {
+  test("under the labeler's zoom the radius stays in screen pixels", () => {
     const zoom = { scale: 2, x: -50, y: -50 };
     const screen = (x: number, y: number) => {
       const p = at(x, y);

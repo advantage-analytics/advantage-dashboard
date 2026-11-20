@@ -36,7 +36,7 @@ const NOT_BUSINESS = new Set<string>([
   SUBMIT_PRACTICE_FAILED,
   // An admin's gate and Reopen's own refusal: never a labeller's submit.
   "Administrator access is required.",
-  "This session is already open for labelling.",
+  "This session is already open for labeling.",
   // Point and shot edits, which share edit-session.ts: not the submit path.
   "Invalid shot id.",
   "Shot not found.",

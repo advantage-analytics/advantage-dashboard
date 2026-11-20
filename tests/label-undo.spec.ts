@@ -313,9 +313,9 @@ test("the function's own refusal is shown; any other failure is not", async () =
     expect(
       await run({
         code: "P0001",
-        message: "This session is not open for labelling.",
+        message: "This session is not open for labeling.",
       }),
-    ).toEqual({ error: "This session is not open for labelling." });
+    ).toEqual({ error: "This session is not open for labeling." });
     expect(
       await run({ code: "42883", message: "function does not exist" }),
     ).toEqual({

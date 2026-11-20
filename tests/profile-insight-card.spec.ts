@@ -191,7 +191,7 @@ test.describe("ProfileInsightCard — first paint", () => {
 });
 
 test.describe("ProfileInsightEmpty — two reasons, two sentences", () => {
-  test("unwritten (the default): nothing analysed yet", () => {
+  test("unwritten (the default): nothing analyzed yet", () => {
     const html = renderEmpty();
     expect(html).toContain('data-reason="unwritten"');
     expect(html).toContain('role="status"');
@@ -200,11 +200,11 @@ test.describe("ProfileInsightEmpty — two reasons, two sentences", () => {
       "No Advantage Intelligence summary for Maya's season yet.",
     );
     expect(text(html)).toContain(
-      "One is written once a match of theirs is analysed.",
+      "One is written once a match of theirs is analyzed.",
     );
   });
 
-  test("unavailable: analysed, but no claim arrived", () => {
+  test("unavailable: analyzed, but no claim arrived", () => {
     const html = renderEmpty("unavailable");
     expect(html).toContain('data-reason="unavailable"');
     expect(text(html)).toContain(
@@ -213,7 +213,7 @@ test.describe("ProfileInsightEmpty — two reasons, two sentences", () => {
     expect(text(html)).toContain("It couldn't be written just now.");
     expect(text(html)).toContain("reload to try again.");
     // Not the day-zero sentence: a match of theirs IS analysed.
-    expect(text(html)).not.toContain("is analysed.");
+    expect(text(html)).not.toContain("is analyzed.");
     expect(html).not.toContain("<button");
     expect(html).not.toContain("<a ");
   });

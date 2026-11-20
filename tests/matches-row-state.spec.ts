@@ -40,9 +40,9 @@ const CASES: {
   cls: string;
 }[] = [
   {
-    word: "Cancelled",
+    word: "Canceled",
     analysis: { status: "cancelled", providerId: null },
-    sr: "Cancelled:",
+    sr: "Canceled:",
     cls: "bg-[var(--ink-100)]",
   },
   {
@@ -100,7 +100,7 @@ test.describe("RowLifecycle leads every settled word with a mark", () => {
     });
   }
 
-  test("a cancelled row is the grey cross, not the red one", () => {
+  test("a canceled row is the gray cross, not the red one", () => {
     const html = render({ status: "cancelled", providerId: null });
     expect(html).toContain("text-[var(--ink-600)]");
     expect(html).not.toContain("var(--danger)");
@@ -176,10 +176,10 @@ test.describe("RowLifecycle: Verification pending", () => {
     }
   });
 
-  test("Failed, Cancelled, Not analyzed and Stats unavailable render as before", () => {
+  test("Failed, Canceled, Not analyzed and Stats unavailable render as before", () => {
     for (const { word, analysis } of CASES) {
       if (
-        !["Failed", "Cancelled", "Not analyzed", "Stats unavailable"].includes(
+        !["Failed", "Canceled", "Not analyzed", "Stats unavailable"].includes(
           word,
         )
       )

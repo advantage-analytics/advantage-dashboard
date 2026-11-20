@@ -586,7 +586,7 @@ test.describe("the subtitle describes the list", () => {
     return page.locator("h1 + div span").first();
   }
 
-  test("team: every recorded match counts, analysed or not", async ({
+  test("team: every recorded match counts, analyzed or not", async ({
     page,
   }) => {
     await openCut(page, "?scope=team&queued=1");

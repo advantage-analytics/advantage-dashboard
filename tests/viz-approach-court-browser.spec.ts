@@ -240,7 +240,7 @@ test("labels name Contact, Placement and the three wings on the opened view only
   );
 });
 
-test("the wall card art uses a tighter viewBox than the labelled opened view", async ({
+test("the wall card art uses a tighter viewBox than the labeled opened view", async ({
   page,
 }) => {
   await page.goto(origin);

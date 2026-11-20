@@ -504,10 +504,10 @@ test.describe("deriveAndPublish segmentation proposal", () => {
   });
 });
 
-test.describe("deriveAndPublish on a cancelled job", () => {
+test.describe("deriveAndPublish on a canceled job", () => {
   quietConsole();
 
-  test("the deriving write is guarded off cancelled", async () => {
+  test("the deriving write is guarded off canceled", async () => {
     const { deriveAndPublish } = load(written());
     const fake = fakeSupabase();
 
@@ -516,7 +516,7 @@ test.describe("deriveAndPublish on a cancelled job", () => {
     expect(fake.guards[0]).toEqual([["status", "cancelled"]]);
   });
 
-  test("a cancelled row is never moved to deriving, and nothing runs after", async () => {
+  test("a canceled row is never moved to deriving, and nothing runs after", async () => {
     let persisted = false;
     const { deriveAndPublish, mail } = load(async () => {
       persisted = true;
@@ -526,7 +526,7 @@ test.describe("deriveAndPublish on a cancelled job", () => {
 
     const out = await deriveAndPublish({ supabase: fake.client, jobId: JOB });
 
-    expect(out).toEqual({ ok: false, reason: "job is cancelled" });
+    expect(out).toEqual({ ok: false, reason: "job is canceled" });
     expect(fake.updates).toEqual([]);
     expect(persisted).toBe(false);
     expect(fake.rpcCalls).toEqual([]);

@@ -609,7 +609,7 @@ export function IpadPreview() {
       <Section
         title="1 · Icon buttons and their labels"
         native="Icons are at least 44pt to tap even when the glyph is small. There are no hover labels; a press-and-hold shows the name (like holding a toolbar button in Files or Safari)."
-        change="The 28px buttons keep their look but get a 44px tap area. The dark label that appears on hover now appears on press-and-hold; a normal tap just does the action. This one change covers all 74 labelled controls, including the collapsed sidebar."
+        change="The 28px buttons keep their look but get a 44px tap area. The dark label that appears on hover now appears on press-and-hold; a normal tap just does the action. This one change covers all 74 labeled controls, including the collapsed sidebar."
       >
         <Frame kind="today" note="28px targets; the label never appears">
           <DrawerHeaderToday />
@@ -635,7 +635,7 @@ export function IpadPreview() {
       <Section
         title="3 · Controls that only appear on hover"
         native="Actions are always visible, usually as a quiet “…” or gear, never hidden behind a pointer."
-        change="About a dozen controls that fade in on hover (Customize tiles, the Ask conversation “…”, photo and crest overlays, lineup drag handles, gallery actions) stay visible on touch. Same size and colour, just not hidden."
+        change="About a dozen controls that fade in on hover (Customize tiles, the Ask conversation “…”, photo and crest overlays, lineup drag handles, gallery actions) stay visible on touch. Same size and color, just not hidden."
       >
         <Frame kind="today" note="the gear is there but invisible">
           <CustomizeStrip />

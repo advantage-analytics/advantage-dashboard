@@ -719,7 +719,7 @@ test("tileDataKey changes when a view's chart changes (I2 fix round)", () => {
 
 /* ── nextFocusId (M6) ──────────────────────────────────────────────────── */
 
-test("nextFocusId focuses the neighbour at the removed tile's own index", () => {
+test("nextFocusId focuses the neighbor at the removed tile's own index", () => {
   expect(nextFocusId(["a", "b", "c"], "b")).toBe("c");
 });
 

@@ -929,7 +929,7 @@ test.describe("match_video_attachments reservation RPCs (live)", () => {
 
   // ── 5. Optimistic concurrency and races ───────────────────────────────────
 
-  test("a stale belief about the active attachment is refused, and an active asset can be neither cancelled nor renewed", async () => {
+  test("a stale belief about the active attachment is refused, and an active asset can be neither canceled nor renewed", async () => {
     expectRefused(
       await reserve({
         p_expected_active_id: randomUUID(),
@@ -3682,7 +3682,7 @@ test.describe("match_video_attachments workspace cap + usage RPCs (live)", () =>
     expect(await usageRows(team)).toHaveLength(2);
   });
 
-  test("a null or omitted limit is the pre-cap behaviour; a negative one is malformed", async () => {
+  test("a null or omitted limit is the pre-cap behavior; a negative one is malformed", async () => {
     const team = teamOf(coach);
     // Team is at 2. An omitted parameter (a caller deployed before the cap)
     // and an explicit null both reserve.

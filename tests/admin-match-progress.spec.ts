@@ -43,7 +43,7 @@ test("steps come in the README order", () => {
     "Uploaded",
     "Sent for analysis",
     "Results landed",
-    "Being labelled",
+    "Being labeled",
     "Published",
     "Checked",
   ]);
@@ -77,7 +77,7 @@ test("uploading", () => {
     ["Uploaded", "current"],
     ["Sent for analysis", "todo"],
     ["Results landed", "todo"],
-    ["Being labelled", "todo"],
+    ["Being labeled", "todo"],
     ["Published", "todo"],
     ["Checked", "todo"],
   ]);
@@ -94,7 +94,7 @@ test("analysing", () => {
     ["Uploaded", "done"],
     ["Sent for analysis", "done"],
     ["Results landed", "current"],
-    ["Being labelled", "todo"],
+    ["Being labeled", "todo"],
     ["Published", "todo"],
     ["Checked", "todo"],
   ]);
@@ -113,7 +113,7 @@ test("failed after the vendor took it fails at Results landed", () => {
     ["Uploaded", "done"],
     ["Sent for analysis", "done"],
     ["Results landed", "failed"],
-    ["Being labelled", "todo"],
+    ["Being labeled", "todo"],
     ["Published", "todo"],
     ["Checked", "todo"],
   ]);
@@ -135,25 +135,25 @@ test("failed before it was sent fails at Sent for analysis", () => {
   ]);
 });
 
-test("analysed and unlabelled", () => {
+test("analyzed and unlabelled", () => {
   const steps = matchProgressSteps(facts({}));
   expect(steps.map((step) => [step.name, step.state])).toEqual([
     ["Uploaded", "done"],
     ["Sent for analysis", "done"],
     ["Results landed", "done"],
-    ["Being labelled", "todo"],
+    ["Being labeled", "todo"],
     ["Published", "todo"],
     ["Checked", "todo"],
   ]);
   expect(steps[2].at).toBe(LANDED);
 });
 
-test("being labelled", () => {
+test("being labeled", () => {
   expect(states(facts({ labelState: "labelling" }))).toEqual([
     ["Uploaded", "done"],
     ["Sent for analysis", "done"],
     ["Results landed", "done"],
-    ["Being labelled", "current"],
+    ["Being labeled", "current"],
     ["Published", "todo"],
     ["Checked", "todo"],
   ]);
@@ -165,7 +165,7 @@ test("verified with no label session: both steps done at verified_at", () => {
     ["Uploaded", "done"],
     ["Sent for analysis", "done"],
     ["Results landed", "done"],
-    ["Being labelled", "done"],
+    ["Being labeled", "done"],
     ["Published", "done"],
     ["Checked", "done"],
   ]);
@@ -182,7 +182,7 @@ test("published and unchecked", () => {
     }),
   );
   expect(steps.slice(3).map((step) => [step.name, step.state])).toEqual([
-    ["Being labelled", "done"],
+    ["Being labeled", "done"],
     ["Published", "done"],
     ["Checked", "todo"],
   ]);
@@ -190,7 +190,7 @@ test("published and unchecked", () => {
   expect(steps[5].at).toBeNull();
 });
 
-test("sent back: labelling again, still published, not checked", () => {
+test("sent back: labeling again, still published, not checked", () => {
   for (const verifiedAt of [VERIFIED, null]) {
     const steps = matchProgressSteps(
       facts({
@@ -200,7 +200,7 @@ test("sent back: labelling again, still published, not checked", () => {
       }),
     );
     expect(steps.slice(3).map((step) => [step.name, step.state])).toEqual([
-      ["Being labelled", "current"],
+      ["Being labeled", "current"],
       ["Published", "done"],
       ["Checked", "todo"],
     ]);
@@ -218,7 +218,7 @@ test("checked: each step carries its own moment", () => {
     }),
   );
   expect(steps.slice(3).map((step) => [step.name, step.state])).toEqual([
-    ["Being labelled", "done"],
+    ["Being labeled", "done"],
     ["Published", "done"],
     ["Checked", "done"],
   ]);
@@ -229,7 +229,7 @@ test("checked: each step carries its own moment", () => {
 test("a submitted label session without verification publishes nothing", () => {
   const steps = states(facts({ labelState: "submitted" }));
   expect(steps.slice(3)).toEqual([
-    ["Being labelled", "done"],
+    ["Being labeled", "done"],
     ["Published", "todo"],
     ["Checked", "todo"],
   ]);

@@ -409,7 +409,7 @@ test.describe("writeLabelPointInsert", () => {
     ]);
   });
 
-  test("a session labelled without marks takes a point — a manual edit, not an answer to a mark", async () => {
+  test("a session labeled without marks takes a point — a manual edit, not an answer to a mark", async () => {
     // Ace v Goodman: the ground-truth session, `marks_enabled` false. The
     // gate is the plain open-session one every row operation shares.
     const blind = fakeClient({
@@ -873,7 +873,7 @@ test("an added empty point reads on the rail, with its menu, and can be deleted"
   expect(tag(row, "data-point-id")).toContain("data-point-new");
   expect(numberOf(html, NEW_ID)).toBe("3");
   expect(row).toContain('aria-label="Point 3 actions"');
-  expect(row).toContain('aria-label="Point 3 winner not labelled"');
+  expect(row).toContain('aria-label="Point 3 winner not labeled"');
   expect(inner(row, 'data-winner-mark="new"')).toBe("?");
   expect(inner(row, "data-point-sentence")).toBe("New point");
   expect(row.slice(row.indexOf("data-point-score"))).toContain("No score");
