@@ -66,7 +66,7 @@ import {
   type ApproachWing,
 } from "../match-filters/approach";
 import type { NetEnding, NetEntry } from "../match-filters/net-game";
-import type { Hand } from "../match-filters/shot-geometry";
+import { hitterHalf, type Hand } from "../match-filters/shot-geometry";
 import { bandKindFor, marksAreShots } from "./cut-kinds";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
@@ -561,9 +561,60 @@ function serveFromShot(p: MatchPoint, shot: MatchShot | undefined) {
   return { shot, metrics };
 }
 
-function serveLandingSide(p: MatchPoint): "deuce" | "ad" | null {
-  const serve = resolvedServe(p);
-  return serve ? (serve.metrics.lateralM < 0 ? "deuce" : "ad") : null;
+const GAME_RUNG: Record<string, number> = {
+  "0": 0,
+  "15": 1,
+  "30": 2,
+  "40": 3,
+  A: 4,
+  AD: 4,
+};
+
+/**
+ * The service court a point's score puts the server in: the parity of the
+ * rungs in a game (0-0, 15-15, 30-0, 40-40 deuce; 15-0, 30-15, Ad-40 ad), the
+ * parity of the points played in a tiebreak (game score 6-6, or a count that
+ * is no game rung). Null when the score was never read (`pointScoreRaw`
+ * null), was frozen, or does not parse — never a guess from a defaulted "0-0".
+ */
+function scoreServeSide(p: MatchPoint): "deuce" | "ad" | null {
+  if (p.scoreFrozen) return null;
+  const raw = readPointScore(p);
+  if (raw == null) return null;
+  const s = raw.toUpperCase().trim();
+  if (s === "DEUCE") return "deuce";
+  const parts = s.split("-").map((x) => x.trim());
+  if (parts.length !== 2) return null;
+  const games = (p.gameScore ?? "").split("-").map((x) => Number(x.trim()));
+  const tiebreak = games.length === 2 && games[0] >= 6 && games[0] === games[1];
+  const asInt = parts.map((x) => (/^\d+$/.test(x) ? Number(x) : null));
+  const asRung = parts.map((x) => GAME_RUNG[x] ?? null);
+  const counts = tiebreak || asRung.some((r) => r === null) ? asInt : asRung;
+  if (counts[0] === null || counts[1] === null) return null;
+  return (counts[0] + counts[1]) % 2 === 0 ? "deuce" : "ad";
+}
+
+/**
+ * The service court the server served FROM — the side the Court filter and
+ * the serve stat rows mean. A serve that landed in can only have landed in
+ * the box diagonal to the server, so its landing answers it (and outranks a
+ * score the vendor may have misread). A fault is different: it can land in
+ * the other box — an ad-court serve long and wide lands in the deuce box —
+ * so reading its landing put it under the wrong side. For a fault the score
+ * is the rule; where it is unread, the server's own contact position
+ * (`hitterHalf`, which faces the net from either end); only then the landing,
+ * and last the defaulted score.
+ */
+function serveSideOf(
+  p: MatchPoint,
+  serve: ReturnType<typeof serveFromShot> = resolvedServe(p),
+): "deuce" | "ad" {
+  const landed = serve ? (serve.metrics.lateralM < 0 ? "deuce" : "ad") : null;
+  if (serve?.metrics.kind === "in" && landed) return landed;
+  const fromScore = scoreServeSide(p);
+  if (fromScore) return fromScore;
+  const contact = serve?.shot ? hitterHalf(serve.shot) : null;
+  return contact ?? landed ?? getPointSide(p.pointScore);
 }
 
 function serveZone(p: MatchPoint): "t" | "body" | "wide" | null {
@@ -598,6 +649,7 @@ function computeServeZoneStats(
     ]),
   ) as Record<ZoneKey, ZoneStats>;
   for (const { metrics, first, result } of eligible) {
+    // In-serves only, so the landing's side IS the side served from.
     const side = metrics.lateralM < 0 ? "deuce" : "ad";
     const zone = stats[`${side}-${deriveZoneFromX(metrics.lateralM)}`];
     zone.count++;
@@ -860,14 +912,11 @@ export function pointMatchesFilters(
   frame: "serve" | "return",
   subjectIsPlayer1: boolean,
   /**
-   * The frame the `court` filter reads, independent of `frame` (which only
-   * governs `ball`'s first/second-serve meaning). Defaults to `frame`, which
-   * is correct for the serve and return cuts (their `court` and `ball`
-   * agree). `computeRallyViz` is the one caller that diverges: it passes
-   * `frame: "serve"` purely for `ball`'s meaning (which serve started the
-   * point) while the rally shot itself has no serve-box landing side of its
-   * own, so `court` must stay score-based — pass `courtFrame: "return"`
-   * there, same as the other non-serve cuts.
+   * Whether `ball` in the serve frame reads the serve actually struck
+   * (`"serve"`, the serve cut) or the point's flattened first-serve label
+   * (`"return"`, every other cut — `computeRallyViz` passes `frame: "serve"`
+   * only for `ball`'s meaning). `court` no longer depends on it: every cut
+   * reads the court the point was served FROM (`serveSideOf`).
    */
   courtFrame: "serve" | "return" = frame,
 ): boolean {
@@ -896,11 +945,9 @@ export function pointMatchesFilters(
   }
 
   if (filters.court.length) {
-    const side =
-      courtFrame === "serve"
-        ? (serveLandingSide(p) ?? getPointSide(p.pointScore))
-        : getPointSide(p.pointScore);
-    if (!filters.court.includes(side)) return false;
+    // The court the point was served FROM, in either frame — a fault that
+    // drifted into the other box stays on the side it was struck from.
+    if (!filters.court.includes(serveSideOf(p))) return false;
   }
 
   // Zone is a serve-box concept — the group is hidden in return mode and the
@@ -1287,9 +1334,8 @@ function computeRallyViz(
   for (const p of points) {
     // "ball" reads as the serve-frame meaning here (first/second serve
     // point) — the rally itself has no "first/second" concept of its own,
-    // it's whichever serve started the point that's being asked about. But
-    // "court" must stay score-based (courtFrame: "return") — a rally shot
-    // has no serve-box landing side of its own, unlike the actual serve cut.
+    // it's whichever serve started the point that's being asked about, read
+    // from the point's labels (courtFrame: "return"), not a struck serve.
     const passes =
       pointMatchesFilters(p, filters, "serve", subjectIsPlayer1, "return") &&
       (matchPass === null || matchPass.point(p));
@@ -1682,7 +1728,7 @@ export function computeViz(
         // and the rest of the filters run without them.
         if (
           filters.court.length &&
-          !filters.court.includes(metrics.lateralM < 0 ? "deuce" : "ad")
+          !filters.court.includes(serveSideOf(p, serve))
         )
           continue;
         if (filters.zone.length) {
@@ -2170,7 +2216,7 @@ function isPlacementRow(d: VizDot): boolean {
  * in one of three lateral thirds of the landing half's singles width. Which
  * outer third counts as "crosscourt" depends on which side the SERVE was
  * hit from/to (`getPointSide`, "deuce" ⇒ the serve landed with a negative
- * world-x, "ad" ⇒ positive — `serveLandingSide`'s own convention above).
+ * world-x, "ad" ⇒ positive — the in-serve case of `serveSideOf` above).
  * `lateralM` is mirrored to read from BEHIND the returner
  * (`pointToReturnDots`'s doc comment), so `-lateralM` recovers that same
  * world-x sign. A return whose landing half matches the serve's side is
