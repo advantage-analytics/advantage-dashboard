@@ -2215,8 +2215,8 @@ function isPlacementRow(d: VizDot): boolean {
  * Direction (Crosscourt / Middle / Down the line): a return's landing sits
  * in one of three lateral thirds of the landing half's singles width. Which
  * outer third counts as "crosscourt" depends on which side the SERVE was
- * hit from/to (`getPointSide`, "deuce" ⇒ the serve landed with a negative
- * world-x, "ad" ⇒ positive — the in-serve case of `serveSideOf` above).
+ * hit from (`serveSideOf`, the Court filter's own answer: "deuce" ⇒ an in
+ * serve lands with a negative world-x, "ad" ⇒ positive).
  * `lateralM` is mirrored to read from BEHIND the returner
  * (`pointToReturnDots`'s doc comment), so `-lateralM` recovers that same
  * world-x sign. A return whose landing half matches the serve's side is
@@ -2276,7 +2276,9 @@ function returnPlacementStats(
   for (const d of eligible) {
     const wonInc = d.outcome === "won" ? 1 : 0;
     const point = pointById.get(d.id);
-    const serveSide = getPointSide(point?.pointScore);
+    // The court the point was served FROM — the same answer the Court
+    // filter uses, so a return kept under Ad is never split as if Deuce.
+    const serveSide = point ? serveSideOf(point) : getPointSide(null);
     const dKey = directionKey(d.lateralM, serveSide);
     direction[dKey].count++;
     direction[dKey].won += wonInc;
@@ -2599,7 +2601,10 @@ export function statRowKeyOf(
   if (cut === "returnPlacement" || cut === "rallyPlacement") {
     if (!isPlacementRow(dot)) return null;
     if (groupKey === "direction" && cut === "returnPlacement")
-      return directionKey(dot.lateralM, getPointSide(point?.pointScore));
+      return directionKey(
+        dot.lateralM,
+        point ? serveSideOf(point) : getPointSide(null),
+      );
     if (groupKey === "depth") {
       const rows = depthBandRows(bands, "ft");
       if (rows.length === 0) return null;

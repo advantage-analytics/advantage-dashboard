@@ -655,7 +655,10 @@ test.describe("computeVizStats — return placement", () => {
   }
 
   test("direction flips between deuce-side and ad-side serves for the same landing x", () => {
-    const deuceSide = returnPoint({ pointScore: "0-0" }); // deuce
+    // Score and serve landing agree, as on a real point: the default serve
+    // (landing x −1, struck from the high-y end) is an ad-court serve, so
+    // the deuce point's serve lands at +1.
+    const deuceSide = returnPoint({ pointScore: "0-0", firstShotLandingX: 1 });
     const adSide = returnPoint({ pointScore: "15-0" }); // ad
 
     const deuceStats = computeVizStats(
