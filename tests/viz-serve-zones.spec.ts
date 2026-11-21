@@ -322,16 +322,20 @@ test("Court filter reads the side served FROM, not where a fault landed", () => 
         },
       ],
     };
-    const court = (side: "deuce" | "ad") =>
+    const inCourt = (
+      point: typeof adFault,
+      side: "deuce" | "ad",
+      ball?: "first" | "second",
+    ) =>
       computeViz(
-        [adFault],
+        [point],
         "serve",
-        { ...EMPTY_VIZ_FILTERS, court: [side], ball: ["second"] },
+        { ...EMPTY_VIZ_FILTERS, court: [side], ...(ball && { ball: [ball] }) },
         true,
-      ).dots.map((d) => d.id);
+      ).count;
 
-    expect(court("deuce")).toEqual([]);
-    expect(court("ad")).toHaveLength(1);
+    expect(inCourt(adFault, "deuce", "second")).toBe(0);
+    expect(inCourt(adFault, "ad", "second")).toBe(1);
 
     // The 1st-court path (every first serve struck) reads it the same way.
     const firstFault = {
@@ -339,36 +343,15 @@ test("Court filter reads the side served FROM, not where a fault landed", () => 
       shots: [{ ...adFault.shots![0], shotType: "First Serve" }],
       firstShotType: "First Serve",
     };
-    const first = (side: "deuce" | "ad") =>
-      computeViz(
-        [firstFault],
-        "serve",
-        { ...EMPTY_VIZ_FILTERS, court: [side], ball: ["first"] },
-        true,
-      ).count;
-    expect(first("deuce")).toBe(0);
-    expect(first("ad")).toBe(1);
+    expect(inCourt(firstFault, "deuce", "first")).toBe(0);
+    expect(inCourt(firstFault, "ad", "first")).toBe(1);
 
     // Score never read: the server's contact position decides.
     const unread = { ...adFault, pointScore: "0-0", pointScoreRaw: null };
-    expect(
-      computeViz(
-        [unread],
-        "serve",
-        { ...EMPTY_VIZ_FILTERS, court: ["ad"] },
-        true,
-      ).count,
-    ).toBe(1);
+    expect(inCourt(unread, "ad")).toBe(1);
 
     // A tiebreak count: 2-1 is three points played, the ad court.
     const tiebreak = { ...adFault, gameScore: "6-6", pointScore: "2-1" };
-    expect(
-      computeViz(
-        [tiebreak],
-        "serve",
-        { ...EMPTY_VIZ_FILTERS, court: ["ad"] },
-        true,
-      ).count,
-    ).toBe(1);
+    expect(inCourt(tiebreak, "ad")).toBe(1);
   }
 });
