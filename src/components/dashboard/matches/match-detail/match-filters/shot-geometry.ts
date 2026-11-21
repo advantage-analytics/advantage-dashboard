@@ -33,8 +33,9 @@ import { COURT_LENGTH_M, NET_Y_M } from "../film/film-court";
  *
  * `film/film-court.ts` states the same thing from the drawing side ("a server
  * [at the low-y end] stands at +x for a deuce point"), and the Shots tab's
- * `serveLandingSide` (`shots/viz-model.ts`) agrees on the receiving end: a
- * deuce serve lands at negative lateral x once normalised to the server's end.
+ * `serveSideOf` (`shots/viz-model.ts`) agrees on the receiving end: a deuce
+ * serve that lands in lands at negative lateral x once normalised to the
+ * server's end (a fault is sided by the score, then `hitterHalf` here).
  *
  * Only the sign of x matters, never a y-only flip — flipping y alone swaps
  * deuce and ad silently (the trap `metersToCourtFrame` documents).

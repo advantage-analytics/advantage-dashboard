@@ -617,6 +617,11 @@ function serveSideOf(
   return contact ?? landed ?? getPointSide(p.pointScore);
 }
 
+/** `serveSideOf` for a dot whose point may be missing (defaults like no score). */
+function servedFromSide(p: MatchPoint | undefined): "deuce" | "ad" {
+  return p ? serveSideOf(p) : getPointSide(null);
+}
+
 function serveZone(p: MatchPoint): "t" | "body" | "wide" | null {
   const serve = resolvedServe(p);
   return serve ? deriveZoneFromX(serve.metrics.lateralM) : null;
@@ -2276,9 +2281,9 @@ function returnPlacementStats(
   for (const d of eligible) {
     const wonInc = d.outcome === "won" ? 1 : 0;
     const point = pointById.get(d.id);
-    // The court the point was served FROM — the same answer the Court
-    // filter uses, so a return kept under Ad is never split as if Deuce.
-    const serveSide = point ? serveSideOf(point) : getPointSide(null);
+    // Same served-from answer as the Court filter, so a return kept under
+    // Ad is never split as if Deuce.
+    const serveSide = servedFromSide(point);
     const dKey = directionKey(d.lateralM, serveSide);
     direction[dKey].count++;
     direction[dKey].won += wonInc;
@@ -2601,10 +2606,7 @@ export function statRowKeyOf(
   if (cut === "returnPlacement" || cut === "rallyPlacement") {
     if (!isPlacementRow(dot)) return null;
     if (groupKey === "direction" && cut === "returnPlacement")
-      return directionKey(
-        dot.lateralM,
-        point ? serveSideOf(point) : getPointSide(null),
-      );
+      return directionKey(dot.lateralM, servedFromSide(point));
     if (groupKey === "depth") {
       const rows = depthBandRows(bands, "ft");
       if (rows.length === 0) return null;
