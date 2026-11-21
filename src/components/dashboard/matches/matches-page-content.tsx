@@ -5,7 +5,7 @@ import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useSearchParams, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { GalleryHorizontalEnd } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { AppliedFilterStrip } from "@/components/dashboard/shared/applied-filter-strip";
 import { EmptyMatches } from "./empty-matches";
 import { TableEmptyBody } from "@/components/dashboard/shared/table-empty-body";
@@ -944,7 +944,7 @@ export function MatchesPageContent({
         // says so in its body (see `TableEmptyBody`).
         empty={
           <TableEmptyBody
-            icon={GalleryHorizontalEnd}
+            icon={CalendarDays}
             {...emptyCutCopy({
               lifecycle,
               query: search.trim(),

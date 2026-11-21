@@ -146,25 +146,43 @@ const APPROACH_LIGHTBOX_LANE_SIZE = 5.8;
 // The lines are stacked by the face's own extent rather than at fixed Ys,
 // so they clear each other at every scale: a line's box runs about an
 // ascent above its baseline and a descent below it (`--font-mono`'s metrics,
-// rounded up), and `APPROACH_APRON_GAP` units (× the scale) separate a line
-// from the next and the wing line from the baseline.
+// rounded up). `APPROACH_BASELINE_GAP` units (× the scale) hold the wing
+// line off the far baseline and `APPROACH_LINE_GAP` hold "Placement" off
+// the wing line — each about two-fifths of a line, up from 1.2, so the stack
+// reads as two rows, with the rest of the 43-unit apron left as padding at
+// the stage edge (canvas "B with more room").
 const APRON_FONT_ASCENT = 1.05;
 const APRON_FONT_DESCENT = 0.3;
-const APPROACH_APRON_GAP = 1.2;
+const APPROACH_BASELINE_GAP = 2.4;
+const APPROACH_LINE_GAP = 2.2;
 
-/** The apron words' sizes and baselines at `scale`. */
+/**
+ * The apron words' sizes and baselines at `scale`. "Contact" mirrors
+ * "Placement" across the court: its box ends as far past the near baseline
+ * as Placement's begins past the far one, so it sits out beyond the bulk of
+ * the contact marks instead of hugging the baseline under them.
+ */
 function approachApronLayout(scale: number) {
   const side = APPROACH_LIGHTBOX_SIDE_SIZE * scale;
   const lane = APPROACH_LIGHTBOX_LANE_SIZE * scale;
-  const gap = APPROACH_APRON_GAP * scale;
-  const laneY = VIEWER_COURT.farBaselineY - gap - APRON_FONT_DESCENT * lane;
+  const laneY =
+    VIEWER_COURT.farBaselineY -
+    APPROACH_BASELINE_GAP * scale -
+    APRON_FONT_DESCENT * lane;
+  const placementY =
+    laneY -
+    APRON_FONT_ASCENT * lane -
+    APPROACH_LINE_GAP * scale -
+    APRON_FONT_DESCENT * side;
+  // How far Placement's box reaches past the far baseline.
+  const reach =
+    VIEWER_COURT.farBaselineY - (placementY - APRON_FONT_ASCENT * side);
   return {
     side,
     lane,
     laneY,
-    placementY:
-      laneY - APRON_FONT_ASCENT * lane - gap - APRON_FONT_DESCENT * side,
-    contactY: VIEWER_COURT.nearBaselineY + gap + APRON_FONT_ASCENT * side,
+    placementY,
+    contactY: VIEWER_COURT.nearBaselineY + reach - APRON_FONT_DESCENT * side,
   };
 }
 /** Centre of each hitter's-view third of the singles court (`laneOf`). */
