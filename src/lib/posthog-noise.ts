@@ -32,14 +32,15 @@ const NOISE = [SCANNER_REJECTION, RESIZE_OBSERVER_LOOP];
 
 /**
  * A desktop browser whose page fills the whole screen, to the pixel: no tab
- * strip, no address bar, no taskbar. People almost never browse like that;
- * the sandboxed Chrome a link scanner opens a mailed link in always does.
- * Over 30 days of pageviews (2026-10/11), Windows sessions with the viewport
- * equal to the screen numbered 586 with one signed-in user among them, and
- * came from datacenter towns (Boydton VA and Des Moines IA for Microsoft
- * Azure, Council Bluffs IA for Google); every other Windows session had a
- * smaller viewport. Phones are left out, since a page there can fill the
- * screen for a real person.
+ * strip, no address bar, no taskbar. People rarely browse like that; the
+ * sandboxed Chrome a link scanner opens a mailed link in did every time.
+ * Over 30 days of pageviews to 2026-11-21, desktop sessions with the
+ * viewport equal to the screen numbered 743 (586 Windows, 157 macOS) with
+ * one signed-in user among them, and came from datacenter towns (Boydton VA
+ * and Des Moines IA for Microsoft Azure, Council Bluffs IA for Google).
+ * A person in a true full-screen window (F11) matches too, which is why only
+ * a failed chunk is dropped on this signature. Phones and tablets are left
+ * out, since a page there can fill the screen for a real person.
  */
 function isFullScreenDesktop(properties: CaptureResult["properties"]): boolean {
   if (properties?.$device_type !== "Desktop") return false;
