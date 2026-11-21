@@ -299,3 +299,59 @@ test("resolved serve row controls coordinates and filters; missing pairs are nev
   legacy.firstShotLandingY = null;
   expect(computeViz([legacy], "serve", EMPTY_VIZ_FILTERS, true).total).toBe(0);
 });
+
+test("Court filter reads the side served FROM, not where a fault landed", () => {
+  // An ad-court second serve (0-15) that sailed into the deuce box: the
+  // landing reads deuce, the server stood in the ad court.
+  for (const highEnd of [false, true]) {
+    const base = servePoint({
+      highEnd,
+      lateral: -2,
+      result: "Out",
+      second: true,
+    });
+    const adFault: typeof base = {
+      ...base,
+      id: `ad-fault-${highEnd}`,
+      pointScore: "0-15",
+      shots: [
+        {
+          ...base.shots![0],
+          // Ad court: the server's left, the mirror of the fixture's deuce x.
+          contactX: -base.shots![0].contactX!,
+        },
+      ],
+    };
+    const inCourt = (
+      point: typeof adFault,
+      side: "deuce" | "ad",
+      ball?: "first" | "second",
+    ) =>
+      computeViz(
+        [point],
+        "serve",
+        { ...EMPTY_VIZ_FILTERS, court: [side], ...(ball && { ball: [ball] }) },
+        true,
+      ).count;
+
+    expect(inCourt(adFault, "deuce", "second")).toBe(0);
+    expect(inCourt(adFault, "ad", "second")).toBe(1);
+
+    // The 1st-court path (every first serve struck) reads it the same way.
+    const firstFault = {
+      ...adFault,
+      shots: [{ ...adFault.shots![0], shotType: "First Serve" }],
+      firstShotType: "First Serve",
+    };
+    expect(inCourt(firstFault, "deuce", "first")).toBe(0);
+    expect(inCourt(firstFault, "ad", "first")).toBe(1);
+
+    // Score never read: the server's contact position decides.
+    const unread = { ...adFault, pointScore: "0-0", pointScoreRaw: null };
+    expect(inCourt(unread, "ad")).toBe(1);
+
+    // A tiebreak count: 2-1 is three points played, the ad court.
+    const tiebreak = { ...adFault, gameScore: "6-6", pointScore: "2-1" };
+    expect(inCourt(tiebreak, "ad")).toBe(1);
+  }
+});
