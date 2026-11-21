@@ -12,10 +12,9 @@
  *               Intelligence, an export for SwingVision
  *   Format    · singles or doubles. Only singles can be analysed or read,
  *               so Doubles is a refusal: a red strip, and Continue sleeps
- *               (`stepBusyLabel`). Doubles stays a pickable row, not a locked
- *               or greyed one — someone holding a doubles video leaves a
- *               disabled row alone and uploads under Singles, which is how a
- *               doubles match got in before this field existed.
+ *               (`stepBusyLabel`). In the menu Doubles is a disabled
+ *               "Coming soon" row; the refusal strip remains for a draft
+ *               that already carries doubles.
  *
  * Each field is a 40px lead (workspace square, avatar circle, engine mark), a
  * 14px value with one text-micro subline, and a hairline rule that goes 2px
@@ -49,8 +48,8 @@ import {
   Info,
   Loader2,
   Plus,
-  User,
-  Users,
+  UserRound,
+  UsersRound,
   XCircle,
 } from "lucide-react";
 import {
@@ -265,7 +264,7 @@ function DisciplineMark({
   discipline: Discipline;
   size: 40 | 26;
 }) {
-  const Glyph = discipline === "doubles" ? Users : User;
+  const Glyph = discipline === "doubles" ? UsersRound : UserRound;
   return (
     <span
       aria-hidden="true"
@@ -474,7 +473,7 @@ function SourceStepContentImpl({
       )}
     >
       {isTeam && !subject ? (
-        <User className="size-4 text-[var(--ink-400)]" strokeWidth={1.5} />
+        <UserRound className="size-4 text-[var(--ink-400)]" strokeWidth={1.5} />
       ) : subject?.kind === "roster" ? (
         getInitials(subject.name)
       ) : (
@@ -970,20 +969,25 @@ function SourceStepContentImpl({
             <span className={MENU_LABEL_CLS}>Players on court</span>
             {(["singles", "doubles"] as const).map((option) => {
               const isCurrent = option === discipline;
+              // Doubles is coming soon: shown, never pickable from here.
+              const soon = option === "doubles" && !isCurrent;
               return (
                 <button
                   key={option}
                   type="button"
                   role="option"
                   aria-selected={isCurrent}
+                  aria-disabled={soon || undefined}
+                  disabled={soon}
                   onClick={() => {
                     if (!isCurrent) onDisciplineSelect(option);
                     setOpenMenu(null);
                   }}
                   className={cn(
-                    "flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-element)] px-2.5 py-[9px] text-left transition-colors duration-150 focus-visible:outline-none",
+                    "flex w-full items-center gap-3 rounded-[var(--radius-element)] px-2.5 py-[9px] text-left transition-colors duration-150 focus-visible:outline-none",
                     "focus-visible:bg-[var(--surface-subtle)]",
-                    !isCurrent && "hover:bg-[var(--surface-subtle)]",
+                    soon ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+                    !isCurrent && !soon && "hover:bg-[var(--surface-subtle)]",
                   )}
                 >
                   <DisciplineMark discipline={option} size={26} />
@@ -993,11 +997,17 @@ function SourceStepContentImpl({
                     </span>
                     <span className="truncate text-[11px] text-[var(--ink-500)]">
                       {option === "doubles"
-                        ? doublesSubline
+                        ? "Two players each side"
                         : "One player each side"}
                     </span>
                   </span>
-                  <ChosenCheck chosen={isCurrent} />
+                  {soon ? (
+                    <span className="shrink-0 text-[11px] font-medium whitespace-nowrap text-[var(--ink-500)]">
+                      Coming soon
+                    </span>
+                  ) : (
+                    <ChosenCheck chosen={isCurrent} />
+                  )}
                 </button>
               );
             })}

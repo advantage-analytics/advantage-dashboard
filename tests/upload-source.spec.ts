@@ -859,7 +859,8 @@ test("Format opens on Singles, and says doubles can't be analysed while closed",
   const html = render();
   const rows = menu(html, FORMAT_MENU);
   expect(rows.map((r) => r.text.split(" ")[0])).toEqual(["Singles", "Doubles"]);
-  expectSharedTreatment(rows, 0);
+  // Doubles is disabled (Coming soon), so only Singles takes the shared treatment.
+  expectSharedTreatment(rows.slice(0, 1), 0);
   // The closed row carries the limit, for the many who never open the menu.
   expect(strip(html)).toContain(
     "One player each side · Doubles can't be analysed yet",
@@ -867,13 +868,13 @@ test("Format opens on Singles, and says doubles can't be analysed while closed",
   expect(html).not.toContain(errorStripCls);
 });
 
-test("Doubles is an ordinary, pickable row: no lock, no Coming soon", () => {
+test("Doubles is a disabled Coming soon row", () => {
   const doubles = menu(render(), FORMAT_MENU)[1];
   expect(doubles.html).toContain('role="option"');
-  expect(doubles.html).not.toContain("disabled");
-  expect(doubles.html).not.toContain('data-icon="Lock"');
-  expect(doubles.text).toContain("Two players each side · Not analysed yet");
-  expect(doubles.text).not.toMatch(/coming soon/i);
+  expect(doubles.html).toContain("disabled");
+  expect(doubles.html).toContain('aria-disabled="true"');
+  expect(doubles.text).toContain("Two players each side");
+  expect(doubles.text).toMatch(/coming soon/i);
 });
 
 test("Doubles chosen brings the red refusal strip, in the video words", () => {
