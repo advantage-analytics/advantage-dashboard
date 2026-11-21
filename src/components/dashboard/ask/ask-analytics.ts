@@ -22,7 +22,7 @@ function askScope(request: AskRequest): AskScope {
   return request.programId ? "team" : "personal";
 }
 
-export function askEndedProperties(
+function askEndedProperties(
   request: AskRequest,
   outcome: AskOutcome,
 ): AnalyticsEvents["ask_ended"] {
