@@ -71,6 +71,10 @@ test.beforeAll(async () => {
               "tests/fixtures/next-navigation-browser-mock.ts",
             ),
             "next/link": resolve("tests/fixtures/next-link-browser-mock.tsx"),
+            "@/lib/posthog-client$": resolve(
+              "tests/fixtures/posthog-client-browser-mock.ts",
+            ),
+            "posthog-js$": resolve("tests/fixtures/posthog-browser-mock.ts"),
             "@": resolve("src"),
           },
         },

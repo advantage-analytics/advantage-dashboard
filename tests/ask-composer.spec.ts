@@ -56,7 +56,15 @@ test.beforeAll(async () => {
           extensions: [".tsx", ".ts", ".jsx", ".js"],
           // No `next/navigation` alias, on purpose: the composer must bundle
           // without one.
-          alias: { "@": resolve("src") },
+          // `ask-analytics` pulls in posthog-js and the env read beside it,
+          // which a bare browser bundle has no `process` for.
+          alias: {
+            "@/lib/posthog-client$": resolve(
+              "tests/fixtures/posthog-client-browser-mock.ts",
+            ),
+            "posthog-js$": resolve("tests/fixtures/posthog-browser-mock.ts"),
+            "@": resolve("src"),
+          },
         },
       },
       (error: Error | null, stats: WebpackStats) => {
