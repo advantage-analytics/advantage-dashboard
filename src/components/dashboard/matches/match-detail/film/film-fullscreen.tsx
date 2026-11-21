@@ -1885,12 +1885,6 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
                   // playing one — so the glyph and the control can never
                   // disagree about which point is bookmarked.
                   saved={savePoint?.saved ?? false}
-                  // You/opponent is `useMatchSides()`'s call, never player order.
-                  wonByYou={
-                    activePoint
-                      ? activePoint.wonByPlayer1 === sides.you.isPlayer1
-                      : null
-                  }
                   dim={!chrome}
                   onRest={onBoardRest}
                 />

@@ -13,24 +13,20 @@ import {
   type BoardSize,
 } from "./board-position";
 import { ANCHOR_LABEL, SETTLE_CLASS, useCornerDrag } from "./use-corner-drag";
-import {
-  footLine,
-  setTrackTone,
-  type Board,
-  type SetTrackTone,
-} from "./film-score";
+import { RailScoreboard, type RailScoreboardPlayer } from "../rail-scoreboard";
+import { footLine, setTrackTone, type Board } from "./film-score";
 
 /**
- * The board: one 236px slab (handoff C1).
+ * The board: one 236px slab over the film.
  *
- * Head is a micro "Playing" / "Paused" against a mono clock. Under it two
- * rows 11px apart — name (you 13/500 white, the opponent 13/400 at 72%), a
- * 6px blue serve dot, then a right-aligned mono group of one 11px set track
- * per set column and a 22px game cell. A 14% hairline closes it off above a
- * foot that pairs the 22px winner pill with the point's name. Every number
- * still comes from `boardAt()` (`film-score.ts`), the same one the report
- * rail reads. It survives the chrome collapse at 82% (`dim`) — it is what
- * the screen IS, not a control.
+ * Its rows are the report rail's scorecard (`RailScoreboard`, tone `dark`):
+ * "Playing" / "Paused" against the clock in blue, then each player's name,
+ * their set digits, a hairline and the game's points, with a small caret on
+ * the server's points. A one-line caption names the point, or the game state
+ * between points (`footLine`). Every number still comes from `boardAt()`
+ * (`film-score.ts`), the same one the rail reads, so the room and the rail
+ * can never disagree. It survives the chrome collapse at 82% (`dim`): it is
+ * what the screen IS, not a control.
  *
  * ── Movable, with four resting corners ──────────────────────────────────────
  * Wherever it sits it covers some of the court, so it can be moved. It moves
@@ -47,23 +43,29 @@ import {
  * (`data-film-own-keys`), which is what lets Space lift instead of pausing.
  */
 
-/** The two tones a set track is drawn in. */
-const SET_TRACK_COLOR: Record<SetTrackTone, string> = {
-  won: "#FFFFFF",
-  lost: "rgba(255,255,255,0.42)",
-};
-
-/** "G. Revelli" → "GR". The winner pill is 22px, so two letters at most. */
-function initials(name: string): string {
-  const letters: string[] = [];
-  for (const part of name.split(/\s+/)) {
-    const letter = part.match(/\p{L}/u)?.[0];
-    if (letter) letters.push(letter.toUpperCase());
-  }
-  if (letters.length === 0) return "";
-  return letters.length === 1
-    ? letters[0]
-    : letters[0] + letters[letters.length - 1];
+/**
+ * One board row as a rail scorecard row. Sets before the live one are
+ * complete, so their winner's digit prints bold and their loser's dims, as on
+ * the rail's final board; the live set's digits stay plain.
+ */
+function scoreRow(
+  id: string,
+  row: Board["rows"][number],
+  other: Board["rows"][number],
+  liveSet: number,
+): RailScoreboardPlayer {
+  const tones = row.sets.map((games, i) =>
+    i < liveSet ? setTrackTone(games, other.sets[i] ?? null) : null,
+  );
+  return {
+    id,
+    name: row.name,
+    sets: row.sets,
+    wonSets: tones.map((tone) => tone === "won"),
+    lostSets: tones.map((tone) => tone === "lost"),
+    points: row.game,
+    serving: row.serving,
+  };
 }
 
 export function FilmScoreboard({
@@ -72,7 +74,6 @@ export function FilmScoreboard({
   playing,
   elapsed,
   saved,
-  wonByYou,
   dim,
   onRest,
 }: {
@@ -85,13 +86,6 @@ export function FilmScoreboard({
   elapsed: string;
   /** Whether the point in play is bookmarked — the foot's "· saved". */
   saved: boolean;
-  /**
-   * Who took the point, resolved against `useMatchSides()` by the room
-   * (`wonByPlayer1 === sides.you.isPlayer1`), never from player1/player2
-   * order. Null between points: the frame does not say whether the pill shows
-   * there, so it is omitted rather than guessed at.
-   */
-  wonByYou: boolean | null;
   /** The chrome is collapsed (R2); the slab stays, at 82%. */
   dim: boolean;
   /**
@@ -189,11 +183,10 @@ export function FilmScoreboard({
         </span>
         {board && (
           <div
-            className="box-border flex flex-col"
+            className="box-border"
             style={{
               width: 236,
-              gap: 14,
-              padding: "14px 15px 12px",
+              padding: "15px 15px 14px",
               borderRadius: "var(--radius-dropdown)",
               background: "rgba(13,13,13,0.74)",
               backdropFilter: "blur(8px)",
@@ -201,122 +194,25 @@ export function FilmScoreboard({
               opacity: dim ? 0.82 : 1,
             }}
           >
-            <div className="flex items-baseline gap-2">
-              {/* `.text-micro` is unlayered and would beat a Tailwind colour
-                  utility, so the dark-scope alpha is set inline. */}
-              <span
-                className="text-micro"
-                style={{ color: "rgba(255,255,255,0.55)" }}
-              >
-                {playing ? "Playing" : "Paused"}
-              </span>
-              <span
-                className="mono tabular ml-auto"
-                style={{ fontSize: 10, color: "rgba(255,255,255,0.45)" }}
-              >
-                {elapsed}
-              </span>
-            </div>
-
-            <div
-              role="table"
-              aria-label="Score"
-              className="flex flex-col gap-[11px]"
-            >
-              {board.rows.map((row, r) => {
-                const you = r === 0;
-                const other = board.rows[you ? 1 : 0];
-                return (
-                  <span
-                    key={row.name}
-                    role="row"
-                    className="flex min-w-0 items-center gap-[7px]"
-                  >
-                    <span
-                      role="rowheader"
-                      className="min-w-0 truncate"
-                      style={{
-                        fontSize: 13,
-                        fontWeight: you ? 500 : 400,
-                        color: you ? "#FFFFFF" : "rgba(255,255,255,0.72)",
-                      }}
-                    >
-                      {row.name}
-                    </span>
-                    <span
-                      aria-hidden="true"
-                      className="h-[6px] w-[6px] shrink-0 rounded-[var(--radius-pill)]"
-                      style={{
-                        background: row.serving ? "var(--blue)" : "transparent",
-                      }}
-                    />
-                    {row.serving && <span className="sr-only">, serving</span>}
-                    <span
-                      role="cell"
-                      className="mono tabular ml-auto inline-flex shrink-0 items-center gap-2 text-[13px] whitespace-nowrap"
-                    >
-                      {row.sets.map((games, i) => (
-                        <span
-                          key={i}
-                          className="w-[11px] text-right"
-                          style={{
-                            color:
-                              SET_TRACK_COLOR[
-                                setTrackTone(games, other.sets[i] ?? null)
-                              ],
-                          }}
-                        >
-                          {games ?? ""}
-                        </span>
-                      ))}
-                      <span
-                        className="w-[22px] text-right"
-                        style={{ color: "#FFFFFF" }}
-                      >
-                        {row.game ?? ""}
-                      </span>
-                    </span>
-                  </span>
-                );
+            {/* The report rail's scorecard, in its dark tone, so the room and
+                the rail read the same score the same way. */}
+            <RailScoreboard
+              tone="dark"
+              status="live"
+              label={playing ? "Playing" : "Paused"}
+              headTime={elapsed}
+              caption={footLine(pointName, saved, {
+                set: board.liveSet + 1,
+                game: board.gameNumber,
+                serverName: (
+                  board.rows.find((row) => row.serving) ?? board.rows[0]
+                ).name,
               })}
-            </div>
-
-            <div
-              className="flex items-center gap-[9px] pt-[9px]"
-              style={{ borderTop: "1px solid rgba(255,255,255,0.14)" }}
-            >
-              {/* Between points nobody has won anything yet. The frame does
-                  not draw that case, so the pill is omitted rather than
-                  invented, and the foot keeps the full width. */}
-              {wonByYou !== null && (
-                <span
-                  aria-label={`${board.rows[wonByYou ? 0 : 1].name} won the point`}
-                  className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[var(--radius-pill)]"
-                  style={{
-                    background: wonByYou
-                      ? "var(--blue)"
-                      : "rgba(255,255,255,0.14)",
-                    fontSize: 10,
-                    fontWeight: 500,
-                    color: "#FFFFFF",
-                  }}
-                >
-                  {initials(board.rows[wonByYou ? 0 : 1].name)}
-                </span>
-              )}
-              <span
-                className="min-w-0 truncate"
-                style={{ fontSize: 11, color: "rgba(255,255,255,0.55)" }}
-              >
-                {footLine(pointName, saved, {
-                  set: board.liveSet + 1,
-                  game: board.gameNumber,
-                  serverName: (
-                    board.rows.find((row) => row.serving) ?? board.rows[0]
-                  ).name,
-                })}
-              </span>
-            </div>
+              players={[
+                scoreRow("you", board.rows[0], board.rows[1], board.liveSet),
+                scoreRow("opp", board.rows[1], board.rows[0], board.liveSet),
+              ]}
+            />
           </div>
         )}
       </div>

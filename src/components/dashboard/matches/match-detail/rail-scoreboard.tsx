@@ -1,6 +1,7 @@
 import { Check } from "lucide-react";
 import { TIEBREAK_STYLE } from "@/components/dashboard/score-line";
 import { StatePill } from "@/components/ui/state-pill";
+import { cn } from "@/lib/utils";
 
 /**
  * The rail scoreboard (H1 · B2, frames SB1–SB3): one widget, three states.
@@ -23,6 +24,46 @@ import { StatePill } from "@/components/ui/state-pill";
  */
 
 export type RailScoreboardStatus = "live" | "final" | "untagged";
+
+/**
+ * The ground the card is drawn on. `light` is the report rail; `dark` is the
+ * film room's floating slab over black video, which draws the same rows in
+ * white alphas and brings its own surface, so it has no inset and no hairline.
+ */
+export type RailScoreboardTone = "light" | "dark";
+
+interface ToneInks {
+  ink: string;
+  muted: string;
+  faint: string;
+  label: string;
+  clock: string;
+  caret: string;
+  rule: string;
+}
+
+const TONE_INKS: Record<RailScoreboardTone, ToneInks> = {
+  light: {
+    ink: "var(--ink-900)",
+    muted: "var(--ink-600)",
+    faint: "var(--ink-400)",
+    label: "var(--ink-500)",
+    clock: "var(--blue)",
+    caret: "var(--ink-600)",
+    rule: "var(--border-hairline)",
+  },
+  // The film room's dark scope: white at the alphas its slab already used,
+  // and the dark ramp's blue (#60A5FA), which holds its contrast on black.
+  dark: {
+    ink: "#FFFFFF",
+    muted: "rgba(255,255,255,0.6)",
+    faint: "rgba(255,255,255,0.4)",
+    label: "rgba(255,255,255,0.55)",
+    clock: "#60A5FA",
+    caret: "rgba(255,255,255,0.6)",
+    rule: "rgba(255,255,255,0.16)",
+  },
+};
 
 export interface RailScoreboardPlayer {
   id: string;
@@ -60,6 +101,8 @@ export interface RailScoreboardProps {
   duration?: string | null;
   /** Always one line; truncates rather than wraps. */
   caption: string;
+  /** `dark` for the film room's slab; the report rail is `light` (the default). */
+  tone?: RailScoreboardTone;
 }
 
 function Dash({ label }: { label: string }) {
@@ -78,7 +121,10 @@ export function RailScoreboard({
   headTime,
   duration,
   caption,
+  tone = "light",
 }: RailScoreboardProps) {
+  const inks = TONE_INKS[tone];
+  const dark = tone === "dark";
   const clock =
     status === "live" ? headTime : status === "final" ? duration : null;
   const anyWinner = status === "final" && players.some((p) => p.won);
@@ -87,21 +133,32 @@ export function RailScoreboard({
     // No card of its own (F1, settled): the rail's head, set off from the view
     // switcher by a hairline that stops 12px short of each rail edge.
     // The first-run tour finds the report's board by `data-tour`.
-    <div className="px-3" data-tour="scoreboard">
+    // The dark slab is not the report's board, so the tour never finds it.
+    <div
+      className={dark ? undefined : "px-3"}
+      data-tour={dark ? undefined : "scoreboard"}
+    >
       <div
-        className="flex flex-col gap-[14px] border-b border-[var(--border-hairline)]"
-        style={{ padding: "18px 13px 20px" }}
+        className={cn(
+          "flex flex-col gap-[14px]",
+          !dark && "border-b border-[var(--border-hairline)]",
+        )}
+        style={{ padding: dark ? 0 : "18px 13px 20px" }}
       >
         <div className="flex items-baseline gap-2">
-          {/* `.text-micro` already paints ink-500, and is unlayered, so no
-              colour utility beside it. */}
-          <span className="text-micro">{label}</span>
+          {/* `.text-micro` already paints ink-500, and is unlayered, so a
+              colour utility would lose to it: the dark tone's goes inline. */}
+          <span
+            className="text-micro"
+            style={dark ? { color: inks.label } : undefined}
+          >
+            {label}
+          </span>
           <div className="flex-1" />
           <span
             className="mono tabular text-[10px] font-medium"
             style={{
-              color:
-                status === "live" && clock ? "var(--blue)" : "var(--ink-400)",
+              color: status === "live" && clock ? inks.clock : inks.faint,
             }}
           >
             {clock ?? <Dash label="No time" />}
@@ -115,11 +172,17 @@ export function RailScoreboard({
               player={player}
               status={status}
               muted={anyWinner && !player.won}
+              inks={inks}
             />
           ))}
         </div>
 
-        <span className="text-micro tabular truncate">{caption}</span>
+        <span
+          className="text-micro tabular truncate"
+          style={dark ? { color: inks.label } : undefined}
+        >
+          {caption}
+        </span>
       </div>
     </div>
   );
@@ -129,13 +192,15 @@ function ScoreRow({
   player,
   status,
   muted,
+  inks,
 }: {
   player: RailScoreboardPlayer;
   status: RailScoreboardStatus;
   /** The final's losing row: name and digits drop to ink-600. */
   muted: boolean;
+  inks: ToneInks;
 }) {
-  const ink = muted ? "var(--ink-600)" : "var(--ink-900)";
+  const ink = muted ? inks.muted : inks.ink;
   const serving = status === "live" && Boolean(player.serving);
 
   return (
@@ -164,7 +229,10 @@ function ScoreRow({
       <div className="flex-1" />
 
       {status === "untagged" || player.sets.length === 0 ? (
-        <span className="mono tabular shrink-0 text-[13px] text-[var(--ink-400)]">
+        <span
+          className="mono tabular shrink-0 text-[13px]"
+          style={{ color: inks.faint }}
+        >
           <Dash label="No score" />
         </span>
       ) : (
@@ -182,10 +250,8 @@ function ScoreRow({
                   // A set winner's digit is full ink, a set loser's is ink-600.
                   color:
                     games === null
-                      ? "var(--ink-400)"
-                      : (won && "var(--ink-900)") ||
-                        (lost && "var(--ink-600)") ||
-                        ink,
+                      ? inks.faint
+                      : (won && inks.ink) || (lost && inks.muted) || ink,
                   fontWeight: won ? 600 : undefined,
                 }}
               >
@@ -213,7 +279,8 @@ function ScoreRow({
             <>
               <span
                 aria-hidden="true"
-                className="mx-0.5 h-3 w-px bg-[var(--border-hairline)]"
+                className="mx-0.5 h-3 w-px"
+                style={{ background: inks.rule }}
               />
               {/* The server is a small caret beside their points, not a dot
                   after the name: a dot there sat beside the player colour
@@ -228,12 +295,12 @@ function ScoreRow({
                     viewBox="0 0 7 8"
                     className="shrink-0"
                   >
-                    <path d="M0 0 7 4 0 8Z" fill="var(--ink-600)" />
+                    <path d="M0 0 7 4 0 8Z" fill={inks.caret} />
                   </svg>
                 ) : null}
                 <span
                   className="font-medium"
-                  style={{ color: player.points ? ink : "var(--ink-400)" }}
+                  style={{ color: player.points ? ink : inks.faint }}
                 >
                   {player.points ?? <Dash label="No points" />}
                 </span>
