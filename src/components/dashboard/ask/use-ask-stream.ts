@@ -44,6 +44,7 @@ import {
   stringOrNull,
   readAskVisual,
 } from "@/lib/services/ask/events";
+import { trackAskFlight } from "./ask-analytics";
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
 
@@ -630,7 +631,7 @@ export async function readAskRefusal(response: Response): Promise<{
 export type AskOutcome =
   | { status: "done"; conversationId: string }
   | { status: "error" }
-  | { status: "refused" }
+  | { status: "refused"; code: string | null; httpStatus: number }
   | { status: "interrupted" }
   | { status: "aborted" };
 
@@ -692,7 +693,11 @@ export async function streamAsk(
       const { refusal, usage } = await readAskRefusal(response);
       if (aborted()) return { status: "aborted" };
       dispatch({ type: "refused", refusal, ...(usage ? { usage } : {}) });
-      return { status: "refused" };
+      return {
+        status: "refused",
+        code: refusal.code,
+        httpStatus: refusal.status,
+      };
     }
 
     if (response.body) {
@@ -919,9 +924,11 @@ export function useAskStream(initial: {
       nextExchange += 1;
       dispatch({ type: "asked", id: `asked-${nextExchange}`, question });
 
-      return streamAsk({ conversationId, question, programId }, dispatch, {
-        signal: controller.signal,
-      });
+      const request: AskRequest = { conversationId, question, programId };
+      return trackAskFlight(
+        request,
+        streamAsk(request, dispatch, { signal: controller.signal }),
+      );
     },
     [conversationId, draft, inFlight, programId],
   );
