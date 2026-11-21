@@ -563,14 +563,14 @@ export function ScoreBlock({
             score that decides the match, or a shorter format. Removing a
             whole element still works after a translation. */}
         {ghost && (
-          <span key="ghost">
+          <span>
             {" "}
             <span className="text-[var(--ink-300)]">·</span> Type in the dashed
             column to add a set
           </span>
         )}
         {fromLine && (
-          <span key="from-line">
+          <span>
             {" "}
             <span className="text-[var(--ink-300)]">·</span> Format from the
             event
