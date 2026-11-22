@@ -210,10 +210,10 @@ test.describe("resolution boundary — the guide's 1080p minimum", () => {
     const result = evaluateVideoProbe(probe({ width: 1280, height: 720 }));
     expect(result.reason).toBe("resolution");
     expect(result.error?.startsWith("This video is 720p. ")).toBe(true);
-    expect(result.error).toContain(
-      "download the original file, not the stream",
+    expect(result.error).toContain("download the original file, not a stream");
+    expect(result.error).not.toMatch(
+      /splitstep|swingvision|computer vision|playsight|cizr/i,
     );
-    expect(result.error).not.toMatch(/splitstep|swingvision|computer vision/i);
   });
 
   test("an odd size quotes its dimensions against the full 1920×1080", () => {
@@ -469,8 +469,8 @@ test.describe("a portrait recording", () => {
       result.error?.startsWith("This video is 1080×1920, filmed upright. "),
     ).toBe(true);
     expect(result.error).toContain("Turn the camera sideways");
-    // PlaySight and CIZR don't film upright: their clause would mislead here.
-    expect(result.error).not.toContain("PlaySight");
+    // It already recorded at 1080p: the stream clause would mislead here.
+    expect(result.error).not.toContain("stream");
   });
 });
 

@@ -252,6 +252,17 @@ this branch's queue, then stop.`
 
 ## Conventions
 
+- **A layout change is the user's call, never a side effect.** Moving, adding or removing
+  a block on a page (reordering a step, a new row or callout, a renamed section) needs
+  the user to have asked for that layout, not just for the copy, fix or analytics around
+  it. A brief that implies one (e.g. "add guidance before the file picker") is not
+  enough on its own: show a before/after screenshot of the real component (a `/design`
+  harness counts) and get a yes before you commit it. Unattended runs (scheduled tasks,
+  routines, auto-fix PRs) never change layout. They put a suggested change in the PR or
+  report as before/after screenshots and leave it unmerged. PR #759 moved the upload
+  wizard's requirements above the drop zone and added a PlaySight/CIZR note this way;
+  it was reverted. Don't name third-party camera apps (PlaySight, CIZR) in the wizard or
+  its refusals; `tests/video-requirements-panel.spec.ts` pins both.
 - **Every branch and PR targets `splitstep-integration`**, never `main`. `main` is
   production and only ever takes `splitstep-integration` whole; the `base-guard` check
   fails any other PR into it. If a tool reports `main` as the default branch, the clone's

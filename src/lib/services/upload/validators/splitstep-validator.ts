@@ -197,8 +197,7 @@ export function formatProbeFps(probe: VideoProbe): string | null {
  *
  * A portrait recording gets its own fix: its numbers look like the bar with
  * the axes swapped, and "record at 1080p" is what it already did — what it
- * needs is the camera turned sideways. The PlaySight/CIZR clause is left off
- * there: those cameras don't film upright.
+ * needs is the camera turned sideways.
  */
 const NAMED_HEIGHTS = new Set([360, 480, 540, 720]);
 function resolutionRefusal(width: number, height: number): string {
@@ -208,9 +207,7 @@ function resolutionRefusal(width: number, height: number): string {
   const named = NAMED_HEIGHTS.has(height);
   const label = named ? `${height}p` : `${width}×${height}`;
   const need = named ? "1080p" : `${MIN_VIDEO_WIDTH}×${MIN_VIDEO_HEIGHT}`;
-  // The PlaySight/CIZR clause is here because their streams are where 720p
-  // files come from; the original download is 1080p.
-  return `This video is ${label}. We need ${need} or higher. Record or export at 1080p. From PlaySight or CIZR, download the original file, not the stream.`;
+  return `This video is ${label}. We need ${need} or higher. Record or export at 1080p, and download the original file, not a stream.`;
 }
 
 /**
@@ -446,7 +443,7 @@ export async function validateSplitStepVideo(
     }
     // The probe's own messages ("may be corrupt or use a codec…") explain
     // the browser, not the next step. A half-finished download is the usual
-    // cause for a file people just pulled off PlaySight or CIZR.
+    // cause for a file just downloaded from another app.
     return {
       success: false,
       reason: "unreadable",
