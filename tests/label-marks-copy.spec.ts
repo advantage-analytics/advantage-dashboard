@@ -195,7 +195,10 @@ test.describe("mark copy", () => {
       "The vendor called this ball out, but Ace played the next shot, so it’s stored as in.",
     );
     expect(markHover(sample("serve_fault"), names)).toBe(
-      "The first serve was called out and only one or two shots followed, with no second serve. It may be a fault the returner hit anyway.",
+      "The vendor called the first serve out, but the returner hit it back and there was no second serve. It may be a fault the returner played anyway.",
+    );
+    expect(markHover(sample("second_serve_called_out"), names)).toBe(
+      "The vendor called the second serve out, but the returner hit it back, so it’s stored as in. Check whether it was a double fault.",
     );
     expect(markHover(sample("winner_to_error_by_bounce"), names)).toBe(
       "The vendor’s tracking had the ball before this winner landing out. The point may be an error by Ace instead.",
