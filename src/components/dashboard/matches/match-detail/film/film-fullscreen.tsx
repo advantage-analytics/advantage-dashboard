@@ -508,8 +508,9 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     return () => window.clearTimeout(timer);
   }, [panel]);
 
-  // Opening and collapsing the drawer touch the drawer and nothing else — no `pause()`, no `load()`, no seek. The film keeps playing
-  // through the slide (spec: "Rules that apply to every task").
+  // Opening and collapsing the drawer touch the drawer and nothing else — no
+  // `pause()`, no `load()`, no seek. The film keeps playing through the slide
+  // (spec: "Rules that apply to every task").
   const openPanel = useCallback(() => {
     setPanel("open");
   }, []);
