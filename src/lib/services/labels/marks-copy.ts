@@ -345,7 +345,7 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
     case "ending_suspect_line":
       return "The vendor’s tracking put the ball before this winner within 1 m of a line. Most like this turn out to be errors.";
     case "second_serve_called_out":
-      return "The second serve was called out, but one or two shots followed. Check whether it was a double fault.";
+      return "The vendor called the second serve out, but it’s stored In because the returner hit it back. Check whether it was a double fault.";
     case "same_player_consecutive":
       return `${names[mark.params.hitter]} hit twice in a row. A shot in between was probably missed.`;
     case "reserve_after_in":
