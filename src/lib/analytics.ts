@@ -147,6 +147,18 @@ export interface AnalyticsEvents {
     decision: "approve" | "deny";
     connector: ConnectorApp | null;
   };
+
+  // Ask (`/dashboard/ask`, `/dashboard/team/ask`). The server's `ask_run`
+  // only sees a question that reached the run; these also catch one refused
+  // before it or abandoned in flight. Never the question text or its tags.
+  ask_submitted: { scope: "personal" | "team" };
+  ask_ended: {
+    scope: "personal" | "team";
+    status: "done" | "error" | "refused" | "interrupted" | "aborted";
+    /** The route's refusal slug (`ask_limit_reached`, …); null otherwise. */
+    refusal_code: string | null;
+    http_status: number | null;
+  };
 }
 
 export type AnalyticsEvent = keyof AnalyticsEvents;
