@@ -427,14 +427,30 @@ export function LegendFilter({
       aria-label="Filter by outcome"
       className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-0.5"
     >
-      {items.map((item) => {
+      {items.map((item, i) => {
         const key = PICK_FOR_ITEM[item.key];
-        if (key === undefined)
+        if (key === undefined) {
+          // The first shape key opens its own group behind a hairline, so
+          // Forehand/Backhand read as a key to the dots' shape rather than
+          // as two more outcome filters that happen not to respond. `h-6`
+          // matches the buttons' box, and the buttons take `.text-micro`'s 1.4
+          // line height, so every label shares one baseline.
+          const opensShapeGroup =
+            i > 0 && PICK_FOR_ITEM[items[i - 1].key] !== undefined;
           return (
-            <span key={item.key} className="px-1">
-              <LegendMark item={item} />
+            <span key={item.key} className="inline-flex h-6 items-center">
+              {opensShapeGroup && (
+                <span
+                  aria-hidden
+                  className="mr-2 ml-1 h-3 w-px bg-[var(--border-card)]"
+                />
+              )}
+              <span className="inline-flex px-1">
+                <LegendMark item={item} />
+              </span>
             </span>
           );
+        }
         const label = LEGEND_PICKS.find((p) => p.key === key)!.label;
         const on = pick === key;
         return (
@@ -445,7 +461,7 @@ export function LegendFilter({
             disabled={counts[key] === 0 && !on}
             onClick={() => onPick(on ? null : key)}
             className={cn(
-              "-mx-0.5 inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[6px] px-2 text-[11px] transition-[background-color,color,opacity] duration-200 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-default disabled:hover:bg-transparent",
+              "-mx-0.5 inline-flex h-6 cursor-pointer items-center gap-1.5 rounded-[6px] px-2 text-[11px] leading-[1.4] transition-[background-color,color,opacity] duration-200 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-default disabled:hover:bg-transparent",
               on
                 ? "font-medium text-[var(--ink-900)]"
                 : "text-[var(--ink-600)]",
