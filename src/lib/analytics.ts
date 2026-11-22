@@ -154,12 +154,43 @@ export interface AnalyticsEvents {
   ask_submitted: { scope: "personal" | "team" };
   ask_ended: {
     scope: "personal" | "team";
-    status: "done" | "error" | "refused" | "interrupted" | "aborted";
-    /** The route's refusal slug (`ask_limit_reached`, …); null otherwise. */
-    refusal_code: string | null;
+    /**
+     * `interrupted`: a response arrived and stopped short. `network_error`:
+     * none arrived (offline, DNS, a blocked request). `error`: the stream's
+     * own `error` event, or the flight itself threw.
+     */
+    status:
+      | "done"
+      | "error"
+      | "refused"
+      | "interrupted"
+      | "network_error"
+      | "aborted";
+    /** The route's refusal slug; `other` for any slug not listed; null when not refused. */
+    refusal_code: AskRefusalCode | null;
     http_status: number | null;
   };
 }
+
+/**
+ * The refusal slugs `/api/ask` answers with: its own (`AskRefusalCode` in
+ * `src/app/api/ask/route.ts`) and the transport ones from
+ * `src/lib/services/match-video/http.ts`. A body's `code` outside this list
+ * is sent as `other`, so a free string never reaches an event.
+ */
+export const ASK_REFUSAL_CODES = [
+  "unauthenticated",
+  "not_a_member",
+  "conversation_not_found",
+  "no_matches",
+  "ask_limit_reached",
+  "invalid_request",
+  "cross_origin",
+  "request_too_large",
+  "internal_error",
+] as const;
+
+export type AskRefusalCode = (typeof ASK_REFUSAL_CODES)[number] | "other";
 
 export type AnalyticsEvent = keyof AnalyticsEvents;
 
