@@ -93,6 +93,13 @@ export interface CreateProgramInput {
   ownerEmail: string | null;
   /** "Start the pilot": approve them on the spot instead of queueing a review. */
   startPilot: boolean;
+  /**
+   * The open `unlisted_program` request this team answers, when the dialog was
+   * opened from Admin › Requests. Once the program exists, that request is
+   * closed and pointed at it — so the queue row says the team was added,
+   * instead of a separate Done the admin has to remember to click.
+   */
+  fromRequestId?: string | null;
 }
 
 /**
@@ -222,10 +229,16 @@ export async function createProgram(
     return { ok: false, error: "Couldn't create that team." };
   }
 
+  // After the row and before the owner: the request is answered the moment
+  // the team exists, whatever becomes of the invitation beside it.
+  const requestWarning = input.fromRequestId
+    ? await closeAnsweredRequest(input.fromRequestId, programId, admin.id)
+    : undefined;
+
   revalidatePath(ADMIN_PATH, "layout");
 
   if (!ownerEmail) {
-    return { ok: true, programId, owner: "none" };
+    return { ok: true, programId, owner: "none", warning: requestWarning };
   }
 
   const programName = programDisplayName(schoolName, team);
@@ -239,7 +252,47 @@ export async function createProgram(
   });
 
   revalidatePath(ADMIN_PATH, "layout");
-  return { ok: true, programId, ...wired };
+  const warning =
+    [wired.warning, requestWarning].filter(Boolean).join(" ") || undefined;
+  return { ok: true, programId, ...wired, warning };
+}
+
+/**
+ * Close the unlisted-program request a create answered, and link it to the
+ * program it became.
+ *
+ * Only an OPEN `unlisted_program` row moves — the same guard as
+ * `resolveRequest`, so a stale tab cannot reopen or relabel a request someone
+ * else already closed. Service role because `program_requests` has no admin
+ * UPDATE policy; `requireAdmin()` ran in the caller. A failure is a warning,
+ * never a failed create: the program exists either way.
+ */
+async function closeAnsweredRequest(
+  requestId: string,
+  programId: string,
+  adminId: string,
+): Promise<string | undefined> {
+  const db = createAdminClient();
+  const { error } = await db
+    .from("program_requests")
+    .update({
+      status: "resolved",
+      program_id: programId,
+      resolved_by: adminId,
+      resolved_at: new Date().toISOString(),
+    })
+    .eq("id", requestId)
+    .eq("kind", "unlisted_program")
+    .eq("status", "open");
+
+  if (error) {
+    console.error("[admin] could not close the answered request", {
+      requestId,
+      error: error.message,
+    });
+    return "The team is created, but its request is still open — close it from Requests.";
+  }
+  return undefined;
 }
 
 /**

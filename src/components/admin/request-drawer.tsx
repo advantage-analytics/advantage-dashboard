@@ -4,6 +4,7 @@ import Link from "next/link";
 import { squadLabel } from "@/lib/data/squad";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
+  Check,
   Copy,
   ExternalLink,
   MoreHorizontal,
@@ -23,6 +24,7 @@ import {
 } from "@/components/dashboard/shared/vertical-steps";
 import { FloatMenu, FloatMenuItem } from "@/components/ui/float-menu";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { CreateTeamDialog } from "@/components/admin/create-team-dialog";
 import { StatePill } from "@/components/ui/state-pill";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { actionRejected } from "@/lib/ui/action-rejected";
@@ -171,6 +173,7 @@ export function RequestDrawer({
     null,
   );
   const [reopening, setReopening] = useState(false);
+  const [creatingTeam, setCreatingTeam] = useState(false);
 
   const run = (action: () => Promise<{ ok: boolean; error?: string }>) => {
     start(async () => {
@@ -190,7 +193,16 @@ export function RequestDrawer({
   const canHandBack =
     isClaim && (status === "objection_window" || status === "approved");
   const canReopen = isClaim && (status === "rejected" || status === "objected");
-  const hasMenu = canReject || canHandBack || canReopen;
+  // An open "add my school" request is answered by creating the team, so that
+  // is its primary. Closing it without one moves to ⋯, where it can't be
+  // mistaken for "added" — the HZCU request was closed that way on 2026-11-21.
+  const unlisted =
+    detail.source === "request" &&
+    detail.kind === "unlisted_program" &&
+    status === "open"
+      ? detail
+      : null;
+  const hasMenu = canReject || canHandBack || canReopen || Boolean(unlisted);
 
   const claim = detail.source === "claim" ? detail : null;
   // "Approve anyway" is the ghost: a personal address nobody has vouched for
@@ -243,6 +255,25 @@ export function RequestDrawer({
                     </button>
                   }
                 >
+                  {unlisted && (
+                    <FloatMenuItem
+                      label="Close without adding"
+                      description="For a team you've already added, or won't. Nobody is emailed."
+                      icon={
+                        <Check
+                          className={MENU_ROW_ICON}
+                          strokeWidth={1.5}
+                          aria-hidden
+                        />
+                      }
+                      onSelect={() => {
+                        setMenuOpen(false);
+                        run(() =>
+                          resolveRequest(unlisted.requestId, "resolved"),
+                        );
+                      }}
+                    />
+                  )}
                   {canReopen && (
                     <FloatMenuItem
                       label="Put back in the queue"
@@ -334,6 +365,27 @@ export function RequestDrawer({
                     first.
                   </p>
                 )}
+              </>
+            ) : unlisted ? (
+              <>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => setCreatingTeam(true)}
+                  className={cn(advButton("primary", "md"), "w-full")}
+                >
+                  Create team
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() =>
+                    run(() => resolveRequest(unlisted.requestId, "dismissed"))
+                  }
+                  className={cn(advButton("ghost", "md"), "w-full")}
+                >
+                  Dismiss
+                </button>
               </>
             ) : detail.source === "request" && row.status === "open" ? (
               <>
@@ -496,6 +548,24 @@ export function RequestDrawer({
         }}
       />
 
+      {/* Mounted per request so its seed is this row's, never the last one's. */}
+      {unlisted && creatingTeam && (
+        <CreateTeamDialog
+          key={unlisted.requestId}
+          open
+          onOpenChange={(open) => {
+            if (!open) setCreatingTeam(false);
+          }}
+          seed={{
+            requestId: unlisted.requestId,
+            schoolName: unlisted.schoolName ?? "",
+            team: unlisted.team,
+            email: row.from.email,
+          }}
+          onCreated={onChanged}
+        />
+      )}
+
       <ConfirmDialog
         open={reopening}
         onOpenChange={(open) => {
@@ -637,6 +707,14 @@ function checksFor(
 /** What the footer says once there is nothing left to press. */
 function settledLine(row: AdminRequestRow): string {
   if (row.detail.source === "request") {
+    const { kind, programId } = row.detail;
+    if (kind === "unlisted_program") {
+      // Only an invite request's decline is emailed (`resolveRequest`).
+      if (row.status === "dismissed") return "Dismissed. Nobody was emailed.";
+      return programId
+        ? "Added — the team is in the directory."
+        : "Closed without adding a team. Nobody was emailed.";
+    }
     return row.status === "dismissed"
       ? "Dismissed. They were told."
       : "Closed — nothing left to do here.";
