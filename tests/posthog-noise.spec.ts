@@ -68,6 +68,8 @@ function chunkLoad(
   screen: [number, number],
   viewport: [number, number],
   device = "Desktop",
+  pathname = "/m/3f9c2a7e",
+  identified = false,
 ) {
   const event = exception(
     "Failed to load chunk /_next/static/immutable/chunks/3evqr7gmv5pog.js from module 361972",
@@ -79,12 +81,46 @@ function chunkLoad(
     $screen_height: screen[1],
     $viewport_width: viewport[0],
     $viewport_height: viewport[1],
+    $pathname: pathname,
+    $is_identified: identified,
   });
   return event;
 }
 
 test("drops a failed chunk in a link scanner's full-screen sandbox", () => {
-  expect(dropUnfixableNoise(chunkLoad([1920, 1080], [1920, 1080]))).toBeNull();
+  for (const pathname of ["/m/3f9c2a7e", "/claim/x"]) {
+    const event = chunkLoad([1920, 1080], [1920, 1080], "Desktop", pathname);
+    expect(dropUnfixableNoise(event)).toBeNull();
+  }
+});
+
+test("keeps a signed-in person's failed chunk in full screen", () => {
+  const event = chunkLoad(
+    [1512, 982],
+    [1512, 982],
+    "Desktop",
+    "/dashboard/matches",
+    true,
+  );
+  expect(dropUnfixableNoise(event)).toBe(event);
+});
+
+test("keeps a signed-in person's failed chunk on a mailed link", () => {
+  const event = chunkLoad(
+    [1920, 1080],
+    [1920, 1080],
+    "Desktop",
+    "/m/3f9c2a7e",
+    true,
+  );
+  expect(dropUnfixableNoise(event)).toBe(event);
+});
+
+test("keeps an anonymous full-screen failed chunk off the mailed links", () => {
+  for (const pathname of ["/dashboard/matches", "/", "/match/x", "/mx/y"]) {
+    const event = chunkLoad([1920, 1080], [1920, 1080], "Desktop", pathname);
+    expect(dropUnfixableNoise(event)).toBe(event);
+  }
 });
 
 test("keeps a person's failed chunk in a normal window", () => {
@@ -108,5 +144,6 @@ test("keeps other errors from a full-screen desktop", () => {
 test("keeps a failed chunk when the window size is unknown", () => {
   const event = exception("Failed to load chunk /x.js", "ChunkLoadError");
   event.properties.$device_type = "Desktop";
+  event.properties.$pathname = "/m/3f9c2a7e";
   expect(dropUnfixableNoise(event)).toBe(event);
 });
