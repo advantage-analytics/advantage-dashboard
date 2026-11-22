@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { StatePill } from "@/components/ui/state-pill";
 import type { AssignedLabelSession } from "@/lib/data/label-assignments-server";
 import { shortDate } from "@/lib/data/match-utils";
+import { controlName } from "@/lib/ui/control-name";
 import { cn } from "@/lib/utils";
 
 /**
@@ -76,6 +77,7 @@ export function AssignedSessionsList({
               aria-label={`${assigned} · ${status}`}
               data-label-session={session.id}
               data-label-status={session.status}
+              {...controlName("label_assigned_row")}
               className={cn(
                 GRID,
                 "-mx-4 h-[56px] w-[calc(100%+32px)] rounded-[var(--radius-element)] px-4 text-left transition-colors duration-100 hover:bg-[var(--surface-muted)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none",

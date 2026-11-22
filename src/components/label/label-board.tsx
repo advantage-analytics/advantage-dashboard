@@ -17,6 +17,7 @@ import type {
 import { agoText, isOverdue, labelDueText } from "@/lib/services/labels/queue";
 import { actionRejected } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
+import { controlName } from "@/lib/ui/control-name";
 import { cn } from "@/lib/utils";
 
 /**
@@ -100,6 +101,7 @@ export function Lane({
     <section
       aria-labelledby={id}
       data-label-lane={id}
+      {...controlName(id.replace(/-/g, "_"))}
       className="flex min-w-0 flex-[1_1_300px] flex-col gap-3 rounded-[var(--radius-card)] bg-[var(--surface-subtle)] px-2 pt-4 pb-2"
     >
       <h2
