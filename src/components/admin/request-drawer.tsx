@@ -4,7 +4,7 @@ import Link from "next/link";
 import { squadLabel } from "@/lib/data/squad";
 import { useEffect, useRef, useState, useTransition } from "react";
 import {
-  Check,
+  Archive,
   Copy,
   ExternalLink,
   MoreHorizontal,
@@ -262,7 +262,7 @@ export function RequestDrawer({
                       label="Close without adding"
                       description="For spam, or a team you've already added. Nobody is emailed."
                       icon={
-                        <Check
+                        <Archive
                           className={MENU_ROW_ICON}
                           strokeWidth={1.5}
                           aria-hidden
@@ -728,7 +728,7 @@ function settledLine(row: AdminRequestRow): string {
       // that send went through is recorded nowhere but the server log, so
       // this says what Dismiss does, not that delivery happened.
       if (row.status === "dismissed")
-        return "Dismissed — Dismiss sends them a “can't add it” email.";
+        return "Dismissed — this sends them a “can't add it” email.";
       return programId
         ? "Added — the team is in the directory."
         : "Closed without adding a team. Nobody was emailed.";
