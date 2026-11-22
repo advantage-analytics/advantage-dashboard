@@ -3,11 +3,9 @@ import { expect, test } from "@playwright/test";
 import {
   DEFAULT_COURT_MODE,
   DEFAULT_COURT_ON,
-  DEFAULT_DRAWER_OPEN,
   DEFAULT_SKIP_DEAD,
   parseCourtMode,
   parseCourtOn,
-  parseDrawerOpen,
   parseSkipDead,
   roomParam,
 } from "@/components/dashboard/matches/match-detail/film/film-room-prefs";
@@ -24,13 +22,6 @@ test('parseCourtMode defaults to "point", accepts "match", rejects nonsense', ()
   expect(parseCourtMode(null)).toBe("point");
   expect(parseCourtMode("match")).toBe("match");
   expect(parseCourtMode("rally")).toBe("point");
-});
-
-test('parseDrawerOpen defaults to false, accepts "1", rejects nonsense', () => {
-  expect(parseDrawerOpen(null)).toBe(DEFAULT_DRAWER_OPEN);
-  expect(parseDrawerOpen(null)).toBe(false);
-  expect(parseDrawerOpen("1")).toBe(true);
-  expect(parseDrawerOpen("yes")).toBe(false);
 });
 
 test('parseSkipDead defaults to true, accepts "0", rejects nonsense', () => {

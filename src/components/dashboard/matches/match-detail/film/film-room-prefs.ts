@@ -6,9 +6,10 @@
  * `film-skip-dead-hint.tsx` and the shell read/write these.
  *
  * Persistence is localStorage, following `film-room:board-anchor`
- * (`board-position.ts`): court on/off, court mode, the points drawer
- * open/closed, skip dead time. There is no `user_preferences` column and no
- * migration for any of this (spec: "Settled mismatches" § Persistence).
+ * (`board-position.ts`): court on/off, court mode, skip dead time. The
+ * points drawer is not a preference: it opens with the room every time.
+ * There is no `user_preferences` column and no migration for any of this
+ * (spec: "Settled mismatches" § Persistence).
  *
  * The URL only ever carries `fullscreen=1`, written on enter and stripped on
  * exit — never honoured on load (spec: "Settled mismatches" § URL). Modeled
@@ -19,7 +20,6 @@
 
 export const COURT_ON_STORAGE_KEY = "film-room:court-on";
 export const COURT_MODE_STORAGE_KEY = "film-room:court-mode";
-export const DRAWER_OPEN_STORAGE_KEY = "film-room:drawer-open";
 /**
  * Skip dead time, shared by the report player and the room: one toggle, so
  * the film does not change behaviour on the way into fullscreen. Not a
@@ -35,7 +35,6 @@ export type CourtMode = "point" | "match";
 
 export const DEFAULT_COURT_ON = true;
 export const DEFAULT_COURT_MODE: CourtMode = "point";
-export const DEFAULT_DRAWER_OPEN = false;
 /**
  * On by default (product decision, 2026-10-24): a match film is mostly
  * walking between points, and a first-time viewer who pressed play and
@@ -57,11 +56,6 @@ export function parseCourtOn(raw: string | null): boolean {
 /** A stored value, or the default (`"point"`) when it is missing or unrecognised. */
 export function parseCourtMode(raw: string | null): CourtMode {
   return raw === "point" || raw === "match" ? raw : DEFAULT_COURT_MODE;
-}
-
-/** A stored value, or the default (`false`) when it is missing or unrecognised. */
-export function parseDrawerOpen(raw: string | null): boolean {
-  return raw === "1";
 }
 
 /** A stored value, or the default (`true`) when it is missing or unrecognised. */
@@ -106,22 +100,6 @@ export function readCourtMode(): CourtMode {
 export function writeCourtMode(value: CourtMode): void {
   try {
     localStorage.setItem(COURT_MODE_STORAGE_KEY, value);
-  } catch {
-    /* private window or storage blocked — the preference just isn't kept */
-  }
-}
-
-export function readDrawerOpen(): boolean {
-  try {
-    return parseDrawerOpen(localStorage.getItem(DRAWER_OPEN_STORAGE_KEY));
-  } catch {
-    return DEFAULT_DRAWER_OPEN;
-  }
-}
-
-export function writeDrawerOpen(value: boolean): void {
-  try {
-    localStorage.setItem(DRAWER_OPEN_STORAGE_KEY, value ? "1" : "0");
   } catch {
     /* private window or storage blocked — the preference just isn't kept */
   }
