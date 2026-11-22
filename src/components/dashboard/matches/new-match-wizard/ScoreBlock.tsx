@@ -556,19 +556,25 @@ export function ScoreBlock({
           enter
         </Kbd>{" "}
         leaves a tiebreak box
+        {/* Each optional clause is one element, never bare text in a
+            fragment: a page translator (Chrome's wraps every text node in
+            `<font>`) moves the text nodes React owns, and React's removeChild
+            on one of them throws NotFoundError when the clause goes — the
+            score that decides the match, or a shorter format. Removing a
+            whole element still works after a translation. */}
         {ghost && (
-          <>
+          <span>
             {" "}
             <span className="text-[var(--ink-300)]">·</span> Type in the dashed
             column to add a set
-          </>
+          </span>
         )}
         {fromLine && (
-          <>
+          <span>
             {" "}
             <span className="text-[var(--ink-300)]">·</span> Format from the
             event
-          </>
+          </span>
         )}
       </span>
     </div>

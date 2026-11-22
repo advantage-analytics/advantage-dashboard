@@ -176,20 +176,23 @@ export function OpponentMenuBody({
           <OpponentNewRow
             onPick={() => onCreate(nameTerm)}
             label={
+              // One keyed element per branch, never a fragment: the two hold
+              // different numbers of text nodes, and React removing a text
+              // node a page translator has moved throws NotFoundError.
               inDual ? (
-                <>
+                <span key="dual">
                   New player for{" "}
                   <span className="font-medium text-[var(--ink-900)]">
                     {lineSchool}
                   </span>
-                </>
+                </span>
               ) : (
-                <>
+                <span key="solo">
                   New opponent{" "}
                   <span className="font-medium text-[var(--ink-900)]">
                     &ldquo;{nameTerm}&rdquo;
                   </span>
-                </>
+                </span>
               )
             }
             hint={inDual ? "name only" : "only you see this name"}
