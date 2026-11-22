@@ -244,6 +244,21 @@ export interface BoardGameState {
  * than to a placeholder sentence, so the foot is never empty and the pill
  * never sits over dead space.
  */
+/**
+ * The point's name with who took it: "Backhand Winner · Lee". The film board
+ * has no other mark for the winner, and the analysis's names ("Forehand
+ * Error") never say whose shot it was. With no point, or no winner, the name
+ * is returned as it came.
+ */
+export function pointWithWinner(
+  pointName: string | null,
+  winnerName: string | null,
+): string | null {
+  const named = pointName?.trim();
+  if (!named || !winnerName) return pointName;
+  return `${named} · ${winnerName}`;
+}
+
 export function footLine(
   pointName: string | null,
   saved: boolean,

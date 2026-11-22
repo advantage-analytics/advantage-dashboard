@@ -14,7 +14,12 @@ import {
 } from "./board-position";
 import { ANCHOR_LABEL, SETTLE_CLASS, useCornerDrag } from "./use-corner-drag";
 import { RailScoreboard, type RailScoreboardPlayer } from "../rail-scoreboard";
-import { footLine, setTrackTone, type Board } from "./film-score";
+import {
+  footLine,
+  pointWithWinner,
+  setTrackTone,
+  type Board,
+} from "./film-score";
 
 /**
  * The board: one 236px slab over the film.
@@ -74,6 +79,7 @@ export function FilmScoreboard({
   playing,
   elapsed,
   saved,
+  wonByYou,
   dim,
   onRest,
 }: {
@@ -86,6 +92,13 @@ export function FilmScoreboard({
   elapsed: string;
   /** Whether the point in play is bookmarked — the foot's "· saved". */
   saved: boolean;
+  /**
+   * Who took the point, resolved against `useMatchSides()` by the room
+   * (`wonByPlayer1 === sides.you.isPlayer1`), never from player1/player2
+   * order. The caption names them after the point ("Backhand Winner · Lee").
+   * Null between points, when there is no point to name.
+   */
+  wonByYou: boolean | null;
   /** The chrome is collapsed (R2); the slab stays, at 82%. */
   dim: boolean;
   /**
@@ -201,13 +214,20 @@ export function FilmScoreboard({
               status="live"
               label={playing ? "Playing" : "Paused"}
               headTime={elapsed}
-              caption={footLine(pointName, saved, {
-                set: board.liveSet + 1,
-                game: board.gameNumber,
-                serverName: (
-                  board.rows.find((row) => row.serving) ?? board.rows[0]
-                ).name,
-              })}
+              caption={footLine(
+                pointWithWinner(
+                  pointName,
+                  wonByYou === null ? null : board.rows[wonByYou ? 0 : 1].name,
+                ),
+                saved,
+                {
+                  set: board.liveSet + 1,
+                  game: board.gameNumber,
+                  serverName: (
+                    board.rows.find((row) => row.serving) ?? board.rows[0]
+                  ).name,
+                },
+              )}
               players={[
                 scoreRow("you", board.rows[0], board.rows[1], board.liveSet),
                 scoreRow("opp", board.rows[1], board.rows[0], board.liveSet),

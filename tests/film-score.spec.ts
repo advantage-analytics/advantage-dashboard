@@ -5,6 +5,7 @@ import {
   boardAt,
   footLine,
   initialSurname,
+  pointWithWinner,
   readGameScore,
   readPointScore,
   setTrackTone,
@@ -147,6 +148,26 @@ test.describe("setTrackTone", () => {
     expect(setTrackTone(null, null)).toBe("lost");
     expect(setTrackTone(null, 3)).toBe("lost");
     expect(setTrackTone(3, null)).toBe("won");
+  });
+});
+
+test.describe("pointWithWinner", () => {
+  test("the point's name gains who took it", () => {
+    expect(pointWithWinner("Forehand Error", "Vargas")).toBe(
+      "Forehand Error · Vargas",
+    );
+    expect(pointWithWinner("  Ace ", "Lee")).toBe("Ace · Lee");
+  });
+  test("no point or no winner leaves the name as it came", () => {
+    expect(pointWithWinner(null, "Lee")).toBeNull();
+    expect(pointWithWinner("  ", "Lee")).toBe("  ");
+    expect(pointWithWinner("Ace", null)).toBe("Ace");
+  });
+  test("footLine still adds Saved after the winner", () => {
+    const state = { set: 1, game: 6, serverName: "Lee" };
+    expect(footLine(pointWithWinner("Ace", "Lee"), true, state)).toBe(
+      "Ace · Lee · Saved",
+    );
   });
 });
 

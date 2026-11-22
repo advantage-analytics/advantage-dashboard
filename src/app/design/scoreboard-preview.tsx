@@ -105,6 +105,7 @@ export function ScoreboardPreview() {
           playing={false}
           elapsed="12:45"
           saved={false}
+          wonByYou={true}
           dim={false}
         />
       </div>
