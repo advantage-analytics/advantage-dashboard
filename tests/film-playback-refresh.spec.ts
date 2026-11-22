@@ -571,8 +571,7 @@ test("a film stopped by leaving the room mid-hand-off stays paused across the sw
     .getByRole("button", { name: "Open the film room fullscreen" })
     .click();
   await page.waitForSelector(ROOM);
-  await page.keyboard.press("Escape");
-  await expect(page.locator(ROOM)).toHaveCount(0);
+  await leaveRoom(page);
   await page.unroute(clip);
   expect((await state(page, REPORT))?.paused).toBe(true);
 
@@ -782,8 +781,7 @@ test("the room swaps with the report player and hands the playhead back", async 
 
   // Leave. The room hands the playhead back as its exit starts.
   await seekTo(page, ROOM, 0.5);
-  await page.keyboard.press("Escape");
-  await expect(page.locator(ROOM)).toHaveCount(0);
+  await leaveRoom(page);
   const handed = await state(page, REPORT);
   expect(handed?.time).toBeCloseTo(0.5, 1);
 });
@@ -1007,8 +1005,7 @@ test("a read-only report renews from the endpoint the report names and never tou
     page.locator('[data-film-chrome] button[aria-label="Save point"]'),
   ).toHaveCount(0);
   await page.keyboard.press("s");
-  await page.keyboard.press("Escape");
-  await expect(page.locator(ROOM)).toHaveCount(0);
+  await leaveRoom(page);
   // Long past the one-second floor of anything scheduled.
   await page.waitForTimeout(1500);
 
@@ -2823,8 +2820,7 @@ test("the rail scoreboard's word follows the film, in the report and through the
   await page.waitForSelector(ROOM);
   await setPlaying(ROOM, true);
   await expect(word).toHaveText("Playing");
-  await page.keyboard.press("Escape");
-  await expect(page.locator(ROOM)).toHaveCount(0);
+  await leaveRoom(page);
   await expect(word).toHaveText("Paused");
 
   // Out again before the room's element has taken the film over: no element
@@ -2836,8 +2832,7 @@ test("the rail scoreboard's word follows the film, in the report and through the
   await page.route(/\.mp4/, () => {});
   await enterRoom.click();
   await page.waitForSelector(ROOM);
-  await page.keyboard.press("Escape");
-  await expect(page.locator(ROOM)).toHaveCount(0);
+  await leaveRoom(page);
   await expect
     .poll(() =>
       page.evaluate(
@@ -4142,8 +4137,13 @@ async function clearAnimations(page: Page) {
   });
 }
 
-/** Escape, then wait for the room to unmount — which only `finished` does. */
+/**
+ * Escape twice, then wait for the room to unmount — which only `finished`
+ * does. The room opens with its points drawer, and the first Escape only
+ * collapses the drawer; the second leaves.
+ */
 async function leaveRoom(page: Page) {
+  await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await expect(page.locator(ROOM)).toHaveCount(0);
 }

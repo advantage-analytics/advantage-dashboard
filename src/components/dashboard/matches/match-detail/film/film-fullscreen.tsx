@@ -61,10 +61,8 @@ import { FilmRoomDrawer } from "./film-room-drawer";
 import {
   readCourtMode,
   readCourtOn,
-  readDrawerOpen,
   writeCourtMode,
   writeCourtOn,
-  writeDrawerOpen,
   type CourtMode,
 } from "./film-room-prefs";
 import { boardAt, type BoardColumns } from "./film-score";
@@ -443,12 +441,10 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
   // Bumped by every seek. The court's readout describes one moment, so it
   // closes as soon as the film moves to another one.
   const [seekKey, setSeekKey] = useState(0);
-  // Open or closed is a viewer preference (spec: Persistence is localStorage),
-  // read once in a lazy initializer so a blocked-storage throw costs nothing
-  // per render. A drawer that was left open opens with the room.
-  const [panel, setPanel] = useState<PanelState>(() =>
-    readDrawerOpen() ? "open" : "closed",
-  );
+  // The points drawer opens with the room, every time: entering fullscreen is
+  // how a viewer goes looking for a point, so the list is there on arrival.
+  // Collapsing it lasts only for this visit.
+  const [panel, setPanel] = useState<PanelState>("open");
   const panelOpen = panel === "open";
   const [videoReady, setVideoReady] = useState(false);
   // The report player's element, mirrored over this one until this one has
@@ -512,16 +508,13 @@ export function FilmFullscreen(p: FilmFullscreenProps) {
     return () => window.clearTimeout(timer);
   }, [panel]);
 
-  // Opening and collapsing the drawer touch the drawer and the preference and
-  // nothing else — no `pause()`, no `load()`, no seek. The film keeps playing
+  // Opening and collapsing the drawer touch the drawer and nothing else — no `pause()`, no `load()`, no seek. The film keeps playing
   // through the slide (spec: "Rules that apply to every task").
   const openPanel = useCallback(() => {
     setPanel("open");
-    writeDrawerOpen(true);
   }, []);
   const collapsePanel = useCallback(() => {
     setPanel("closing");
-    writeDrawerOpen(false);
   }, []);
 
   // Showing, hiding and swapping the court touch the court and the preference
