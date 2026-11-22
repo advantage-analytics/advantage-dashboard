@@ -258,7 +258,7 @@ export function RequestDrawer({
                   {unlisted && (
                     <FloatMenuItem
                       label="Close without adding"
-                      description="For a team you've already added, or won't. Nobody is emailed."
+                      description="For spam, or a team you've already added. Nobody is emailed."
                       icon={
                         <Check
                           className={MENU_ROW_ICON}

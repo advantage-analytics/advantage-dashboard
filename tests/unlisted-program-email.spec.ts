@@ -1,6 +1,9 @@
 import { expect, test } from "@playwright/test";
 
-import { unlistedProgramDeclinedEmail } from "@/lib/services/email";
+import {
+  unlistedProgramDeclinedEmail,
+  unlistedProgramReceivedEmail,
+} from "@/lib/services/email";
 
 /**
  * The "we can't add your school" email, sent when an admin dismisses an
@@ -35,4 +38,32 @@ test("html escapes the program name the requester typed", () => {
     programName: `<script>alert(1)</script> Men's`,
   });
   expect(typed.html).not.toContain("<script>alert(1)</script>");
+});
+
+test.describe("receipt", () => {
+  const receipt = unlistedProgramReceivedEmail({
+    to: "coach@example.edu",
+    programName: "HZCU Men's",
+    requesterName: "Wei Zhang",
+  });
+
+  test("envelope and greeting", () => {
+    expect(receipt.subject).toBe("Your request to add HZCU Men's");
+    expect(receipt.tags).toEqual({ type: "unlisted_program_received" });
+    expect(receipt.text).toContain("Thanks Wei Zhang");
+  });
+
+  test("promises an answer, never a team", () => {
+    expect(receipt.text).toContain("We'll email you either way");
+    expect(receipt.text).not.toMatch(/we'll set it up|when it is ready/i);
+  });
+
+  test("reads without a name", () => {
+    const bare = unlistedProgramReceivedEmail({
+      to: "coach@example.edu",
+      programName: "HZCU Men's",
+      requesterName: null,
+    });
+    expect(bare.text).toContain("Thanks — HZCU Men's");
+  });
 });

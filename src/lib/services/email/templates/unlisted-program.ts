@@ -20,6 +20,54 @@ import type { EmailMessage } from "../send";
  * a click, not a note. The copy says what is true without inventing a policy.
  */
 
+export interface UnlistedProgramReceivedInput {
+  /**
+   * The caller's own verified account address — `submitUnlistedProgram()`
+   * sends this only when the typed address is the signed-in session's, so the
+   * form can never be used to mail an inbox its user doesn't control.
+   */
+  to: string;
+  /** "HZCU Men's" — the school and squad as they typed them. */
+  programName: string;
+  /** From the form; the greeting reads without it. */
+  requesterName: string | null;
+}
+
+/**
+ * The receipt for "Tell us the program": the request is in, and a person will
+ * answer it either way. The answer is one of two emails — the program claim
+ * invite when the team is created, or `unlistedProgramDeclinedEmail` — so
+ * this one promises an email, never a team.
+ */
+export function unlistedProgramReceivedEmail(
+  input: UnlistedProgramReceivedInput,
+): EmailMessage {
+  const { to, programName } = input;
+  const name = input.requesterName?.trim();
+
+  const content: EmailContent = {
+    preheader: `We have your request to add ${programName}.`,
+    eyebrow: "Request received",
+    heading: `We have your request to add ${programName}`,
+    body: [
+      `Thanks${name ? ` ${name}` : ""} — ${programName} isn't in our directory yet, so a person on our team will look at it.`,
+      "We'll email you either way: a link to set the team up if we add it, or a note if we can't right now.",
+    ],
+    facts: [{ label: "Program", value: programName }],
+    // No call to action: there is nothing for them to do, and a button back
+    // to the form they just used invites a second request.
+    note: "If you got a detail wrong, reply to this email — a person reads it.",
+  };
+
+  return {
+    to,
+    subject: `Your request to add ${programName}`,
+    html: renderEmail(content),
+    text: renderText(content),
+    tags: { type: "unlisted_program_received" },
+  };
+}
+
 export interface UnlistedProgramDeclinedInput {
   /** The address recorded on the request — never anything a caller supplies. */
   to: string;

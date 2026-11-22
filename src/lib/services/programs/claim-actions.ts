@@ -10,6 +10,7 @@ import {
   claimVerifyAddressEmail,
   inviteRequestReceivedEmail,
   joinRequestOwnerNoticeEmail,
+  unlistedProgramReceivedEmail,
 } from "@/lib/services/email";
 import { programDisplayName } from "@/lib/data/programs-server";
 import { checkClaimEmail } from "./domain-match";
@@ -1529,6 +1530,10 @@ export async function submitUnlistedProgram(input: {
   school: string;
   team: string;
   email: string;
+  /** Asked on the form since 2026-11-21; optional here for an older tab. */
+  name?: string;
+  /** One of `CLAIM_ROLES`, or absent. Anything else files as "no role". */
+  role?: string;
 }): Promise<ActionOutcome> {
   const school = input.school.trim();
   const email = input.email.trim();
@@ -1541,6 +1546,8 @@ export async function submitUnlistedProgram(input: {
   const filed = await fileRequest({
     kind: "unlisted_program",
     email,
+    name: input.name,
+    role: toClaimRole(input.role),
     schoolName: school,
     team: input.team,
   });
@@ -1558,11 +1565,39 @@ export async function submitUnlistedProgram(input: {
         kind: "request",
         id: requestId,
         programName,
-        requesterName: email,
+        requesterName: input.name?.trim() || email,
         requesterEmail: email.toLowerCase(),
         reason: "New unlisted-program submission — not yet in the directory",
       });
     });
+  }
+
+  // The receipt follows `requestInvite`'s rule exactly, for the same reason:
+  // this form works signed out and takes any address, so mailing whatever was
+  // typed would let anyone send our email — carrying a school name they chose
+  // — to any inbox. It goes only to a signed-in caller's OWN account address.
+  // A signed-out requester has the on-screen confirmation, and the answer
+  // (claim invite or decline) still reaches the address they gave, because a
+  // person decides that one. Sent whether or not the row was new: the same
+  // two facts decide it either way, so it reveals nothing about the queue.
+  if (filed.ok) {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    const accountEmail = user?.email?.trim();
+    if (accountEmail && accountEmail.toLowerCase() === email.toLowerCase()) {
+      const sent = await sendEmail(
+        unlistedProgramReceivedEmail({
+          to: accountEmail,
+          programName: programDisplayName(school, input.team),
+          requesterName: input.name?.trim() || null,
+        }),
+      );
+      if (!sent.ok) {
+        console.warn("[claim] unlisted-program receipt not sent", { school });
+      }
+    }
   }
 
   return toActionOutcome(filed);
