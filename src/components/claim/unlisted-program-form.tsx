@@ -3,19 +3,25 @@
 import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { submitUnlistedProgram } from "@/lib/services/programs/claim-actions";
+import { CLAIM_ROLES } from "@/lib/services/programs/claim-roles";
 import {
   CLAIM_BUTTON,
   CLAIM_FIELD,
   CLAIM_LABEL,
   CLAIM_MICRO,
   ClaimActions,
+  ClaimSelect,
 } from "./claim-shell";
 import { TeamPills } from "./team-pills";
 
 /**
- * Three fields, deliberately. The spec says resist adding a fourth: this lands
- * in the same review queue as an unrecognized-domain claim, and everything else
- * can be asked once a person is actually looking at it.
+ * Five fields: school, squad, name, role, email. This was three, on the theory
+ * that everything else could be asked once a person was looking at it — but
+ * nobody can ask, because the only thing on file is an address. A request
+ * that arrived as "HZCU", Men's and a bare address (2026-11-21) left the
+ * reviewer nothing to decide on. Name and role are what the admin queue
+ * prints beside every other request, so they are asked here too. The role
+ * list is the claim flow's one vocabulary (`CLAIM_ROLES`).
  *
  * At page scale school and squad share a row, because "Northgate University"
  * and "Men's" are one answer asked twice — putting them on separate rows made
@@ -24,6 +30,8 @@ import { TeamPills } from "./team-pills";
 export function UnlistedProgramForm() {
   const [school, setSchool] = useState("");
   const [team, setTeam] = useState<"mens" | "womens">("mens");
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("");
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -32,9 +40,10 @@ export function UnlistedProgramForm() {
   if (sent) {
     return (
       <p className="text-body max-w-[62ch] rounded-[var(--radius-card)] border border-[var(--border-hairline)] bg-[var(--surface-subtle)] px-5 py-4">
-        Thanks — we have {school.trim()}. We&#39;ll set it up and email{" "}
-        <span className="text-[var(--ink-900)]">{email.trim()}</span> when it is
-        ready.
+        Thanks — we have {school.trim()}. A person will look at it, and
+        we&#39;ll email{" "}
+        <span className="text-[var(--ink-900)]">{email.trim()}</span> either
+        way.
       </p>
     );
   }
@@ -43,7 +52,13 @@ export function UnlistedProgramForm() {
     event.preventDefault();
     setError(null);
     startTransition(async () => {
-      const result = await submitUnlistedProgram({ school, team, email });
+      const result = await submitUnlistedProgram({
+        school,
+        team,
+        name,
+        role,
+        email,
+      });
       if (!result.ok) setError(result.error);
       else setSent(true);
     });
@@ -67,6 +82,39 @@ export function UnlistedProgramForm() {
         <div>
           <span className={CLAIM_LABEL}>Team</span>
           <TeamPills value={team} onChange={setTeam} />
+        </div>
+      </div>
+
+      <div className="grid gap-5 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <div>
+          <label htmlFor="name" className={CLAIM_LABEL}>
+            Your name
+          </label>
+          <input
+            id="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="name"
+            className={CLAIM_FIELD}
+          />
+        </div>
+
+        <div>
+          <label htmlFor="role" className={CLAIM_LABEL}>
+            Your role
+          </label>
+          <ClaimSelect
+            id="role"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+          >
+            <option value="">Choose one</option>
+            {CLAIM_ROLES.map((r) => (
+              <option key={r.value} value={r.value}>
+                {r.label}
+              </option>
+            ))}
+          </ClaimSelect>
         </div>
       </div>
 
@@ -99,7 +147,13 @@ export function UnlistedProgramForm() {
         <ClaimActions>
           <button
             type="submit"
-            disabled={pending || !school.trim() || !email.trim()}
+            disabled={
+              pending ||
+              !school.trim() ||
+              !name.trim() ||
+              !role ||
+              !email.trim()
+            }
             className={CLAIM_BUTTON}
           >
             {pending ? (
