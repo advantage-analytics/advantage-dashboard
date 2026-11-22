@@ -38,9 +38,10 @@ const NOISE = [SCANNER_REJECTION, RESIZE_OBSERVER_LOOP];
  * viewport equal to the screen numbered 743 (586 Windows, 157 macOS) with
  * one signed-in user among them, and came from datacenter towns (Boydton VA
  * and Des Moines IA for Microsoft Azure, Council Bluffs IA for Google).
- * A person in a true full-screen window (F11) matches too, which is why only
- * a failed chunk is dropped on this signature. Phones and tablets are left
- * out, since a page there can fill the screen for a real person.
+ * A person in a true full-screen window matches too (macOS native full
+ * screen, F11, a kiosk), so this signature alone is never enough: see
+ * isScannerVisit. Phones and tablets are left out, since a page there can
+ * fill the screen for a real person.
  */
 function isFullScreenDesktop(properties: CaptureResult["properties"]): boolean {
   if (properties?.$device_type !== "Desktop") return false;
@@ -53,6 +54,30 @@ function isFullScreenDesktop(properties: CaptureResult["properties"]): boolean {
     $screen_height > 0 &&
     $viewport_width === $screen_width &&
     $viewport_height === $screen_height
+  );
+}
+
+/**
+ * The pages a mailed link lands on: a shared match report (/m/<token>) and a
+ * program claim (/claim/...). A link scanner opens those and nothing else.
+ */
+const MAILED_LINK_PATH = /^\/(?:m|claim)\//;
+
+/**
+ * A link scanner's visit: a full-screen desktop on a mailed-link page that
+ * nobody has signed in on. `$is_identified` is set by posthog-js on every
+ * event before `before_send` runs, from the persisted `$user_state`, which
+ * `identify()` turns to "identified"; a scanner never signs in, so it is
+ * never true there. A signed-in person in macOS full screen who hits a
+ * deploy-skew chunk failure on the dashboard still reaches error tracking.
+ */
+function isScannerVisit(properties: CaptureResult["properties"]): boolean {
+  if (properties?.$is_identified === true) return false;
+  const pathname = properties?.$pathname;
+  return (
+    typeof pathname === "string" &&
+    MAILED_LINK_PATH.test(pathname) &&
+    isFullScreenDesktop(properties)
   );
 }
 
@@ -81,11 +106,12 @@ export function isUnfixableNoise(event: CaptureResult): boolean {
     return true;
   // A lazy chunk that would not load, in a link scanner's sandbox (PostHog
   // issue 01a1cc8b): every occurrence was an anonymous visit to a shared
-  // /m/<token> report from a Microsoft Azure IP (Boydton VA, WA), all three
-  // in a 1920x1080 window that filled its 1920x1080 screen. A person's
-  // failed chunk, in a normal window, still reaches error tracking.
+  // /m/<token> report from a Microsoft Azure IP (Boydton VA, Des Moines IA;
+  // Google's scanner comes from Council Bluffs IA), all three in a 1920x1080
+  // window that filled its 1920x1080 screen. A person's failed chunk, in a
+  // normal window or signed in or anywhere else, still reaches error tracking.
   return (
-    isFullScreenDesktop(event.properties) &&
+    isScannerVisit(event.properties) &&
     entries.some(({ type }) => type === "ChunkLoadError")
   );
 }
