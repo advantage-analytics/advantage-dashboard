@@ -237,6 +237,21 @@ export interface BoardGameState {
 }
 
 /**
+ * The point's name with who took it: "Backhand Winner · Lee". The film board
+ * has no other mark for the winner, and the analysis's names ("Forehand
+ * Error") never say whose shot it was. With no point, or no winner, the name
+ * is returned as it came.
+ */
+export function pointWithWinner(
+  pointName: string | null,
+  winnerName: string | null,
+): string | null {
+  const named = pointName?.trim();
+  if (!named || !winnerName) return pointName;
+  return `${named} · ${winnerName}`;
+}
+
+/**
  * The board's foot line.
  *
  * A named point wins, gaining "· saved" when the workspace has bookmarked it.
