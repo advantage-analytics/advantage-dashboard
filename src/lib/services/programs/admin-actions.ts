@@ -10,6 +10,7 @@ import {
   claimDeclinedEmail,
   claimVerifyIdentityEmail,
   inviteRequestDeclinedEmail,
+  unlistedProgramDeclinedEmail,
 } from "@/lib/services/email";
 import { notifyProgramWentLive } from "@/lib/services/notifications/program-live-mail";
 import { claimRoleLabel } from "./claim-roles";
@@ -742,7 +743,7 @@ export async function resolveRequest(
     })
     .eq("id", requestId)
     .eq("status", "open")
-    .select("id, kind, email, program_id")
+    .select("id, kind, email, program_id, school_name, team")
     .maybeSingle();
 
   if (error) {
@@ -768,6 +769,32 @@ export async function resolveRequest(
       to: resolved.email as string,
       programId: (resolved.program_id as string | null) ?? null,
     });
+  }
+
+  // An "add my school" request was promised an email on its confirmation
+  // screen. A yes keeps that promise by creating the team (the claim invite);
+  // this is the no. "Close without adding" (`resolved`) stays silent — it is
+  // for a team already set up some other way.
+  if (
+    resolved &&
+    status === "dismissed" &&
+    resolved.kind === "unlisted_program" &&
+    resolved.school_name
+  ) {
+    const sent = await sendEmail(
+      unlistedProgramDeclinedEmail({
+        to: resolved.email as string,
+        programName: programDisplayName(
+          resolved.school_name as string,
+          (resolved.team as string | null) ?? null,
+        ),
+      }),
+    );
+    if (!sent.ok) {
+      console.warn("[admin] unlisted-program decline email not sent", {
+        requestId: resolved.id,
+      });
+    }
   }
 
   return { ok: true };

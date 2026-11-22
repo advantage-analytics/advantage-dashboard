@@ -709,8 +709,10 @@ function settledLine(row: AdminRequestRow): string {
   if (row.detail.source === "request") {
     const { kind, programId } = row.detail;
     if (kind === "unlisted_program") {
-      // Only an invite request's decline is emailed (`resolveRequest`).
-      if (row.status === "dismissed") return "Dismissed. Nobody was emailed.";
+      // Dismiss mails `unlistedProgramDeclinedEmail`; Close without adding
+      // (`resolved`, no program) sends nothing (`resolveRequest`).
+      if (row.status === "dismissed")
+        return "Dismissed. We emailed them that it can't be added.";
       return programId
         ? "Added — the team is in the directory."
         : "Closed without adding a team. Nobody was emailed.";
