@@ -6,9 +6,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { createLoader, marker } from "./fixtures/vm-modules";
 
 /**
- * The file step's "Before you add a video" block — the three lead rows, the
- * PlaySight/CIZR note, the line of facts under the drop zone, and the frame
- * diagram.
+ * The file step's "What the analysis needs" block — the two lead rows, the
+ * line of facts, and the frame diagram.
  *
  * Rendered offline through `fixtures/vm-modules`. The dialog is stubbed: it is
  * closed on first render and draws nothing, and its Radix shell is not what
@@ -32,7 +31,7 @@ type Result = {
   suggestion?: string;
 };
 
-function loadPanel() {
+function renderPanel(result?: Result): string {
   const loader = createLoader({
     stubs: {
       "./VideoRequirementsDialog": {
@@ -40,22 +39,12 @@ function loadPanel() {
       },
     },
   });
-  return loader.load(`${DIR}/VideoRequirements.tsx`) as {
+  const { VideoRequirements } = loader.load(`${DIR}/VideoRequirements.tsx`) as {
     VideoRequirements: React.ComponentType<{ result?: Result }>;
-    VideoRequirementsFacts: React.ComponentType;
   };
-}
-
-function renderPanel(result?: Result): string {
-  const { VideoRequirements } = loadPanel();
   return renderToStaticMarkup(
     React.createElement(VideoRequirements, { result }),
   );
-}
-
-function renderFacts(): string {
-  const { VideoRequirementsFacts } = loadPanel();
-  return renderToStaticMarkup(React.createElement(VideoRequirementsFacts));
 }
 
 function renderFrame(variant: "works" | "wont-work"): string {
@@ -65,52 +54,21 @@ function renderFrame(variant: "works" | "wont-work"): string {
   return renderToStaticMarkup(React.createElement(CourtFrame, { variant }));
 }
 
-test("leads with the full match, then resolution and frame rate, then the camera's view", () => {
+test("leads with resolution and frame rate, then the camera's view", () => {
   const out = text(renderPanel());
-  const order = [
-    "The full match, unedited",
-    "1080p at 30 fps or higher",
-    "Filmed from behind the baseline",
-  ].map((row) => out.indexOf(row));
-  expect(order.every((i) => i >= 0)).toBe(true);
-  expect([...order].sort((a, b) => a - b)).toEqual(order);
-  expect(out).toContain("Not a highlight or cut version");
-});
-
-test("says where to get the original from PlaySight and CIZR, closed by default", () => {
-  const html = renderPanel();
-  const out = text(html);
-  expect(out).toContain("Using PlaySight or CIZR?");
-  expect(out).toContain("download the original file, not the stream");
-  expect(out).toContain("download the full match, not the edited version");
-  // A native disclosure, shut until asked: the block holds no state.
-  expect(html).toMatch(/<details(?![^>]*\bopen\b)[^>]*>/);
+  expect(out).toContain("1080p at 30 fps or higher");
+  expect(out).toContain("Camera behind the back fence");
+  expect(out.indexOf("1080p at 30 fps")).toBeLessThan(
+    out.indexOf("Camera behind the back fence"),
+  );
 });
 
 test("keeps the rest as one line of facts above the dialog link", () => {
-  const html = renderFacts();
+  const html = renderPanel();
   expect(text(html)).toContain(
-    "One camera that doesn't move · Singles · Complete games · Under 8 GB",
+    "Uncut, with the time between points · One camera that doesn't move · Singles · Complete games · Under 8 GB",
   );
   expect(html).toContain('data-component="VideoRequirementsDialog"');
-  // The dialog lives in the facts, not in the block above the drop zone.
-  expect(renderPanel()).not.toContain("VideoRequirementsDialog");
-});
-
-test("the file step reads the requirements before the picker and the facts after", () => {
-  // Source order, like upload-details-video-section.spec.ts: a static render
-  // of the whole step costs more than the wiring it would show. The block
-  // above the drop zone is the point of this change — guidance read after
-  // the file is chosen is guidance read too late.
-  const src = readFileSync(`${DIR}/FileStepContent.tsx`, "utf8");
-  const requirements = src.indexOf("<VideoRequirements result=");
-  const dropZone = src.indexOf('controlName("wizard_choose_file")');
-  const facts = src.indexOf("<VideoRequirementsFacts />");
-  expect(requirements).toBeGreaterThan(-1);
-  expect(dropZone).toBeGreaterThan(requirements);
-  expect(facts).toBeGreaterThan(dropZone);
-  // Drawn once: it stays over a checked file rather than moving under it.
-  expect(src.split("<VideoRequirements result=").length - 1).toBe(1);
 });
 
 test("the panel stays server-renderable", () => {
@@ -133,13 +91,13 @@ test("the frame that does not work carries no blue marks", () => {
   expect(renderFrame("wont-work")).not.toContain("var(--blue)");
 });
 
-test("row 2 states the rule until a video has been checked", () => {
+test("row 1 states the rule until a video has been checked", () => {
   const out = text(renderPanel());
   expect(out).toContain("Checked when you add the file · 60 fps is better");
   expect(out).not.toContain("This video meets it");
 });
 
-test("a video that passes turns row 2 into the answer", () => {
+test("a video that passes turns row 1 into the answer", () => {
   const html = renderPanel({ status: "pass", label: "1080p · 30 fps" });
   const out = text(html);
   expect(out).toContain("This video meets it");
@@ -150,22 +108,46 @@ test("a video that passes turns row 2 into the answer", () => {
 test("a video accepted with a caution reads as one, in the warning ink", () => {
   const html = renderPanel({ status: "warn", label: "1080p · 29.95 fps" });
   const out = text(html);
-  // The block sits above the picker, so the caution strip is below it.
-  expect(out).toContain("Accepted · See the note below");
-  expect(out).not.toContain("note above");
+  expect(out).toContain("Accepted · See the note above");
   expect(out).toContain("1080p · 29.95 fps");
   expect(html).toContain("var(--warning-text)");
 });
 
-test("a passing video's suggestion joins row 2 instead of taking a strip", () => {
+test("a passing video's suggestion joins row 1 instead of taking a strip", () => {
   const out = text(
     renderPanel({
       status: "pass",
       label: "1080p · 30 fps",
-      suggestion: "60 fps gives more accurate stats",
+      suggestion: "60 fps gives noticeably better ball tracking",
     }),
   );
   expect(out).toContain(
-    "This video meets it · 60 fps gives more accurate stats",
+    "This video meets it · 60 fps gives noticeably better ball tracking",
   );
+});
+
+// The block sat above the drop zone for a week (PR #759) with a PlaySight/CIZR
+// note, and was taken back out (2026-11-21). These pin the settled layout: the
+// drop zone leads the step, and no camera brand is named in the wizard or its
+// refusals. Moving the block is a product decision, not a side effect of a copy
+// or analytics change — change this spec only when that has been asked for.
+test("the requirements sit under the drop zone, not above it", () => {
+  const src = readFileSync(`${DIR}/FileStepContent.tsx`, "utf8");
+  const dropZone = src.indexOf("aria-label={`Drop ${whose} ${noun} here");
+  const block = src.indexOf("<VideoRequirements ");
+  expect(dropZone).toBeGreaterThan(0);
+  expect(block).toBeGreaterThan(dropZone);
+  expect(src.match(/<VideoRequirements /g)).toHaveLength(1);
+});
+
+test("no camera brand is called out in the wizard or its refusals", () => {
+  const files = [
+    `${DIR}/VideoRequirements.tsx`,
+    `${DIR}/VideoRequirementsDialog.tsx`,
+    `${DIR}/FileStepContent.tsx`,
+    "src/lib/services/upload/validators/splitstep-validator.ts",
+  ];
+  for (const f of files) {
+    expect(readFileSync(f, "utf8"), f).not.toMatch(/playsight|cizr/i);
+  }
 });
