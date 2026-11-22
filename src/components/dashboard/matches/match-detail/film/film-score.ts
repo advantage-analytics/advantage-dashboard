@@ -237,14 +237,6 @@ export interface BoardGameState {
 }
 
 /**
- * The board's foot line.
- *
- * A named point wins, gaining "· saved" when the workspace has bookmarked it.
- * Between points (R7) it falls back to the game the board is showing rather
- * than to a placeholder sentence, so the foot is never empty and the pill
- * never sits over dead space.
- */
-/**
  * The point's name with who took it: "Backhand Winner · Lee". The film board
  * has no other mark for the winner, and the analysis's names ("Forehand
  * Error") never say whose shot it was. With no point, or no winner, the name
@@ -259,6 +251,14 @@ export function pointWithWinner(
   return `${named} · ${winnerName}`;
 }
 
+/**
+ * The board's foot line.
+ *
+ * A named point wins, gaining "· saved" when the workspace has bookmarked it.
+ * Between points (R7) it falls back to the game the board is showing rather
+ * than to a placeholder sentence, so the foot is never empty and the pill
+ * never sits over dead space.
+ */
 export function footLine(
   pointName: string | null,
   saved: boolean,
