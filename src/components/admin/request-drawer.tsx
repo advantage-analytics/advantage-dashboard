@@ -174,6 +174,8 @@ export function RequestDrawer({
   );
   const [reopening, setReopening] = useState(false);
   const [creatingTeam, setCreatingTeam] = useState(false);
+  /** Set once the dialog has created a team; read when it closes. */
+  const teamCreated = useRef(false);
 
   const run = (action: () => Promise<{ ok: boolean; error?: string }>) => {
     start(async () => {
@@ -548,13 +550,23 @@ export function RequestDrawer({
         }}
       />
 
-      {/* Mounted per request so its seed is this row's, never the last one's. */}
+      {/* Mounted per request so its seed is this row's, never the last one's.
+          The page refreshes when the dialog CLOSES, not when the team is
+          created: creating it resolves the request, a refresh drops the row
+          from Waiting, and this drawer — the dialog with it — would unmount
+          before the admin read the outcome step and any warning on it (a
+          claim link that didn't send is one only they can fix). */}
       {unlisted && creatingTeam && (
         <CreateTeamDialog
           key={unlisted.requestId}
           open
           onOpenChange={(open) => {
-            if (!open) setCreatingTeam(false);
+            if (open) return;
+            setCreatingTeam(false);
+            if (teamCreated.current) {
+              teamCreated.current = false;
+              onChanged();
+            }
           }}
           seed={{
             requestId: unlisted.requestId,
@@ -562,7 +574,9 @@ export function RequestDrawer({
             team: unlisted.team,
             email: row.from.email,
           }}
-          onCreated={onChanged}
+          onCreated={() => {
+            teamCreated.current = true;
+          }}
         />
       )}
 
@@ -710,16 +724,23 @@ function settledLine(row: AdminRequestRow): string {
     const { kind, programId } = row.detail;
     if (kind === "unlisted_program") {
       // Dismiss mails `unlistedProgramDeclinedEmail`; Close without adding
-      // (`resolved`, no program) sends nothing (`resolveRequest`).
+      // (`resolved`, no program) sends nothing (`resolveRequest`). Whether
+      // that send went through is recorded nowhere but the server log, so
+      // this says what Dismiss does, not that delivery happened.
       if (row.status === "dismissed")
-        return "Dismissed. We emailed them that it can't be added.";
+        return "Dismissed — Dismiss sends them a “can't add it” email.";
       return programId
         ? "Added — the team is in the directory."
         : "Closed without adding a team. Nobody was emailed.";
     }
-    return row.status === "dismissed"
-      ? "Dismissed. They were told."
-      : "Closed — nothing left to do here.";
+    // Only an invite request's decline is mailed (`notifyRequestDeclined`);
+    // a dismissed dispute or match report is closed silently.
+    if (row.status === "dismissed") {
+      return kind === "invite_request"
+        ? "Dismissed. They were told."
+        : "Dismissed. Nobody was emailed.";
+    }
+    return "Closed — nothing left to do here.";
   }
   switch (row.status) {
     // Every row in the Verifying view is this status — the link is out and

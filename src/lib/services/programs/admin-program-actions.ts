@@ -273,7 +273,7 @@ async function closeAnsweredRequest(
   adminId: string,
 ): Promise<string | undefined> {
   const db = createAdminClient();
-  const { error } = await db
+  const { data, error } = await db
     .from("program_requests")
     .update({
       status: "resolved",
@@ -283,7 +283,8 @@ async function closeAnsweredRequest(
     })
     .eq("id", requestId)
     .eq("kind", "unlisted_program")
-    .eq("status", "open");
+    .eq("status", "open")
+    .select("id");
 
   if (error) {
     console.error("[admin] could not close the answered request", {
@@ -291,6 +292,12 @@ async function closeAnsweredRequest(
       error: error.message,
     });
     return "The team is created, but its request is still open — close it from Requests.";
+  }
+  // Matching nothing is not an error to PostgREST, but it is news to the
+  // admin: somebody closed this request from another tab first — perhaps with
+  // Dismiss, which has already told the requester we can't add them.
+  if (!data || data.length === 0) {
+    return "The team is created, but its request had already been closed by someone else — check Requests › Closed before following up.";
   }
   return undefined;
 }

@@ -65,7 +65,7 @@ const noop = () => {};
 export function RequestCreateTeamPreview() {
   return (
     <main className="min-h-screen bg-[var(--surface-page)] p-8">
-      <h1 className="text-[18px] font-medium text-[var(--ink-900)]">
+      <h1 className="text-[16px] font-medium text-[var(--ink-900)]">
         Unlisted-program request → Create team
       </h1>
       <p className="mt-1 max-w-[640px] text-[12px] leading-[1.55] text-[var(--ink-600)]">

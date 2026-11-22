@@ -1537,6 +1537,7 @@ export async function submitUnlistedProgram(input: {
 }): Promise<ActionOutcome> {
   const school = input.school.trim();
   const email = input.email.trim();
+  const name = input.name?.trim();
 
   if (!school) return { ok: false, error: "Add the school name." };
   if (!email) return { ok: false, error: "Add an email address." };
@@ -1565,7 +1566,7 @@ export async function submitUnlistedProgram(input: {
         kind: "request",
         id: requestId,
         programName,
-        requesterName: input.name?.trim() || email,
+        requesterName: name || email,
         requesterEmail: email.toLowerCase(),
         reason: "New unlisted-program submission — not yet in the directory",
       });
@@ -1580,6 +1581,10 @@ export async function submitUnlistedProgram(input: {
   // (claim invite or decline) still reaches the address they gave, because a
   // person decides that one. Sent whether or not the row was new: the same
   // two facts decide it either way, so it reveals nothing about the queue.
+  //
+  // The session is read here, during the request, where its cookies are; only
+  // the Resend round trip is deferred with `after()`, so the confirmation
+  // screen never waits on mail.
   if (filed.ok) {
     const supabase = await createClient();
     const {
@@ -1587,16 +1592,19 @@ export async function submitUnlistedProgram(input: {
     } = await supabase.auth.getUser();
     const accountEmail = user?.email?.trim();
     if (accountEmail && accountEmail.toLowerCase() === email.toLowerCase()) {
-      const sent = await sendEmail(
-        unlistedProgramReceivedEmail({
-          to: accountEmail,
-          programName: programDisplayName(school, input.team),
-          requesterName: input.name?.trim() || null,
-        }),
-      );
-      if (!sent.ok) {
-        console.warn("[claim] unlisted-program receipt not sent", { school });
-      }
+      const receipt = unlistedProgramReceivedEmail({
+        to: accountEmail,
+        programName: programDisplayName(school, input.team),
+        requesterName: name || null,
+      });
+      after(async () => {
+        const sent = await sendEmail(receipt);
+        if (!sent.ok) {
+          console.warn("[claim] unlisted-program receipt not sent", {
+            school,
+          });
+        }
+      });
     }
   }
 
