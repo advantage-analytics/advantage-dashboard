@@ -26,6 +26,9 @@ test("the route checks the bearer before it builds the service-role client", () 
 test("the route sweeps every job, not a page's matches", () => {
   expect(src).toContain("reconcileVendorJobs({ supabase, cap: POLL_CAP })");
   expect(src).toContain("recoverUndeliveredResults({ supabase })");
+  // Queued → Analyzing with nobody on a page: the vendor sends no "started"
+  // webhook, so the cron asks its job list for every queued job.
+  expect(src).toContain("refreshQueuedJobs({ supabase })");
   expect(src).not.toContain("matchIds");
 });
 

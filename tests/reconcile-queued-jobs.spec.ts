@@ -108,7 +108,7 @@ function load(respond: () => { status: number; body: unknown }) {
   return {
     refresh: mod.refreshQueuedJobs as (p: {
       supabase: unknown;
-      matchIds: string[];
+      matchIds?: string[];
       now?: Date;
     }) => Promise<number>,
     requests,
@@ -234,6 +234,46 @@ test("no queued rows on the page means no vendor call", async () => {
     matchIds: ["m-a"],
     now: NOW,
   });
+  expect(requests).toHaveLength(0);
+});
+
+test("unscoped (the cron) covers every queued job, whatever its match", async () => {
+  const rows = [row("a"), row("b"), row("c", "completed")];
+  const { refresh, requests } = load(() =>
+    list(["a", "job_processing"], ["b", "job_processing"]),
+  );
+
+  const moved = await refresh({ supabase: fakeSupabase(rows), now: NOW });
+
+  expect(moved).toBe(2);
+  expect(rows.map((r) => r.status)).toEqual([
+    "processing",
+    "processing",
+    "completed",
+  ]);
+  expect(requests).toEqual(["https://vendor.test/jobs"]);
+});
+
+test("unscoped with nothing queued makes no vendor call", async () => {
+  const { refresh, requests } = load(() => list());
+  const moved = await refresh({
+    supabase: fakeSupabase([row("a", "completed"), row("b", "processing")]),
+    now: NOW,
+  });
+  expect(moved).toBe(0);
+  expect(requests).toHaveLength(0);
+});
+
+test("an empty page scope is still a no-op, not every job", async () => {
+  const rows = [row("a")];
+  const { refresh, requests } = load(() => list(["a", "job_processing"]));
+  const moved = await refresh({
+    supabase: fakeSupabase(rows),
+    matchIds: [],
+    now: NOW,
+  });
+  expect(moved).toBe(0);
+  expect(rows[0].status).toBe("queued");
   expect(requests).toHaveLength(0);
 });
 

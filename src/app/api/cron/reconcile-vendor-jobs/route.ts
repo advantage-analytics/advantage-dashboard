@@ -27,6 +27,7 @@ import { authorizeCronRequest } from "@/lib/services/match-video/cleanup-schedul
 import {
   reconcileVendorJobs,
   recoverUndeliveredResults,
+  refreshQueuedJobs,
 } from "@/lib/services/splitstep/reconcile";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -69,6 +70,20 @@ export async function GET(request: Request) {
   const polled = await reconcileVendorJobs({ supabase, cap: POLL_CAP });
   if (polled.polled) {
     console.info("[reconcile-vendor-jobs] polled", { ...polled });
+  }
+
+  // The vendor sends no "started" webhook; pages flip the matches they show,
+  // this flips every queued job so the label moves with nobody looking. Kept
+  // apart so a failure here cannot skip the results sweep below.
+  try {
+    const started = await refreshQueuedJobs({ supabase });
+    if (started) {
+      console.info("[reconcile-vendor-jobs] marked started", { started });
+    }
+  } catch (err) {
+    console.warn("[reconcile-vendor-jobs] queued refresh failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   // A recovered result downloads a file and derives a whole match — seconds
