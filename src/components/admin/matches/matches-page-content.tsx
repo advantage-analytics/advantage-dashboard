@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { CalendarDays } from "lucide-react";
+import { GalleryHorizontalEnd } from "lucide-react";
 import { AdminPage } from "@/components/admin/admin-page";
 import {
   CountPills,
@@ -450,7 +450,7 @@ export function MatchesPageContent({
 
           {page.length === 0 ? (
             <TableEmptyBody
-              icon={CalendarDays}
+              icon={GalleryHorizontalEnd}
               title={
                 rows.length === 0
                   ? "No matches on Advantage yet"

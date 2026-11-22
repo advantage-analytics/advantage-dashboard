@@ -1,7 +1,7 @@
 import {
   Home,
   Calendar,
-  CalendarDays,
+  GalleryHorizontalEnd,
   ChartLine,
   MessageSquare,
   UsersRound,
@@ -40,7 +40,7 @@ export type NavLink = {
 
 export const PERSONAL_NAV: readonly NavLink[] = [
   { name: "Home", href: "/dashboard", icon: Home },
-  { name: "Matches", href: "/dashboard/matches", icon: CalendarDays },
+  { name: "Matches", href: "/dashboard/matches", icon: GalleryHorizontalEnd },
   {
     name: "Statistics",
     href: "/dashboard/statistics",
@@ -77,12 +77,10 @@ export const PERSONAL_NAV: readonly NavLink[] = [
  * and lets `visible_match_ids()` decide who sees which rows — so the entry is
  * back, and inside a program players have a route to a match list again.
  *
- * The two carry different icons because they answer different questions:
- * `calendar` for Schedule, `calendar-days` for Matches (the same glyph as the
- * Matches drawer). The two read close, so when `SCHEDULE_ENABLED` brings
- * Schedule back beside Matches, give one of them a more distinct icon.
- * Matches keeps the same glyph `PERSONAL_NAV` gives it, so one destination
- * does not change shape when the workspace switcher moves.
+ * The two carry different icons because they answer different questions —
+ * the design's own pairing: `calendar` for Schedule, `gallery-horizontal-end`
+ * for Matches. Matches keeps the same glyph `PERSONAL_NAV` gives it, so one
+ * destination does not change shape when the workspace switcher moves.
  *
  * Schedule is a coming-soon page for now (`lib/schedule/availability.ts`), so
  * it sits below Roster with the other unfinished entries rather than beside
@@ -116,7 +114,7 @@ export const PERSONAL_NAV: readonly NavLink[] = [
  */
 export const TEAM_NAV: readonly NavLink[] = [
   { name: "Team home", href: "/dashboard/team", icon: Home },
-  { name: "Matches", href: "/dashboard/matches", icon: CalendarDays },
+  { name: "Matches", href: "/dashboard/matches", icon: GalleryHorizontalEnd },
   { name: "Roster", href: "/dashboard/team/roster", icon: UsersRound },
   {
     name: "Schedule",
