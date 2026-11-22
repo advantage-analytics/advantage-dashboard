@@ -627,12 +627,20 @@ export async function readAskRefusal(response: Response): Promise<{
   };
 }
 
-/** How one question ended. `done` is the only one that saved anything. */
+/**
+ * How one question ended. `done` is the only one that saved anything.
+ *
+ * `interrupted` is a response that arrived and then stopped short;
+ * `network_error` is a request that never got a response at all (offline,
+ * DNS, a blocked request). The thread shows both the same way — only
+ * analytics tells them apart.
+ */
 export type AskOutcome =
   | { status: "done"; conversationId: string }
   | { status: "error" }
   | { status: "refused"; code: string | null; httpStatus: number }
   | { status: "interrupted" }
+  | { status: "network_error" }
   | { status: "aborted" };
 
 export interface AskRequest {
@@ -680,6 +688,7 @@ export async function streamAsk(
 ): Promise<AskOutcome> {
   const send = options.fetch ?? fetch;
   const aborted = () => options.signal?.aborted === true;
+  let responded = false;
 
   try {
     const response = await send("/api/ask", {
@@ -688,6 +697,7 @@ export async function streamAsk(
       body: JSON.stringify(askRequestBody(request)),
       signal: options.signal,
     });
+    responded = true;
 
     if (response.status !== 200) {
       const { refusal, usage } = await readAskRefusal(response);
@@ -715,9 +725,10 @@ export async function streamAsk(
   }
 
   if (aborted()) return { status: "aborted" };
-  // The body ended, or the connection did, with neither `done` nor `error`.
+  // The body ended, or the connection did, with neither `done` nor `error` —
+  // or the request never got a response at all.
   dispatch({ type: "interrupted", message: ASK_INTERRUPTED_MESSAGE });
-  return { status: "interrupted" };
+  return { status: responded ? "interrupted" : "network_error" };
 }
 
 // ── Reading a saved conversation ────────────────────────────────────────────

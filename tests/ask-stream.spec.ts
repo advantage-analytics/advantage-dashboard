@@ -657,11 +657,15 @@ test.describe("a failed answer", () => {
     });
   });
 
-  test("a connection that never opens is the same interruption", async () => {
+  test("a connection that never opens reads the same, but is a network error", async () => {
     const { state, outcome } = await askAgainst(() => {
       throw new TypeError("fetch failed");
     });
-    expect(outcome).toEqual({ status: "interrupted" });
+    expect(outcome).toEqual({ status: "network_error" });
+    expect(state.exchanges[0].answer).toMatchObject({
+      status: "error",
+      error: { code: null, message: ASK_INTERRUPTED_MESSAGE },
+    });
     expect(state.inFlight).toBe(false);
     expect(state.draft).toEqual(QUESTION);
   });
@@ -965,9 +969,11 @@ test.describe("analytics for a question", () => {
     const pending = trackedAgainst(
       ((_url: RequestInfo | URL, init?: RequestInit) =>
         new Promise<Response>((_resolve, reject) => {
-          init?.signal?.addEventListener("abort", () =>
-            reject(new DOMException("aborted", "AbortError")),
-          );
+          const abort = () => reject(new DOMException("aborted", "AbortError"));
+          // Aborted before the fetch ran: reject now, not on an event that
+          // has already fired — otherwise the test hangs instead of failing.
+          if (init?.signal?.aborted) return abort();
+          init?.signal?.addEventListener("abort", abort);
         })) as typeof fetch,
       { signal: controller.signal },
     );
@@ -980,6 +986,66 @@ test.describe("analytics for a question", () => {
       status: "aborted",
       refusal_code: null,
     });
+  });
+
+  test("a refusal slug the route does not send is recorded as `other`", async () => {
+    const { events } = await trackedAgainst((async () =>
+      Response.json(
+        { error: "Something.", code: "marcus@example.com" },
+        { status: 400 },
+      )) as typeof fetch);
+    expect(events[1].properties).toEqual({
+      scope: "personal",
+      status: "refused",
+      refusal_code: "other",
+      http_status: 400,
+    });
+  });
+
+  test("a request that never got a response is a network error, not an interruption", async () => {
+    const { events } = await trackedAgainst((async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch);
+    expect(events[1].properties).toMatchObject({
+      status: "network_error",
+      refusal_code: null,
+      http_status: null,
+    });
+  });
+
+  test("a flight that rejects is still ended, as `error`, and rethrown", async () => {
+    const events: { event: string; properties: unknown }[] = [];
+    const request = { conversationId: null, question: QUESTION };
+    const failure = new Error("boom");
+    await expect(
+      trackAskFlight(request, Promise.reject(failure), (event, properties) =>
+        events.push({ event, properties }),
+      ),
+    ).rejects.toBe(failure);
+    expect(events).toEqual([
+      { event: "ask_submitted", properties: { scope: "personal" } },
+      {
+        event: "ask_ended",
+        properties: {
+          scope: "personal",
+          status: "error",
+          refusal_code: null,
+          http_status: null,
+        },
+      },
+    ]);
+  });
+
+  test("a capture that throws never breaks the question", async () => {
+    const request = { conversationId: null, question: QUESTION };
+    const outcome = await trackAskFlight(
+      request,
+      Promise.resolve({ status: "done", conversationId: "c-1" } as const),
+      () => {
+        throw new Error("posthog down");
+      },
+    );
+    expect(outcome).toEqual({ status: "done", conversationId: "c-1" });
   });
 
   test("never carries the question or its tags", async () => {
