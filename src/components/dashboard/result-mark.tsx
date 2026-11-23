@@ -1,11 +1,11 @@
-import { CircleCheck, CircleMinus, CircleX } from "lucide-react";
+import { Ban, CircleCheck, CircleMinus, CircleX } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
  * Won, lost or level — the product's ONE outcome register.
  *
  * `circle-check` / `circle-x` / `circle-minus` at 14px, stroke 1.5, in the
- * outcome colours, with the word carried as the accessible name. A screen
+ * outcome colours (and a grey `ban` for a score that named no winner), with the word carried as the accessible name. A screen
  * reader hears exactly what the retired badge used to say.
  *
  * ── Why this is the only register now ──────────────────────────────────────
@@ -35,8 +35,20 @@ import { cn } from "@/lib/utils";
  */
 export function ResultMark({
   won,
+  noResult = false,
   className,
 }: {
+  /**
+   * The match was played and scored, and the score names no winner: a set
+   * stopped at 4-4, a match halted at a set all. Draws the grey `ban` mark,
+   * read out as "No result", whatever `won` says — a row's winner field is
+   * only a default on such a score (`DisplayMatch.level`).
+   *
+   * Not the level mark and not `EmptyMark`: level is a decided draw (a dual
+   * tied on lines), and the dash is for a cell with nothing to report yet.
+   * This is a finished score that decided nothing.
+   */
+  noResult?: boolean;
   /**
    * `true` won · `false` lost · `null` **level** — a dual that finished level
    * on lines. Null is a decided draw, never "not yet decided": an undecided
@@ -47,8 +59,20 @@ export function ResultMark({
   won: boolean | null;
   className?: string;
 }): React.JSX.Element {
-  const Icon = won === null ? CircleMinus : won ? CircleCheck : CircleX;
-  const label = won === null ? "Level" : won ? "Won" : "Lost";
+  const Icon = noResult
+    ? Ban
+    : won === null
+      ? CircleMinus
+      : won
+        ? CircleCheck
+        : CircleX;
+  const label = noResult
+    ? "No result"
+    : won === null
+      ? "Level"
+      : won
+        ? "Won"
+        : "Lost";
 
   return (
     <span className={cn("inline-flex items-center", className)}>
@@ -60,7 +84,7 @@ export function ResultMark({
            ink-500 — a draw is a decided result, but not a coloured one. */
         style={{
           color:
-            won === null
+            noResult || won === null
               ? "var(--ink-500)"
               : won
                 ? "var(--success)"

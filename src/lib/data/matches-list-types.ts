@@ -63,7 +63,7 @@ export interface DisplayMatch {
    * practice set stopped at 4-4, a match halted at a set all). `score.winner`
    * still reads "player2" on such a row — the transform's old default — so a
    * list that must not call it a loss asks this first and draws `ResultMark`'s
-   * level mark. Absent on a decided row.
+   * no-result mark. Absent on a decided row.
    */
   level?: true;
   round?: string;

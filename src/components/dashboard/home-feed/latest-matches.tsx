@@ -133,10 +133,12 @@ export function LatestMatches({
                     score longer than three sets widens its own row rather
                     than being cut. */}
                 <span className="flex h-7 min-w-[132px] shrink-0 items-center gap-2">
-                  {/* A level score gets the level mark, never a loss: its
-                      `score.winner` is only the transform's default. */}
+                  {/* A score that names no winner gets the no-result mark,
+                      never a loss: its `score.winner` is only the transform's
+                      default. */}
                   <ResultMark
-                    won={match.level ? null : match.score.winner === "player1"}
+                    won={match.score.winner === "player1"}
+                    noResult={match.level === true}
                   />
                   <ScoreLine
                     sets={match.score.sets}
