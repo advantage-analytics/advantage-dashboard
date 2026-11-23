@@ -14,7 +14,8 @@ import { UploadFailureListener } from "@/components/dashboard/toast/upload-failu
 import { timeOfDayGreeting } from "@/lib/ui/greeting";
 import { readMissingLegalDocuments } from "@/lib/legal/acceptance-server";
 import { createClient } from "@/lib/supabase/server";
-import { loginRedirectPath } from "@/lib/auth/request-path";
+import { loginRedirectPath, requestedPath } from "@/lib/auth/request-path";
+import { termsUpdateHref } from "@/lib/legal/terms-return";
 
 /**
  * Dashboard layout.
@@ -62,7 +63,9 @@ export default async function Layout({
     workspace.viewer.id,
     workspace.viewer.role,
   );
-  if (missingLegal.length > 0) redirect("/terms-update");
+  // Carrying the requested page, so a link to a match lands on the match once
+  // they agree rather than on Home (`termsUpdateHref`).
+  if (missingLegal.length > 0) redirect(termsUpdateHref(await requestedPath()));
 
   // The header greets by name on the personal Home (Platform Audit Pa2). The
   // word is chosen here, on the server, for the reason the page's own greeting
