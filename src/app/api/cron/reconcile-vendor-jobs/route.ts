@@ -15,7 +15,10 @@
  * It is called by Postgres instead — `pg_cron` → `pg_net`, every ten minutes,
  * set up by the `schedule_vendor_job_reconcile` migration — with the same
  * `Authorization: Bearer $CRON_SECRET` the Vercel crons send, read there from
- * Vault. Excluded from the proxy matcher with the rest of `api/cron`.
+ * Vault. The job calls only when some job is waiting on the vendor or its
+ * results (`gate_cron_http_on_pending_work` migration), so an idle tick costs
+ * no function invocation. Excluded from the proxy matcher with the rest of
+ * `api/cron`.
  *
  * The service-role client is built only after the bearer has matched, as on
  * the other cron routes, so an unauthorized request never constructs it.
