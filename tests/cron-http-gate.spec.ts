@@ -13,7 +13,9 @@ const file = readdirSync(dir).find((name) =>
 );
 
 function jobBody(sql: string, name: string): string {
-  const start = sql.indexOf(`'${name}'`);
+  // Anchor on the schedule call, not the bare name: a comment that quotes
+  // the job name must not shift which command the asserts read.
+  const start = sql.indexOf(`cron.schedule(\n  '${name}'`);
   expect(start).toBeGreaterThan(-1);
   const open = sql.indexOf("$job$", start);
   const close = sql.indexOf("$job$", open + 5);
@@ -40,7 +42,10 @@ test("both HTTP crons are gated on pending work", () => {
   expect(reconcile).toContain("job.status in ('submitting', 'processing')");
   // Same 30 minutes as STALE_AFTER_MS in reconcile.ts.
   expect(reconcile).toContain("interval '30 minutes'");
+  expect(reconcile).toContain("job.external_job_id is not null");
+  expect(reconcile).toContain("job.status = 'completed'");
   expect(reconcile).toContain("job.results_object_key is null");
+  expect(reconcile).toContain("job.derivation_version is null");
 
   expect(sql).toContain("'*/5 * * * *'");
   expect(sql).toContain("'*/10 * * * *'");
@@ -52,25 +57,18 @@ test("both HTTP crons are gated on pending work", () => {
 });
 
 test("the gate's thresholds still match the sweeps they guard", () => {
-  const analysis = readFileSync(
-    resolve(process.cwd(), "src/lib/data/match-analysis.ts"),
-    "utf8",
+  const read = (path: string) =>
+    readFileSync(resolve(process.cwd(), path), "utf8");
+
+  expect(read("src/lib/data/match-analysis.ts")).toContain(
+    "UPLOAD_PAUSED_AFTER_MS = 20 * 60 * 1000",
   );
-  expect(analysis).toContain("UPLOAD_PAUSED_AFTER_MS = 20 * 60 * 1000");
-  const reconcile = readFileSync(
-    resolve(process.cwd(), "src/lib/services/splitstep/reconcile.ts"),
-    "utf8",
-  );
+  const reconcile = read("src/lib/services/splitstep/reconcile.ts");
   expect(reconcile).toContain("STALE_AFTER_MS = 30 * 60 * 1000");
   expect(reconcile).toContain(
     'POLLABLE_STATUSES = ["submitting", "queued", "processing"]',
   );
-  const mail = readFileSync(
-    resolve(
-      process.cwd(),
-      "src/lib/services/notifications/upload-paused-mail.ts",
-    ),
-    "utf8",
-  );
-  expect(mail).toContain("return `upload_paused:${jobId}`;");
+  expect(
+    read("src/lib/services/notifications/upload-paused-mail.ts"),
+  ).toContain("return `upload_paused:${jobId}`;");
 });
