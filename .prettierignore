@@ -97,3 +97,9 @@ analysis/data/
 *.sh
 *.py
 *.toml
+
+# Local design mockups: standalone HTML a developer keeps beside the checkout,
+# never tracked. `format:check` walks untracked files too, so one unclosed
+# tag in a throwaway mockup fails the pre-push hook for code it has nothing
+# to do with.
+mockups/
