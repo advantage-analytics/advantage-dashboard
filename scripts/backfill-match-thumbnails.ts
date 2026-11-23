@@ -197,7 +197,7 @@ async function pending(db: Db): Promise<Source[]> {
     if (error?.code === "42703") {
       throw new Error(
         "matches.video_thumbnail_key does not exist yet: apply " +
-          "supabase/migrations/20261123050000_matches_video_thumbnail_key.sql first",
+          "supabase/migrations/20261123160122_matches_video_thumbnail_key.sql first",
       );
     }
     if (error) throw new Error(`Could not read matches: ${error.message}`);
