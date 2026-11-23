@@ -167,8 +167,9 @@ export const getHomeFeed = cache(
 function summarize(
   matches: DisplayMatch[],
 ): Pick<HomeFeed, "analyzing" | "analyzed" | "lastFive" | "matchCount"> {
+  // A level score is neither a win nor a loss, so it is not in the record.
   const decided = matches
-    .filter((match) => !isPracticeMatch(match.matchType))
+    .filter((match) => !isPracticeMatch(match.matchType) && !match.level)
     .slice(0, 5);
   const wins = decided.filter((m) => m.score.winner === "player1").length;
   return {
