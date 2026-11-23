@@ -23,6 +23,12 @@ import type { ListKind } from "./list-pending";
 import { MatchFrame } from "./match-frame";
 import { MatchStatus } from "./match-status";
 
+/** The verb between the two names, the same in both workspaces. */
+function resultVerb(match: DisplayMatch): string {
+  if (isPracticeMatch(match.matchType)) return "vs";
+  return match.score.winner === "player1" ? "def." : "lost to";
+}
+
 /**
  * The newest matches as a short list — the Matches page stays the table with
  * headers, sorting and filters. Each row reads on its own: a still, who beat
@@ -30,12 +36,6 @@ import { MatchStatus } from "./match-status";
  *
  * A personal list leaves the player's own name off: every row is theirs.
  */
-/** The verb between the two names, the same in both workspaces. */
-function resultVerb(match: DisplayMatch): string {
-  if (isPracticeMatch(match.matchType)) return "vs";
-  return match.score.winner === "player1" ? "def." : "lost to";
-}
-
 export function LatestMatches({
   matches,
   scope,

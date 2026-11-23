@@ -3,8 +3,7 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import type { HomeFeed } from "@/lib/data/home-feed-server";
 
-const count = (n: number, one: string, many: string) =>
-  `${n === 1 ? one : many}`;
+const matchWord = (n: number) => (n === 1 ? "match" : "matches");
 
 /**
  * Both Homes' title row: the greeting, one line on where the matches stand,
@@ -37,24 +36,12 @@ export function HomeTitle({
   action?: ReactNode;
 }) {
   const { analyzing, analyzed, lastFive, matchCount } = feed;
+  const [n, verb] =
+    analyzing > 0 ? [analyzing, "analyzing"] : [analyzed, "analyzed"];
   const status =
-    analyzing > 0
-      ? {
-          n: analyzing,
-          word:
-            (yours ? "of your " : "") +
-            count(analyzing, "match", "matches") +
-            " analyzing",
-        }
-      : analyzed > 0
-        ? {
-            n: analyzed,
-            word:
-              (yours ? "of your " : "") +
-              count(analyzed, "match", "matches") +
-              " analyzed",
-          }
-        : null;
+    n > 0
+      ? { n, word: `${yours ? "of your " : ""}${matchWord(n)} ${verb}` }
+      : null;
   const record =
     lastFive.played > 0 ? `${lastFive.wins}–${lastFive.losses}` : null;
 
@@ -100,7 +87,7 @@ export function HomeTitle({
                   <b className="tabular font-normal text-[var(--ink-900)]">
                     {matchCount}
                   </b>{" "}
-                  {count(matchCount, "match", "matches")}
+                  {matchWord(matchCount)}
                 </span>
               )}
             </>
@@ -170,11 +157,7 @@ export function EmptyBand({
       className={`${BAND} group rounded-b-[var(--radius-element)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none`}
     >
       {text}
-      <ChevronRight
-        aria-hidden
-        strokeWidth={1.5}
-        className="size-[13px] shrink-0 text-[var(--ink-300)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--ink-900)]"
-      />
+      <RowChevron />
     </Link>
   );
 }

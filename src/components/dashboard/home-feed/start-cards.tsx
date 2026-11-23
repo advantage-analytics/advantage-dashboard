@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { RowChevron } from "./home-title";
 
 export type StartArt = "court" | "roster" | "ask";
 
@@ -146,8 +146,6 @@ export const START_ART: Record<StartArt, React.JSX.Element> = {
   ),
 };
 
-const CHEVRON =
-  "size-[13px] shrink-0 text-[var(--ink-300)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--ink-900)]";
 const CARD =
   "surface-card group transition-shadow duration-[var(--duration-hover)] hover:shadow-[var(--shadow-card-emphasis)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
 
@@ -184,7 +182,7 @@ export function StartCards({ cards }: { cards: StartCard[] }) {
               <b className="text-[13px] font-medium text-[var(--ink-900)]">
                 {card.title}
               </b>
-              <ChevronRight aria-hidden strokeWidth={1.5} className={CHEVRON} />
+              <RowChevron />
             </span>
             <span className="line-clamp-2 min-h-8 text-[12px] leading-4 text-[var(--ink-600)]">
               {card.body}

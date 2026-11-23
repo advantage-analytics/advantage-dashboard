@@ -1,10 +1,9 @@
 import Link from "next/link";
 import type { RosterMember } from "@/lib/data/team-roster-server";
 import { topMovers } from "@/lib/data/team-movers";
-import { formatDelta } from "@/lib/data/match-utils";
+import { formatDelta, getInitials } from "@/lib/data/match-utils";
 import { recordLabel } from "@/lib/data/player-profile";
 import { EmptyMark } from "@/components/ui/empty-mark";
-import { getInitials } from "@/lib/data/match-utils";
 import { PersonAvatar } from "@/components/ui/person-avatar";
 import { FormStrip } from "@/components/dashboard/shared/form-strip";
 import { cn } from "@/lib/utils";

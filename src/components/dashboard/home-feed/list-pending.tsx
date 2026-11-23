@@ -19,6 +19,12 @@ const MATCH_ROW = {
   tail: "w-28",
 };
 
+const NUMBER_ROW = {
+  lead: null,
+  lines: ["w-28", "w-24"] as [string, string],
+  tail: "w-36",
+};
+
 const ROW_SHAPE: Record<
   ListKind,
   { lead: string | null; lines: [string, string]; tail: string }
@@ -29,10 +35,10 @@ const ROW_SHAPE: Record<
     lines: ["w-32", "w-28"],
     tail: "w-20",
   },
-  numbers: { lead: null, lines: ["w-28", "w-24"], tail: "w-36" },
+  numbers: NUMBER_ROW,
   yours: MATCH_ROW,
   team: MATCH_ROW,
-  playerNumbers: { lead: null, lines: ["w-28", "w-24"], tail: "w-36" },
+  playerNumbers: NUMBER_ROW,
 };
 
 /**
