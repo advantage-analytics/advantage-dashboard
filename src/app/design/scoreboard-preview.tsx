@@ -5,7 +5,7 @@ import type { Board } from "@/components/dashboard/matches/match-detail/film/fil
 type Players = React.ComponentProps<typeof RailScoreboard>["players"];
 
 /**
- * Emon's 7-6(5) second set: Eli lost it, so Eli's 5 hangs off Emon's 7. `open`
+ * Emon's 7-6(5) second set: Eli lost it, so the 5 hangs off Eli's 6. `open`
  * leaves the last set unfinished (Eli 2, Emon 3) and bolds nothing in it.
  */
 function emonEli(open: boolean): Players {
@@ -14,7 +14,7 @@ function emonEli(open: boolean): Players {
       id: "you",
       name: "Eli Stephenson",
       sets: open ? [6, 6, 2] : [6, 6, 6],
-      tiebreaks: [null, null, null],
+      tiebreaks: [null, 5, null],
       lostSets: [false, true, false],
       wonSets: [true, false, !open],
       won: !open,
@@ -23,7 +23,7 @@ function emonEli(open: boolean): Players {
       id: "opp",
       name: "Emon van Loben Sels",
       sets: open ? [3, 7, 3] : [3, 7, 4],
-      tiebreaks: [null, 5, null],
+      tiebreaks: [null, null, null],
       lostSets: [true, false, !open],
       wonSets: [false, true, false],
       won: false,
