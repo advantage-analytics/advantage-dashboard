@@ -88,6 +88,7 @@ import {
   type UpdateAlignmentResult,
 } from "@/lib/match-video/types";
 import { holdTabAwake } from "@/lib/services/upload/tab-keep-awake";
+import { saveMatchThumbnail } from "@/lib/video/capture-thumbnail";
 import { discardPreparedVideo, prepareVideoForUpload } from "@/lib/video/trim";
 
 import {
@@ -831,6 +832,13 @@ export function useAttachmentFlow(
           // The attempt ended in a publication, so the id that identified it
           // has nothing left to find.
           clientRequestId.current = null;
+          // The list-row still, from the picked file at its own clock: the
+          // first serve is where play starts. After publication, so the
+          // match has a video by the time it has a thumbnail. Best effort —
+          // it cannot throw and nothing waits on it.
+          void saveMatchThumbnail(matchId, picked.file, {
+            startSeconds: alignment.confirmedVideoTimeSeconds,
+          });
           if (
             settle({
               status: "saved",
