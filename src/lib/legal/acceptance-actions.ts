@@ -7,6 +7,7 @@ import {
   insertLegalAcceptances,
   readMissingLegalDocuments,
 } from "./acceptance-server";
+import { termsReturnPath } from "./terms-return";
 import { LEGAL_VERSIONS, isLegalDocument } from "./versions";
 
 export type AcceptLegalTermsResult = {
@@ -26,10 +27,13 @@ export type AcceptLegalTermsResult = {
  * it only lets someone who read an older text be told so instead of being
  * recorded as agreeing to words they never saw. Which documents are written is
  * the server's own answer — whatever this account is still missing — never a
- * list the client sends. Success redirects to the dashboard.
+ * list the client sends. Success redirects to `next`, the dashboard page the
+ * account was headed to — clamped again here, since a server action's
+ * arguments are the caller's to choose (`termsReturnPath`).
  */
 export async function acceptLegalTerms(
   rendered: Record<string, string>,
+  next?: string | null,
 ): Promise<AcceptLegalTermsResult> {
   for (const [document, version] of Object.entries(rendered ?? {})) {
     if (!isLegalDocument(document) || LEGAL_VERSIONS[document] !== version) {
@@ -66,5 +70,5 @@ export async function acceptLegalTerms(
   if (!result.ok) return { ok: false, reason: "failed" };
 
   revalidatePath("/dashboard", "layout");
-  redirect("/dashboard");
+  redirect(termsReturnPath(next));
 }

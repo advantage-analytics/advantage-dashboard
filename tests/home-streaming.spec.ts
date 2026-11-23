@@ -6,30 +6,26 @@ import * as React from "react";
 import * as jsx from "react/jsx-runtime";
 import ts from "typescript";
 
-/**
- * `presenceFails` mirrors `getWorkspacePresence`'s own failure answer: it
- * never rejects, it resolves to "present everywhere".
- */
-function route(
-  matchRows: { id: string; date: string }[],
-  presenceFails = false,
-) {
+const SOURCE = readFileSync(
+  resolve("src/app/dashboard/(home)/page.tsx"),
+  "utf8",
+);
+
+/** The personal Home's entrypoint with every read stubbed and recorded. */
+function route(feed?: unknown) {
   const pending = new Promise<never>(() => {});
   const reads: string[] = [];
   const exports: { default?: () => Promise<React.ReactElement> } = {};
   const placeholder = (name: string) =>
     Object.assign(() => null, { displayName: name });
-  const query: Record<string, unknown> = {};
-  for (const key of ["from", "select", "eq", "single", "maybeSingle"])
-    query[key] = () => query;
-  query.then = (fn: (v: unknown) => unknown) =>
-    Promise.resolve(fn({ data: {} }));
-  const source = readFileSync(
-    resolve("src/app/dashboard/(home)/page.tsx"),
-    "utf8",
-  );
+  const read =
+    (name: string, value: Promise<unknown> = pending) =>
+    () => {
+      reads.push(name);
+      return value;
+    };
   runInNewContext(
-    ts.transpileModule(source, {
+    ts.transpileModule(SOURCE, {
       compilerOptions: {
         module: ts.ModuleKind.CommonJS,
         jsx: ts.JsxEmit.ReactJSX,
@@ -50,68 +46,19 @@ function route(
           return {
             getWorkspaceContext: async () => ({
               active: { kind: "personal" },
-              viewer: { id: "viewer" },
+              viewer: { id: "viewer", name: "Viewer", firstName: "Viewer" },
             }),
           };
-        if (id.includes("presence-server"))
+        if (id.includes("home-feed-server"))
           return {
-            getWorkspacePresence: async () => ({
-              workspaceId: "viewer",
-              matches: presenceFails || matchRows.length > 0,
-            }),
-          };
-        if (id === "@/lib/supabase/server")
-          return { createClient: async () => ({ from: () => query }) };
-        if (id.includes("personal-matches-server"))
-          return {
-            getPersonalMatches: async () => {
-              reads.push("matches");
-              return matchRows;
-            },
-          };
-        if (id.includes("performance-server"))
-          return {
-            getOverallPerformance: () => {
-              reads.push("performance");
-              return pending;
-            },
-          };
-        if (id.includes("personal-kpis-server"))
-          return {
-            getPersonalSeasonKpis: () => {
-              reads.push("kpis");
-              return pending;
-            },
+            getHomeFeed: read("feed", feed ? Promise.resolve(feed) : undefined),
           };
         if (id.includes("usage-server"))
-          return {
-            getPersonalUsage: () => {
-              reads.push("usage");
-              return pending;
-            },
-          };
-        if (id.includes("personal-activity-server"))
-          return {
-            getPersonalActivity: () =>
-              Promise.resolve({ days: [], monthLabels: [], sessionCount: 0 }),
-          };
-        if (id.includes("player-identity-server"))
-          return { getMyPlayerIds: async () => ["viewer"] };
-        if (id.includes("home-recent-data"))
-          return {
-            countViewerWins: () => 0,
-            loadRecentMatches: () => {
-              reads.push("recent");
-              return pending;
-            },
-          };
-        if (id.includes("home-serve-data"))
-          return {
-            loadHomeServes: () => {
-              reads.push("serves");
-              return pending;
-            },
-          };
+          return { getPersonalUsage: read("usage") };
+        if (id.includes("personal-kpis-server"))
+          return { getPersonalSeasonKpis: read("kpis") };
+        if (id.includes("ask-server"))
+          return { getAskPins: read("pins", Promise.resolve([])) };
         if (id.includes("splitstep/config"))
           return { currentBillingMonth: () => "2026-09" };
         return new Proxy({}, { get: (_, name) => placeholder(String(name)) });
@@ -121,79 +68,43 @@ function route(
   return { render: exports.default!, reads };
 }
 
-function contentProps(node: React.ReactElement): Record<string, unknown> {
-  const props = node.props as {
-    hasMatches?: boolean;
-    children?: React.ReactElement | React.ReactElement[];
-  };
-  if (typeof props.hasMatches === "boolean") return props;
-  for (const child of React.Children.toArray(props.children)) {
-    if (React.isValidElement(child)) {
-      const found = contentProps(child);
-      if ("hasMatches" in found) return found;
+function find(
+  node: unknown,
+  name: string,
+): React.ReactElement<Record<string, unknown>> | undefined {
+  if (!React.isValidElement<Record<string, unknown>>(node)) return;
+  const type = node.type as { name?: string; displayName?: string };
+  if (type.name === name || type.displayName === name) return node;
+  for (const value of Object.values(node.props)) {
+    for (const child of Array.isArray(value) ? value : [value]) {
+      const result = find(child, name);
+      if (result) return result;
     }
   }
-  return {};
 }
-
-test("Home returns its frame while independent analytics and serve reads remain pending", async () => {
-  const home = route([{ id: "personal-match", date: "2026-09-01" }]);
+test("Home returns its frame while every read is still pending", async () => {
+  const home = route();
   const result = await Promise.race([
     home.render(),
     new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error("page waited for widget data")), 1000),
     ),
   ]);
-  expect(contentProps(result).hasMatches).toBe(true);
-  // The reads chained on the match list start once it lands, not before the
-  // page returns — let those microtasks run.
-  await new Promise((settle) => setTimeout(settle, 0));
-  expect(home.reads).toEqual(
-    expect.arrayContaining([
-      "performance",
-      "kpis",
-      "usage",
-      "recent",
-      "serves",
-    ]),
-  );
+  expect(find(result, "HomeFeedFrame")).toBeDefined();
+  expect(home.reads).toEqual(["feed", "usage", "kpis", "pins"]);
 });
 
-test("Empty account selects day zero before analytics and skips recent/serve/usage reads", async () => {
-  const home = route([]);
-  const result = await home.render();
-  const children = React.Children.toArray(
-    (result.props as { children?: React.ReactNode }).children,
-  ).filter(React.isValidElement);
-  const named = (name: string) =>
-    children.find(
-      (child) => (child.type as { displayName?: string }).displayName === name,
-    );
-  expect(named("HomeDayZeroPage")?.props).toEqual({ userId: "viewer" });
-  expect(named("PresenceReport")?.props).toMatchObject({ matches: false });
-  expect(home.reads).not.toContain("recent");
-  expect(home.reads).not.toContain("serves");
-  expect(home.reads).not.toContain("usage");
-  expect(home.reads).not.toContain("performance");
-  expect(home.reads).not.toContain("kpis");
-  expect(home.reads).not.toContain("matches");
+test("The action cards hold the lead slot at every stage, with no read behind them", async () => {
+  const start = find(await route().render(), "StartCards");
+  expect(
+    (start?.props.cards as { title: string }[]).map((card) => card.title),
+  ).toEqual(["New match", "Join your team", "Ask about your game"]);
+  // No lead card, no separate day-zero page and no presence read.
+  expect(SOURCE).not.toContain("lead-card");
+  expect(SOURCE).not.toContain("DayZero");
+  expect(SOURCE).not.toContain("getWorkspacePresence");
 });
 
-test("Failed presence read cannot become a first-match offer", async () => {
-  const home = route([], true);
-  const result = await home.render();
-  expect(contentProps(result).hasMatches).toBe(true);
-});
-
-test("Recent matches does not wait for full-history performance", () => {
-  const source = readFileSync(
-    resolve("src/app/dashboard/(home)/page.tsx"),
-    "utf8",
-  );
-  const recentRegion = source.match(
-    /async function Recent[\s\S]*?async function Activity/,
-  )?.[0];
-  expect(recentRegion).toBeTruthy();
-  expect(recentRegion).toContain("wonCount");
-  expect(recentRegion).not.toContain("performance");
+test("The title, pilot card and list share one match read", () => {
+  expect(SOURCE.match(/getHomeFeed\(\)/g)).toHaveLength(1);
 });

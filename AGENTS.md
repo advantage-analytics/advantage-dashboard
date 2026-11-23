@@ -162,6 +162,14 @@ nothing reads the result as verified. Never drop a rally: assume it was a point.
 existing refusal fires on a real job, replace it the same way. Job c349e3d4 was refused
 over its first point, which the score stream had not read yet.
 
+**Match thumbnails.** A list row shows a match's video as a stored still, never by
+opening the video. `matches.video_thumbnail_key` holds an object key
+(`thumbnails/{matchId}/{uuid}.jpg`, Azure video container); the browser captures the
+frame during upload (`src/lib/video/capture-thumbnail.ts`) and loaders sign URLs in one
+pass with `signMatchThumbnails()` (`src/lib/data/match-thumbnails-server.ts`), only for
+rows the caller's own client returned. The column is writable by the match's creator, so
+a key is signed or deleted only after `isThumbnailKeyFor()` passes.
+
 ### LLM and email
 
 `getLLMStream()` (`src/lib/llm/adapter.ts`) streams for `/api/home-insight` and
@@ -252,6 +260,17 @@ this branch's queue, then stop.`
 
 ## Conventions
 
+- **A layout change is the user's call, never a side effect.** Moving, adding or removing
+  a block on a page (reordering a step, a new row or callout, a renamed section) needs
+  the user to have asked for that layout, not just for the copy, fix or analytics around
+  it. A brief that implies one (e.g. "add guidance before the file picker") is not
+  enough on its own: show a before/after screenshot of the real component (a `/design`
+  harness counts) and get a yes before you commit it. Unattended runs (scheduled tasks,
+  routines, auto-fix PRs) never change layout. They put a suggested change in the PR or
+  report as before/after screenshots and leave it unmerged. PR #759 moved the upload
+  wizard's requirements above the drop zone and added a PlaySight/CIZR note this way;
+  it was reverted. Don't name third-party camera apps (PlaySight, CIZR) in the wizard or
+  its refusals; `tests/video-requirements-panel.spec.ts` pins both.
 - **Every branch and PR targets `splitstep-integration`**, never `main`. `main` is
   production and only ever takes `splitstep-integration` whole; the `base-guard` check
   fails any other PR into it. If a tool reports `main` as the default branch, the clone's

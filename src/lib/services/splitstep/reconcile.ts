@@ -299,24 +299,31 @@ let queueListCache: {
  * past which the vendor's DELETE refuses to cancel it. Falls back to `now`
  * when the list carries no parseable timestamp. One update per started job,
  * since each carries its own time; a page rarely holds more than a couple.
+ *
+ * Pages pass the `matchIds` they show; the reconcile cron omits it to cover
+ * every queued job, so a job moves without anyone opening a page. Either way
+ * the vendor is only asked when at least one queued row exists.
  */
 export async function refreshQueuedJobs(params: {
   supabase: SupabaseClient;
-  matchIds: string[];
+  /** Scope to these matches; omit for every queued job (the cron). */
+  matchIds?: string[];
   now?: Date;
 }): Promise<number> {
   const { supabase, matchIds, now = new Date() } = params;
-  if (matchIds.length === 0) return 0;
+  if (matchIds !== undefined && matchIds.length === 0) return 0;
 
   const config = resolveSplitstepVendorApiConfig();
   if (!config.ok) return 0;
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("processing_jobs")
     .select("id, external_job_id")
     .eq("status", "queued")
-    .not("external_job_id", "is", null)
-    .in("match_id", matchIds);
+    .not("external_job_id", "is", null);
+  if (matchIds !== undefined) query = query.in("match_id", matchIds);
+
+  const { data, error } = await query;
   if (error || !data || data.length === 0) return 0;
 
   const vendorJobs = await listInFlightJobs(config, now);

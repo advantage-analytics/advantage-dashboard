@@ -40,14 +40,11 @@ import {
  */
 export function DashboardShell({
   activitySlot,
-  greeting,
+  sidebarExpanded = false,
   children,
 }: {
-  /**
-   * "Good morning" / "Good afternoon" / "Good evening", chosen by the layout
-   * on the server. The header shows it on the personal Home's leading slot.
-   */
-  greeting: string;
+  /** The sidebar width this browser last showed (`SIDEBAR_COOKIE`). */
+  sidebarExpanded?: boolean;
   /**
    * The activity tray, already wrapped in its Suspense boundary by the layout.
    * Passed as a node rather than as data so the server component inside it can
@@ -181,7 +178,7 @@ export function DashboardShell({
         {/* Inside UnsavedChangesProvider — the confirmation warns about unsaved
           work, so it has to be able to read it. */}
         <LogoutProvider>
-          <SidebarStateProvider>
+          <SidebarStateProvider initialExpanded={sidebarExpanded}>
             {/* Wraps both, because the page sets the status and the header reads it. */}
             <HeaderStatusProvider>
               {/* Same reason, other end of the bar: the page publishes a leading
@@ -204,7 +201,7 @@ export function DashboardShell({
                     document, escapes this scroller, and lets the whole shell
                     scroll up into blank page background. */}
                   <div className="relative flex min-w-0 flex-1 flex-col overflow-y-auto scroll-smooth [scrollbar-gutter:stable] motion-reduce:scroll-auto">
-                    <Header activitySlot={activitySlot} greeting={greeting} />
+                    <Header activitySlot={activitySlot} />
                     {/* Grows to fill whatever the header leaves, so a page shorter
                     than the viewport can still push its own footer to the
                     bottom edge instead of leaving it hanging under the cards.

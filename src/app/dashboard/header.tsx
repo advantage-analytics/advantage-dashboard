@@ -146,14 +146,7 @@ function getStaticBreadcrumbs(
   return label ? [{ label }] : [];
 }
 
-export function Header({
-  activitySlot,
-  greeting,
-}: {
-  activitySlot: React.ReactNode;
-  /** Server-chosen "Good morning" etc. — see `timeOfDayGreeting`. */
-  greeting: string;
-}) {
+export function Header({ activitySlot }: { activitySlot: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const headerStatus = useHeaderStatus();
@@ -386,13 +379,7 @@ export function Header({
         <div className="flex min-w-0 flex-1 items-center">
           {headerSlot}
 
-          {showGreeting && (
-            <HeaderGreeting
-              greeting={greeting}
-              firstName={viewer.firstName}
-              workspaceName={greetingWorkspace}
-            />
-          )}
+          {showGreeting && <HeaderGreeting workspaceName={greetingWorkspace} />}
 
           {/* Workspace first and heaviest; the qualifier — the squad on a team,
               the viewer's name on a personal one — trails it in micro type with

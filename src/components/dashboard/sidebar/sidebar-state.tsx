@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { SIDEBAR_COOKIE } from "./sidebar-cookie";
 
 /**
  * The sidebar's two committed widths, and how it moves between them.
@@ -28,6 +29,7 @@ import {
 // preference resets on deploy.
 const STORAGE_KEY = "sidebar:pinned";
 const AUTO_COLLAPSE_BELOW = 1280;
+const COOKIE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 
 export const RAIL_WIDTH = 64;
 export const PANEL_WIDTH = 232;
@@ -51,22 +53,42 @@ export function useSidebarState(): SidebarState {
 }
 
 export function SidebarStateProvider({
+  initialExpanded = false,
   children,
 }: {
+  /**
+   * What this browser last showed, read from {@link SIDEBAR_COOKIE} by the
+   * dashboard layout. With it the server renders the panel at the width the
+   * reader left it, so a reload does not draw the rail and then slide the
+   * whole page sideways as the panel opens.
+   */
+  initialExpanded?: boolean;
   children: React.ReactNode;
 }) {
-  // Starts collapsed on the server and on first paint, then reads the stored
-  // preference. Rendering the rail first and widening is the cheap direction to
-  // be wrong in — the reverse would push the page sideways after hydration.
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(initialExpanded);
 
+  // The stored preference is still the authority: a browser with no cookie
+  // yet (or a stale one) settles here, once, and the cookie below then agrees
+  // for every load after.
   useEffect(() => {
     try {
-      if (localStorage.getItem(STORAGE_KEY) === "1") setExpanded(true);
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored !== null) setExpanded(stored === "1");
     } catch {
       // Private mode or a full quota — the rail is a fine default.
     }
   }, []);
+
+  // Mirror what is on screen for the next server render. Declared before the
+  // narrow-viewport effect only in source order; it runs on every change, so
+  // an auto-collapse is recorded too.
+  useEffect(() => {
+    try {
+      document.cookie = `${SIDEBAR_COOKIE}=${expanded ? "1" : "0"}; path=/; max-age=${COOKIE_MAX_AGE_SECONDS}; samesite=lax`;
+    } catch {
+      // No cookie: the next load starts from the rail, as it always did.
+    }
+  }, [expanded]);
 
   // Below 1280px, collapse and stay collapsed. Declared after the effect above
   // so a narrow viewport wins on mount, and it deliberately does NOT write the

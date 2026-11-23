@@ -35,6 +35,8 @@
  * | Join request owner notice | `requestInvite()` on a NEW open row, to the program owner · pref `notifyTeamActivity` — WIRED |
  * | Member joined            | every accept path in `join-actions.ts`, to the program owner · pref `notifyTeamActivity` — WIRED |
  * | Invite request declined  | `resolveRequest(id, "dismissed")`, to the requester — WIRED |
+ * | Unlisted program received | `submitUnlistedProgram()`, only when a session is signed in and the typed address is its own account email (same rule as the invite-request receipt) — a signed-out requester sees the screen and gets no mail — WIRED |
+ * | Unlisted program declined | `resolveRequest(id, "dismissed")` on an `unlisted_program` row, to the address on the request — WIRED. "Close without adding" (`resolved`) sends nothing; a team created from the request sends the program claim invite instead |
  * | Expired-invite nudge     | `requestFreshInvite()` — WIRED                  |
  * | Ownership transferred    | `transferProgramOwnership()`, to the new owner — WIRED |
  * | Member left              | `leaveProgram()`, to the owner · pref `notifyTeamActivity` — WIRED |
@@ -161,6 +163,13 @@ export {
   type ClaimObjectionNoticeInput,
   type ProgramClaimInviteInput,
 } from "./templates/claim";
+
+export {
+  unlistedProgramReceivedEmail,
+  unlistedProgramDeclinedEmail,
+  type UnlistedProgramReceivedInput,
+  type UnlistedProgramDeclinedInput,
+} from "./templates/unlisted-program";
 
 export {
   ownershipTransferredEmail,

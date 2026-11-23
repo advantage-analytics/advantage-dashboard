@@ -9,6 +9,7 @@ import {
 } from "react";
 import { cn } from "@/lib/utils";
 import {
+  BLACK_VIDEO_WIDTH,
   RAIL_DEFAULT_PX,
   RAIL_WIDTH_STORAGE_KEY,
   clampRailWidth,
@@ -33,24 +34,15 @@ const RAIL_WIDTH_PERSIST_MS = 150;
  *
  * - The rail's width is `useRailWidth`; the clamp and the storage key are in
  *   label-layout.ts.
- * - The film's width is capped (`BLACK_VIDEO_WIDTH`) so the court keeps
- *   `BLACK_COURT_MIN` of the stage's height. The stage is a size container, so
- *   the cap is plain CSS.
+ * - The film's width is capped (`BLACK_VIDEO_WIDTH`, in label-layout.ts, so
+ *   the route's `loading.tsx` draws the same film) so the court keeps its
+ *   share of the stage's height. The stage is a size container, so the cap is
+ *   plain CSS.
  * - While mounted, everything beside the layer is `inert` (`inertOutside`):
  *   each sibling of the layer and of its ancestors, stopping below `body`'s
  *   children, because that is where Radix portals the menus, the confirm and
  *   the tooltips.
  */
-
-/** What the court always keeps of the stage's height. */
-const BLACK_COURT_MIN = "max(320px, 40cqh)";
-
-/**
- * The film's width: the stage's, or — where that would crowd the court out —
- * 16:9 of the height the court leaves. Never under 16:9 of 120px, for a
- * window too short to honour both.
- */
-export const BLACK_VIDEO_WIDTH = `min(100cqw, max(calc((100cqh - ${BLACK_COURT_MIN}) * 16 / 9), 213px))`;
 
 /**
  * Makes everything beside `layer` unreachable while it is mounted: `inert` on

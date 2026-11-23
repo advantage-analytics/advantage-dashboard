@@ -6,7 +6,7 @@ import type { RailScoreboardProps } from "@/components/dashboard/matches/match-d
 import { createLoader } from "./fixtures/vm-modules";
 
 /**
- * The report rail's scoreboard draws a tiebreak beside the set winner's 7,
+ * The report rail's scoreboard draws a tiebreak beside the set loser's 6,
  * offline. `rail-scoreboard.tsx` loads through `fixtures/vm-modules`.
  */
 const loader = createLoader({ stubs: {} });
@@ -43,21 +43,20 @@ const FINAL: RailScoreboardProps = {
   ],
 };
 
-test.describe("RailScoreboard draws the tiebreak beside the winner's 7", () => {
-  test("the loser's points are raised on the set winner's row only", () => {
+test.describe("RailScoreboard draws the tiebreak beside the loser's 6", () => {
+  test("the loser's points are raised on the set loser's row only", () => {
     const html = renderToStaticMarkup(
       React.createElement(rail.RailScoreboard, FINAL),
     );
-    // Set 3 is 7-6(5) to Chen: the raised 5 follows Chen's 7 ...
+    // Set 3 is 7-6(5) to Chen: the raised 5 follows Díaz's 6 ...
     expect(html).toMatch(
-      />7<span class="inline-block w-0"><span aria-hidden="true"[^>]*>5</,
+      />6<span class="inline-block w-0"><span aria-hidden="true"[^>]*>5</,
     );
-    // ... and nothing hangs off Díaz's 6.
-    expect(html).not.toMatch(/>6<span class="inline-block w-0">/);
+    // ... and nothing hangs off Chen's 7.
+    expect(html).not.toMatch(/>7<span class="inline-block w-0">/);
     expect(
       html.match(/aria-hidden="true" style="font-size:0.6em/g),
     ).toHaveLength(1);
-    // Spoken as the other side's points, not the winner's.
-    expect(html).toContain("(won the tiebreak; opponent scored 5)");
+    expect(html).toContain(" tiebreak 5");
   });
 });

@@ -38,6 +38,12 @@ export interface DbMatch {
 export interface DisplayMatch {
   /** Matches API currently permits only the uploader to edit or delete. */
   canManage?: boolean;
+  /**
+   * A short-lived read URL for the match video's stored still, or null when
+   * the match has none. Set only by a loader that signs them
+   * (`signMatchThumbnails`, the Home feed today); absent everywhere else.
+   */
+  thumbnailUrl?: string | null;
   id: string;
   /** Null when the match was filed with no event — the row renders "No event". */
   tournamentName: string | null;
@@ -58,6 +64,14 @@ export interface DisplayMatch {
    * page sets it once `match_label_states` has answered.
    */
   verificationPending: boolean;
+  /**
+   * The score names no winner: level on sets with no stored winner (a
+   * practice set stopped at 4-4, a match halted at a set all). `score.winner`
+   * still reads "player2" on such a row — the transform's old default — so a
+   * list that must not call it a loss asks this first and draws `ResultMark`'s
+   * no-result mark. Absent on a decided row.
+   */
+  level?: true;
   round?: string;
   matchContext?: string;
   duration?: string;
@@ -132,6 +146,7 @@ export function transformDbMatch(
     player2Tiebreak: row.score?.player2_tiebreaks?.[i] ?? null,
   }));
 
+  const winner = scoreWinner(row.score);
   return {
     id: row.id,
     tournamentName: row.tournament_name,
@@ -149,9 +164,10 @@ export function transformDbMatch(
     score: {
       sets,
       // The shared rule (a stored winner, then sets). A level score has always
-      // read as player2 here.
-      winner: scoreWinner(row.score) ?? "player2",
+      // read as player2 here; `level` says when that is only the default.
+      winner: winner ?? "player2",
     },
+    ...(winner === null ? { level: true as const } : {}),
   };
 }
 

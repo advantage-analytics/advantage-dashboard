@@ -9,7 +9,9 @@
  * cron once a day. It is called by Postgres instead — `pg_cron` → `pg_net`,
  * every five minutes, set up by the `schedule_stalled_upload_sweep` migration
  * — with the same `Authorization: Bearer $CRON_SECRET` the Vercel crons send,
- * read there from Vault. Excluded from the proxy matcher with the rest of
+ * read there from Vault. The job calls only when a paused, unmailed upload
+ * exists (`gate_cron_http_on_pending_work` migration), so an idle tick costs
+ * no function invocation. Excluded from the proxy matcher with the rest of
  * `api/cron`.
  *
  * The service-role client is built only after the bearer has matched, as on

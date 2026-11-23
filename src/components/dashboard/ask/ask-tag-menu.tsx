@@ -1,6 +1,6 @@
 "use client";
 
-import { Brain, CalendarDays, UserRound } from "lucide-react";
+import { Brain, GalleryHorizontalEnd, UserRound } from "lucide-react";
 import {
   ChosenCheck,
   FloatMenu,
@@ -205,7 +205,7 @@ export function askTagKey(tag: Pick<AskTag, "kind" | "id">): string {
 export const ASK_TAG_ICON = {
   player: UserRound,
   opponent: Brain,
-  match: CalendarDays,
+  match: GalleryHorizontalEnd,
 } as const;
 
 const ASK_TAG_KIND_LABEL = {

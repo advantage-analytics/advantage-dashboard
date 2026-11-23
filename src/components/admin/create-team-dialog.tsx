@@ -152,24 +152,50 @@ interface Created {
   warning?: string;
 }
 
+/**
+ * What an unlisted-program request already says, for opening this dialog from
+ * Admin › Requests. The form is filled in from it and stays editable — a
+ * requester's "HZCU" may need its full name — and creating the team closes
+ * the request (`createProgram`'s `fromRequestId`).
+ */
+export interface CreateTeamSeed {
+  requestId: string;
+  schoolName: string;
+  team: Squad | null;
+  /** The requester's address, offered as the owner's. */
+  email: string;
+}
+
 export function CreateTeamDialog({
   open,
   onOpenChange,
+  seed,
+  onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Read once, when the dialog mounts — mount it per request. */
+  seed?: CreateTeamSeed;
+  /** Ran once the program exists, so the caller can refresh what it shows. */
+  onCreated?: () => void;
 }) {
   const router = useRouter();
 
-  const [orgType, setOrgType] = useState<ProgramOrgType | undefined>(undefined);
-  const [name, setName] = useState("");
-  const [team, setTeam] = useState<Squad | undefined>(undefined);
+  // The claim flow's "Tell us the program" form sits under the college
+  // directory search, so a request is a college until the admin says not.
+  const [orgType, setOrgType] = useState<ProgramOrgType | undefined>(
+    seed ? "college" : undefined,
+  );
+  const [name, setName] = useState(seed?.schoolName ?? "");
+  const [team, setTeam] = useState<Squad | undefined>(
+    seed?.team && isSquadAllowed("college", seed.team) ? seed.team : undefined,
+  );
   const [division, setDivision] = useState<string | undefined>(undefined);
   const [conference, setConference] = useState("");
   const [city, setCity] = useState("");
   const [state, setState] = useState<string | undefined>(undefined);
   const [domain, setDomain] = useState("");
-  const [ownerEmail, setOwnerEmail] = useState("");
+  const [ownerEmail, setOwnerEmail] = useState(seed?.email ?? "");
   const [startPilot, setStartPilot] = useState(false);
 
   const [conferences, setConferences] = useState<{
@@ -249,11 +275,13 @@ export function CreateTeamDialog({
         primaryDomain: domain.trim() || null,
         ownerEmail: ownerEmail.trim() || null,
         startPilot,
+        fromRequestId: seed?.requestId ?? null,
       }).catch(actionRejected);
       if (!result.ok) {
         setProblem(result.error);
         return;
       }
+      onCreated?.();
       setCreated({
         programId: result.programId,
         name: name.trim(),
@@ -284,7 +312,9 @@ export function CreateTeamDialog({
               <DialogDescription className="mt-1 text-left text-[12px] leading-[1.55] text-[var(--ink-600)]">
                 {created
                   ? outcomeSentence(created)
-                  : "Adds a program to the directory. A college gets a claim link; anything else is invited."}
+                  : seed
+                    ? `Filled in from ${seed.email}'s request. Check the name, then create it — that closes the request.`
+                    : "Adds a program to the directory. A college gets a claim link; anything else is invited."}
               </DialogDescription>
             </div>
             <button

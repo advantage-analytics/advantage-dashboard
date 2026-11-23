@@ -8,13 +8,15 @@ import {
 import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
 import { PresenceProvider } from "@/components/dashboard/presence-provider";
 import { getWorkspacePresence } from "@/lib/workspace/presence-server";
+import { cookies } from "next/headers";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { SIDEBAR_COOKIE } from "@/components/dashboard/sidebar/sidebar-cookie";
 import { ToastProvider } from "@/components/dashboard/toast/toast-provider";
 import { UploadFailureListener } from "@/components/dashboard/toast/upload-failure-listener";
-import { timeOfDayGreeting } from "@/lib/ui/greeting";
 import { readMissingLegalDocuments } from "@/lib/legal/acceptance-server";
 import { createClient } from "@/lib/supabase/server";
-import { loginRedirectPath } from "@/lib/auth/request-path";
+import { loginRedirectPath, requestedPath } from "@/lib/auth/request-path";
+import { termsUpdateHref } from "@/lib/legal/terms-return";
 
 /**
  * Dashboard layout.
@@ -36,6 +38,9 @@ export default async function Layout({
   children: React.ReactNode;
 }) {
   const workspace = await getWorkspaceContext();
+  // The sidebar's last width in this browser, so the shell renders it as the
+  // reader left it rather than opening it after hydration.
+  const sidebarExpanded = (await cookies()).get(SIDEBAR_COOKIE)?.value === "1";
 
   // Middleware refreshes the session; this covers the case where it has already
   // expired by the time the layout renders. Checked before anything else is
@@ -62,14 +67,9 @@ export default async function Layout({
     workspace.viewer.id,
     workspace.viewer.role,
   );
-  if (missingLegal.length > 0) redirect("/terms-update");
-
-  // The header greets by name on the personal Home (Platform Audit Pa2). The
-  // word is chosen here, on the server, for the reason the page's own greeting
-  // always was: rendered into the HTML, it cannot flash in or mismatch on
-  // hydration. The server's clock is UTC on Vercel — the same compromise the
-  // page made before the greeting moved up.
-  const greeting = timeOfDayGreeting(new Date().getHours());
+  // Carrying the requested page, so a link to a match lands on the match once
+  // they agree rather than on Home (`termsUpdateHref`).
+  if (missingLegal.length > 0) redirect(termsUpdateHref(await requestedPath()));
 
   // Whether the workspace holds anything yet, so a route's loading fallback
   // can draw that page's day zero instead of skeleton rows nobody has. A
@@ -91,7 +91,7 @@ export default async function Layout({
         <ToastProvider>
           <UploadFailureListener />
           <DashboardShell
-            greeting={greeting}
+            sidebarExpanded={sidebarExpanded}
             activitySlot={
               <Suspense fallback={<ActivityTrayFallback />}>
                 <ActivityTrayLoader />

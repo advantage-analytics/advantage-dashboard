@@ -16,6 +16,7 @@ import { resolveJoinStateOnce } from "@/lib/services/programs/join-state-server"
 import { quotaHours } from "@/lib/services/programs/join-quota";
 import { inviteSentence } from "@/lib/services/programs/join-role";
 import { createClient } from "@/lib/supabase/server";
+import { IdentifySignedIn } from "@/components/analytics/identify-signed-in";
 import { OnboardingFlow } from "./onboarding-flow";
 
 export const metadata = { title: "Your name" };
@@ -29,6 +30,10 @@ export const metadata = { title: "Your name" };
  * mirror-image check below is what makes the flow unreachable once it is set,
  * so a bookmarked /onboarding can never re-run the questions. Signed-out
  * visitors go to login like any protected page.
+ *
+ * Every branch renders `IdentifySignedIn`: this page, not `DashboardShell`, is
+ * where a new account's first session lands, so it is the one that has to
+ * tell PostHog who the browser belongs to.
  *
  * All four screens live in one client component — the step split is a branch
  * in the flow, not a route — and the answers persist through
@@ -99,17 +104,20 @@ export default async function OnboardingPage({
         redirect(next);
       }
       return (
-        <OnboardingFlow
-          join={{
-            next,
-            programName: join.programName,
-            // The coach's own spelling of this person, when their address is
-            // already on the roster. An invitation carries no such name.
-            ...splitRosterName(
-              join.kind === "link_ready" ? join.rosterMatchName : null,
-            ),
-          }}
-        />
+        <>
+          <IdentifySignedIn userId={user.id} />
+          <OnboardingFlow
+            join={{
+              next,
+              programName: join.programName,
+              // The coach's own spelling of this person, when their address is
+              // already on the roster. An invitation carries no such name.
+              ...splitRosterName(
+                join.kind === "link_ready" ? join.rosterMatchName : null,
+              ),
+            }}
+          />
+        </>
       );
     }
   }
@@ -136,6 +144,7 @@ export default async function OnboardingPage({
       // would offer an exit to a dashboard this account has not reached yet.
       // 720 is the width the offer pane's two columns of terms were drawn at.
       <div className="flex min-h-dvh items-center bg-[var(--surface-card)] px-6 py-24 sm:px-10">
+        <IdentifySignedIn userId={user.id} />
         <div className="mx-auto w-full" style={{ maxWidth: 720 }}>
           <div className="flex min-w-0 flex-col" style={{ gap: 28 }}>
             <ClaimHeading
@@ -165,5 +174,10 @@ export default async function OnboardingPage({
     );
   }
 
-  return <OnboardingFlow />;
+  return (
+    <>
+      <IdentifySignedIn userId={user.id} />
+      <OnboardingFlow />
+    </>
+  );
 }

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { LegalUpdateForm } from "@/components/legal/legal-update-form";
 import { readMissingLegalDocuments } from "@/lib/legal/acceptance-server";
+import { termsReturnPath } from "@/lib/legal/terms-return";
 import { LEGAL_DOCUMENTS, legalUpdateCopy } from "@/lib/legal/versions";
 import { createClient } from "@/lib/supabase/server";
 
@@ -18,14 +19,23 @@ const VERSIONS_EFFECTIVE = "2026-10-25T00:00:00Z";
  * The one-time terms screen. `dashboard/layout.tsx` sends an onboarded account
  * here while it holds no current-version `legal_acceptances` row for a
  * document it needs (`requiredLegalDocuments`); agreeing records the missing
- * rows and returns to the dashboard.
+ * rows and returns to the dashboard page it asked for (`?next=`).
  *
  * Outside `/dashboard` on purpose, like `/onboarding`: the dashboard layout
  * is what redirects here, so living under it would loop. The mirror check
  * below sends an account with nothing missing straight back, so a bookmarked
  * URL never asks twice.
  */
-export default async function TermsUpdatePage() {
+export default async function TermsUpdatePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const query = await searchParams;
+  // The dashboard page the account was headed to, clamped to `/dashboard…`.
+  const next = termsReturnPath(
+    typeof query.next === "string" ? query.next : null,
+  );
   const supabase = await createClient();
   const {
     data: { user },
@@ -46,7 +56,7 @@ export default async function TermsUpdatePage() {
 
   const role = (row?.role as string | null | undefined) ?? null;
   const missing = await readMissingLegalDocuments(supabase, user.id, role);
-  if (missing.length === 0) redirect("/dashboard");
+  if (missing.length === 0) redirect(next);
 
   const createdAt = (row?.created_at as string | null | undefined) ?? null;
   const returning =
@@ -60,6 +70,7 @@ export default async function TermsUpdatePage() {
       <div className="mx-auto w-full" style={{ maxWidth: 640 }}>
         <LegalUpdateForm
           copy={legalUpdateCopy({ returning, guardian: role === "parent" })}
+          next={next}
           documents={LEGAL_DOCUMENTS.filter((document) =>
             missing.includes(document),
           )}

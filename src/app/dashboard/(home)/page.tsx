@@ -1,335 +1,206 @@
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { redirect } from "next/navigation";
-import HomeContent from "./home-content";
-import { HomeDayZeroPage } from "./home-day-zero-page";
-import { PresenceReport } from "@/components/dashboard/presence-provider";
-import RecentActivity from "./recent-activity";
-import { createClient } from "@/lib/supabase/server";
+import Link from "next/link";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { getWorkspacePresence } from "@/lib/workspace/presence-server";
-import { getPersonalMatches } from "@/lib/data/personal-matches-server";
-import { getMyPlayerIds } from "@/lib/data/player-identity-server";
-import { getOverallPerformance } from "@/lib/data/performance-server";
-import { getPersonalSeasonKpis } from "@/lib/data/personal-kpis-server";
+import { getHomeFeed } from "@/lib/data/home-feed-server";
 import { getPersonalUsage } from "@/lib/data/usage-server";
-import { isUnlimitedCap } from "@/lib/data/usage-format";
-import type { Workspace } from "@/lib/workspace/types";
-import { getPersonalActivity } from "@/lib/data/personal-activity-server";
-import {
-  countViewerWins,
-  loadRecentMatches,
-  type DbRecentMatch,
-} from "@/lib/data/home-recent-data";
-import { loadHomeServes } from "@/lib/data/home-serve-data";
+import { getPersonalSeasonKpis } from "@/lib/data/personal-kpis-server";
 import { getAskPins } from "@/lib/data/ask-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
-import { buildInsightEvidenceWithCaption } from "@/lib/ui/insight-evidence";
-import { SeasonKpiStrip } from "@/components/dashboard/shared/season-kpi-strip";
-import { SeasonTitle } from "@/components/dashboard/home/season-title";
-import { ActivityWidget } from "@/components/dashboard/home/activity-widget";
-import { UsageFooter } from "@/components/dashboard/shared/usage-footer";
-import { FocusCard } from "@/components/dashboard/home/focus-card";
-import { FocusEmpty } from "@/components/dashboard/home/focus-empty";
-import HomeAiInsight from "@/components/dashboard/home/home-ai-insight";
-import ServePlacementHome from "@/components/dashboard/home/serve-placement-home";
-import {
-  HomeTitlePending,
-  HomeKpisPending,
-  HomeActivityBodyPending,
-  HomeRecentBodyPending,
-  HomeServesPending,
-  HomeFooterPending,
-  FocusCardPending,
-} from "@/components/dashboard/loading/home-skeleton";
-import { HomeWidgetFrame } from "@/components/dashboard/home/home-widget-frame";
+import { timeOfDayGreeting } from "@/lib/ui/greeting";
+import { advButton } from "@/lib/ui/adv-button";
 import { AskPinCard } from "@/components/dashboard/home/ask-pin-card";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
+import { HomeTitle } from "@/components/dashboard/home-feed/home-title";
+import {
+  PilotCard,
+  pilotDaysLeft,
+} from "@/components/dashboard/home-feed/pilot-card";
+import {
+  StartCards,
+  type StartCard,
+} from "@/components/dashboard/home-feed/start-cards";
+import { LatestMatches } from "@/components/dashboard/home-feed/latest-matches";
+import { YourNumbers } from "@/components/dashboard/home-feed/your-numbers";
+import {
+  BottomRow,
+  HomeFeedFrame,
+  PilotPending,
+  TitlePending,
+  TopRow,
+} from "@/components/dashboard/home-feed/home-feed-pending";
+import { HomeListPending } from "@/components/dashboard/home-feed/home-shape-memory";
 import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Home" };
 
+/**
+ * The personal Home: Team Home's page for one player.
+ *
+ * Same layout and the same parts — the greeting, the action cards beside the
+ * beta card, then Latest matches — and where a program lists its players, a
+ * player gets their own numbers.
+ */
 export default async function Home() {
   const workspace = await getWorkspaceContext();
   if (!workspace) redirect(await loginRedirectPath("/dashboard"));
-  if (workspace.active.kind === "team") redirect("/dashboard/team");
-  const supabase = await createClient();
-  const userId = workspace.viewer.id;
-  const billingMonth = currentBillingMonth();
-  // Day zero is decided by the presence read — one `limit(1)` row, over the
-  // same `created_by = me AND program_id IS NULL` predicate as the match list
-  // below — rather than by awaiting every personal match before any region
-  // can start. `cache()` makes this the layout's own in-flight read, not a
-  // second one. Its failure answer is "present", which draws the populated
-  // page and lets each widget's own empty state speak, never a false day zero
-  // over somebody's data.
-  const presence = await getWorkspacePresence(workspace);
-  // Keeps the loading fallback's day-zero hint honest across navigation.
-  const report = (
-    <PresenceReport
-      workspaceId={workspace.active.id}
-      matches={presence.matches}
-    />
+  const { active, viewer } = workspace;
+  if (active.kind === "team") redirect("/dashboard/team");
+
+  const feed = getHomeFeed();
+  const usage = getPersonalUsage(active, currentBillingMonth());
+  const season = getPersonalSeasonKpis(viewer.id);
+  const pins = getAskPins(null, viewer.id);
+  for (const pending of [feed, usage, season, pins]) pending.catch(() => {});
+
+  const action = (
+    <Link href="/dashboard/matches/new" className={advButton("primary")}>
+      New match
+    </Link>
   );
-  // Day zero reads nothing further — see `HomeDayZeroPage`, which the route's
-  // loading fallback also draws.
-  if (!presence.matches) {
-    return (
-      <>
-        {report}
-        <HomeDayZeroPage userId={userId} />
-      </>
-    );
-  }
-  // Past this point the viewer has at least one match. The full list is
-  // started, not awaited: only the regions that draw from it wait for it,
-  // each inside its own Suspense boundary. Not bounded, deliberately — the
-  // win/loss record, match count and season figures are totals over every
-  // personal match, and `getOverallPerformance` shares this cached read; a
-  // limit here would quietly change those numbers. The per-widget slices
-  // below are the bounds.
-  const matches = getPersonalMatches(userId);
-  const resources = startHomeResources(
-    supabase,
-    workspace.active,
-    matches,
-    billingMonth,
-  );
+  const greeting = timeOfDayGreeting(new Date().getHours());
+  // Once the pilot is over there is no card, and the cards take the row.
+  const pilot =
+    pilotDaysLeft() < 0
+      ? null
+      : region(
+          "Beta",
+          <PilotPending />,
+          <Banner feed={feed} usage={usage} name={viewer.name} />,
+        );
+
   return (
-    <div className="flex w-full flex-1 flex-col bg-white">
-      {report}
-      <div className="mx-auto flex w-full max-w-screen-2xl flex-1 flex-col px-8 pt-5 pb-8 xl:px-14">
-        <HomeContent
-          key={userId}
-          hasMatches
-          title={region(
-            "Season summary",
-            <HomeTitlePending />,
-            <Title resources={resources} />,
-          )}
-          kpiStrip={region(
-            "Season statistics",
-            <HomeKpisPending />,
-            <Kpis resources={resources} />,
-          )}
-          recent={
-            <HomeWidgetFrame
-              title="Recent matches"
-              href="/dashboard/matches"
-              action="All matches"
-              className="@container/matches"
-            >
-              {region(
-                "Recent matches",
-                <HomeRecentBodyPending />,
-                <Recent resources={resources} />,
-              )}
-            </HomeWidgetFrame>
-          }
-          activity={
-            <HomeWidgetFrame
-              title="Activity"
-              href="/dashboard/matches"
-              action="Session log"
-              className="@container/activity flex flex-col gap-1.5"
-            >
-              {region(
-                "Activity",
-                <HomeActivityBodyPending />,
-                <Activity resources={resources} />,
-              )}
-            </HomeWidgetFrame>
-          }
-          insight={region(
-            "Advantage Intelligence",
-            <FocusCardPending />,
-            <Insight resources={resources} />,
-          )}
-          serves={
-            <HomeWidgetFrame
-              title="Serve placement"
-              href="/dashboard/statistics"
-              action="Placement view"
-              className="flex flex-col gap-3"
-            >
-              {region(
-                "Serve placement",
-                <HomeServesPending />,
-                <Serves resources={resources} />,
-              )}
-            </HomeWidgetFrame>
-          }
-          // The last card in the right column, and only while something is
-          // pinned: no skeleton (a bar would promise a card most Home pages
-          // never get) and no empty state (see `AskPinCard`). A failed read
-          // is still the retry. When the right column is the taller one, the
-          // Usage footer under the grid moves down as the card streams in —
-          // accepted: the footer is a quiet last line read after everything
-          // else, and a placeholder for a card most players never pin would
-          // cost every page a gap to save a few of them one shift.
-          pins={region("Pinned from Ask", null, <Pins resources={resources} />)}
-          footer={region(
-            "Usage",
-            <HomeFooterPending />,
-            <Footer resources={resources} />,
-          )}
-        />
-      </div>
-    </div>
+    <HomeFeedFrame key={viewer.id}>
+      {region(
+        "Season summary",
+        <TitlePending action={action} />,
+        <Title
+          feed={feed}
+          greeting={greeting}
+          firstName={viewer.firstName}
+          action={action}
+        />,
+      )}
+      <TopRow pilot={pilot} lead={<StartCards cards={CARDS} />} />
+      <BottomRow>
+        {region(
+          "Latest matches",
+          <HomeListPending list="matches" />,
+          <Latest feed={feed} />,
+        )}
+        {region(
+          "Your numbers",
+          <HomeListPending list="numbers" />,
+          <Numbers season={season} />,
+        )}
+      </BottomRow>
+      {region("Pinned from Ask", null, <Pins pins={pins} />)}
+    </HomeFeedFrame>
   );
 }
 
-function startHomeResources(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  personal: Workspace,
-  matches: ReturnType<typeof getPersonalMatches>,
-  billingMonth: string,
-) {
-  // A personal workspace is keyed by its owner's id.
-  const userId = personal.id;
-  const performance = getOverallPerformance();
-  const usage = getPersonalUsage(personal, billingMonth);
-  const season = getPersonalSeasonKpis(userId);
-  const activity = matches.then((rows) => getPersonalActivity(userId, rows));
-  const players = getMyPlayerIds();
-  const recent = Promise.all([players, matches]).then(([ids, rows]) =>
-    loadRecentMatches(
-      supabase,
-      userId,
-      ids,
-      rows.slice(0, 50) as DbRecentMatch[],
-    ),
-  );
-  const wonCount = Promise.all([players, matches]).then(([ids, rows]) =>
-    countViewerWins(rows as DbRecentMatch[], ids, userId),
-  );
-  // The whole list: the loader skips practice before cutting its window.
-  const serves = matches.then((rows) => loadHomeServes(supabase, userId, rows));
-  const pins = getAskPins(null, userId);
-  return {
-    matches,
-    userId,
-    performance,
-    usage,
-    season,
-    recent,
-    wonCount,
-    players,
-    activity,
-    serves,
-    pins,
-  };
-}
-type HomeResources = ReturnType<typeof startHomeResources>;
-async function Title({ resources }: { resources: HomeResources }) {
-  const { matches, userId, performance, usage } = resources;
-  const [p, u, rows] = await Promise.all([performance, usage, matches]);
-  if (!u) return null;
+type Feed = ReturnType<typeof getHomeFeed>;
+
+async function Title({
+  feed,
+  greeting,
+  firstName,
+  action,
+}: {
+  feed: Feed;
+  greeting: string;
+  firstName: string | null;
+  action: ReactNode;
+}) {
   return (
-    <SeasonTitle
-      hasMatches
-      matchCount={rows.length}
-      analyzedMatchCount={p?.analyzedMatchCount ?? 0}
-      usage={u}
-      userId={userId}
+    <HomeTitle
+      label="Home"
+      greeting={greeting}
+      firstName={firstName}
+      feed={await feed}
+      emptyLine="Start with your first match."
+      action={action}
     />
   );
 }
-async function Kpis({ resources }: { resources: HomeResources }) {
-  const { season } = resources;
-  const data = await season;
+
+async function Banner({
+  feed,
+  usage,
+  name,
+}: {
+  feed: Feed;
+  usage: ReturnType<typeof getPersonalUsage>;
+  name: string;
+}) {
+  const [{ analyzed }, used] = await Promise.all([feed, usage]);
+  if (!used) return null;
   return (
-    <SeasonKpiStrip
-      kpis={data.kpis}
-      hasStats={data.hasStats}
-      matchesPlayed={data.matchesPlayed}
+    <PilotCard
+      eyebrow={`${name} · Beta`}
+      usedSeconds={used.usedSeconds}
+      capSeconds={used.capSeconds}
+      creditSeconds={used.creditSeconds}
+      analyzed={analyzed}
     />
   );
 }
-async function Recent({ resources }: { resources: HomeResources }) {
-  const { recent, players, wonCount, userId, matches } = resources;
-  const [events, ids, wins, rows] = await Promise.all([
-    recent,
-    players,
-    wonCount,
-    matches,
-  ]);
+
+const CARDS: StartCard[] = [
+  {
+    href: "/dashboard/matches/new",
+    title: "New match",
+    body: "Advantage Intelligence charts every point",
+    art: "court",
+  },
+  {
+    // The sidebar's own "Create team workspace" destination.
+    href: "/claim/team",
+    title: "Join your team",
+    body: "Find your program and ask to join",
+    art: "roster",
+  },
+  {
+    href: "/dashboard/ask",
+    title: "Ask about your game",
+    body: "Your serve, your returns, an opponent",
+    art: "ask",
+  },
+];
+
+async function Latest({ feed }: { feed: Feed }) {
   return (
-    <RecentActivity
-      userId={userId}
-      playerIds={ids}
-      hasMatches
-      showEmptyAction
-      matchCount={rows.length}
-      wonCount={wins}
-      initialEvents={events}
-    />
-  );
-}
-async function Activity({ resources }: { resources: HomeResources }) {
-  const { activity } = resources;
-  return <ActivityWidget activity={await activity} />;
-}
-async function Serves({ resources }: { resources: HomeResources }) {
-  return <ServePlacementHome initialData={await resources.serves} />;
-}
-async function Insight({ resources }: { resources: HomeResources }) {
-  const { performance, userId } = resources;
-  const p = await performance;
-  const evidence = p
-    ? buildInsightEvidenceWithCaption(p.kpiCards, p.matchCount)
-    : null;
-  // Matches exist but none has analysed stats to build evidence from yet: the
-  // honest zero state (empty anatomy, one line on what arrives), never a
-  // fabricated finding and never a silently missing card.
-  if (!p || !evidence)
-    return (
-      <FocusCard
-        showStatisticsLink={false}
-        footer={{ left: "One thing to work on, once a match is analysed." }}
-      >
-        <FocusEmpty />
-      </FocusCard>
-    );
-  return (
-    <FocusCard
-      footer={{
-        left: evidence.caption,
-        right: `${p.analyzedMatchCount} ${p.analyzedMatchCount === 1 ? "match" : "matches"}`,
+    <LatestMatches
+      matches={(await feed).latest}
+      scope="personal"
+      empty={{
+        title: "Add your first match",
+        body: "Upload a video or import a SwingVision file. You’ll need the final score.",
+        href: "/dashboard/matches/new",
       }}
-    >
-      <HomeAiInsight
-        evidence={evidence.parts}
-        cacheSignature={`${userId}:${p.matchCount}:${p.winRate.value}:${p.form.join("")}`}
-      />
-    </FocusCard>
-  );
-}
-async function Pins({ resources }: { resources: HomeResources }) {
-  const pins = await resources.pins;
-  // Absent, not empty — the card's own rule (`AskPinCard`).
-  if (pins.length === 0) return null;
-  return <AskPinCard pins={pins} />;
-}
-async function Footer({ resources }: { resources: HomeResources }) {
-  const u = await resources.usage;
-  // An admin's personal workspace has no cap to meter.
-  if (!u || isUnlimitedCap(u.capSeconds)) return null;
-  return (
-    <UsageFooter
-      usedSeconds={u.usedSeconds}
-      capSeconds={u.capSeconds}
-      billingMonth={u.billingMonth}
-      creditSeconds={u.creditSeconds}
     />
   );
 }
 
-const region = (
-  label: string,
-  fallback: React.ReactNode,
-  content: React.ReactNode,
-) => (
-  <WidgetBoundary label={label}>
-    <Suspense fallback={fallback}>{content}</Suspense>
-  </WidgetBoundary>
-);
+async function Numbers({
+  season,
+}: {
+  season: ReturnType<typeof getPersonalSeasonKpis>;
+}) {
+  return <YourNumbers kpis={(await season).kpis} />;
+}
+
+async function Pins({ pins }: { pins: ReturnType<typeof getAskPins> }) {
+  const list = await pins;
+  // Absent, not empty — the card's own rule (`AskPinCard`).
+  if (list.length === 0) return null;
+  return <AskPinCard pins={list} />;
+}
+
+function region(label: string, fallback: ReactNode, children: ReactNode) {
+  return (
+    <WidgetBoundary label={label}>
+      <Suspense fallback={fallback}>{children}</Suspense>
+    </WidgetBoundary>
+  );
+}

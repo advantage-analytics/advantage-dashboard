@@ -15,7 +15,10 @@
  * It is called by Postgres instead — `pg_cron` → `pg_net`, every ten minutes,
  * set up by the `schedule_vendor_job_reconcile` migration — with the same
  * `Authorization: Bearer $CRON_SECRET` the Vercel crons send, read there from
- * Vault. Excluded from the proxy matcher with the rest of `api/cron`.
+ * Vault. The job calls only when some job is waiting on the vendor or its
+ * results (`gate_cron_http_on_pending_work` migration), so an idle tick costs
+ * no function invocation. Excluded from the proxy matcher with the rest of
+ * `api/cron`.
  *
  * The service-role client is built only after the bearer has matched, as on
  * the other cron routes, so an unauthorized request never constructs it.
@@ -27,6 +30,7 @@ import { authorizeCronRequest } from "@/lib/services/match-video/cleanup-schedul
 import {
   reconcileVendorJobs,
   recoverUndeliveredResults,
+  refreshQueuedJobs,
 } from "@/lib/services/splitstep/reconcile";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -69,6 +73,20 @@ export async function GET(request: Request) {
   const polled = await reconcileVendorJobs({ supabase, cap: POLL_CAP });
   if (polled.polled) {
     console.info("[reconcile-vendor-jobs] polled", { ...polled });
+  }
+
+  // The vendor sends no "started" webhook; pages flip the matches they show,
+  // this flips every queued job so the label moves with nobody looking. Kept
+  // apart so a failure here cannot skip the results sweep below.
+  try {
+    const started = await refreshQueuedJobs({ supabase });
+    if (started) {
+      console.info("[reconcile-vendor-jobs] marked started", { started });
+    }
+  } catch (err) {
+    console.warn("[reconcile-vendor-jobs] queued refresh failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
   }
 
   // A recovered result downloads a file and derives a whole match — seconds

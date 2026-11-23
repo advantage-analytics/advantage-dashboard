@@ -38,10 +38,13 @@ import {
 export function LegalUpdateForm({
   copy,
   documents,
+  next,
 }: {
   copy: LegalUpdateCopy;
   /** The documents this account is missing, in the order the box names them. */
   documents: readonly LegalDocument[];
+  /** The dashboard page to return to once they agree (`termsReturnPath`). */
+  next: string;
 }) {
   const router = useRouter();
   const [agreed, setAgreed] = useState(false);
@@ -59,6 +62,7 @@ export function LegalUpdateForm({
         Object.fromEntries(
           documents.map((document) => [document, LEGAL_VERSIONS[document]]),
         ),
+        next,
       );
       if (!result || result.ok) return;
       if (result.reason === "terms-changed") {
