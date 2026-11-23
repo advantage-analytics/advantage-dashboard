@@ -38,6 +38,12 @@ export interface DbMatch {
 export interface DisplayMatch {
   /** Matches API currently permits only the uploader to edit or delete. */
   canManage?: boolean;
+  /**
+   * A short-lived read URL for the match video's stored still, or null when
+   * the match has none. Set only by a loader that signs them
+   * (`signMatchThumbnails`, the Home feed today); absent everywhere else.
+   */
+  thumbnailUrl?: string | null;
   id: string;
   /** Null when the match was filed with no event — the row renders "No event". */
   tournamentName: string | null;
