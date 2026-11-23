@@ -57,8 +57,9 @@ export interface PurgeMatchStorageOptions {
   }>;
   /**
    * Deletes every list-row thumbnail stored for these matches
-   * (`thumbnails/{matchId}/`), returning how many went. Production lists the
-   * video container by prefix; specs pass their fake.
+   * (`thumbnails/{matchId}/`), returning how many went. Called only with
+   * matches whose row names a thumbnail. Production lists the video
+   * container by prefix; specs pass their fake.
    */
   deleteThumbnails?: (matchIds: string[]) => Promise<number>;
 }
@@ -535,15 +536,36 @@ export async function purgeMatchStorage(
 
     (async () => {
       try {
-        // 5. List-row thumbnails. Keyed by match id alone, so nothing is read
-        //    first and nothing is shared between matches.
+        // 5. List-row thumbnails. Storage is only touched for a match whose
+        //    row names one, like the video lane above: a purge of matches
+        //    with no thumbnail makes no storage call at all.
+        const { data: rows, error: rowsError } = await supabase
+          .from("matches")
+          .select("id, video_thumbnail_key")
+          .in("id", matchIds);
+        if (rowsError) {
+          console.error(
+            `[${label}] could not read thumbnail keys — any thumbnail stays ` +
+              `under thumbnails/{matchId}/:`,
+            rowsError.message,
+          );
+          return;
+        }
+        const withThumbnail = (rows ?? [])
+          .filter((row) => Boolean(row.video_thumbnail_key))
+          .map((row) => row.id as string);
+        if (withThumbnail.length === 0) return;
+
+        // By prefix rather than by the key itself: the column is writable by
+        // the match's creator, and the prefix also collects an image an
+        // earlier replace left behind.
         const deleteThumbnails =
           options.deleteThumbnails ??
           (async (ids: string[]) => {
             const storage = azureThumbnailStorage();
             return storage.available() ? storage.deleteAllFor(ids) : 0;
           });
-        const count = await deleteThumbnails(matchIds);
+        const count = await deleteThumbnails(withThumbnail);
         if (count > 0) {
           console.log(`[${label}] removed ${count} thumbnail(s)`);
         }

@@ -614,33 +614,94 @@ test.describe("removing a match's video", () => {
     expect(source).toContain("clearThumbnailIfVideoGone(matchId");
   });
 
-  test("deleting a match deletes its thumbnails", async () => {
-    const deletedFor: string[][] = [];
-    const empty = {
-      select: () => empty,
-      in: () => empty,
-      then: (resolve: (value: unknown) => unknown) =>
-        resolve({ data: [], error: null }),
-    };
-    const supabase = {
-      from: () => empty,
+  /** A caller whose `matches` read returns `rows`; every other table is empty. */
+  function purgeCaller(rows: { id: string; video_thumbnail_key: unknown }[]) {
+    const reads = (table: string) => ({
+      select: () => ({
+        in: async () => ({
+          data: table === "matches" ? rows : [],
+          error: null,
+        }),
+      }),
+    });
+    return {
+      from: reads,
       storage: { from: () => ({ remove: async () => ({ error: null }) }) },
     } as unknown as SupabaseClient;
+  }
 
+  async function runPurge(
+    rows: { id: string; video_thumbnail_key: unknown }[],
+    deleteThumbnails?: (ids: string[]) => Promise<number>,
+  ) {
+    const supabase = purgeCaller(rows);
     await purgeMatchStorage(supabase, [MATCH, OTHER_MATCH], "spec", {
       claimPurge: async () => ({ data: true, error: null }),
       sharedKeyReader: supabase,
       queueR2Deletes: async () => ({ queued: 0, error: null }),
       attachments: {
-        authorize: async () => ({ ok: true, value: [] }),
+        listAttachments: async () => [],
+        cleanup: {},
+        schedule: async () => {},
       } as never,
-      deleteThumbnails: async (ids) => {
+      deleteThumbnails,
+    });
+  }
+
+  test("deleting a match deletes its thumbnails", async () => {
+    const deletedFor: string[][] = [];
+    await runPurge(
+      [
+        {
+          id: MATCH,
+          video_thumbnail_key: thumbnailObjectKey(MATCH, randomUUID()),
+        },
+        { id: OTHER_MATCH, video_thumbnail_key: null },
+      ],
+      async (ids) => {
         deletedFor.push(ids);
         return ids.length;
       },
-    });
+    );
+    // Only the match that has one: the other costs no storage call.
+    expect(deletedFor).toEqual([[MATCH]]);
+  });
 
-    expect(deletedFor).toEqual([[MATCH, OTHER_MATCH]]);
+  test("a purge of matches with no thumbnail never reaches storage", async () => {
+    // No `deleteThumbnails` stub, and a storage account that does not
+    // exist: the production default would throw if it were reached. This is
+    // what every other spec that calls the purge relies on.
+    const saved = {
+      account: process.env.AZURE_STORAGE_ACCOUNT,
+      key: process.env.AZURE_STORAGE_KEY,
+      container: process.env.AZURE_STORAGE_CONTAINER,
+    };
+    process.env.AZURE_STORAGE_ACCOUNT = "advtestaccount";
+    process.env.AZURE_STORAGE_KEY = Buffer.from("k".repeat(32)).toString(
+      "base64",
+    );
+    process.env.AZURE_STORAGE_CONTAINER = "advantage-videos";
+    const errors: string[] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => errors.push(String(args[0]));
+    try {
+      await runPurge([
+        { id: MATCH, video_thumbnail_key: null },
+        { id: OTHER_MATCH, video_thumbnail_key: null },
+      ]);
+      await runPurge([]);
+    } finally {
+      console.error = originalError;
+      for (const [name, value] of [
+        ["AZURE_STORAGE_ACCOUNT", saved.account],
+        ["AZURE_STORAGE_KEY", saved.key],
+        ["AZURE_STORAGE_CONTAINER", saved.container],
+      ] as const) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+    expect(errors).toEqual([]);
   });
 });
 
