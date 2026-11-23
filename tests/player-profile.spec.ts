@@ -16,6 +16,7 @@ import {
   resolveSchool,
   runningDifferential,
   statRowsByKey,
+  withPlayerStats,
   type DbStatRow,
   type ProfileEntry,
   type ProfileEvent,
@@ -613,6 +614,32 @@ test.describe("last-match chips: errors are never split", () => {
     const stats = statRowsByKey([row]).values().next().value ?? null;
     return chipsFrom(stats);
   }
+
+  test("a player's Home numbers need their stats joined on: results alone carry none", () => {
+    // `profileResultsFrom` hands back results with `stats: null`; a strip
+    // built straight from them has a record and no figure to chart, which is
+    // what left a player's "Your numbers" empty beside three analyzed matches.
+    const results = ["a", "b", "c"].map((id) => result(id, true));
+    const bare = seasonStrip(results).kpis;
+    expect(bare.some((kpi) => (kpi.points?.length ?? 0) >= 2)).toBe(false);
+
+    const rows = results.map((r, i) =>
+      dbRow({ match_id: r.id, is_player1: true, first_serve_pct: 50 + i * 5 }),
+    );
+    const joined = withPlayerStats(results, rows);
+    expect(joined.every((r) => r.stats !== null)).toBe(true);
+    const firstServe = seasonStrip(joined).kpis.find(
+      (kpi) => kpi.key === "first_serve_pct",
+    );
+    expect(firstServe?.points).toHaveLength(3);
+
+    // The seat picks the row: the other side's statistics are never theirs.
+    const other = withPlayerStats(
+      results,
+      rows.map((row) => ({ ...row, is_player1: false })),
+    );
+    expect(other.every((r) => r.stats === null)).toBe(true);
+  });
 
   test("forced 3 + unforced 10 reads as Errors 13", () => {
     const chips = chipsOf(dbRow({ unforced_errors: 10, forced_errors: 3 }));
