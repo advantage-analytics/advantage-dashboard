@@ -33,19 +33,20 @@ export function MatchFrame({
         box,
       )}
     >
+      {/* Always underneath: what the box shows while the image is on its
+          way, and all it shows when there is none or it fails. */}
+      <span
+        aria-hidden
+        className="absolute inset-0 grid place-items-center [&>svg]:h-auto [&>svg]:w-[58%]"
+      >
+        {START_ART.court}
+      </span>
       <MatchThumbnail
         src={src}
         width={width}
         height={height}
         className="pointer-events-none absolute inset-0 size-full"
-        fallback={
-          <span
-            aria-hidden
-            className="absolute inset-0 grid place-items-center [&>svg]:h-auto [&>svg]:w-[58%]"
-          >
-            {START_ART.court}
-          </span>
-        }
+        fallback={null}
       />
     </span>
   );
