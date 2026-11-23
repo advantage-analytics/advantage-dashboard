@@ -33,6 +33,8 @@ function route(
      * the flag-off tests at the bottom pass `false`.
      */
     scheduleEnabled?: boolean;
+    /** What Team Home's one match read (`getHomeFeed`) resolves to. */
+    feed?: unknown;
   } = {},
 ) {
   const reads: string[] = [];
@@ -129,6 +131,27 @@ function route(
               return resources;
             },
           };
+        if (id.includes("home-feed-server"))
+          return {
+            getHomeFeed: () => {
+              reads.push("feed");
+              return options.feed ? Promise.resolve(options.feed) : pending;
+            },
+          };
+        if (id.includes("usage-server"))
+          return {
+            getProgramUsage: () => {
+              reads.push("usage");
+              return pending;
+            },
+          };
+        if (id.includes("ask-server"))
+          return {
+            getAskPins: () => {
+              reads.push("pins");
+              return Promise.resolve([]);
+            },
+          };
         if (id.includes("team-roster-server"))
           return {
             getRosterData: async () => {
@@ -195,35 +218,48 @@ async function renderChild(node: React.ReactElement<Record<string, unknown>>) {
   )(node.props);
 }
 
-test("Team Home streams the schedule's confirmed empty cards while analytics, roster and usage remain pending", async () => {
+const emptyFeed = {
+  latest: [],
+  highlights: [],
+  analyzing: 0,
+  analyzed: 0,
+  lastFive: { wins: 0, losses: 0, played: 0 },
+  matchCount: 0,
+};
+const cardTitles = (lead: unknown) =>
+  (find(lead, "StartCards")?.props.cards as { title: string }[]).map(
+    (card) => card.title,
+  );
+
+test("Team Home returns its frame while every read is still pending", async () => {
   const home = route("");
-  const frame = await home.render();
-  expect(find(frame, "TeamHomeFrame")).toBeDefined();
-  const dual = await renderChild(find(frame, "Dual")!);
-  expect(find(dual, "DualSheetEmpty")?.props.canSchedule).toBe(true);
-  const court = await renderChild(find(frame, "Court")!);
-  expect(find(court, "CourtRecord")?.props.record).toEqual({
-    columns: [],
-    dualsPlayed: 0,
-  });
-  expect(home.reads).toEqual(["presence", "resources"]);
+  const frame = await Promise.race([
+    home.render(),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("page waited for its data")), 1000),
+    ),
+  ]);
+  expect(find(frame, "HomeFeedFrame")).toBeDefined();
+  // One read each, started together; nothing asks whether the program is
+  // new first — a new program draws this same page.
+  expect(home.reads).toEqual(["feed", "usage", "roster", "pins"]);
 });
 
-test("Team Home day zero draws the static day-zero page instead of streamed regions", async () => {
-  const home = route("", { dayZero: true });
-  const page = await home.render();
-  const dayZero = find(page, "TeamHomeDayZeroPage");
-  expect(dayZero).toBeDefined();
-  expect(dayZero?.props).toMatchObject({ canManage: true });
-  expect(find(page, "TeamHomeFrame")).toBeUndefined();
-  expect(find(page, "Dual")).toBeUndefined();
-  expect(find(page, "PresenceReport")?.props).toMatchObject({
-    matches: false,
-    roster: false,
-    duals: false,
-  });
-  // Resources start beside presence so a populated visit pays no extra trip.
-  expect(home.reads).toEqual(["presence", "resources"]);
+test("Team Home's lead slot holds the start cards until a match is analyzed, then its highlight", async () => {
+  const fresh = route("", { feed: emptyFeed });
+  const cards = await renderChild(find(await fresh.render(), "Lead")!);
+  expect(cardTitles(cards)).toEqual([
+    "New match",
+    "Invite players",
+    "Ask about the team",
+  ]);
+  expect(find(cards, "JustAnalyzed")).toBeUndefined();
+
+  const highlights = [{ match: { id: "m1" }, summary: null }];
+  const analyzed = route("", { feed: { ...emptyFeed, highlights } });
+  const lead = await renderChild(find(await analyzed.render(), "Lead")!);
+  expect(find(lead, "JustAnalyzed")?.props.highlights).toEqual(highlights);
+  expect(find(lead, "StartCards")).toBeUndefined();
 });
 
 test("Team Home presence honors the roster membership fallback", () => {
@@ -314,9 +350,11 @@ test("Player view skips the staff join-request read and does not offer adding a 
   );
   expect(find(content, "RosterDayZeroPage")?.props.canManage).toBe(false);
   expect(roster.reads).toEqual(["roster"]);
-  const home = route("", { role: "player" });
-  const dual = await renderChild(find(await home.render(), "Dual")!);
-  expect(find(dual, "DualSheetEmpty")?.props.canSchedule).toBe(false);
+  // A player can neither upload for the program nor manage its roster, so
+  // Team Home offers them only the card they can act on.
+  const home = route("", { role: "player", feed: emptyFeed });
+  const lead = await renderChild(find(await home.render(), "Lead")!);
+  expect(cardTitles(lead)).toEqual(["Ask about the team"]);
 });
 
 // ── While the Schedule is a coming-soon page (`lib/schedule/availability.ts`)
@@ -333,27 +371,12 @@ test("Schedule off: the page is the coming-soon stub and reads nothing", async (
   }
 });
 
-test("Schedule off: Team Home draws no dual, court record or dual history", async () => {
-  const home = route("", { scheduleEnabled: false });
-  const frame = find(await home.render(), "TeamHomeFrame");
-  expect(frame).toBeDefined();
-  expect(frame?.props).toMatchObject({
-    dual: null,
-    court: null,
-    history: null,
-  });
-  expect(find(frame, "Dual")).toBeUndefined();
-  expect(find(frame, "Court")).toBeUndefined();
-  expect(find(frame, "History")).toBeUndefined();
-});
-
-test("Schedule off: a program with only events is still day zero", async () => {
-  const home = route("", {
-    dayZero: true,
-    hasEvents: true,
-    scheduleEnabled: false,
-  });
-  const page = await home.render();
-  expect(find(page, "TeamHomeDayZeroPage")).toBeDefined();
-  expect(find(page, "PresenceReport")?.props).toMatchObject({ duals: false });
+test("Team Home reads nothing from the schedule", () => {
+  // The dual sheet, court record and dual history left the page with the
+  // redesign, so the Schedule being closed has nothing here to gate.
+  const source = readFileSync(
+    resolve("src/app/dashboard/team/(home)/page.tsx"),
+    "utf8",
+  );
+  expect(source).not.toMatch(/schedule/i);
 });

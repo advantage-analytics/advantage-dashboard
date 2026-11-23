@@ -24,7 +24,13 @@ const KpiDetailChart = dynamic(() => import("./kpi-detail-chart"), {
 const EASE_CURVE = [0.25, 0.46, 0.45, 0.94] as const;
 const EASE_OUT: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
-function Sparkline({ data, positive }: { data: number[]; positive: boolean }) {
+export function Sparkline({
+  data,
+  positive,
+}: {
+  data: number[];
+  positive: boolean;
+}) {
   const id = useId();
   const shouldReduceMotion = useReducedMotion();
   const width = 80;

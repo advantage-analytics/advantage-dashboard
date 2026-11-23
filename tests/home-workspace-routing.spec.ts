@@ -71,7 +71,7 @@ for (const role of ["owner", "coach", "staff", "player"]) {
 test("personal workspace proceeds to its own home data", async () => {
   const route = homeRoute("(home)", "personal");
   await expect(route.render()).rejects.toThrow("home-data-started");
-  expect(route.dataReads).toEqual(["@/lib/supabase/server:createClient"]);
+  expect(route.dataReads).toEqual(["@/lib/data/home-feed-server:getHomeFeed"]);
 });
 
 test("Team Home sends a personal workspace back before team reads", async () => {

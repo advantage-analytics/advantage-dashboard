@@ -40,14 +40,8 @@ import {
  */
 export function DashboardShell({
   activitySlot,
-  greeting,
   children,
 }: {
-  /**
-   * "Good morning" / "Good afternoon" / "Good evening", chosen by the layout
-   * on the server. The header shows it on the personal Home's leading slot.
-   */
-  greeting: string;
   /**
    * The activity tray, already wrapped in its Suspense boundary by the layout.
    * Passed as a node rather than as data so the server component inside it can
@@ -204,7 +198,7 @@ export function DashboardShell({
                     document, escapes this scroller, and lets the whole shell
                     scroll up into blank page background. */}
                   <div className="relative flex min-w-0 flex-1 flex-col overflow-y-auto scroll-smooth [scrollbar-gutter:stable] motion-reduce:scroll-auto">
-                    <Header activitySlot={activitySlot} greeting={greeting} />
+                    <Header activitySlot={activitySlot} />
                     {/* Grows to fill whatever the header leaves, so a page shorter
                     than the viewport can still push its own footer to the
                     bottom edge instead of leaving it hanging under the cards.
