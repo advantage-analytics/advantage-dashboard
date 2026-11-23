@@ -611,6 +611,25 @@ export function chipsFrom(stats: ProfileStatRow | null): ProfileChip[] {
   return chips;
 }
 
+/**
+ * A player's results with each match's statistics joined on, from rows already
+ * read. Pure, so a spec can hand it fixtures.
+ *
+ * `profileResultsFrom` leaves `stats` null on purpose — the profile's header
+ * needs only results — so a strip built straight from it has a record and no
+ * figures at all. The seat decides which of a match's two stat rows is theirs.
+ */
+export function withPlayerStats(
+  results: readonly ProfileResult[],
+  statRows: readonly DbStatRow[],
+): ProfileResult[] {
+  const byKey = statRowsByKey(statRows);
+  return results.map((result) => ({
+    ...result,
+    stats: byKey.get(statKey(result.id, result.isPlayer1)) ?? null,
+  }));
+}
+
 /** What a season strip needs to render, off the results behind it. */
 export interface SeasonStrip {
   kpis: ProfileKpi[];
