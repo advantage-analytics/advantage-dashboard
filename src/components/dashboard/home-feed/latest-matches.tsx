@@ -25,7 +25,8 @@ import { MatchStatus } from "./match-status";
 
 /** The verb between the two names, the same in both workspaces. */
 function resultVerb(match: DisplayMatch): string {
-  if (isPracticeMatch(match.matchType)) return "vs";
+  // A level score decided nothing, so the row says who played, not who won.
+  if (isPracticeMatch(match.matchType) || match.level) return "vs";
   return match.score.winner === "player1" ? "def." : "lost to";
 }
 
@@ -128,7 +129,13 @@ export function LatestMatches({
                     score longer than three sets widens its own row rather
                     than being cut. */}
                 <span className="flex h-7 min-w-[132px] shrink-0 items-center gap-2">
-                  <ResultMark won={match.score.winner === "player1"} />
+                  {/* A score that names no winner gets the no-result mark,
+                      never a loss: its `score.winner` is only the transform's
+                      default. */}
+                  <ResultMark
+                    won={match.score.winner === "player1"}
+                    noResult={match.level === true}
+                  />
                   <ScoreLine
                     sets={match.score.sets}
                     className="tabular text-[13px] whitespace-nowrap text-[var(--ink-900)]"

@@ -1,12 +1,23 @@
-import { CircleCheck, CircleMinus, CircleX } from "lucide-react";
+import { Ban, CircleCheck, CircleMinus, CircleX } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/* Tokens, not the `--viz-*` ramp: green is winning, red is losing, and both
+   have a dark-scope value the literal hexes do not. Level and no-result are
+   ink-500 — a draw is a decided result, but not a coloured one. */
+const OUTCOME = {
+  won: { Icon: CircleCheck, label: "Won", color: "var(--success)" },
+  lost: { Icon: CircleX, label: "Lost", color: "var(--danger)" },
+  level: { Icon: CircleMinus, label: "Level", color: "var(--ink-500)" },
+  none: { Icon: Ban, label: "No result", color: "var(--ink-500)" },
+} as const;
 
 /**
  * Won, lost or level — the product's ONE outcome register.
  *
  * `circle-check` / `circle-x` / `circle-minus` at 14px, stroke 1.5, in the
- * outcome colours, with the word carried as the accessible name. A screen
- * reader hears exactly what the retired badge used to say.
+ * outcome colours (and a grey `ban` for a score that named no winner), with
+ * the word carried as the accessible name. A screen reader hears exactly what
+ * the retired badge used to say.
  *
  * ── Why this is the only register now ──────────────────────────────────────
  * The system used to run two: the WORD (`Badge` "Won"/"Lost") under a labelled
@@ -35,8 +46,20 @@ import { cn } from "@/lib/utils";
  */
 export function ResultMark({
   won,
+  noResult = false,
   className,
 }: {
+  /**
+   * The match was played and scored, and the score names no winner: a set
+   * stopped at 4-4, a match halted at a set all. Draws the grey `ban` mark,
+   * read out as "No result", whatever `won` says — a row's winner field is
+   * only a default on such a score (`DisplayMatch.level`).
+   *
+   * Not the level mark and not `EmptyMark`: level is a decided draw (a dual
+   * tied on lines), and the dash is for a cell with nothing to report yet.
+   * This is a finished score that decided nothing.
+   */
+  noResult?: boolean;
   /**
    * `true` won · `false` lost · `null` **level** — a dual that finished level
    * on lines. Null is a decided draw, never "not yet decided": an undecided
@@ -47,25 +70,15 @@ export function ResultMark({
   won: boolean | null;
   className?: string;
 }): React.JSX.Element {
-  const Icon = won === null ? CircleMinus : won ? CircleCheck : CircleX;
-  const label = won === null ? "Level" : won ? "Won" : "Lost";
+  const { Icon, label, color } =
+    OUTCOME[noResult ? "none" : won === null ? "level" : won ? "won" : "lost"];
 
   return (
     <span className={cn("inline-flex items-center", className)}>
       <Icon
         className="size-3.5 shrink-0"
         strokeWidth={1.5}
-        /* Tokens, not the `--viz-*` ramp: green is winning, red is losing, and
-           both have a dark-scope value the literal hexes do not. Level is
-           ink-500 — a draw is a decided result, but not a coloured one. */
-        style={{
-          color:
-            won === null
-              ? "var(--ink-500)"
-              : won
-                ? "var(--success)"
-                : "var(--danger)",
-        }}
+        style={{ color }}
         aria-hidden="true"
       />
       <span className="sr-only">{label}</span>

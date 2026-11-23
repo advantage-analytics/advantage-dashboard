@@ -41,3 +41,38 @@ test.describe("matchContext caption", () => {
     }
   });
 });
+
+test.describe("a level score is flagged, not passed off as a loss", () => {
+  const scored = (score: DbMatch["score"]) =>
+    transformDbMatch({ ...row(null), score }, "u1");
+
+  test("a decided score carries no flag", () => {
+    const match = scored({ player1: [6, 6], player2: [3, 4] });
+    expect(match?.level).toBeUndefined();
+    expect(match?.score.winner).toBe("player1");
+  });
+
+  test("level on sets with no stored winner is flagged", () => {
+    // One set all, and a single set stopped at 4-4: neither names a winner.
+    for (const score of [
+      { player1: [6, 3], player2: [4, 6] },
+      { player1: [4], player2: [4] },
+    ]) {
+      const match = scored(score);
+      expect(match?.level).toBe(true);
+      // The old default still stands for readers that have not asked.
+      expect(match?.score.winner).toBe("player2");
+    }
+  });
+
+  test("a stored winner decides a score that is level on sets", () => {
+    // A retirement at a set all: the games do not decide it, the record does.
+    const match = scored({
+      player1: [6, 3],
+      player2: [4, 6],
+      winner: "player1",
+    });
+    expect(match?.level).toBeUndefined();
+    expect(match?.score.winner).toBe("player1");
+  });
+});
