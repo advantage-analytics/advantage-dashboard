@@ -19,6 +19,7 @@ import {
   tallySide,
   withLobAvailability,
   withoutShotKindRows,
+  withoutUnmeasuredPassRow,
   withPointRows,
   type H2HRow,
   type H2HValue,
@@ -447,9 +448,16 @@ export function HeadToHeadCard() {
   const groups = useMemo(
     () =>
       // Lob points and Drop shot points are left off the match report
-      // (`withoutShotKindRows`).
-      withoutShotKindRows(
-        withLobAvailability(groupsFor(isDerived, errorSplitJudged), !!lobKeys),
+      // (`withoutShotKindRows`), and so is Passed when there is no ball
+      // flight data to tell a pass from a lob (`withoutUnmeasuredPassRow`).
+      withoutUnmeasuredPassRow(
+        withoutShotKindRows(
+          withLobAvailability(
+            groupsFor(isDerived, errorSplitJudged),
+            !!lobKeys,
+          ),
+        ),
+        !!lobKeys,
       ),
     [isDerived, errorSplitJudged, lobKeys],
   );

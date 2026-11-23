@@ -581,6 +581,26 @@ export function withoutShotKindRows(
   }));
 }
 
+/**
+ * The match report's groups without the Passed row when the match has no
+ * ball-paths file: both figures would be a dash (`withLobAvailability`), so
+ * the row says nothing about this match and is left off rather than shown
+ * empty. The season table keeps it — its pools line up with the row shape
+ * by position across matches, and one match with lobs gives it a figure.
+ */
+export function withoutUnmeasuredPassRow(
+  groups: { title: string; configs: H2HRowConfig[] }[],
+  hasLobs: boolean,
+): { title: string; configs: H2HRowConfig[] }[] {
+  if (hasLobs) return groups;
+  return groups.map((group) => ({
+    title: group.title,
+    configs: group.configs.filter(
+      (config) => config.fromPoints !== "passingShotsWon",
+    ),
+  }));
+}
+
 export function groupsFor(isDerived: boolean, errorSplitJudged: boolean) {
   if (isDerived)
     return errorSplitJudged

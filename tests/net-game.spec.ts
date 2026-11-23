@@ -12,6 +12,7 @@ import {
   tallySide,
   withPointRows,
 } from "@/components/dashboard/matches/match-detail/head-to-head-card";
+import { withoutUnmeasuredPassRow } from "@/components/dashboard/matches/match-detail/head-to-head-rows";
 import { applyFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import {
   applyMatchFilters,
@@ -757,6 +758,15 @@ test.describe("without ball flight data", () => {
       netBy: "either",
       netEnding: "passed",
     });
+  });
+
+  test("the match report leaves the Passed row off, and keeps it with lobs", () => {
+    const labels = (hasLobs: boolean) =>
+      withoutUnmeasuredPassRow(groups, hasLobs)[0].configs.map((c) => c.label);
+    expect(labels(false)).not.toContain("Passed the net player");
+    expect(labels(false)).toContain("Approach points won");
+    expect(labels(true)).toContain("Passed the net player");
+    expect(labels(false)).toHaveLength(POINT_ROWS.length - 1);
   });
 
   test("the Net game card drops Lobbed and names Passed for what it holds", () => {
