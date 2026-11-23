@@ -17,6 +17,7 @@ import {
 } from "@/lib/data/matches-list-types";
 import { isAnalysisReady, isInFlight } from "@/lib/data/match-analysis";
 import { isPracticeMatch } from "@/lib/matches/match-type";
+import { signMatchThumbnails } from "@/lib/data/match-thumbnails-server";
 
 /**
  * How many of the newest matches both Homes read. The page draws six rows and
@@ -67,6 +68,7 @@ export interface PlayerFeed {
 type FeedRow = DbMatch & {
   player2_id: string | null;
   created_by: string | null;
+  video_thumbnail_key: string | null;
 };
 
 /**
@@ -87,7 +89,7 @@ export const getHomeFeed = cache(
     const supabase = await createClient();
 
     const COLUMNS =
-      "id, created_by, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, verified_at, duration, source_provider, player2_id";
+      "id, created_by, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, verified_at, duration, source_provider, player2_id, video_thumbnail_key";
     const newest = () =>
       supabase
         .from("matches")
@@ -121,6 +123,25 @@ export const getHomeFeed = cache(
     const rows = (data ?? []) as FeedRow[];
     const matches = await display(rows);
 
+    // Each row's still, signed here so the list renders a plain image and
+    // never opens a video. Only for rows this read returned through the
+    // viewer's own client, and only for the handful a list actually draws.
+    const thumbnailKeys = new Map(
+      rows.map((row) => [row.id, row.video_thumbnail_key]),
+    );
+    const withStills = (list: DisplayMatch[]): DisplayMatch[] => {
+      const urls = signMatchThumbnails(
+        list.map((match) => ({
+          id: match.id,
+          video_thumbnail_key: thumbnailKeys.get(match.id) ?? null,
+        })),
+      );
+      return list.map((match) => ({
+        ...match,
+        thumbnailUrl: urls[match.id] ?? null,
+      }));
+    };
+
     // A team row seats the program's player as player one (`withRosterProfiles`),
     // under either of the two ids a match may carry for them.
     const myPlayerId = isTeam ? active.myPlayerId : null;
@@ -139,7 +160,11 @@ export const getHomeFeed = cache(
         .or(`player1_id.in.(${ids}),player2_id.in.(${ids})`);
       if (ownError)
         throw new Error("Could not load your matches", { cause: ownError });
-      own = await display((ownData ?? []) as FeedRow[]);
+      const ownRows = (ownData ?? []) as FeedRow[];
+      for (const row of ownRows) {
+        thumbnailKeys.set(row.id, row.video_thumbnail_key);
+      }
+      own = await display(ownRows);
     }
     const mine = myPlayerId ? own.filter(isMine) : [];
     const others = myPlayerId
@@ -148,14 +173,16 @@ export const getHomeFeed = cache(
 
     return {
       ...summarize(matches),
-      latest: matches.slice(0, HOME_LATEST_ROWS),
+      latest: withStills(matches.slice(0, HOME_LATEST_ROWS)),
       player: myPlayerId
         ? {
-            own: mine.slice(
-              0,
-              others.length > 0 ? PLAYER_OWN_ROWS : HOME_LATEST_ROWS,
+            own: withStills(
+              mine.slice(
+                0,
+                others.length > 0 ? PLAYER_OWN_ROWS : HOME_LATEST_ROWS,
+              ),
             ),
-            team: others,
+            team: withStills(others),
             summary: summarize(mine),
           }
         : null,
