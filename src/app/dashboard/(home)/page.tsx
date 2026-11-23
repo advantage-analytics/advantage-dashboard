@@ -12,7 +12,10 @@ import { advButton } from "@/lib/ui/adv-button";
 import { AskPinCard } from "@/components/dashboard/home/ask-pin-card";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { HomeTitle } from "@/components/dashboard/home-feed/home-title";
-import { PilotCard } from "@/components/dashboard/home-feed/pilot-card";
+import {
+  PilotCard,
+  pilotDaysLeft,
+} from "@/components/dashboard/home-feed/pilot-card";
 import {
   StartCards,
   type StartCard,
@@ -56,11 +59,15 @@ export default async function Home() {
     </Link>
   );
   const greeting = timeOfDayGreeting(new Date().getHours());
-  const pilot = region(
-    "Beta",
-    <PilotPending />,
-    <Banner feed={feed} usage={usage} name={viewer.name} />,
-  );
+  // Once the pilot is over there is no card, and the cards take the row.
+  const pilot =
+    pilotDaysLeft() < 0
+      ? null
+      : region(
+          "Beta",
+          <PilotPending />,
+          <Banner feed={feed} usage={usage} name={viewer.name} />,
+        );
 
   return (
     <HomeFeedFrame key={viewer.id}>

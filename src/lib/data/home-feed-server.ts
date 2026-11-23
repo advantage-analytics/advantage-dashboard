@@ -86,33 +86,40 @@ export const getHomeFeed = cache(
     const isTeam = active.kind === "team";
     const supabase = await createClient();
 
-    const query = supabase
-      .from("matches")
-      .select(
-        "id, created_by, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, verified_at, duration, source_provider, player2_id",
-      )
-      .order("date", { ascending: false })
-      .limit(FEED_WINDOW);
+    const COLUMNS =
+      "id, created_by, player1_id, player1_name, player2_name, tournament_name, round, date, score, result, match_type, court_type, verified, verified_at, duration, source_provider, player2_id";
+    const newest = () =>
+      supabase
+        .from("matches")
+        .select(COLUMNS)
+        .order("date", { ascending: false })
+        .limit(FEED_WINDOW);
+
+    // Stored rows to the rows the lists draw: the Matches page's pipeline.
+    const display = async (rows: FeedRow[]): Promise<DisplayMatch[]> => {
+      const scored = rows.filter(
+        (row) => transformDbMatch(row, viewer.id) !== null,
+      );
+      const enriched = enrichMatches(supabase, scored, viewer);
+      return withVerificationPending(
+        isTeam
+          ? withRosterProfiles(supabase, active.id, enriched, scored)
+          : withViewerSide(scored, viewer.id, enriched),
+        loadVerificationPending(
+          supabase,
+          scored.map((row) => row.id),
+        ),
+      );
+    };
+
     const { data, error } = await (isTeam
-      ? query.eq("program_id", active.id)
-      : query.eq("created_by", viewer.id).is("program_id", null));
+      ? newest().eq("program_id", active.id)
+      : newest().eq("created_by", viewer.id).is("program_id", null));
     if (error)
       throw new Error("Could not load the home feed", { cause: error });
 
     const rows = (data ?? []) as FeedRow[];
-    const scored = rows.filter(
-      (row) => transformDbMatch(row, viewer.id) !== null,
-    );
-    const enriched = enrichMatches(supabase, scored, viewer);
-    const matches = await withVerificationPending(
-      isTeam
-        ? withRosterProfiles(supabase, active.id, enriched, scored)
-        : withViewerSide(scored, viewer.id, enriched),
-      loadVerificationPending(
-        supabase,
-        scored.map((row) => row.id),
-      ),
-    );
+    const matches = await display(rows);
 
     // A team row seats the program's player as player one (`withRosterProfiles`),
     // under either of the two ids a match may carry for them.
@@ -120,7 +127,21 @@ export const getHomeFeed = cache(
     const isMine = (match: DisplayMatch) =>
       match.player1.id === viewer.id ||
       (myPlayerId != null && match.player1.id === myPlayerId);
-    const mine = myPlayerId ? matches.filter(isMine) : [];
+    // The viewer's own matches are in the program's window unless the window
+    // is full — then theirs may all be older than it, and filtering it would
+    // tell a player with a season behind them that they have no matches. Read
+    // theirs on their own in that case: either seat, either of their ids.
+    let own = matches;
+    if (myPlayerId && rows.length === FEED_WINDOW) {
+      const ids = [...new Set([viewer.id, myPlayerId])].join(",");
+      const { data: ownData, error: ownError } = await newest()
+        .eq("program_id", active.id)
+        .or(`player1_id.in.(${ids}),player2_id.in.(${ids})`);
+      if (ownError)
+        throw new Error("Could not load your matches", { cause: ownError });
+      own = await display((ownData ?? []) as FeedRow[]);
+    }
+    const mine = myPlayerId ? own.filter(isMine) : [];
     const others = myPlayerId
       ? matches.filter((match) => !isMine(match)).slice(0, PLAYER_TEAM_ROWS)
       : [];

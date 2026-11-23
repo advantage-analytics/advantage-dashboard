@@ -32,9 +32,15 @@ function stillFor(matchId: string): Promise<Still | null> {
   if (known && Date.now() - known.at < SOURCE_TTL_MS) return known.still;
   const still = fetch(`/api/matches/${matchId}/video/still`)
     .then((response) => (response.ok ? response.json() : null))
-    .then((result: MatchStillResult | null) => result?.still ?? null)
+    .then((result: MatchStillResult | null) => {
+      const found = result?.still ?? null;
+      // Only a video is remembered. "None" may stop being true at any moment
+      // (a video attached, an analysis finished), so the next mount asks.
+      if (!found) sources.delete(matchId);
+      return found;
+    })
     .catch(() => {
-      // A failed ask is not an answer: the next row to mount asks again.
+      // A failed ask is not an answer either.
       sources.delete(matchId);
       return null;
     });

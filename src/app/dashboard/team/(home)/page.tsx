@@ -16,7 +16,10 @@ import { NewMatchAction } from "@/components/dashboard/team/team-season-title";
 import { AskPinCard } from "@/components/dashboard/home/ask-pin-card";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { HomeTitle } from "@/components/dashboard/home-feed/home-title";
-import { PilotCard } from "@/components/dashboard/home-feed/pilot-card";
+import {
+  PilotCard,
+  pilotDaysLeft,
+} from "@/components/dashboard/home-feed/pilot-card";
 import {
   StartCards,
   type StartCard,
@@ -136,11 +139,15 @@ export default async function TeamHomePage() {
         },
       ];
   const greeting = timeOfDayGreeting(new Date().getHours());
-  const pilot = region(
-    "Pilot",
-    <PilotPending />,
-    <Banner feed={feed} usage={usage} active={active} />,
-  );
+  // Once the pilot is over there is no card, and the cards take the row.
+  const pilot =
+    pilotDaysLeft() < 0
+      ? null
+      : region(
+          "Pilot",
+          <PilotPending />,
+          <Banner feed={feed} usage={usage} active={active} />,
+        );
 
   return (
     <HomeFeedFrame key={`${viewer.id}:${active.id}`}>

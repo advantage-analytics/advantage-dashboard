@@ -135,7 +135,9 @@ export function YourNumbers({
               <Link
                 key={row.key}
                 href={`${askHref}?q=${encodeURIComponent(
-                  `Why did my ${row.label.toLowerCase()} go ${rounded < 0 ? "down" : "up"}?`,
+                  rounded === 0
+                    ? `What is behind my ${row.label.toLowerCase()}?`
+                    : `Why did my ${row.label.toLowerCase()} go ${rounded < 0 ? "down" : "up"}?`,
                 )}`}
                 aria-label={`Ask about ${row.label}`}
                 className={`${LIST_ROW} ${LIST_ROW_HOVER}`}

@@ -33,12 +33,30 @@ export function HomeFeedFrame({ children }: { children: ReactNode }) {
 /**
  * The top of the page: the action cards beside the pilot card, level with
  * each other.
+ *
+ * The pilot card can be absent — the pilot is over, or a personal account has
+ * no allowance to show — and then the cards take the whole row rather than
+ * sitting beside an empty rail. `pilot` is null when the page already knows;
+ * a card that resolves to nothing leaves its slot empty, which the `:empty`
+ * rules below collapse (React's streaming markers are comments, which
+ * `:empty` ignores).
  */
-export function TopRow({ lead, pilot }: { lead: ReactNode; pilot: ReactNode }) {
+export function TopRow({
+  lead,
+  pilot,
+}: {
+  lead: ReactNode;
+  pilot: ReactNode | null;
+}) {
+  if (pilot === null) return <div className="min-w-0">{lead}</div>;
   return (
-    <div className={`${COLUMNS} items-stretch`}>
+    <div
+      className={`${COLUMNS} items-stretch xl:has-[>[data-rail]:empty]:grid-cols-1`}
+    >
       <div className="min-w-0">{lead}</div>
-      <div className="min-w-0">{pilot}</div>
+      <div data-rail className="min-w-0 empty:hidden">
+        {pilot}
+      </div>
     </div>
   );
 }
