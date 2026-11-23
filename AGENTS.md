@@ -162,6 +162,14 @@ nothing reads the result as verified. Never drop a rally: assume it was a point.
 existing refusal fires on a real job, replace it the same way. Job c349e3d4 was refused
 over its first point, which the score stream had not read yet.
 
+**Match thumbnails.** A list row shows a match's video as a stored still, never by
+opening the video. `matches.video_thumbnail_key` holds an object key
+(`thumbnails/{matchId}/{uuid}.jpg`, Azure video container); the browser captures the
+frame during upload (`src/lib/video/capture-thumbnail.ts`) and loaders sign URLs in one
+pass with `signMatchThumbnails()` (`src/lib/data/match-thumbnails-server.ts`), only for
+rows the caller's own client returned. The column is writable by the match's creator, so
+a key is signed or deleted only after `isThumbnailKeyFor()` passes.
+
 ### LLM and email
 
 `getLLMStream()` (`src/lib/llm/adapter.ts`) streams for `/api/home-insight` and

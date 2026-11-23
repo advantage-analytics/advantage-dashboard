@@ -10,6 +10,7 @@ import {
 } from "@/lib/services/splitstep/job-liveness";
 import { markJobUploaded } from "@/lib/services/splitstep/mark-job-uploaded";
 import { refusalCodeFor } from "@/lib/services/splitstep/refusal-code";
+import { saveMatchThumbnail } from "@/lib/video/capture-thumbnail";
 import { exceedsUploadLimit, remuxedJobWindow } from "@/lib/video/trim-plan";
 import {
   OversizeVideoError,
@@ -259,6 +260,12 @@ export async function uploadAndSubmitVideo({
     return event.returnValue;
   };
   window.addEventListener("beforeunload", handleBeforeUnload);
+  // The list-row still, from the picked file. Beside the upload, never part
+  // of it: it cannot throw, and nothing below waits on it or reads its answer.
+  void saveMatchThumbnail(matchId, pickedFile, {
+    startSeconds: trim?.startSeconds,
+    endSeconds: trim?.endSeconds,
+  });
   // The other way an hour-long upload dies: the computer sleeps. Held for the
   // cut and the transfer, released wherever the unload guard comes off.
   const awake = holdTabAwake();

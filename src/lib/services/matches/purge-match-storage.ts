@@ -5,6 +5,7 @@ import {
   purgeMatchAttachments,
   type AttachmentPurgeDeps,
 } from "@/lib/services/match-video/purge";
+import { azureThumbnailStorage } from "@/lib/services/match-thumbnail/storage";
 import { RESULTS_BUCKET } from "@/lib/services/splitstep/config";
 import {
   ballPathsObjectKey,
@@ -54,6 +55,12 @@ export interface PurgeMatchStorageOptions {
     queued: number;
     error: string | null;
   }>;
+  /**
+   * Deletes every list-row thumbnail stored for these matches
+   * (`thumbnails/{matchId}/`), returning how many went. Production lists the
+   * video container by prefix; specs pass their fake.
+   */
+  deleteThumbnails?: (matchIds: string[]) => Promise<number>;
 }
 
 /**
@@ -523,6 +530,25 @@ export async function purgeMatchStorage(
         }
       } catch (err) {
         console.error(`[${label}] storage cleanup threw:`, err);
+      }
+    })(),
+
+    (async () => {
+      try {
+        // 5. List-row thumbnails. Keyed by match id alone, so nothing is read
+        //    first and nothing is shared between matches.
+        const deleteThumbnails =
+          options.deleteThumbnails ??
+          (async (ids: string[]) => {
+            const storage = azureThumbnailStorage();
+            return storage.available() ? storage.deleteAllFor(ids) : 0;
+          });
+        const count = await deleteThumbnails(matchIds);
+        if (count > 0) {
+          console.log(`[${label}] removed ${count} thumbnail(s)`);
+        }
+      } catch (err) {
+        console.error(`[${label}] thumbnail cleanup threw:`, err);
       }
     })(),
 

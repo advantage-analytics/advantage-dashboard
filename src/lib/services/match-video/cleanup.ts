@@ -67,6 +67,11 @@ import {
   type MatchVideoResult,
 } from "@/lib/match-video/types";
 
+import {
+  clearThumbnailIfVideoGone,
+  productionClearThumbnailDeps,
+} from "@/lib/services/match-thumbnail/clear";
+
 import { publishedBlobOf, stagedBlobOf } from "./probe";
 import { matchVideoRpcError, type RpcErrorLike } from "./rpc-errors";
 import {
@@ -234,6 +239,13 @@ export interface CleanupDeps {
   storage: CleanupStorage;
   /** Test seam; production mints a random UUID per run. */
   mintWorkerToken?: () => string;
+  /**
+   * Called with the match of a retired attachment whose video was just
+   * collected, so a match left with no video loses its list-row thumbnail
+   * too (`match-thumbnail/clear.ts`). Best effort: it must not throw, and
+   * its outcome never changes a row's settle.
+   */
+  afterFinalCollected?: (matchId: string) => Promise<unknown>;
 }
 
 export interface CleanupRunOptions {
@@ -496,6 +508,14 @@ async function collectRow(
       if (settled.value.outcome !== "cleaned_up") {
         console.log(`${LOG} ${settled.value.outcome}`, context);
       }
+      if (
+        settled.value.outcome === "cleaned_up" &&
+        collectFinal &&
+        claim.match_id &&
+        deps.afterFinalCollected
+      ) {
+        await deps.afterFinalCollected(claim.match_id).catch(() => undefined);
+      }
       return { ...base, outcome: settled.value.outcome };
     }
 
@@ -720,6 +740,8 @@ export function productionCleanupDeps(admin: SupabaseClient): CleanupDeps {
   return {
     database: supabaseCleanupDatabase(admin),
     storage: azureCleanupStorage(),
+    afterFinalCollected: (matchId) =>
+      clearThumbnailIfVideoGone(matchId, productionClearThumbnailDeps(admin)),
   };
 }
 

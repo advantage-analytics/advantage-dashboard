@@ -319,6 +319,13 @@ export function mintPlaybackSas(params: {
    * exactly `ttlSeconds` and that no browser ever sees, such as a copy source.
    */
   stable?: boolean;
+  /**
+   * The signed `rscc` of a stable URL; defaults to
+   * {@link PLAYBACK_CACHE_CONTROL}. Only for a blob whose name is never
+   * rewritten (a match thumbnail), where a `max-age` cannot replay stale
+   * bytes.
+   */
+  cacheControl?: string;
 }): { playbackUrl: string; expiresAt: Date } {
   const config = requireAzureStorageConfig();
   const ttlSeconds = params.ttlSeconds ?? PLAYBACK_SAS_TTL_SECONDS;
@@ -338,7 +345,9 @@ export function mintPlaybackSas(params: {
       permissions: "r",
       startsOn,
       expiresOn,
-      cacheControl: stable ? PLAYBACK_CACHE_CONTROL : undefined,
+      cacheControl: stable
+        ? (params.cacheControl ?? PLAYBACK_CACHE_CONTROL)
+        : undefined,
     }),
     expiresAt: expiresOn,
   };

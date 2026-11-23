@@ -234,6 +234,22 @@ test.beforeAll(async () => {
 
     const matchId = decodeURIComponent(api[1]);
     const rest = api[2] ?? "";
+
+    // The list-row still the flow saves after a publication: a JPEG body,
+    // fired beside the flow and never awaited. Answered and deliberately not
+    // recorded — whether it has been sent yet when a test reads the request
+    // log is a race no assertion here is about (`match-thumbnail.spec.ts`
+    // owns that route).
+    if (rest === "/thumbnail") {
+      request.resume();
+      request.on("end", () => {
+        response.statusCode = 200;
+        response.setHeader("content-type", "application/json");
+        response.end(JSON.stringify({ stored: true }));
+      });
+      return;
+    }
+
     const chunks: Buffer[] = [];
     request.on("data", (chunk: Buffer) => chunks.push(chunk));
     request.on("end", () => {
@@ -1033,6 +1049,8 @@ test("the flow creates no match, draft, job or analysis request", async ({
         path !== "/bundle.js" &&
         path !== "/app.css" &&
         path !== "/__requests" &&
+        // Best effort and unawaited, so it may or may not have gone yet.
+        !path.endsWith("/video/thumbnail") &&
         !path.startsWith("/fixtures/"),
     );
 
