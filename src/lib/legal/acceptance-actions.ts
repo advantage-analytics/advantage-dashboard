@@ -1,13 +1,13 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { termsReturnPath } from "@/lib/legal/terms-return";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
   insertLegalAcceptances,
   readMissingLegalDocuments,
 } from "./acceptance-server";
+import { termsReturnPath } from "./terms-return";
 import { LEGAL_VERSIONS, isLegalDocument } from "./versions";
 
 export type AcceptLegalTermsResult = {
