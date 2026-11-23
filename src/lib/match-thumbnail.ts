@@ -32,6 +32,7 @@ export const THUMBNAIL_LEAD_SECONDS = 90;
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const UUID_ONLY = new RegExp(`^${UUID}$`);
+const THUMBNAIL_FILE_NAME = new RegExp(`^${UUID}\\.jpg$`);
 
 export const THUMBNAIL_KEY_PREFIX = "thumbnails/";
 
@@ -72,7 +73,7 @@ export function isThumbnailKeyFor(
   if (!UUID_ONLY.test(id)) return false;
   const prefix = thumbnailPrefixFor(id);
   if (!key.startsWith(prefix)) return false;
-  return new RegExp(`^${UUID}\\.jpg$`).test(key.slice(prefix.length));
+  return THUMBNAIL_FILE_NAME.test(key.slice(prefix.length));
 }
 
 /**
@@ -95,7 +96,10 @@ export function thumbnailCaptureTime(input: {
       ? input.durationSeconds
       : 0;
   const start = clamp(input.startSeconds ?? 0, 0, duration);
-  const end = clamp(input.endSeconds ?? duration, start, duration);
+  // An end at or before the start is "no end": the wizard stores 0 for an
+  // untrimmed clip, and a collapsed window would return the start itself.
+  const givenEnd = input.endSeconds ?? 0;
+  const end = clamp(givenEnd > start ? givenEnd : duration, start, duration);
   const midpoint = start + (end - start) / 2;
   return Math.min(start + THUMBNAIL_LEAD_SECONDS, midpoint);
 }

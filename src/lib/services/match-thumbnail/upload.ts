@@ -96,6 +96,14 @@ export async function handleUploadThumbnail(
   }
 
   const previous = await deps.readKey(match.id);
+  if (previous.error) {
+    // Not a refusal: the new image can still be stored. Only the one it
+    // replaces goes uncollected until the match itself is deleted.
+    console.error(`${LOG} could not read the current key`, {
+      matchId: match.id,
+      error: previous.error,
+    });
+  }
   const key = thumbnailObjectKey(match.id, (deps.mintImageId ?? randomUUID)());
 
   try {

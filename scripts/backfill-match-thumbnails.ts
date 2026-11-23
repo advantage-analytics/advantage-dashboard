@@ -102,6 +102,11 @@ interface Source {
     "playback (R2)" | "playback" | "vendor copy" | "original" | "attachment";
   store: "r2" | "azure";
   key: string;
+  /**
+   * Added to a point's `video_time` to get its second in THIS file. Only an
+   * attachment has one: its points keep the spreadsheet's clock.
+   */
+  offsetSeconds?: number;
 }
 
 interface JobRow {
@@ -133,24 +138,37 @@ function sourceOfJob(job: JobRow): Omit<Source, "matchId"> | null {
 async function pending(db: Db): Promise<Source[]> {
   const sources = new Map<string, Source>();
 
-  const jobs = await db
-    .from("processing_jobs")
-    .select(
-      "match_id, created_at, video_object_key, trimmed_object_key, playback_object_key, playback_status, playback_store",
-    )
-    .not("match_id", "is", null)
-    .order("created_at", { ascending: false });
-  if (jobs.error) throw new Error(`Could not read jobs: ${jobs.error.message}`);
-  // Newest job first, so the first source seen for a match is its current one.
-  for (const job of (jobs.data ?? []) as JobRow[]) {
-    if (sources.has(job.match_id)) continue;
-    const source = sourceOfJob(job);
-    if (source) sources.set(job.match_id, { matchId: job.match_id, ...source });
+  // Paged: the API returns at most 1000 rows to one select, and a silent
+  // cut-off here would report matches as done that were never read.
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const jobs = await db
+      .from("processing_jobs")
+      .select(
+        "match_id, created_at, video_object_key, trimmed_object_key, playback_object_key, playback_status, playback_store",
+      )
+      .not("match_id", "is", null)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (jobs.error) {
+      throw new Error(`Could not read jobs: ${jobs.error.message}`);
+    }
+    const rows = (jobs.data ?? []) as JobRow[];
+    // Newest job first, so the first source seen for a match is its current one.
+    for (const job of rows) {
+      if (sources.has(job.match_id)) continue;
+      const source = sourceOfJob(job);
+      if (source) {
+        sources.set(job.match_id, { matchId: job.match_id, ...source });
+      }
+    }
+    if (rows.length < PAGE) break;
   }
 
   const attachments = await db
     .from("match_video_attachments")
-    .select("match_id, final_blob_key")
+    .select("match_id, final_blob_key, offset_seconds")
     .eq("state", "active")
     .not("match_id", "is", null)
     .not("final_blob_key", "is", null);
@@ -164,6 +182,7 @@ async function pending(db: Db): Promise<Source[]> {
       kind: "attachment",
       store: "azure",
       key: row.final_blob_key as string,
+      offsetSeconds: Number(row.offset_seconds) || 0,
     });
   }
 
@@ -229,8 +248,9 @@ async function durationOf(url: string): Promise<number> {
 
 async function firstPointSeconds(
   db: Db,
-  matchId: string,
+  source: Source,
 ): Promise<number | null> {
+  const matchId = source.matchId;
   const { data } = await db
     .from("points")
     .select("video_time")
@@ -240,7 +260,8 @@ async function firstPointSeconds(
     .limit(1);
   const raw = data?.[0]?.video_time;
   const value = raw === null || raw === undefined ? NaN : Number(raw);
-  return Number.isFinite(value) && value >= 0 ? value : null;
+  if (!Number.isFinite(value)) return null;
+  return Math.max(0, value + (source.offsetSeconds ?? 0));
 }
 
 async function grabFrame(url: string, atSeconds: number, out: string) {
@@ -313,7 +334,7 @@ async function main() {
         const duration = await durationOf(sourceUrl);
         const at = thumbnailCaptureTime({
           durationSeconds: duration,
-          startSeconds: await firstPointSeconds(db, source.matchId),
+          startSeconds: await firstPointSeconds(db, source).catch(() => null),
         });
         await grabFrame(sourceUrl, at, out);
 

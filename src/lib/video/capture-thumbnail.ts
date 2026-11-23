@@ -27,7 +27,7 @@ const JPEG_QUALITY = 0.72;
 
 function nextEvent(
   target: HTMLVideoElement,
-  event: "loadedmetadata" | "seeked",
+  event: "loadeddata" | "seeked",
   timeoutMs: number,
 ): Promise<boolean> {
   return new Promise((resolve) => {
@@ -72,15 +72,20 @@ export async function captureVideoThumbnail(
     video.playsInline = true;
     video.src = objectUrl;
 
-    if (!(await nextEvent(video, "loadedmetadata", LOAD_TIMEOUT_MS))) {
+    // `loadeddata`, not `loadedmetadata`: Safari paints nothing to a canvas
+    // until frame data has arrived, and the still would be solid black.
+    if (!(await nextEvent(video, "loadeddata", LOAD_TIMEOUT_MS))) {
       return null;
     }
     if (!(video.videoWidth > 0 && video.videoHeight > 0)) return null;
+    // No known length means no way to pick a frame past the warm-up; frame
+    // zero is worse than no thumbnail, which the backfill can still fill.
+    if (!(Number.isFinite(video.duration) && video.duration > 0)) return null;
 
     video.currentTime = thumbnailCaptureTime({
       durationSeconds: video.duration,
       startSeconds: window.startSeconds,
-      endSeconds: window.endSeconds || null,
+      endSeconds: window.endSeconds,
     });
     if (!(await nextEvent(video, "seeked", SEEK_TIMEOUT_MS))) return null;
 

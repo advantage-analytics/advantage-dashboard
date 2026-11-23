@@ -127,6 +127,16 @@ test.describe("thumbnailCaptureTime", () => {
     ).toBe(150);
   });
 
+  test("an end of 0, the wizard's untrimmed value, is no end at all", () => {
+    expect(
+      thumbnailCaptureTime({
+        durationSeconds: 5400,
+        startSeconds: 0,
+        endSeconds: 0,
+      }),
+    ).toBe(90);
+  });
+
   test("stays inside the file on nonsense input", () => {
     expect(thumbnailCaptureTime({ durationSeconds: NaN })).toBe(0);
     expect(
