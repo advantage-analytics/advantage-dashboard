@@ -8,7 +8,9 @@ import {
 import { WorkspaceProvider } from "@/components/dashboard/workspace-provider";
 import { PresenceProvider } from "@/components/dashboard/presence-provider";
 import { getWorkspacePresence } from "@/lib/workspace/presence-server";
+import { cookies } from "next/headers";
 import { DashboardShell } from "@/components/dashboard/dashboard-shell";
+import { SIDEBAR_COOKIE } from "@/components/dashboard/sidebar/sidebar-cookie";
 import { ToastProvider } from "@/components/dashboard/toast/toast-provider";
 import { UploadFailureListener } from "@/components/dashboard/toast/upload-failure-listener";
 import { readMissingLegalDocuments } from "@/lib/legal/acceptance-server";
@@ -35,6 +37,9 @@ export default async function Layout({
   children: React.ReactNode;
 }) {
   const workspace = await getWorkspaceContext();
+  // The sidebar's last width in this browser, so the shell renders it as the
+  // reader left it rather than opening it after hydration.
+  const sidebarExpanded = (await cookies()).get(SIDEBAR_COOKIE)?.value === "1";
 
   // Middleware refreshes the session; this covers the case where it has already
   // expired by the time the layout renders. Checked before anything else is
@@ -83,6 +88,7 @@ export default async function Layout({
         <ToastProvider>
           <UploadFailureListener />
           <DashboardShell
+            sidebarExpanded={sidebarExpanded}
             activitySlot={
               <Suspense fallback={<ActivityTrayFallback />}>
                 <ActivityTrayLoader />

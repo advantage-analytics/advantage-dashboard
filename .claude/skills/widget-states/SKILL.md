@@ -37,6 +37,18 @@ check every caller.
 - [ ] **Skeleton mirrors the loaded layout**: same frame/chrome (real title,
       eyebrow, engine mark render immediately — Carbon: show what you already
       know), bars at the loaded content's positions and proportions.
+- [ ] **A list's skeleton draws the size it last had.** The loaded list
+      records its shape (`useRememberShape`) and the skeleton reads it back
+      (`useRecalledShape`, `loading/shape-memory.ts`), per workspace, with a
+      validated fallback — see empty-and-loading.md → "A list's skeleton
+      remembers its size". A hard-coded row count is a finding.
+- [ ] **Nothing moves when the data lands.** Two causes to check by name:
+      a text placeholder must sit in its text's line box (a bare bar plus a
+      gap is shorter than the line it stands for), and a skeleton behind a
+      streamed region must have its remembered size before the first paint,
+      not at hydration (the inline-script pattern in
+      `home-feed/home-shape-memory.tsx`). Measure rather than eyeball: a
+      `PerformanceObserver` on `layout-shift` names every node that moved.
 - [ ] Tokens, not hex: `bg-[var(--surface-skeleton)]`, `motion-safe:animate-pulse`.
 - [ ] Wrapper has `role="status"` + `aria-label="Loading <widget>"`; the bars
       are `aria-hidden="true"`.

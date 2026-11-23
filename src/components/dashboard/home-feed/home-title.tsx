@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import type { HomeFeed } from "@/lib/data/home-feed-server";
 
 const count = (n: number, one: string, many: string) =>
@@ -19,7 +21,13 @@ export function HomeTitle({
   emptyLine,
   label,
   action,
+  yours = false,
 }: {
+  /**
+   * The figures are the reader's own matches inside a team ("2 of your
+   * matches analyzed"), not the workspace's.
+   */
+  yours?: boolean;
   greeting: string;
   firstName: string | null;
   feed: Pick<HomeFeed, "analyzing" | "analyzed" | "lastFive" | "matchCount">;
@@ -33,12 +41,18 @@ export function HomeTitle({
     analyzing > 0
       ? {
           n: analyzing,
-          word: count(analyzing, "match", "matches") + " analyzing",
+          word:
+            (yours ? "of your " : "") +
+            count(analyzing, "match", "matches") +
+            " analyzing",
         }
       : analyzed > 0
         ? {
             n: analyzed,
-            word: count(analyzed, "match", "matches") + " analyzed",
+            word:
+              (yours ? "of your " : "") +
+              count(analyzed, "match", "matches") +
+              " analyzed",
           }
         : null;
   const record =
@@ -122,41 +136,121 @@ export function SectionHead({
 export const HEAD_LINK =
   "rounded-[var(--radius-cell)] text-[11px] font-medium text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
 
-/** The band under an empty table's ghost rows: what goes here, and how. */
+const BAND =
+  "relative mt-1.5 flex items-center gap-4 px-3 pt-4 pb-3.5 before:absolute before:inset-x-3 before:top-0 before:border-t before:border-[var(--border-hairline)]";
+
+/**
+ * The band under an empty list's ghost rows: what goes here, in two lines.
+ * Given an `href` the whole band is the action — one click target carrying
+ * the trailing chevron every card and row on the page uses.
+ */
 export function EmptyBand({
   title,
   body,
-  children,
+  href,
 }: {
   title: string;
   body: string;
-  children?: ReactNode;
+  href?: string;
 }) {
+  const text = (
+    <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+      <b className="text-[13px] leading-[18px] font-medium text-[var(--ink-900)]">
+        {title}
+      </b>
+      <span className="truncate text-[12px] leading-[18px] text-[var(--ink-600)]">
+        {body}
+      </span>
+    </span>
+  );
+  if (!href) return <div className={BAND}>{text}</div>;
   return (
-    <div className="mt-1.5 flex items-center gap-3.5 border-t border-[var(--border-hairline)] pt-4 pb-3">
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <b className="text-[13px] font-medium text-[var(--ink-900)]">{title}</b>
-        <span className="text-[12px] leading-normal text-[var(--ink-600)]">
-          {body}
-        </span>
-      </div>
-      {children ? (
-        <div className="flex shrink-0 items-center gap-2">{children}</div>
-      ) : null}
-    </div>
+    <Link
+      href={href}
+      className={`${BAND} group rounded-b-[var(--radius-element)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-muted)] focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none`}
+    >
+      {text}
+      <ChevronRight
+        aria-hidden
+        strokeWidth={1.5}
+        className="size-[13px] shrink-0 text-[var(--ink-300)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--ink-900)]"
+      />
+    </Link>
+  );
+}
+
+/** A list card's own chrome, shared by the filled and the empty lists. */
+export const LIST_CARD = "surface-card flex flex-col p-2";
+/** One row of a Home list: 58px, rounded hover, the page's row rhythm. */
+export const LIST_ROW =
+  "group relative flex h-[58px] items-center gap-3.5 rounded-[var(--radius-element)] px-3 transition-colors duration-[var(--duration-hover)]";
+export const LIST_ROW_HOVER =
+  "hover:bg-[var(--surface-muted)] active:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-muted)] focus-visible:outline-none";
+/** A row's two lines, in the list pages' table type: 13/18 over 12/16. */
+export const ROW_TITLE =
+  "min-w-0 truncate text-[13px] leading-[18px] text-[var(--ink-900)]";
+export const ROW_SUB =
+  "min-w-0 truncate text-[12px] leading-4 text-[var(--ink-600)]";
+
+export function RowChevron() {
+  return (
+    <ChevronRight
+      aria-hidden
+      strokeWidth={1.5}
+      className="pointer-events-none size-[13px] shrink-0 text-[var(--ink-300)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--ink-900)]"
+    />
   );
 }
 
 /** One grey bar of a ghost row. */
-export function GhostBar({ width, round }: { width: number; round?: boolean }) {
+export function GhostBar({
+  width,
+  height = 8,
+  round,
+}: {
+  width: number;
+  height?: number;
+  round?: boolean;
+}) {
   return (
     <span
-      className="block bg-[var(--ink-100)]"
+      className="block shrink-0 bg-[var(--ink-100)]"
       style={{
         width,
-        height: round ? width : 8,
-        borderRadius: round ? "50%" : 4,
+        height: round ? width : height,
+        borderRadius: round ? "50%" : height > 8 ? 6 : 4,
       }}
     />
+  );
+}
+
+const GHOST_FADE = [1, 0.6, 0.3];
+
+/**
+ * Three fading placeholder rows, each given the shape of the row it stands
+ * in for by `children` (the leading mark and the trailing bars).
+ */
+export function GhostRows({
+  lead,
+  lines,
+  tail,
+}: {
+  lead?: ReactNode;
+  lines: [number, number];
+  tail: ReactNode;
+}) {
+  return (
+    <>
+      {GHOST_FADE.map((opacity) => (
+        <div key={opacity} aria-hidden className={LIST_ROW} style={{ opacity }}>
+          {lead}
+          <span className="flex min-w-0 flex-1 flex-col gap-2">
+            <GhostBar width={lines[0]} />
+            <GhostBar width={lines[1]} />
+          </span>
+          {tail}
+        </div>
+      ))}
+    </>
   );
 }

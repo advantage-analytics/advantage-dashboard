@@ -82,20 +82,6 @@ function find(
     }
   }
 }
-const renderChild = (node: React.ReactElement<Record<string, unknown>>) =>
-  (
-    node.type as (props: Record<string, unknown>) => Promise<React.ReactElement>
-  )(node.props);
-
-const emptyFeed = {
-  latest: [],
-  highlights: [],
-  analyzing: 0,
-  analyzed: 0,
-  lastFive: { wins: 0, losses: 0, played: 0 },
-  matchCount: 0,
-};
-
 test("Home returns its frame while every read is still pending", async () => {
   const home = route();
   const result = await Promise.race([
@@ -108,29 +94,17 @@ test("Home returns its frame while every read is still pending", async () => {
   expect(home.reads).toEqual(["feed", "usage", "kpis", "pins"]);
 });
 
-test("An account with no match draws the same page: start cards in the lead slot", async () => {
-  const home = route(emptyFeed);
-  const lead = await renderChild(find(await home.render(), "Lead")!);
-  const cards = find(lead, "StartCards")?.props.cards as { title: string }[];
-  expect(cards.map((card) => card.title)).toEqual([
-    "New match",
-    "Join your team",
-    "Ask about your game",
-  ]);
-  expect(find(lead, "JustAnalyzed")).toBeUndefined();
-  // No separate day-zero page and no presence read deciding between two.
+test("The action cards hold the lead slot at every stage, with no read behind them", async () => {
+  const start = find(await route().render(), "StartCards");
+  expect(
+    (start?.props.cards as { title: string }[]).map((card) => card.title),
+  ).toEqual(["New match", "Join your team", "Ask about your game"]);
+  // No lead card, no separate day-zero page and no presence read.
+  expect(SOURCE).not.toContain("lead-card");
   expect(SOURCE).not.toContain("DayZero");
   expect(SOURCE).not.toContain("getWorkspacePresence");
 });
 
-test("The first analyzed match takes the lead slot from the cards", async () => {
-  const highlights = [{ match: { id: "m1" }, summary: "You won." }];
-  const home = route({ ...emptyFeed, highlights });
-  const lead = await renderChild(find(await home.render(), "Lead")!);
-  expect(find(lead, "JustAnalyzed")?.props.highlights).toEqual(highlights);
-  expect(find(lead, "StartCards")).toBeUndefined();
-});
-
-test("The title, banner, highlight and table share one match read", () => {
+test("The title, pilot card and list share one match read", () => {
   expect(SOURCE.match(/getHomeFeed\(\)/g)).toHaveLength(1);
 });

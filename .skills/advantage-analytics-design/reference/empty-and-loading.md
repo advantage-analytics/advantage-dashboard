@@ -36,6 +36,53 @@ is the reference; where it differs, this system wins.
 - A token, never a hex.
 - One `role="status"` per region, never one per bar.
 
+**A list's skeleton remembers its size.** A skeleton shows before the server
+has counted anything, so the only way it can draw the right number of rows is
+from memory. Every list that loads behind a skeleton records what it drew and
+reads it back next time, through `src/components/dashboard/loading/shape-memory.ts`
+(`useRememberShape` in the loaded view, `useRecalledShape` in the skeleton).
+The store is `localStorage`, per device and per workspace; never a cookie, a
+server read or a guess from another list.
+
+- **What to remember:** whatever changes the skeleton's height or structure —
+  a row count, plus any section that appears only sometimes (the Roster's
+  bench divider and Invited rows, the Matches Date track's year, a second
+  page). Never content: no names, scores or figures.
+- **One small file per surface**, beside the list it describes, holding the
+  shape's type, its validator and its default: `matches/matches-shape-memory.ts`,
+  `team/roster-shape-memory.tsx`, `opponents/opponents-shape-memory.ts`,
+  `home-feed/home-shape-memory.tsx` (one count per Home list: matches,
+  players, numbers).
+- **Validate what you read.** Pass an `isShape` guard built on `isCount`, so a
+  value written by an older build or edited by hand falls back to the default.
+- **The default is a mid-sized list**, used on a device that has never
+  rendered the page. A hard load renders the default on the server and swaps
+  to the remembered shape at hydration.
+- **A list that was empty** comes back as its empty state's own ghost rows
+  (three), not as zero rows and not as the default.
+- **Rows take the loaded row's shape:** the same height, the same leading
+  block (a 78×44 still, a 32px avatar) and the same two lines, so the frame
+  holds when the data lands.
+- **Size it before the first paint where the data can beat hydration.** On a
+  hard load a streamed region often resolves before React hydrates, so a
+  skeleton that learns its size at hydration draws the default and then jumps
+  by a row. Where that happens (the Home lists), the server renders every row
+  the list could have and a script inline in the same HTML hides the extras
+  from `localStorage` before paint; once hydrated, the count is read directly
+  (`HomeListPending` in `home-feed/home-shape-memory.tsx`).
+- **Chrome the server draws must know its own state.** A preference that
+  changes the frame (the sidebar's width) cannot live only in `localStorage`:
+  the server would draw the default and the page would slide when the client
+  corrected it. Mirror what is on screen into a cookie the layout reads
+  (`SIDEBAR_COOKIE`, `sidebar/sidebar-cookie.ts`); `localStorage` stays the
+  preference.
+- **Text placeholders keep the text's line box.** A bar standing for a line of
+  type sits in a box of that line's height (`h-[1.2em]` on the type class, or
+  the line-height in px), never a bare bar with a gap — the difference is what
+  moves everything beneath it when the words land.
+- A server-rendered list records through a client component that renders
+  nothing (`RememberRosterShape`, `RememberHomeRows`).
+
 **A skeleton is a promise that something is arriving.** It belongs to a
 request that will resolve — a fetch in flight, a page mounting. It never
 stands in for data that does not exist, because a shape that says "loading"

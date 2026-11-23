@@ -16,34 +16,18 @@ import {
   transformDbMatch,
 } from "@/lib/data/matches-list-types";
 import { isAnalysisReady, isInFlight } from "@/lib/data/match-analysis";
-import {
-  insightSummaryFor,
-  type InsightSummaryFields,
-} from "@/lib/data/insight-voice";
 import { isPracticeMatch } from "@/lib/matches/match-type";
 
 /**
- * How many of the newest matches both Homes read. The page draws three rows
- * and up to three highlights, and counts "analyzing" and the last five results
- * off the same rows — the Matches page stays the place that reads them all.
+ * How many of the newest matches both Homes read. The page draws six rows and
+ * counts "analyzing" and the last five results off the same rows — the Matches page stays the place that reads them all.
  */
 const FEED_WINDOW = 40;
 /** The Latest matches table is a glance, not a list: the Matches page pages. */
-export const HOME_LATEST_ROWS = 3;
-/** The highlight's stepper never walks further back than this. */
-const HIGHLIGHT_LIMIT = 3;
-
-export interface HomeHighlight {
-  match: DisplayMatch;
-  /** The match report's own summary, in the voice this reader gets. */
-  summary: string | null;
-}
-
+export const HOME_LATEST_ROWS = 6;
 export interface HomeFeed {
   /** The newest matches, exactly as the Matches table draws them. */
   latest: DisplayMatch[];
-  /** The newest analyzed matches, newest first. Empty before the first. */
-  highlights: HomeHighlight[];
   /** Matches still on their way to a report (`isInFlight`). */
   analyzing: number;
   /** Matches with a finished report, inside the window. */
@@ -51,6 +35,33 @@ export interface HomeFeed {
   /** Wins and losses over the five newest decided, non-practice matches. */
   lastFive: { wins: number; losses: number; played: number };
   matchCount: number;
+  /**
+   * The same page read for one player: set on a team workspace whose viewer
+   * has a roster row of their own, null otherwise. Team Home draws it for a
+   * member whose role is player; staff who also play still get the program's
+   * page.
+   */
+  player: PlayerFeed | null;
+}
+
+/** How many of a player's own matches their Team Home lists. */
+export const PLAYER_OWN_ROWS = 5;
+/** How many teammates' matches sit under them. */
+export const PLAYER_TEAM_ROWS = 3;
+
+export interface PlayerFeed {
+  /**
+   * The viewer's own matches, newest first: five while there is a team list
+   * beneath them, six (the page's usual list) when there is none.
+   */
+  own: DisplayMatch[];
+  /**
+   * Teammates' newest matches, never the viewer's own. Empty when there are
+   * none the viewer may see — row-level security has already decided that.
+   */
+  team: DisplayMatch[];
+  /** The title's figures, counted over the viewer's matches alone. */
+  summary: Pick<HomeFeed, "analyzing" | "analyzed" | "lastFive" | "matchCount">;
 }
 
 type FeedRow = DbMatch & {
@@ -103,73 +114,50 @@ export const getHomeFeed = cache(
       ),
     );
 
-    const ready = matches.filter(
-      (match) => match.analysis && isAnalysisReady(match.analysis.status),
-    );
-    const decided = matches
-      .filter((match) => !isPracticeMatch(match.matchType))
-      .slice(0, 5);
-    const wins = decided.filter((m) => m.score.winner === "player1").length;
+    // A team row seats the program's player as player one (`withRosterProfiles`),
+    // under either of the two ids a match may carry for them.
+    const myPlayerId = isTeam ? active.myPlayerId : null;
+    const isMine = (match: DisplayMatch) =>
+      match.player1.id === viewer.id ||
+      (myPlayerId != null && match.player1.id === myPlayerId);
+    const mine = myPlayerId ? matches.filter(isMine) : [];
+    const others = myPlayerId
+      ? matches.filter((match) => !isMine(match)).slice(0, PLAYER_TEAM_ROWS)
+      : [];
 
     return {
+      ...summarize(matches),
       latest: matches.slice(0, HOME_LATEST_ROWS),
-      highlights: await withSummaries(
-        supabase,
-        ready.slice(0, HIGHLIGHT_LIMIT),
-        (match) =>
-          !isTeam ||
-          match.player1.id === viewer.id ||
-          (active.myPlayerId != null && match.player1.id === active.myPlayerId),
-      ),
-      analyzing: matches.filter(
-        (match) => match.analysis && isInFlight(match.analysis.status),
-      ).length,
-      analyzed: ready.length,
-      lastFive: { wins, losses: decided.length - wins, played: decided.length },
-      matchCount: matches.length,
+      player: myPlayerId
+        ? {
+            own: mine.slice(
+              0,
+              others.length > 0 ? PLAYER_OWN_ROWS : HOME_LATEST_ROWS,
+            ),
+            team: others,
+            summary: summarize(mine),
+          }
+        : null,
     };
   },
 );
 
-/**
- * Each highlight's summary, read only for the few matches drawn.
- *
- * `insight-voice.ts` is the one place that picks a voice: only the player a
- * report is turned to reads "you"; a coach or teammate gets the observer
- * sentence with the names filled in.
- */
-async function withSummaries(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+/** The title's figures over a list of matches, newest first. */
+function summarize(
   matches: DisplayMatch[],
-  viewerIsYou: (match: DisplayMatch) => boolean,
-): Promise<HomeHighlight[]> {
-  if (matches.length === 0) return [];
-  const { data, error } = await supabase
-    .from("matches")
-    .select("id, insights")
-    .in(
-      "id",
-      matches.map((match) => match.id),
-    );
-  if (error)
-    throw new Error("Could not load match summaries", { cause: error });
-  type Sides = {
-    player1?: InsightSummaryFields | null;
-    player2?: InsightSummaryFields | null;
-  } | null;
-  const byId = new Map(
-    (data ?? []).map((row) => [row.id as string, row.insights as Sides]),
-  );
-  return matches.map((match) => {
-    const sides = byId.get(match.id);
-    const insight = match.turned ? sides?.player2 : sides?.player1;
-    return {
-      match,
-      summary: insightSummaryFor(
-        insight,
-        viewerIsYou(match) ? "player" : "observer",
-        { you: match.player1.name, opp: match.player2.name },
-      ),
-    };
-  });
+): Pick<HomeFeed, "analyzing" | "analyzed" | "lastFive" | "matchCount"> {
+  const decided = matches
+    .filter((match) => !isPracticeMatch(match.matchType))
+    .slice(0, 5);
+  const wins = decided.filter((m) => m.score.winner === "player1").length;
+  return {
+    analyzing: matches.filter(
+      (match) => match.analysis && isInFlight(match.analysis.status),
+    ).length,
+    analyzed: matches.filter(
+      (match) => match.analysis && isAnalysisReady(match.analysis.status),
+    ).length,
+    lastFive: { wins, losses: decided.length - wins, played: decided.length },
+    matchCount: matches.length,
+  };
 }

@@ -12,19 +12,21 @@ import { advButton } from "@/lib/ui/adv-button";
 import { AskPinCard } from "@/components/dashboard/home/ask-pin-card";
 import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { HomeTitle } from "@/components/dashboard/home-feed/home-title";
-import { PilotBanner } from "@/components/dashboard/home-feed/pilot-banner";
-import { StartCards } from "@/components/dashboard/home-feed/start-cards";
-import { JustAnalyzed } from "@/components/dashboard/home-feed/just-analyzed";
+import { PilotCard } from "@/components/dashboard/home-feed/pilot-card";
+import {
+  StartCards,
+  type StartCard,
+} from "@/components/dashboard/home-feed/start-cards";
 import { LatestMatches } from "@/components/dashboard/home-feed/latest-matches";
 import { YourNumbers } from "@/components/dashboard/home-feed/your-numbers";
 import {
-  BannerPending,
+  BottomRow,
   HomeFeedFrame,
-  LatestPending,
-  LeadPending,
-  TablePending,
+  PilotPending,
   TitlePending,
+  TopRow,
 } from "@/components/dashboard/home-feed/home-feed-pending";
+import { HomeListPending } from "@/components/dashboard/home-feed/home-shape-memory";
 import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Home" };
@@ -32,10 +34,9 @@ export const metadata = { title: "Home" };
 /**
  * The personal Home: Team Home's page for one player.
  *
- * Same order and the same parts — the greeting, the beta banner, the slot
- * that holds the getting-started cards until the first report and its
- * highlight after, then Latest matches — and where a program lists its
- * players, a player gets their own numbers.
+ * Same layout and the same parts — the greeting, the action cards beside the
+ * beta card, then Latest matches — and where a program lists its players, a
+ * player gets their own numbers.
  */
 export default async function Home() {
   const workspace = await getWorkspaceContext();
@@ -55,6 +56,11 @@ export default async function Home() {
     </Link>
   );
   const greeting = timeOfDayGreeting(new Date().getHours());
+  const pilot = region(
+    "Beta",
+    <PilotPending />,
+    <Banner feed={feed} usage={usage} name={viewer.name} />,
+  );
 
   return (
     <HomeFeedFrame key={viewer.id}>
@@ -68,22 +74,19 @@ export default async function Home() {
           action={action}
         />,
       )}
-      {region(
-        "Beta",
-        <BannerPending />,
-        <Banner feed={feed} usage={usage} name={viewer.name} />,
-      )}
-      {region("Latest report", <LeadPending />, <Lead feed={feed} />)}
-      {region(
-        "Latest matches",
-        <LatestPending scope="personal" />,
-        <Latest feed={feed} />,
-      )}
-      {region(
-        "Your numbers",
-        <TablePending title="Your numbers" rows={5} />,
-        <Numbers season={season} />,
-      )}
+      <TopRow pilot={pilot} lead={<StartCards cards={CARDS} />} />
+      <BottomRow>
+        {region(
+          "Latest matches",
+          <HomeListPending list="matches" />,
+          <Latest feed={feed} />,
+        )}
+        {region(
+          "Your numbers",
+          <HomeListPending list="numbers" />,
+          <Numbers season={season} />,
+        )}
+      </BottomRow>
       {region("Pinned from Ask", null, <Pins pins={pins} />)}
     </HomeFeedFrame>
   );
@@ -126,8 +129,7 @@ async function Banner({
   const [{ analyzed }, used] = await Promise.all([feed, usage]);
   if (!used) return null;
   return (
-    <PilotBanner
-      recipient="Your account"
+    <PilotCard
       eyebrow={`${name} · Beta`}
       usedSeconds={used.usedSeconds}
       capSeconds={used.capSeconds}
@@ -137,34 +139,27 @@ async function Banner({
   );
 }
 
-async function Lead({ feed }: { feed: Feed }) {
-  const { highlights } = await feed;
-  if (highlights.length > 0) return <JustAnalyzed highlights={highlights} />;
-  return (
-    <StartCards
-      cards={[
-        {
-          href: "/dashboard/matches/new",
-          title: "New match",
-          body: "Advantage Intelligence charts every point",
-          art: "court",
-        },
-        {
-          href: "/dashboard/settings/teams",
-          title: "Join your team",
-          body: "Find your program and ask to join",
-          art: "roster",
-        },
-        {
-          href: "/dashboard/ask",
-          title: "Ask about your game",
-          body: "Your serve, your returns, an opponent",
-          art: "ask",
-        },
-      ]}
-    />
-  );
-}
+const CARDS: StartCard[] = [
+  {
+    href: "/dashboard/matches/new",
+    title: "New match",
+    body: "Advantage Intelligence charts every point",
+    art: "court",
+  },
+  {
+    // The sidebar's own "Create team workspace" destination.
+    href: "/claim/team",
+    title: "Join your team",
+    body: "Find your program and ask to join",
+    art: "roster",
+  },
+  {
+    href: "/dashboard/ask",
+    title: "Ask about your game",
+    body: "Your serve, your returns, an opponent",
+    art: "ask",
+  },
+];
 
 async function Latest({ feed }: { feed: Feed }) {
   return (
@@ -172,8 +167,9 @@ async function Latest({ feed }: { feed: Feed }) {
       matches={(await feed).latest}
       scope="personal"
       empty={{
-        title: "Your first match goes here",
-        body: "Upload a match video or import a SwingVision file. You’ll need the final score.",
+        title: "Add your first match",
+        body: "Upload a video or import a SwingVision file. You’ll need the final score.",
+        href: "/dashboard/matches/new",
       }}
     />
   );

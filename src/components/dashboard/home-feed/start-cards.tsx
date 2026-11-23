@@ -10,7 +10,7 @@ export interface StartCard {
   art: StartArt;
 }
 
-/** The drawings, exported for the highlight's video well. */
+/** The drawings, exported for the match rows' still fallback. */
 export const START_ART: Record<StartArt, React.JSX.Element> = {
   court: (
     <svg
@@ -146,45 +146,49 @@ export const START_ART: Record<StartArt, React.JSX.Element> = {
   ),
 };
 
+const CHEVRON =
+  "size-[13px] shrink-0 text-[var(--ink-300)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--ink-900)]";
+const CARD =
+  "surface-card group transition-shadow duration-[var(--duration-hover)] hover:shadow-[var(--shadow-card-emphasis)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none";
+
 /**
- * The cards a Home shows until its first match is analyzed: the two or three
- * things worth doing first, each a whole-card link. The highlight takes this
- * slot once a report exists.
+ * The two or three things worth doing, each a whole-card link with a drawing
+ * over the words. They hold the lead slot beside the pilot card at every
+ * stage of a workspace's life.
  */
 export function StartCards({ cards }: { cards: StartCard[] }) {
   if (cards.length === 0) return null;
   return (
     <section
-      aria-label="Getting started"
-      className="grid gap-4"
+      aria-label="Quick actions"
+      className="grid h-full gap-5"
       style={{ gridTemplateColumns: `repeat(${cards.length}, minmax(0, 1fr))` }}
     >
       {cards.map((card) => (
         <Link
           key={card.title}
           href={card.href}
-          className="surface-card group flex flex-col px-2 pt-2 pb-0 transition-shadow duration-[var(--duration-hover)] hover:shadow-[var(--shadow-card-emphasis)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+          className={`${CARD} flex flex-col px-2 pt-2 pb-0`}
         >
           <div
             aria-hidden
-            className="grid aspect-[16/4] place-items-center overflow-hidden rounded-[var(--radius-element)] bg-[var(--surface-page)] [&>svg]:h-auto [&>svg]:w-[72%]"
+            className="grid min-h-[120px] flex-1 place-items-center overflow-hidden rounded-[var(--radius-element)] bg-[var(--surface-page)] transition-colors duration-[var(--duration-hover)] group-hover:bg-[var(--surface-subtle)] group-focus-visible:bg-[var(--surface-subtle)] [&>svg]:h-auto [&>svg]:w-[72%]"
           >
             {START_ART[card.art]}
           </div>
-          <div className="flex items-center gap-3 px-3 py-3.5">
-            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          {/* The sentence wraps to two lines at most and always holds room
+              for two, so the three cards stay level; the chevron rides the
+              title line. */}
+          <div className="flex flex-col gap-0.5 px-3 pt-3 pb-3.5">
+            <span className="flex items-center justify-between gap-3">
               <b className="text-[13px] font-medium text-[var(--ink-900)]">
                 {card.title}
               </b>
-              <span className="text-[12px] text-[var(--ink-600)]">
-                {card.body}
-              </span>
+              <ChevronRight aria-hidden strokeWidth={1.5} className={CHEVRON} />
             </span>
-            <ChevronRight
-              aria-hidden
-              strokeWidth={1.5}
-              className="size-[13px] shrink-0 text-[var(--ink-300)] transition-colors duration-[var(--duration-hover)] group-hover:text-[var(--ink-900)]"
-            />
+            <span className="line-clamp-2 min-h-8 text-[12px] leading-4 text-[var(--ink-600)]">
+              {card.body}
+            </span>
           </div>
         </Link>
       ))}

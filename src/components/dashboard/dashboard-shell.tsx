@@ -40,8 +40,11 @@ import {
  */
 export function DashboardShell({
   activitySlot,
+  sidebarExpanded = false,
   children,
 }: {
+  /** The sidebar width this browser last showed (`SIDEBAR_COOKIE`). */
+  sidebarExpanded?: boolean;
   /**
    * The activity tray, already wrapped in its Suspense boundary by the layout.
    * Passed as a node rather than as data so the server component inside it can
@@ -175,7 +178,7 @@ export function DashboardShell({
         {/* Inside UnsavedChangesProvider — the confirmation warns about unsaved
           work, so it has to be able to read it. */}
         <LogoutProvider>
-          <SidebarStateProvider>
+          <SidebarStateProvider initialExpanded={sidebarExpanded}>
             {/* Wraps both, because the page sets the status and the header reads it. */}
             <HeaderStatusProvider>
               {/* Same reason, other end of the bar: the page publishes a leading

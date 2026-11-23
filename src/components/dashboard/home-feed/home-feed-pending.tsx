@@ -3,13 +3,17 @@ import {
   PendingBar,
   PendingRegion,
 } from "@/components/dashboard/loading/pending";
-import {
-  LIST_ROW_FRAME,
-  listColumnLabels,
-  listGridCols,
-} from "@/components/dashboard/matches/match-list-layout";
-import { cn } from "@/lib/utils";
-import { SectionHead } from "./home-title";
+import { HomeListPending, TeamListsPending } from "./home-shape-memory";
+
+/**
+ * The page's two columns: the main column and a rail. The rail is 420px where
+ * there is room and gives up to 60px back when the sidebar is open on a
+ * laptop — the main column's rows carry more (a still, two names, a score, a
+ * status) than the rail's do. Not below 360px: the pilot card's footer and
+ * the numbers' trendlines need it.
+ */
+const COLUMNS =
+  "grid gap-5 xl:grid-cols-[minmax(0,1fr)_clamp(360px,33%,420px)]";
 
 /**
  * The page's own column, shared by both Homes and their loading fallbacks —
@@ -26,106 +30,75 @@ export function HomeFeedFrame({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * The top of the page: the action cards beside the pilot card, level with
+ * each other.
+ */
+export function TopRow({ lead, pilot }: { lead: ReactNode; pilot: ReactNode }) {
+  return (
+    <div className={`${COLUMNS} items-stretch`}>
+      <div className="min-w-0">{lead}</div>
+      <div className="min-w-0">{pilot}</div>
+    </div>
+  );
+}
+
+/**
+ * The two lists. Nothing is stretched to level them (the design system's Home
+ * rule): each card ends where its rows do.
+ */
+export function BottomRow({ children }: { children: ReactNode }) {
+  return <div className={`${COLUMNS} items-start`}>{children}</div>;
+}
+
 export function TitlePending({ action }: { action?: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-6">
-      <PendingRegion label="summary" innerClassName="flex flex-col gap-2.5">
-        <PendingBar className="h-6 w-56" />
-        <PendingBar className="w-72" />
+      {/* The loaded title's own two line boxes (`HomeTitle`): the heading's
+          1.2em line, then a 20px line 4px beneath it — so the row under it
+          does not move when the words land. */}
+      <PendingRegion label="summary">
+        <span className="text-title-lg flex h-[1.2em] items-center">
+          <PendingBar className="h-5 w-56" />
+        </span>
+        <span className="mt-1 flex h-5 items-center">
+          <PendingBar className="h-2.5 w-72" />
+        </span>
       </PendingRegion>
       {action}
     </div>
   );
 }
 
-/** The banner's footprint, so nothing below it moves when it arrives. */
-export function BannerPending() {
+/** The pilot card's footprint, so nothing beside or below it moves. */
+export function PilotPending() {
   return (
-    <PendingRegion
-      label="pilot"
-      className="h-[108px] rounded-[var(--radius-card)] bg-[var(--surface-skeleton)] motion-safe:animate-pulse"
-    >
-      {null}
+    <PendingRegion label="pilot" className="h-full min-h-[214px]">
+      <PendingBar className="h-full min-h-[214px] w-full rounded-[var(--radius-card)]" />
     </PendingRegion>
   );
 }
 
-/** The lead slot: the highlight card's footprint under its heading. */
-export function LeadPending() {
+/** The three action cards' footprint beside the pilot card. */
+export function TopPending({ pilot }: { pilot: ReactNode }) {
   return (
-    <div className="flex flex-col gap-3">
-      <SectionHead title="Just analyzed" />
-      <PendingRegion
-        label="latest report"
-        className="surface-card p-2"
-        innerClassName="flex gap-6"
-      >
-        <span className="block aspect-video w-[224px] shrink-0 rounded-[var(--radius-element)] bg-[var(--surface-skeleton)] motion-safe:animate-pulse" />
-        <span className="flex flex-1 flex-col justify-center gap-3 pr-4">
-          <PendingBar className="w-64" />
-          <PendingBar className="w-40" />
-          <PendingBar />
-          <PendingBar className="w-4/5" />
-        </span>
-      </PendingRegion>
-    </div>
-  );
-}
-
-function RowsPending({ rows }: { rows: number }) {
-  return (
-    <>
-      {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="flex h-[52px] items-center gap-6">
-          <PendingBar className="w-12" />
-          <PendingBar className="w-40" />
-          <PendingBar className="w-32" />
-          <PendingBar className="w-24" />
-          <PendingBar className="w-44" />
-        </div>
-      ))}
-    </>
-  );
-}
-
-export function LatestPending({ scope }: { scope: "personal" | "team" }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <SectionHead title="Latest matches" />
-      <div className="surface-card" style={{ padding: "2px 24px 6px" }}>
-        <div
-          className={cn(
-            LIST_ROW_FRAME,
-            "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-          )}
-          style={listGridCols(scope)}
+    <TopRow
+      pilot={pilot}
+      lead={
+        <PendingRegion
+          label="quick actions"
+          className="h-full min-h-[214px]"
+          innerClassName="grid h-full grid-cols-3 gap-5"
         >
-          {listColumnLabels(scope).map((label) => (
-            <span key={label} className="eyebrow-sm min-w-0 truncate">
-              {label}
-            </span>
+          {[0, 1, 2].map((i) => (
+            <PendingBar
+              key={i}
+              className="h-full min-h-[214px] w-full rounded-[var(--radius-card)]"
+            />
           ))}
-        </div>
-        <PendingRegion label="latest matches">
-          <RowsPending rows={3} />
         </PendingRegion>
-      </div>
-    </div>
-  );
-}
-
-export function TablePending({ title, rows }: { title: string; rows: number }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <SectionHead title={title} />
-      <PendingRegion
-        label={title.toLowerCase()}
-        className="surface-card"
-        innerClassName="px-6 pt-3 pb-1.5"
-      >
-        <RowsPending rows={rows} />
-      </PendingRegion>
-    </div>
+      }
+    />
   );
 }
 
@@ -140,13 +113,17 @@ export function HomeFeedSkeleton({
   return (
     <HomeFeedFrame>
       <TitlePending action={action} />
-      <BannerPending />
-      <LeadPending />
-      <LatestPending scope={scope} />
-      <TablePending
-        title={scope === "team" ? "Players" : "Your numbers"}
-        rows={scope === "team" ? 6 : 5}
-      />
+      <TopPending pilot={<PilotPending />} />
+      <BottomRow>
+        {scope === "team" ? (
+          <TeamListsPending />
+        ) : (
+          <>
+            <HomeListPending list="matches" />
+            <HomeListPending list="numbers" />
+          </>
+        )}
+      </BottomRow>
     </HomeFeedFrame>
   );
 }

@@ -1,75 +1,155 @@
 import Link from "next/link";
 import type { DisplayMatch } from "@/lib/data/matches-list-types";
-import { MatchesGrid } from "@/components/dashboard/matches/matches-grid";
-import {
-  LIST_ROW_FRAME,
-  listColumnLabels,
-  listGridCols,
-} from "@/components/dashboard/matches/match-list-layout";
+import { formatMatchDayShortYear } from "@/lib/data/match-day";
+import { isPracticeMatch } from "@/lib/matches/match-type";
+import { ResultMark } from "@/components/dashboard/result-mark";
+import { ScoreLine } from "@/components/dashboard/score-line";
 import { cn } from "@/lib/utils";
-import { EmptyBand, GhostBar, HEAD_LINK, SectionHead } from "./home-title";
-
-const GHOST_OPACITY = [1, 0.6, 0.3];
-/** One bar per track, in the Matches table's own column order. */
-const GHOST_WIDTHS = {
-  personal: [40, 104, 14, 60, 120, 96],
-  team: [40, 96, 104, 14, 60, 120, 96],
-};
+import {
+  EmptyBand,
+  GhostBar,
+  GhostRows,
+  HEAD_LINK,
+  LIST_CARD,
+  LIST_ROW,
+  LIST_ROW_HOVER,
+  ROW_SUB,
+  ROW_TITLE,
+  RowChevron,
+  SectionHead,
+} from "./home-title";
+import { RememberHomeRows } from "./home-shape-memory";
+import type { ListKind } from "./list-pending";
+import { MatchFrame } from "./match-frame";
+import { MatchStatus } from "./match-status";
 
 /**
- * The newest few matches, drawn by the Matches page's own table
- * (`MatchesGrid`) so a row reads the same in both places. Before the first
- * match it is that table's header over ghost rows, and one line on what goes
- * here.
+ * The newest matches as a short list — the Matches page stays the table with
+ * headers, sorting and filters. Each row reads on its own: a still, who beat
+ * whom, the day and event, then where the match stands beside its result.
+ *
+ * A personal list leaves the player's own name off: every row is theirs.
  */
+/** The verb between the two names, the same in both workspaces. */
+function resultVerb(match: DisplayMatch): string {
+  if (isPracticeMatch(match.matchType)) return "vs";
+  return match.score.winner === "player1" ? "def." : "lost to";
+}
+
 export function LatestMatches({
   matches,
   scope,
   empty,
+  title = "Latest matches",
+  link = { label: "All matches", href: "/dashboard/matches" },
+  list = "matches",
 }: {
   matches: DisplayMatch[];
+  /**
+   * How a row names its match: `team` leads with the program's player
+   * ("Avery def. Riley Park"); `personal` is spoken to the reader ("def.
+   * Riley Park").
+   */
   scope: "personal" | "team";
-  empty: { title: string; body: string };
+  /** Omitted for a list that is not drawn when it has nothing to show. */
+  empty?: { title: string; body: string; href?: string };
+  title?: string;
+  /** The heading's quiet link; null for none. */
+  link?: { label: string; href: string } | null;
+  /** Which remembered row count this list teaches its skeleton. */
+  list?: ListKind;
 }) {
   return (
-    <section aria-label="Latest matches" className="flex flex-col gap-2.5">
-      <SectionHead title="Latest matches">
-        <Link href="/dashboard/matches" className={HEAD_LINK}>
-          All matches
-        </Link>
+    <section aria-label={title} className="flex min-w-0 flex-col gap-2.5">
+      <SectionHead title={title}>
+        {link ? (
+          <Link href={link.href} className={HEAD_LINK}>
+            {link.label}
+          </Link>
+        ) : null}
       </SectionHead>
-      {matches.length > 0 ? (
-        <MatchesGrid matches={matches} scope={scope} />
-      ) : (
-        <div className="surface-card" style={{ padding: "2px 24px 6px" }}>
-          <div
-            className={cn(
-              LIST_ROW_FRAME,
-              "border-b border-[var(--border-hairline)] pt-3.5 pb-2.5",
-            )}
-            style={listGridCols(scope)}
-          >
-            {listColumnLabels(scope).map((label) => (
-              <span key={label} className="eyebrow-sm min-w-0 truncate">
-                {label}
-              </span>
-            ))}
-          </div>
-          {GHOST_OPACITY.map((opacity) => (
-            <div
-              key={opacity}
-              aria-hidden
-              className={cn(LIST_ROW_FRAME, "h-[52px]")}
-              style={{ ...listGridCols(scope), opacity }}
-            >
-              {GHOST_WIDTHS[scope].map((width, i) => (
-                <GhostBar key={i} width={width} round={width === 14} />
-              ))}
-            </div>
-          ))}
-          <EmptyBand title={empty.title} body={empty.body} />
-        </div>
-      )}
+      <RememberHomeRows list={list} rows={matches.length} />
+      <div className={cn(LIST_CARD, "@container")}>
+        {matches.length === 0 ? (
+          <>
+            <GhostRows
+              lead={<GhostBar width={78} height={44} />}
+              lines={[160, 120]}
+              tail={<GhostBar width={70} />}
+            />
+            {empty ? <EmptyBand {...empty} /> : null}
+          </>
+        ) : (
+          matches.map((match) => {
+            const practice = isPracticeMatch(match.matchType);
+            const names = `${match.player1.name} vs ${match.player2.name}`;
+            return (
+              <Link
+                key={match.id}
+                href={`/dashboard/matches/${match.id}`}
+                className={cn(LIST_ROW, LIST_ROW_HOVER)}
+              >
+                {/* A narrow card gives the still's room to the names. */}
+                <span className="contents @max-[640px]:hidden">
+                  <MatchFrame
+                    matchId={match.id}
+                    alt={`Frame from ${names}`}
+                    size="row"
+                  />
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className={ROW_TITLE}>
+                    {scope === "team" ? (
+                      <b className="font-medium">{match.player1.name} </b>
+                    ) : null}
+                    <span className="text-[var(--ink-500)]">
+                      {resultVerb(match)}{" "}
+                    </span>
+                    <span
+                      className={
+                        scope === "team"
+                          ? "text-[var(--ink-700)]"
+                          : "font-medium"
+                      }
+                    >
+                      {match.player2.name}
+                    </span>
+                  </span>
+                  <span className={ROW_SUB}>
+                    <span className="tabular mr-2">
+                      {formatMatchDayShortYear(match.date)}
+                    </span>
+                    {/* A practice match says so, whatever event name it
+                        was filed under. */}
+                    {practice
+                      ? "Practice match"
+                      : (match.tournamentName ?? "No event")}
+                  </span>
+                </span>
+                {/* The Matches table's own order: the result and score in a
+                    fixed track, flush left, so every outcome sits at one x;
+                    then where the match stands, in a track of its own. A
+                    score longer than three sets widens its own row rather
+                    than being cut. */}
+                <span className="flex h-7 min-w-[132px] shrink-0 items-center gap-2">
+                  <ResultMark won={match.score.winner === "player1"} />
+                  <ScoreLine
+                    sets={match.score.sets}
+                    className="tabular text-[13px] whitespace-nowrap text-[var(--ink-900)]"
+                  />
+                </span>
+                {/* Not the Matches table's `row-lifecycle` cell: that is a
+                    size container, and one sized by its own content collapses
+                    to nothing — which hid every status here. */}
+                <span className="flex w-[148px] shrink-0 items-center overflow-hidden">
+                  <MatchStatus match={match} />
+                </span>
+                <RowChevron />
+              </Link>
+            );
+          })
+        )}
+      </div>
     </section>
   );
 }
