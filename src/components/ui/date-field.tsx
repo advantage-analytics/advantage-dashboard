@@ -369,44 +369,52 @@ export function DateField({
                 />
               </Button>
             </header>
-            <CalendarGrid
-              weekdayStyle="short"
-              className="border-separate border-spacing-0 [&_td]:p-0 [&_th]:p-0"
-            >
-              <CalendarGridHeader>
-                {(day) => (
-                  <CalendarHeaderCell className="h-[22px] w-[30px] text-center text-[10px] font-medium text-[var(--ink-400)] uppercase">
-                    {day}
-                  </CalendarHeaderCell>
-                )}
-              </CalendarGridHeader>
-              <CalendarGridBody>
-                {(date) => (
-                  <CalendarCell
-                    date={date}
-                    className={cn(
-                      "relative flex size-[30px] cursor-pointer items-center justify-center rounded-[7px] text-[12px] text-[var(--ink-900)] tabular-nums select-none",
-                      "data-[hovered]:bg-[var(--surface-subtle)]",
-                      "data-[outside-month]:opacity-[0.35]",
-                      "data-[disabled]:cursor-default data-[disabled]:text-[var(--ink-400)] data-[disabled]:data-[hovered]:bg-transparent",
-                      "data-[selected]:bg-[var(--blue)] data-[selected]:text-white data-[selected]:data-[hovered]:bg-[var(--blue)]",
-                    )}
-                  >
-                    {({ formattedDate, isToday, isSelected }) => (
-                      <>
-                        {formattedDate}
-                        {isToday && !isSelected ? (
-                          <span
-                            aria-hidden="true"
-                            className="absolute bottom-[3px] left-1/2 size-[3px] -translate-x-1/2 rounded-full bg-[var(--blue)]"
-                          />
-                        ) : null}
-                      </>
-                    )}
-                  </CalendarCell>
-                )}
-              </CalendarGridBody>
-            </CalendarGrid>
+            {/* Always six weeks tall (22px weekday row + 6 × 30px). A month
+                spans four to six week rows, and a popover that changes height
+                as you page moves under the cursor: placed above the field it
+                grows upward, so the chevron you just pressed slides away, and
+                near a viewport edge it flips sides outright. The edit-match
+                dialog did both on the first press back from November 2025. */}
+            <div className="min-h-[202px]">
+              <CalendarGrid
+                weekdayStyle="short"
+                className="border-separate border-spacing-0 [&_td]:p-0 [&_th]:p-0"
+              >
+                <CalendarGridHeader>
+                  {(day) => (
+                    <CalendarHeaderCell className="h-[22px] w-[30px] text-center text-[10px] font-medium text-[var(--ink-400)] uppercase">
+                      {day}
+                    </CalendarHeaderCell>
+                  )}
+                </CalendarGridHeader>
+                <CalendarGridBody>
+                  {(date) => (
+                    <CalendarCell
+                      date={date}
+                      className={cn(
+                        "relative flex size-[30px] cursor-pointer items-center justify-center rounded-[7px] text-[12px] text-[var(--ink-900)] tabular-nums select-none",
+                        "data-[hovered]:bg-[var(--surface-subtle)]",
+                        "data-[outside-month]:opacity-[0.35]",
+                        "data-[disabled]:cursor-default data-[disabled]:text-[var(--ink-400)] data-[disabled]:data-[hovered]:bg-transparent",
+                        "data-[selected]:bg-[var(--blue)] data-[selected]:text-white data-[selected]:data-[hovered]:bg-[var(--blue)]",
+                      )}
+                    >
+                      {({ formattedDate, isToday, isSelected }) => (
+                        <>
+                          {formattedDate}
+                          {isToday && !isSelected ? (
+                            <span
+                              aria-hidden="true"
+                              className="absolute bottom-[3px] left-1/2 size-[3px] -translate-x-1/2 rounded-full bg-[var(--blue)]"
+                            />
+                          ) : null}
+                        </>
+                      )}
+                    </CalendarCell>
+                  )}
+                </CalendarGridBody>
+              </CalendarGrid>
+            </div>
           </Calendar>
         </Dialog>
       </Popover>
