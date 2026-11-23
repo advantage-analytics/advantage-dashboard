@@ -1,12 +1,23 @@
 import { Ban, CircleCheck, CircleMinus, CircleX } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+/* Tokens, not the `--viz-*` ramp: green is winning, red is losing, and both
+   have a dark-scope value the literal hexes do not. Level and no-result are
+   ink-500 — a draw is a decided result, but not a coloured one. */
+const OUTCOME = {
+  won: { Icon: CircleCheck, label: "Won", color: "var(--success)" },
+  lost: { Icon: CircleX, label: "Lost", color: "var(--danger)" },
+  level: { Icon: CircleMinus, label: "Level", color: "var(--ink-500)" },
+  none: { Icon: Ban, label: "No result", color: "var(--ink-500)" },
+} as const;
+
 /**
  * Won, lost or level — the product's ONE outcome register.
  *
  * `circle-check` / `circle-x` / `circle-minus` at 14px, stroke 1.5, in the
- * outcome colours (and a grey `ban` for a score that named no winner), with the word carried as the accessible name. A screen
- * reader hears exactly what the retired badge used to say.
+ * outcome colours (and a grey `ban` for a score that named no winner), with
+ * the word carried as the accessible name. A screen reader hears exactly what
+ * the retired badge used to say.
  *
  * ── Why this is the only register now ──────────────────────────────────────
  * The system used to run two: the WORD (`Badge` "Won"/"Lost") under a labelled
@@ -59,37 +70,15 @@ export function ResultMark({
   won: boolean | null;
   className?: string;
 }): React.JSX.Element {
-  const Icon = noResult
-    ? Ban
-    : won === null
-      ? CircleMinus
-      : won
-        ? CircleCheck
-        : CircleX;
-  const label = noResult
-    ? "No result"
-    : won === null
-      ? "Level"
-      : won
-        ? "Won"
-        : "Lost";
+  const { Icon, label, color } =
+    OUTCOME[noResult ? "none" : won === null ? "level" : won ? "won" : "lost"];
 
   return (
     <span className={cn("inline-flex items-center", className)}>
       <Icon
         className="size-3.5 shrink-0"
         strokeWidth={1.5}
-        /* Tokens, not the `--viz-*` ramp: green is winning, red is losing, and
-           both have a dark-scope value the literal hexes do not. Level is
-           ink-500 — a draw is a decided result, but not a coloured one. */
-        style={{
-          color:
-            noResult || won === null
-              ? "var(--ink-500)"
-              : won
-                ? "var(--success)"
-                : "var(--danger)",
-        }}
+        style={{ color }}
         aria-hidden="true"
       />
       <span className="sr-only">{label}</span>
