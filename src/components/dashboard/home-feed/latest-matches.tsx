@@ -92,11 +92,7 @@ export function LatestMatches({
               >
                 {/* A narrow card gives the still's room to the names. */}
                 <span className="contents @max-[640px]:hidden">
-                  <MatchFrame
-                    matchId={match.id}
-                    alt={`Frame from ${names}`}
-                    size="row"
-                  />
+                  <MatchFrame src={match.thumbnailUrl} size="row" />
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className={ROW_TITLE}>
