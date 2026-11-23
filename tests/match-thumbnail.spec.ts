@@ -352,6 +352,8 @@ test.describe("MatchThumbnail", () => {
     );
     expect(source).toContain("onError={() => setFailedSrc(src)}");
     expect(source).toContain("failedSrc === src");
+    // …including one that failed before hydration, when no handler heard it.
+    expect(source).toContain("img?.complete && img.naturalWidth === 0");
   });
 });
 

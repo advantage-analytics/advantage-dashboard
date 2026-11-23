@@ -43,6 +43,11 @@ export function MatchThumbnail({
       loading="lazy"
       decoding="async"
       draggable={false}
+      // An image that failed before hydration fired its `error` event with
+      // nobody listening; a settled image with no pixels is that same failure.
+      ref={(img) => {
+        if (img?.complete && img.naturalWidth === 0) setFailedSrc(src);
+      }}
       onError={() => setFailedSrc(src)}
       className={className}
       style={{ objectFit: "cover" }}
