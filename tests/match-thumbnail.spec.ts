@@ -91,7 +91,7 @@ test.describe("thumbnail keys", () => {
 
   test("the migration states the same key rule as the code", () => {
     const sql = readFileSync(
-      "supabase/migrations/20261123050000_matches_video_thumbnail_key.sql",
+      "supabase/migrations/20261123160122_matches_video_thumbnail_key.sql",
       "utf8",
     );
     expect(sql).toContain("add column if not exists video_thumbnail_key text");

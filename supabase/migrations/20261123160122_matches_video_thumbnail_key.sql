@@ -18,17 +18,26 @@
 alter table public.matches
   add column if not exists video_thumbnail_key text;
 
-alter table public.matches
-  drop constraint if exists matches_video_thumbnail_key_shape;
-
-alter table public.matches
-  add constraint matches_video_thumbnail_key_shape check (
-    video_thumbnail_key is null
-    or video_thumbnail_key ~ (
-      '^thumbnails/' || id::text
-      || '/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$'
-    )
-  );
+-- Existence-checked rather than drop-and-add, so the file is re-runnable
+-- without a destructive statement.
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'matches_video_thumbnail_key_shape'
+      and conrelid = 'public.matches'::regclass
+  ) then
+    alter table public.matches
+      add constraint matches_video_thumbnail_key_shape check (
+        video_thumbnail_key is null
+        or video_thumbnail_key ~ (
+          '^thumbnails/' || id::text
+          || '/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.jpg$'
+        )
+      );
+  end if;
+end
+$$;
 
 comment on column public.matches.video_thumbnail_key is
   'Object key of the match video''s list-row still in the video container (thumbnails/{match_id}/{uuid}.jpg). Never a URL. NULL = none.';
