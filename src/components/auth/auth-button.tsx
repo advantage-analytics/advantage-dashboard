@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 interface AuthButtonProps {
   children: ReactNode;
@@ -10,7 +11,21 @@ interface AuthButtonProps {
   /** For a form with two submits (the OAuth consent page): which one this is. */
   name?: string;
   value?: string;
+  /**
+   * Draws the action as a link to this path instead of a button — for an
+   * action that only goes somewhere ("Continue to Advantage"), so it opens in
+   * a new tab like any other link.
+   */
+  href?: string;
 }
+
+const CLASSES =
+  "inline-flex h-[44px] w-full items-center justify-center gap-[8px] rounded-[var(--radius-button)] border border-transparent bg-[var(--blue)] px-[20px] text-[13px] font-medium whitespace-nowrap text-white outline-none hover:bg-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:active:scale-100";
+
+const TRANSITION = {
+  transition:
+    "background-color var(--duration-hover), color var(--duration-hover), border-color var(--duration-hover), box-shadow var(--duration-hover), transform 80ms ease-out",
+};
 
 /**
  * The one full-width filled action each auth page is allowed.
@@ -29,7 +44,15 @@ export default function AuthButton({
   onClick,
   name,
   value,
+  href,
 }: AuthButtonProps) {
+  if (href) {
+    return (
+      <Link href={href} style={TRANSITION} className={CLASSES}>
+        {children}
+      </Link>
+    );
+  }
   return (
     <button
       type={type}
@@ -37,11 +60,8 @@ export default function AuthButton({
       onClick={onClick}
       name={name}
       value={value}
-      style={{
-        transition:
-          "background-color var(--duration-hover), color var(--duration-hover), border-color var(--duration-hover), box-shadow var(--duration-hover), transform 80ms ease-out",
-      }}
-      className="inline-flex h-[44px] w-full items-center justify-center gap-[8px] rounded-[var(--radius-button)] border border-transparent bg-[var(--blue)] px-[20px] text-[13px] font-medium whitespace-nowrap text-white outline-none hover:bg-[var(--blue-hover)] focus-visible:shadow-[var(--focus-ring)] active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:active:scale-100"
+      style={TRANSITION}
+      className={CLASSES}
     >
       {children}
     </button>

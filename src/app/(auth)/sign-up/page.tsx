@@ -1,4 +1,5 @@
 import { SignUpForm } from "@/components/auth/sign-up-form";
+import { SignedInGate } from "@/components/auth/signed-in-card";
 import { safeNext } from "@/lib/auth/safe-next";
 import { joinProgramNameForNext } from "@/lib/services/programs/join-state-server";
 
@@ -12,7 +13,8 @@ export const metadata = { title: "Create account" };
  * is how the confirmation mail brings them back to `/join/<token>` instead of
  * leaving a brand-new account on the dashboard, not on the team it was made
  * to join. When `next` is a join link the form's header names the team; any
- * other destination renders the ordinary form with no extra read.
+ * other destination renders the ordinary form with no extra read. A browser
+ * that is already signed in gets `SignedInGate`'s card instead of the form.
  */
 export default async function Page({
   searchParams,
@@ -22,5 +24,9 @@ export default async function Page({
   const { next: raw } = await searchParams;
   const next = safeNext(typeof raw === "string" ? raw : null);
   const joinProgram = await joinProgramNameForNext(next);
-  return <SignUpForm next={next} joinProgram={joinProgram} />;
+  return (
+    <SignedInGate mode="sign-up" next={next}>
+      <SignUpForm next={next} joinProgram={joinProgram} />
+    </SignedInGate>
+  );
 }
