@@ -1,4 +1,5 @@
 import { LoginForm } from "@/components/auth/login-form";
+import { SignedInGate } from "@/components/auth/signed-in-card";
 import { safeNext } from "@/lib/auth/safe-next";
 import { joinProgramNameForNext } from "@/lib/services/programs/join-state-server";
 
@@ -19,6 +20,9 @@ export const metadata = { title: "Sign in" };
  * the params makes the route dynamic, and the render is pure JSX with no I/O,
  * so that buys a full first paint for a per-request render of nothing.
  *
+ * A browser that is already signed in gets `SignedInGate`'s card in place
+ * of the form, read client-side so this render stays free of I/O.
+ *
  * The one read: when `next` is a join link, the header names the team it is
  * for (`joinProgramNameForNext`). Every other sign-in skips it.
  */
@@ -30,5 +34,9 @@ export default async function Page({
   const { next: raw } = await searchParams;
   const next = safeNext(typeof raw === "string" ? raw : null);
   const joinProgram = await joinProgramNameForNext(next);
-  return <LoginForm next={next} joinProgram={joinProgram} />;
+  return (
+    <SignedInGate mode="login" next={next}>
+      <LoginForm next={next} joinProgram={joinProgram} />
+    </SignedInGate>
+  );
 }
