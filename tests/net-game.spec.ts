@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 import type { BallPathsFile } from "@/lib/services/splitstep/derivation/ball-paths";
@@ -13,6 +15,7 @@ import {
   withPointRows,
 } from "@/components/dashboard/matches/match-detail/head-to-head-card";
 import { withoutUnmeasuredPassRow } from "@/components/dashboard/matches/match-detail/head-to-head-rows";
+import { useLobShotKeysLoad } from "@/components/dashboard/matches/match-detail/film/use-ball-paths";
 import { applyFilmCut } from "@/components/dashboard/matches/match-detail/film-cut-context";
 import {
   applyMatchFilters,
@@ -767,6 +770,28 @@ test.describe("without ball flight data", () => {
     expect(labels(false)).toContain("Approach points won");
     expect(labels(true)).toContain("Passed the net player");
     expect(labels(false)).toHaveLength(POINT_ROWS.length - 1);
+  });
+
+  test("lob data is absent only once it is known, never while loading", () => {
+    // The first render, before any fetch could answer: what a reader that
+    // hides the Passed row on `absent` sees on mount.
+    const firstRender = (enabled: boolean) => {
+      function Probe() {
+        const { keys, absent } = useLobShotKeysLoad({
+          matchId: "no-such-match",
+          enabled,
+        });
+        return JSON.stringify({ keys, absent });
+      }
+      return JSON.parse(
+        renderToStaticMarkup(createElement(Probe)).replaceAll("&quot;", '"'),
+      ) as { keys: null; absent: boolean };
+    };
+    // Not an Advantage Intelligence match, or a mount that may not read the
+    // file: nothing will come, so the row can go at once.
+    expect(firstRender(false)).toEqual({ keys: null, absent: true });
+    // The file is still on its way: the row keeps its dash.
+    expect(firstRender(true)).toEqual({ keys: null, absent: false });
   });
 
   test("the Net game card drops Lobbed and names Passed for what it holds", () => {

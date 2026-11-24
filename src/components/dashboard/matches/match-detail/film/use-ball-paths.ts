@@ -84,16 +84,30 @@ export function useBallPathsRoute(readOnly: boolean): {
  * `useBallPaths` puts it on the film clock; `useLobShotKeys` reads lobs off
  * it.
  */
-export function useBallPathsFile({
+export function useBallPathsFile(params: {
+  matchId: string;
+  enabled: boolean;
+  /** See {@link useBallPathsRoute}. Omitted: the match's own route. */
+  endpoint?: string;
+}): BallPathsFile | null {
+  return useBallPathsLoad(params).file;
+}
+
+/**
+ * `useBallPathsFile`, plus whether the request has settled without a file —
+ * a refusal, a body that is not the file, or a network error. Still silent:
+ * nothing throws or logs. An aborted request is not settled, so `missing`
+ * stays false while a fetch is in flight or about to be re-asked.
+ */
+export function useBallPathsLoad({
   matchId,
   enabled,
   endpoint,
 }: {
   matchId: string;
   enabled: boolean;
-  /** See {@link useBallPathsRoute}. Omitted: the match's own route. */
   endpoint?: string;
-}): BallPathsFile | null {
+}): { file: BallPathsFile | null; missing: boolean } {
   // A file still cached when this mount starts is held for the mount's
   // life, so it cannot expire under a view that already drew it.
   const [loaded, setLoaded] = useState<{
@@ -103,6 +117,8 @@ export function useBallPathsFile({
     const file = cachedFile(matchId);
     return file ? { matchId, file } : null;
   });
+  /** The match id whose request settled without a file. */
+  const [missedId, setMissedId] = useState<string | null>(null);
   /** The match id already asked for, so `enabled` can flap for free. */
   const requested = useRef<string | null>(null);
 
@@ -125,6 +141,7 @@ export function useBallPathsFile({
         );
         if (!response.ok) {
           settled = true;
+          if (live) setMissedId(matchId);
           return;
         }
         const file = parseBallPathsFile(await response.json());
@@ -132,10 +149,18 @@ export function useBallPathsFile({
         if (file) lastFile = { matchId, file, at: Date.now() };
         // `live` is checked after the awaits, so nothing is set on an unmounted
         // component even though the abort usually gets there first.
-        if (!file || !live) return;
+        if (!live) return;
+        if (!file) {
+          setMissedId(matchId);
+          return;
+        }
         setLoaded({ matchId, file });
       } catch {
-        // Deliberately empty — see the header. An abort lands here too.
+        // Deliberately silent — see the header. An abort lands here too, and
+        // is not an answer: only a live request's failure counts as missing.
+        // `settled` stays false so the next mount asks again, as it always
+        // did after a network error.
+        if (live && !controller.signal.aborted) setMissedId(matchId);
       }
     })();
 
@@ -153,8 +178,9 @@ export function useBallPathsFile({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, matchId]);
 
-  if (loaded && loaded.matchId === matchId) return loaded.file;
-  return cachedFile(matchId);
+  const file =
+    loaded && loaded.matchId === matchId ? loaded.file : cachedFile(matchId);
+  return { file, missing: !file && missedId === matchId };
 }
 
 export function useBallPaths({
@@ -198,9 +224,30 @@ export function useLobShotKeys({
   enabled: boolean;
   endpoint?: string;
 }): ReadonlySet<number> | null {
-  const file = useBallPathsFile({ matchId, enabled, endpoint });
-  return useMemo(
+  return useLobShotKeysLoad({ matchId, enabled, endpoint }).keys;
+}
+
+/**
+ * `useLobShotKeys`, plus `absent`: this mount will have no lobs to read —
+ * the fetch is not enabled (not an Advantage Intelligence match, or a mount
+ * that may not read the file), or it settled with no file or an empty one.
+ * While the file is loading `absent` is false, so a reader that hides on it
+ * does not flash a row out and back in.
+ */
+export function useLobShotKeysLoad({
+  matchId,
+  enabled,
+  endpoint,
+}: {
+  matchId: string;
+  enabled: boolean;
+  endpoint?: string;
+}): { keys: ReadonlySet<number> | null; absent: boolean } {
+  const { file, missing } = useBallPathsLoad({ matchId, enabled, endpoint });
+  const keys = useMemo(
     () => (file && file.strokes.length > 0 ? lobShotKeys(file) : null),
     [file],
   );
+  const absent = !enabled || missing || (file !== null && keys === null);
+  return { keys, absent };
 }
