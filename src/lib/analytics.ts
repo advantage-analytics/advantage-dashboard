@@ -129,6 +129,24 @@ export interface AnalyticsEvents {
     weekly_film_band: WeeklyFilmBand | null;
     acquisition_source: AcquisitionSource | null;
   };
+  // The player's first run (`/onboarding`). One `onboarding_step_viewed` per
+  // page turn, forward or back, and step 1 on mount: the last one before a
+  // visit ends is where the person stopped. `step` is the `Step` id from
+  // `src/app/onboarding/steps.ts` (4 is the guardian step), `step_number` and
+  // `step_count` its position on the persona's path (`stepViewedProps`).
+  onboarding_step_viewed: {
+    step: number;
+    step_number: number | null;
+    step_count: number | null;
+    persona: "play" | "junior" | "coach" | null;
+  };
+  // A finishing action that answered with an error line instead of
+  // redirecting. Never the error text or any answer; the age gate's refusal
+  // is not sent at all (`isAgeRefusal`), since it would mark a minor.
+  onboarding_submit_failed: {
+    step: number;
+    persona: "play" | "junior" | "coach" | null;
+  };
   // "Request an invite" to a directory program, sent only once the request is
   // on file. `claimed` is a program with an owner or a claim in progress (the
   // request reaches them), `unclaimed` one with nobody yet (it waits for the

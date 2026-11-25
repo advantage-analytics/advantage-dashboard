@@ -33,6 +33,7 @@ import { GUARDIAN_TERMS_URL } from "@/lib/constants";
 import { DateField } from "@/components/ui/date-field";
 import { createClient } from "@/lib/supabase/client";
 import { isPostHogConfigured } from "@/lib/posthog-client";
+import { track } from "@/lib/analytics";
 import { cn } from "@/lib/utils";
 import {
   finishGuardianOnboarding,
@@ -55,9 +56,10 @@ import {
   DOB_MIN,
   ageAllows,
   ageBand,
+  isAgeRefusal,
   todayUtc,
 } from "./age";
-import { previousStep, stepLabel, type Step } from "./steps";
+import { previousStep, stepLabel, stepViewedProps, type Step } from "./steps";
 
 /**
  * The first run — Onboarding & Team Setup screens 1.2 through 1.5 and 1.7,
@@ -274,6 +276,27 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
   const pushed = useRef(0);
   const reached = useRef<Step>(1);
 
+  // One `onboarding_step_viewed` per page turn, forward or back, and step 1
+  // on mount: the last one is where a visit stopped. The persona is read
+  // through a ref so picking a card on step 2 is not a page turn.
+  const personaRef = useRef(persona);
+  useEffect(() => {
+    personaRef.current = persona;
+  }, [persona]);
+  useEffect(() => {
+    track("onboarding_step_viewed", stepViewedProps(step, personaRef.current));
+  }, [step]);
+
+  // An action answered with an error line instead of redirecting. The event
+  // carries the step and persona only, never the sentence; the age gate's
+  // refusal is not sent at all, since it would mark the account as a minor's.
+  const failSubmit = (message: string) => {
+    setError(message);
+    if (!isAgeRefusal(message)) {
+      track("onboarding_submit_failed", { step, persona });
+    }
+  };
+
   useEffect(() => {
     window.history.replaceState(
       { ...window.history.state, onbStep: 1, onbIdx: 0 },
@@ -312,7 +335,7 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
         lastName,
         dob,
       });
-      if (result && !result.ok) setError(result.error);
+      if (result && !result.ok) failSubmit(result.error);
     });
   };
 
@@ -349,7 +372,7 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
           dob,
           next: join.next,
         });
-        if (result && !result.ok) setError(result.error);
+        if (result && !result.ok) failSubmit(result.error);
       });
       return;
     }
@@ -464,7 +487,7 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
         dob,
         ...answers,
       });
-      if (result && !result.ok) setError(result.error);
+      if (result && !result.ok) failSubmit(result.error);
     });
   };
 
@@ -504,7 +527,7 @@ export function OnboardingFlow({ join }: { join?: JoinNameStep }) {
         classYear,
         consent,
       });
-      if (result && !result.ok) setError(result.error);
+      if (result && !result.ok) failSubmit(result.error);
     });
   };
 
