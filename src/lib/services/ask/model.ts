@@ -61,6 +61,9 @@ export function askAdapterModel(input: {
         model: call?.stage === "answer" ? stage.answer : stage.plan,
         temperature: call?.temperature,
         maxTokens: call?.maxTokens,
+        // Claude only: the answer is prose over numbers already computed,
+        // every other stage writes or checks SQL.
+        effort: call?.stage === "answer" ? "low" : "medium",
         jsonSchema: call?.jsonSchema,
         staticPrefixLength: call?.staticPrefixLength,
         signal: input.signal,

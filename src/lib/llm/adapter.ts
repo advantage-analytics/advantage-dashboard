@@ -41,15 +41,30 @@ export interface LLMCallOptions {
    * question's plan call from its answer call inside that trace.
    */
   span?: string;
-  /** Sampling temperature, Anthropic path only (Gemini refuses sampling parameters). */
+  /**
+   * Sampling temperature. Sent to neither provider any more: Gemini answers
+   * sampling parameters with a 400, and so does every current Claude model.
+   * Kept so callers that ask for determinism still type-check.
+   */
   temperature?: number;
-  /** The reply's length cap in tokens, Anthropic path only; its default is 1024. */
+  /**
+   * The reply's length floor in tokens, Anthropic path only. Claude's
+   * thinking counts against `max_tokens`, so the request never goes below
+   * `ANTHROPIC_MIN_MAX_TOKENS`; you pay only for what is generated.
+   */
   maxTokens?: number;
   /**
+   * How hard Claude thinks, Anthropic path only (`output_config.effort`):
+   * `low` (the default here) for prose and insight cards, `medium` for SQL
+   * planning. Thinking cannot be turned off on Claude Opus 5.5 or Sonnet 5.5;
+   * effort is the one control.
+   */
+  effort?: "low" | "medium" | "high";
+  /**
    * When set, the reply is one JSON object of this shape and nothing else:
-   * `response_format` on the OpenAI-compatible path, a single forced tool on
-   * the Anthropic path, whose arguments then stream as JSON text. The caller
-   * still parses and checks what comes back.
+   * `response_format` on the OpenAI-compatible path, structured outputs
+   * (`output_config.format`) on the Anthropic path. The reply then streams
+   * as JSON text on both. The caller still parses and checks what comes back.
    */
   jsonSchema?: {
     name: string;
@@ -75,8 +90,57 @@ export interface LLMCallOptions {
 }
 
 /** Each provider's default model, and the prefix its ids carry. */
-const ANTHROPIC_DEFAULT_MODEL = "claude-opus-4-6";
+const ANTHROPIC_DEFAULT_MODEL = "claude-opus-5-5";
 const GEMINI_DEFAULT_MODEL = "gemini-3.5-flash-lite";
+
+/**
+ * Claude's thinking counts against `max_tokens`, so a cap sized for the
+ * reply alone (Ask's answer asked for 1024) ends the reply mid-sentence.
+ * Billing is per token generated, so a high ceiling costs nothing extra.
+ */
+const ANTHROPIC_MIN_MAX_TOKENS = 16000;
+
+/**
+ * Server-side refusal fallback: if a safety classifier declines a request,
+ * the API re-runs it on a fallback model inside the same call instead of
+ * returning an empty `refusal`. Sent as a beta header on the plain endpoint
+ * because PostHog's wrapper instruments `messages.create` only.
+ */
+const ANTHROPIC_FALLBACK_BETA = "server-side-fallback-2026-07-01";
+
+/**
+ * The models that take `fallbacks`. Claude Haiku 5.5 has no server-side
+ * fallback and older models predate it; sending it there is a 400, which
+ * `getLLMStream()` would then hide by answering on Gemini.
+ */
+const ANTHROPIC_FALLBACK_MODELS =
+  /^claude-(?:(?:fable|mythos)-5-[12]|opus-5(?:-5)?|sonnet-5-5)$/;
+
+/**
+ * The models that take `output_config.effort`. Haiku 4.5, Sonnet 4.5 and
+ * earlier answer it with a 400; an id not listed here runs at its default.
+ */
+const ANTHROPIC_EFFORT_MODELS =
+  /^claude-(?:fable|mythos|opus-5|sonnet-5|haiku-5|opus-4-[5-9]|sonnet-4-6)/;
+
+/**
+ * Structured outputs require every object in the schema to forbid extra
+ * keys. The schemas here (`ASK_PLAN_REPLY_SCHEMA`) are shared with Gemini,
+ * which does not need it, so the flag is added on the way out rather than
+ * written into each schema.
+ */
+export function closedJsonSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(closedJsonSchema);
+  if (typeof schema !== "object" || schema === null) return schema;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema)) {
+    out[key] = closedJsonSchema(value);
+  }
+  if (out.type === "object" && !("additionalProperties" in out)) {
+    out.additionalProperties = false;
+  }
+  return out;
+}
 
 function modelFor(
   provider: "anthropic" | "openai",
@@ -316,6 +380,73 @@ export async function getLLMStream(
 
 /* ── Anthropic ────────────────────────────────────────────── */
 
+/**
+ * The fields every Anthropic request shares, apart from messages and tools.
+ * No `temperature` and no `thinking`: current Claude models answer sampling
+ * parameters with a 400, and Opus 5.5 / Sonnet 5.5 refuse a disabled
+ * `thinking` too — they think adaptively, and `effort` sets how much.
+ */
+function anthropicCommonBody(
+  systemPrompt: string,
+  options: LLMCallOptions,
+  defaultEffort: NonNullable<LLMCallOptions["effort"]>,
+) {
+  const model = modelFor("anthropic", options.model);
+  return {
+    model,
+    max_tokens: Math.max(options.maxTokens ?? 0, ANTHROPIC_MIN_MAX_TOKENS),
+    system: anthropicSystem(systemPrompt, options.staticPrefixLength),
+    output_config: {
+      ...(ANTHROPIC_EFFORT_MODELS.test(model)
+        ? { effort: options.effort ?? defaultEffort }
+        : {}),
+      // A JSON reply is constrained by structured outputs and streams as
+      // ordinary text. (It used to be a forced tool call, which Opus 5.5
+      // and Sonnet 5.5 refuse with a 400.)
+      ...(options.jsonSchema
+        ? {
+            format: {
+              type: "json_schema" as const,
+              schema: closedJsonSchema(options.jsonSchema.schema) as Record<
+                string,
+                unknown
+              >,
+            },
+          }
+        : {}),
+    },
+    ...(ANTHROPIC_FALLBACK_MODELS.test(model)
+      ? { fallbacks: "default" as const }
+      : {}),
+  };
+}
+
+/** The streamed Anthropic request body, apart from PostHog's options. Exported for its spec. */
+export function anthropicRequestBody(
+  systemPrompt: string,
+  messages: ChatMessage[],
+  options: LLMCallOptions,
+) {
+  return {
+    ...anthropicCommonBody(systemPrompt, options, "low"),
+    stream: true as const,
+    messages: messages.map((m) => ({ role: m.role, content: m.content })),
+  };
+}
+
+/** Per-request options: the fallback beta header only beside a `fallbacks` body field. Exported for its spec. */
+export function anthropicRequestOptions(
+  model: string,
+  signal: AbortSignal | undefined,
+) {
+  return {
+    ...(ANTHROPIC_FALLBACK_MODELS.test(model)
+      ? { headers: { "anthropic-beta": ANTHROPIC_FALLBACK_BETA } }
+      : {}),
+    ...(signal ? { signal } : {}),
+  };
+}
+
 async function anthropicStream(
   systemPrompt: string,
   messages: ChatMessage[],
@@ -324,33 +455,19 @@ async function anthropicStream(
   apiKey: string,
 ): Promise<AsyncIterable<string>> {
   const posthog = getPostHogClient();
-  const request = {
-    model: modelFor("anthropic", options.model),
-    max_tokens: options.maxTokens ?? 1024,
-    stream: true as const,
-    system: anthropicSystem(systemPrompt, options.staticPrefixLength),
-    messages: messages.map((m) => ({ role: m.role, content: m.content })),
-    ...(options.temperature !== undefined
-      ? { temperature: options.temperature }
-      : {}),
-    // A JSON reply is a forced call of one tool whose input is the schema:
-    // the one way this API constrains a reply's shape. Its arguments arrive
-    // as `input_json_delta` events, yielded below as the reply's text.
-    ...(options.jsonSchema
-      ? {
-          tools: [
-            {
-              name: options.jsonSchema.name,
-              description:
-                "The reply, in the shape the system prompt asks for.",
-              input_schema: options.jsonSchema.schema,
-            },
-          ],
-          tool_choice: { type: "tool" as const, name: options.jsonSchema.name },
-        }
-      : {}),
+  // The SDK's request type predates `fallbacks` and the newer models; the
+  // body is sent as written.
+  const request = anthropicRequestBody(
+    systemPrompt,
+    messages,
+    options,
+  ) as never as {
+    stream: true;
+    model: string;
+    max_tokens: number;
+    messages: never[];
   };
-  const requestOptions = options.signal ? { signal: options.signal } : {};
+  const requestOptions = anthropicRequestOptions(request.model, options.signal);
   // `create({ stream: true })`, not `messages.stream()`: PostHog's wrapper
   // only instruments `create`, and `stream()` through it throws on first read.
   // Imported inside each branch, not at module scope: `@posthog/ai/anthropic`
@@ -386,11 +503,8 @@ async function anthropicStream(
   async function* iterate(): AsyncIterable<string> {
     for await (const event of stream) {
       if (event.type !== "content_block_delta") continue;
-      if (event.delta.type === "text_delta") {
-        yield event.delta.text;
-      } else if (event.delta.type === "input_json_delta") {
-        yield event.delta.partial_json;
-      }
+      // Thinking deltas are skipped: only the reply is the caller's text.
+      if (event.delta.type === "text_delta") yield event.delta.text;
     }
   }
 
@@ -606,33 +720,60 @@ export async function getLLMToolTurn(
   }
 }
 
-async function anthropicToolTurn(
+/**
+ * What a forced tool choice becomes on Claude. Opus 5.5 and Sonnet 5.5
+ * refuse a forced `tool_choice` (`any` / `tool`) with a 400, so the choice
+ * is always `auto`.
+ *
+ * A named choice also gets a note after the latest tool results. Only a
+ * named one: `agent.ts` names a tool on its last turn alone, so the note is
+ * never resent without it. A note on every `required` turn would be dropped
+ * from the history the next turn sends, and an earlier message that changes
+ * between requests makes Claude discard the reasoning it attached to the
+ * turns after it. `required` turns rely on the tool list, and on the loop's
+ * own nudge (`agent.ts`) when a turn answers in prose.
+ */
+function anthropicToolNudge(
+  choice: LLMToolCallOptions["toolChoice"],
+): string | null {
+  if (!choice || typeof choice === "string") return null;
+  return `Respond now by calling the ${choice.name} tool.`;
+}
+
+/** The Anthropic request body for one tool turn, apart from PostHog's options. Exported for its spec. */
+export function anthropicToolRequestBody(
   systemPrompt: string,
   messages: LLMToolMessage[],
   tools: readonly LLMTool[],
-  context: LLMObservabilityContext,
   options: LLMToolCallOptions,
-  apiKey: string,
-): Promise<LLMToolTurn> {
-  const posthog = getPostHogClient();
-  const choice = options.toolChoice ?? "auto";
-  const request = {
-    model: modelFor("anthropic", options.model),
-    max_tokens: options.maxTokens ?? 4096,
-    system: anthropicSystem(systemPrompt, options.staticPrefixLength),
-    messages: messages.map((message) => {
+) {
+  const nudge = anthropicToolNudge(options.toolChoice);
+  const lastIndex = messages.length - 1;
+  return {
+    // The planner's turns: SQL accuracy is worth some thinking.
+    ...anthropicCommonBody(systemPrompt, options, "medium"),
+    messages: messages.map((message, index) => {
+      const note = index === lastIndex ? nudge : null;
       if (message.role === "user") {
-        return { role: "user" as const, content: message.content };
+        return {
+          role: "user" as const,
+          content: note ? `${message.content}\n\n${note}` : message.content,
+        };
       }
       if (message.role === "tool") {
         return {
           role: "user" as const,
-          content: message.results.map((result) => ({
-            type: "tool_result" as const,
-            tool_use_id: result.id,
-            content: result.content,
-            ...(result.isError ? { is_error: true } : {}),
-          })),
+          content: [
+            ...message.results.map((result) => ({
+              type: "tool_result" as const,
+              tool_use_id: result.id,
+              content: result.content,
+              ...(result.isError ? { is_error: true } : {}),
+            })),
+            // Text after the tool results, never before: the API wants the
+            // results first in the turn.
+            ...(note ? [{ type: "text" as const, text: note }] : []),
+          ],
         };
       }
       if (message.raw?.provider === "anthropic") {
@@ -658,19 +799,29 @@ async function anthropicToolTurn(
       description: tool.description,
       input_schema: tool.inputSchema,
     })),
-    tool_choice:
-      choice === "auto"
-        ? { type: "auto" as const }
-        : choice === "required"
-          ? { type: "any" as const }
-          : { type: "tool" as const, name: choice.name },
-    ...(options.temperature !== undefined
-      ? { temperature: options.temperature }
-      : {}),
+    tool_choice: { type: "auto" as const },
   };
-  const requestOptions = options.signal ? { signal: options.signal } : {};
-  // The content blocks are built loosely above (a replayed assistant turn is
-  // the provider's own array); the SDK's request type is too narrow for that.
+}
+
+async function anthropicToolTurn(
+  systemPrompt: string,
+  messages: LLMToolMessage[],
+  tools: readonly LLMTool[],
+  context: LLMObservabilityContext,
+  options: LLMToolCallOptions,
+  apiKey: string,
+): Promise<LLMToolTurn> {
+  const posthog = getPostHogClient();
+  const request = anthropicToolRequestBody(
+    systemPrompt,
+    messages,
+    tools,
+    options,
+  );
+  const requestOptions = anthropicRequestOptions(request.model, options.signal);
+  // The content blocks are built loosely (a replayed assistant turn is the
+  // provider's own array, thinking blocks included, which must go back
+  // unchanged); the SDK's request type is too narrow for that.
   const body = request as never;
   const response = (
     posthog

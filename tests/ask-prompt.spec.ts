@@ -1220,7 +1220,7 @@ test.describe("isLLMConfigured", () => {
       ANTHROPIC_API_KEY: "k",
     });
     expect(resolvedLLMModel("claude-x")).toBe("claude-x");
-    expect(resolvedLLMModel("gemini-x")).toBe("claude-opus-4-6");
+    expect(resolvedLLMModel("gemini-x")).toBe("claude-opus-5-5");
   });
 
   test("whenever it is false, getLLMStream answers with the mock stream", async () => {
