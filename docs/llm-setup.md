@@ -20,7 +20,7 @@ Match-report insights are **not** this adapter: they come from the
 
 | `LLM_PROVIDER` | SDK                 | Key env var         | Model                   |
 | -------------- | ------------------- | ------------------- | ----------------------- |
-| `anthropic`    | `@anthropic-ai/sdk` | `ANTHROPIC_API_KEY` | `claude-opus-4-6`       |
+| `anthropic`    | `@anthropic-ai/sdk` | `ANTHROPIC_API_KEY` | `claude-opus-5-5`       |
 | `openai`       | `openai`            | `OPENAI_API_KEY`    | `gemini-3.5-flash-lite` |
 
 `openai` is a misnomer kept for compatibility: the branch drives the OpenAI
@@ -98,12 +98,14 @@ What one call sends, measured 2026-10-14 (`docs/ask-improvement-roadmap.md`):
 | Ask plan (SQL) | ~9,000 tokens | ~300 tokens |
 | Ask answer     | ~4,500 tokens | ~400 tokens |
 
-List prices per million tokens on that date:
+List prices per million tokens (Claude rows updated 2026-11-24):
 
 | Model                   | Input | Output | ≈ per Ask question | ≈ per insight |
 | ----------------------- | ----- | ------ | ------------------ | ------------- |
 | `gemini-3.5-flash-lite` | $0.30 | $2.50  | $0.006             | under $0.001  |
-| `claude-opus-4-6`       | $5    | $25    | $0.09              | $0.003        |
+| `claude-opus-5-5`       | $4    | $20    | $0.08              | $0.003        |
+| `claude-sonnet-5-5`     | $2    | $10    | $0.04              | $0.001        |
+| `claude-haiku-5-5`      | $0.10 | $0.50  | $0.002             | under $0.001  |
 
 Prices change; the roadmap's §1.1 compares the current alternatives. The
 actual spend is in PostHog (§7).
@@ -124,10 +126,13 @@ What the adapter adds so the events can be read:
   once per request and shared by every call in it, so an Ask question's plan,
   pattern and answer calls (and retries) sit under one `$ai_trace_id`.
 - **What a call asks for** travels in `getLLMStream()`'s options too:
-  `temperature` and `maxTokens` (Anthropic path only: Gemini answers sampling
-  parameters with a 400 and counts thinking tokens against a cap, so
-  `geminiRequestBody()` sends neither), a `jsonSchema` the reply must hold to
-  (`response_format` on the Gemini path, a forced tool on the Anthropic one),
+  `maxTokens` and `effort` (Anthropic path only: Gemini counts thinking
+  tokens against a cap, so `geminiRequestBody()` sends no cap; on Claude
+  `maxTokens` is a floor under a 16,000-token ceiling, since thinking counts
+  against it too), `temperature` (sent to neither: Gemini and every current
+  Claude model answer sampling parameters with a 400), a `jsonSchema` the
+  reply must hold to (`response_format` on the Gemini path, structured
+  outputs — `output_config.format` — on the Anthropic one),
   a `staticPrefixLength` marking the fixed part of the system prompt for the
   Anthropic prompt cache, and the request's `signal` so a closed tab aborts
   the provider call. Ask's plan step uses all of them; its prompts put the
