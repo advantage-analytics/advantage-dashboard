@@ -3,6 +3,7 @@ import { isPostHogConfigured } from "@/lib/posthog-client";
 import type { VideoRejectionReason } from "@/lib/services/upload/types";
 import type { ClaimRoleValue } from "@/lib/services/programs/claim-roles";
 import type { ConnectorApp } from "@/lib/auth/oauth-consent";
+import type { LabelBoardViewedProperties } from "@/lib/services/labels/board-viewed";
 import type {
   AcquisitionSource,
   RosterSizeBand,
@@ -147,6 +148,10 @@ export interface AnalyticsEvents {
     decision: "approve" | "deny";
     connector: ConnectorApp | null;
   };
+
+  // The labeller's board (`/label`), once per page load: how many jobs it
+  // offered and how many the viewer could claim. Counts and flags only.
+  label_board_viewed: LabelBoardViewedProperties;
 
   // Ask (`/dashboard/ask`, `/dashboard/team/ask`). The server's `ask_run`
   // only sees a question that reached the run; these also catch one refused
