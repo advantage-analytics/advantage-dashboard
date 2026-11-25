@@ -56,3 +56,29 @@ export function stepLabel(step: Step, persona: PathPersona | null): string {
   const position = path.indexOf(step) + 1;
   return position > 0 ? `Step ${position} of ${path.length}` : `Step ${step}`;
 }
+
+/**
+ * The `onboarding_step_viewed` payload for a screen: the step id, its 1-based
+ * position on the persona's path and that path's length. Steps 1 and 2 open
+ * every path, so their position is known before a persona is; the length is
+ * null until one is picked. Step ids and the persona enum only — never an
+ * answer typed on the screen.
+ */
+export function stepViewedProps(
+  step: Step,
+  persona: PathPersona | null,
+): {
+  step: Step;
+  step_number: number | null;
+  step_count: number | null;
+  persona: PathPersona | null;
+} {
+  const path = persona ? PATH[persona] : null;
+  const position = path ? path.indexOf(step) + 1 : step <= 2 ? step : 0;
+  return {
+    step,
+    step_number: position > 0 ? position : null,
+    step_count: path ? path.length : null,
+    persona,
+  };
+}
