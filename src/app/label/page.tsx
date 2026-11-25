@@ -1,8 +1,10 @@
 import { AdminPage } from "@/components/admin/admin-page";
 import { AssignedSessionsList } from "@/components/label/assigned-sessions-list";
 import { LabelBoard } from "@/components/label/label-board";
+import { LabelBoardViewed } from "@/components/label/label-board-viewed";
 import { listAssignedLabelSessions } from "@/lib/data/label-assignments-server";
 import { loadLabellerBoard } from "@/lib/data/label-queue-server";
+import { labelBoardViewedProperties } from "@/lib/services/labels/board-viewed";
 import { requireLabeller } from "@/lib/services/labels/claim-session";
 import { requireLabelViewerOrNotFound } from "@/lib/services/programs/admin-guard";
 
@@ -55,6 +57,10 @@ export default async function LabelHomePage() {
     // chrome comes with it.
     <AdminPage className="gap-10">
       <LabelBoard board={board} now={now} canClaim={canClaim} />
+      {/* Renders nothing: one analytics event with the board's counts. */}
+      <LabelBoardViewed
+        properties={labelBoardViewedProperties(board, canClaim, now)}
+      />
       {offBoard.length > 0 ? (
         <section
           aria-labelledby="label-assigned"
