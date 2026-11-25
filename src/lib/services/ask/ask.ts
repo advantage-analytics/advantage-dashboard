@@ -274,6 +274,13 @@ export interface AskModel {
   ): Promise<AsyncIterable<string>>;
   /** One tool turn (`getLLMToolTurn()`), for agent mode; absent, agent mode does not run. */
   toolTurn?: AskAgentToolTurn;
+  /**
+   * The model that answered the stage's calls so far — the other provider's
+   * when one failed over — or undefined before any call answered. `plan`
+   * covers the plan, pattern and agent calls. The run record prefers this
+   * to the model the stage was configured with.
+   */
+  servedModel?(stage: "plan" | "answer"): string | undefined;
 }
 
 /** One spent question, as `ask_reserve_question()` returned it. */

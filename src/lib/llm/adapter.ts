@@ -87,7 +87,24 @@ export interface LLMCallOptions {
    * default rather than failing the call.
    */
   model?: string;
+  /**
+   * Called once the call is answered, with the provider and model that
+   * answered it — the other provider's when the configured one failed and
+   * the call failed over. Ask records this as the stage's model, so a broken
+   * Claude setup does not show up as Claude runs answered by Gemini.
+   */
+  onServed?: (served: LLMServed) => void;
 }
+
+/** Who answered one call. `failover` is true when the configured provider failed first. */
+export interface LLMServed {
+  provider: LLMProvider;
+  model: string;
+  failover: boolean;
+}
+
+/** The two provider paths, by `LLM_PROVIDER`'s values (`openai` drives Gemini). */
+export type LLMProvider = "anthropic" | "openai";
 
 /** Each provider's default model, and the prefix its ids carry. */
 const ANTHROPIC_DEFAULT_MODEL = "claude-opus-5-5";
@@ -252,7 +269,7 @@ export function flushPostHogAfterResponse(posthog: PostHog | null) {
   flushAfterResponse(posthog);
 }
 
-function flushAfterResponse(posthog: PostHog | null) {
+function flushAfterResponse(posthog: Pick<PostHog, "flush"> | null) {
   if (!posthog) return;
   try {
     after(() => posthog.flush());
@@ -305,7 +322,8 @@ export function isLLMConfigured(): boolean {
  * The model a call asking for `requested` runs on, as `modelFor()` resolves
  * it for the configured provider; null in mock mode, where no model runs.
  * For telemetry: a request that fails over to the other provider runs that
- * provider's model instead, which is not known here.
+ * provider's model instead, which is not known here — `options.onServed`
+ * reports what actually answered.
  */
 export function resolvedLLMModel(requested: string | undefined): string | null {
   if (!isLLMConfigured()) return null;
@@ -313,6 +331,123 @@ export function resolvedLLMModel(requested: string | undefined): string | null {
     process.env.LLM_PROVIDER === "anthropic" ? "anthropic" : "openai",
     requested,
   );
+}
+
+/** One provider a call may run on: which, on what model, and the request itself. */
+export interface LLMProviderAttempt<T> {
+  provider: LLMProvider;
+  model: string;
+  run: () => Promise<T>;
+}
+
+/** The PostHog surface the failover event needs; a stub in the spec. */
+type FailoverCapture = Pick<PostHog, "capture" | "flush">;
+
+/**
+ * What a failed provider call says about itself, reduced to fields that
+ * cannot carry user data: the HTTP status, the provider's error type and
+ * code (`invalid_request_error`, `invalid_api_key`), and the SDK's error
+ * class. Never the message — a 400 can quote the request back.
+ */
+export function llmFailureFields(error: unknown): {
+  error_status: number | null;
+  error_type: string | null;
+  error_code: string | null;
+  error_name: string | null;
+} {
+  const record =
+    typeof error === "object" && error !== null
+      ? (error as Record<string, unknown>)
+      : {};
+  // Short identifiers only: anything else (a sentence, a quoted value) is dropped.
+  const slug = (value: unknown) =>
+    typeof value === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(value)
+      ? value
+      : null;
+  return {
+    error_status:
+      typeof record.status === "number" && Number.isInteger(record.status)
+        ? record.status
+        : null,
+    error_type: slug(record.type),
+    error_code: slug(record.code),
+    error_name: error instanceof Error ? slug(error.name) : null,
+  };
+}
+
+/** The `$ai_provider` PostHog's LLM events carry for each path. */
+const POSTHOG_PROVIDER: Record<LLMProvider, string> = {
+  anthropic: "anthropic",
+  openai: "google",
+};
+
+/**
+ * Runs `primary`; when it throws and `secondary` exists, captures one
+ * `llm_provider_failover` event and runs `secondary` instead. An aborted
+ * call is not retried. `options.onServed` hears which one answered.
+ *
+ * The event is for spotting a broken provider setup (a bad key, a key
+ * without the workspace scope, a parameter the model refuses), which
+ * otherwise runs silently on the other provider. It carries no prompt,
+ * reply or error message: under `posthogPrivacyMode` only model, cost,
+ * tokens and latency leave the server, and an error message can quote the
+ * request. Exported for its spec, which passes a stub `posthog`.
+ */
+export async function runWithProviderFailover<T>(
+  attempts: {
+    primary: LLMProviderAttempt<T>;
+    secondary: LLMProviderAttempt<T> | null;
+  },
+  context: LLMObservabilityContext,
+  options: Pick<LLMCallOptions, "span" | "model" | "signal" | "onServed">,
+  call: "stream" | "tool_turn",
+  posthog: FailoverCapture | null = getPostHogClient(),
+): Promise<T> {
+  const { primary, secondary } = attempts;
+  let result: T;
+  try {
+    result = await primary.run();
+  } catch (error) {
+    if (!secondary || options.signal?.aborted) throw error;
+    const failure = llmFailureFields(error);
+    console.warn("[llm] primary provider failed; retrying on the other", {
+      provider: primary.provider,
+      span: options.span,
+      ...failure,
+    });
+    if (posthog) {
+      posthog.capture({
+        distinctId: context.distinctId,
+        event: "llm_provider_failover",
+        properties: {
+          primary_provider: POSTHOG_PROVIDER[primary.provider],
+          secondary_provider: POSTHOG_PROVIDER[secondary.provider],
+          primary_model: primary.model,
+          secondary_model: secondary.model,
+          requested_model: options.model ?? null,
+          call,
+          $ai_span_name: options.span ?? null,
+          $ai_trace_id: context.traceId,
+          $ai_session_id: context.sessionId,
+          ...failure,
+        },
+      });
+      flushAfterResponse(posthog);
+    }
+    const served = await secondary.run();
+    options.onServed?.({
+      provider: secondary.provider,
+      model: secondary.model,
+      failover: true,
+    });
+    return served;
+  }
+  options.onServed?.({
+    provider: primary.provider,
+    model: primary.model,
+    failover: false,
+  });
+  return result;
 }
 
 /**
@@ -329,19 +464,26 @@ export async function getLLMStream(
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
 
+  const viaAnthropic = (
+    key: string,
+  ): LLMProviderAttempt<AsyncIterable<string>> => ({
+    provider: "anthropic",
+    model: modelFor("anthropic", options.model),
+    run: () => anthropicStream(systemPrompt, messages, context, options, key),
+  });
+  const viaOpenAI = (
+    key: string,
+  ): LLMProviderAttempt<AsyncIterable<string>> => ({
+    provider: "openai",
+    model: modelFor("openai", options.model),
+    run: () => openaiStream(systemPrompt, messages, context, options, key),
+  });
+
   const primary =
     provider === "anthropic" && anthropicKey
-      ? () =>
-          anthropicStream(
-            systemPrompt,
-            messages,
-            context,
-            options,
-            anthropicKey,
-          )
+      ? viaAnthropic(anthropicKey)
       : provider === "openai" && openaiKey
-        ? () =>
-            openaiStream(systemPrompt, messages, context, options, openaiKey)
+        ? viaOpenAI(openaiKey)
         : null;
   if (!primary) {
     // No provider configured — return a mock stream for local dev.
@@ -354,28 +496,17 @@ export async function getLLMStream(
   // is the caller's to handle, as it was.
   const secondary =
     provider === "anthropic" && openaiKey
-      ? () => openaiStream(systemPrompt, messages, context, options, openaiKey)
+      ? viaOpenAI(openaiKey)
       : provider === "openai" && anthropicKey
-        ? () =>
-            anthropicStream(
-              systemPrompt,
-              messages,
-              context,
-              options,
-              anthropicKey,
-            )
+        ? viaAnthropic(anthropicKey)
         : null;
 
-  try {
-    return await primary();
-  } catch (error) {
-    if (!secondary || options.signal?.aborted) throw error;
-    console.warn("[llm] primary provider failed; retrying on the other", {
-      provider,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return secondary();
-  }
+  return runWithProviderFailover(
+    { primary, secondary },
+    context,
+    options,
+    "stream",
+  );
 }
 
 /* ── Anthropic ────────────────────────────────────────────── */
@@ -690,10 +821,18 @@ export async function getLLMToolTurn(
   const provider = process.env.LLM_PROVIDER ?? "";
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
-  const viaAnthropic = (key: string) => () =>
-    anthropicToolTurn(systemPrompt, messages, tools, context, options, key);
-  const viaOpenAI = (key: string) => () =>
-    openaiToolTurn(systemPrompt, messages, tools, context, options, key);
+  const viaAnthropic = (key: string): LLMProviderAttempt<LLMToolTurn> => ({
+    provider: "anthropic",
+    model: modelFor("anthropic", options.model),
+    run: () =>
+      anthropicToolTurn(systemPrompt, messages, tools, context, options, key),
+  });
+  const viaOpenAI = (key: string): LLMProviderAttempt<LLMToolTurn> => ({
+    provider: "openai",
+    model: modelFor("openai", options.model),
+    run: () =>
+      openaiToolTurn(systemPrompt, messages, tools, context, options, key),
+  });
 
   const primary =
     provider === "anthropic" && anthropicKey
@@ -708,16 +847,12 @@ export async function getLLMToolTurn(
       : provider === "openai" && anthropicKey
         ? viaAnthropic(anthropicKey)
         : null;
-  try {
-    return await primary();
-  } catch (error) {
-    if (!secondary || options.signal?.aborted) throw error;
-    console.warn("[llm] primary provider failed; retrying on the other", {
-      provider,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    return secondary();
-  }
+  return runWithProviderFailover(
+    { primary, secondary },
+    context,
+    options,
+    "tool_turn",
+  );
 }
 
 /**

@@ -12,6 +12,7 @@
 
 import {
   createLLMObservabilityContext,
+  type LLMServed,
   getLLMStream,
   getLLMToolTurn,
   isLLMConfigured,
@@ -33,7 +34,9 @@ function requestedStageModels(): {
 /**
  * The model each stage runs on, for ask_runs and the `ask_run` event: the
  * adapter's own resolution, so a substituted provider default is recorded as
- * what ran. Null in mock mode. A provider failover is not reflected.
+ * what is configured to run. Null in mock mode. A provider failover is not
+ * known here: the run record takes the model that answered from
+ * `AskModel.servedModel()` once a stage has run, and this is its fallback.
  */
 export function askStageModels(): {
   plan: string | null;
@@ -53,6 +56,13 @@ export function askAdapterModel(input: {
 }): AskModel {
   const observability = createLLMObservabilityContext(input.userId);
   const stage = requestedStageModels();
+  // Who answered each stage. A failover sticks: one failed-over call in a
+  // stage is the thing ask_runs should show, even if a later call in it
+  // reached the configured provider again.
+  const served: { plan?: LLMServed; answer?: LLMServed } = {};
+  const record = (key: "plan" | "answer") => (answered: LLMServed) => {
+    if (!served[key]?.failover) served[key] = answered;
+  };
   return {
     configured: isLLMConfigured(),
     stream: (systemPrompt, messages, call) =>
@@ -67,6 +77,7 @@ export function askAdapterModel(input: {
         jsonSchema: call?.jsonSchema,
         staticPrefixLength: call?.staticPrefixLength,
         signal: input.signal,
+        onServed: record(call?.stage === "answer" ? "answer" : "plan"),
       }),
     // Agent mode's turns (`agent.ts`) run on the plan stage's model: they
     // write the plan. The loop's deadline aborts a turn beside the request.
@@ -81,6 +92,8 @@ export function askAdapterModel(input: {
           input.signal && call.signal
             ? AbortSignal.any([input.signal, call.signal])
             : (call.signal ?? input.signal),
+        onServed: record("plan"),
       }),
+    servedModel: (key) => served[key]?.model,
   };
 }

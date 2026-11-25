@@ -141,6 +141,27 @@ What the adapter adds so the events can be read:
   chunk, which Gemini sends only when asked (the request's
   `stream_options.include_usage`). Before 2026-10-15 every event from this
   path recorded zero tokens and zero cost.
+- **`llm_provider_failover`** is captured once per call whose configured
+  provider threw and that was retried on the other provider's key (both
+  `getLLMStream()` and `getLLMToolTurn()`, through
+  `runWithProviderFailover()`). Without it a broken Claude setup — a bad key,
+  a key without the workspace scope, a 400 from a parameter the model
+  refuses — runs silently on Gemini. Properties: `primary_provider` /
+  `secondary_provider` (`anthropic` or `google`, as `$ai_provider`),
+  `primary_model`, `secondary_model`, `requested_model` (the caller's
+  `options.model`, or null), `call` (`stream` or `tool_turn`),
+  `$ai_span_name`, `$ai_trace_id` and `$ai_session_id` (so it sits beside the
+  call's `$ai_generation` events), and `error_status`, `error_type`,
+  `error_code`, `error_name` (the HTTP status, the provider's error type and
+  code, the SDK's error class — short identifiers only). Never the prompt,
+  the reply or the error message, which can quote the request. An aborted
+  call, or one with no second key, is not retried and sends nothing.
+- **The model that answered.** `options.onServed` hears the provider and
+  model that answered each call, with `failover: true` after a retry. Ask
+  (`askAdapterModel()`) keeps it per stage, and `ask_runs.plan_model` /
+  `answer_model` and the `ask_run` event record that model rather than the
+  configured one (`askStageModels()`, still the fallback for a stage no
+  call answered).
 
 Nothing is sent when the PostHog server config is absent.
 
