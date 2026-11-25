@@ -114,7 +114,7 @@ const ANTHROPIC_FALLBACK_BETA = "server-side-fallback-2026-07-01";
  * `getLLMStream()` would then hide by answering on Gemini.
  */
 const ANTHROPIC_FALLBACK_MODELS =
-  /^claude-(?:(?:fable|mythos)-5-[12]|opus-5|opus-5-5|sonnet-5-5)$/;
+  /^claude-(?:(?:fable|mythos)-5-[12]|opus-5(?:-5)?|sonnet-5-5)$/;
 
 /**
  * The models that take `output_config.effort`. Haiku 4.5, Sonnet 4.5 and
@@ -122,10 +122,6 @@ const ANTHROPIC_FALLBACK_MODELS =
  */
 const ANTHROPIC_EFFORT_MODELS =
   /^claude-(?:fable|mythos|opus-5|sonnet-5|haiku-5|opus-4-[5-9]|sonnet-4-6)/;
-
-function anthropicTakesFallbacks(model: string): boolean {
-  return ANTHROPIC_FALLBACK_MODELS.test(model);
-}
 
 /**
  * Structured outputs require every object in the schema to forbid extra
@@ -419,7 +415,7 @@ function anthropicCommonBody(
           }
         : {}),
     },
-    ...(anthropicTakesFallbacks(model)
+    ...(ANTHROPIC_FALLBACK_MODELS.test(model)
       ? { fallbacks: "default" as const }
       : {}),
   };
@@ -444,7 +440,7 @@ export function anthropicRequestOptions(
   signal: AbortSignal | undefined,
 ) {
   return {
-    ...(anthropicTakesFallbacks(model)
+    ...(ANTHROPIC_FALLBACK_MODELS.test(model)
       ? { headers: { "anthropic-beta": ANTHROPIC_FALLBACK_BETA } }
       : {}),
     ...(signal ? { signal } : {}),
