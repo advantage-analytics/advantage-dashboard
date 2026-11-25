@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 import {
   anthropicRequestBody,
+  anthropicRequestOptions,
   anthropicToolRequestBody,
   closedJsonSchema,
 } from "@/lib/llm/adapter";
@@ -107,11 +108,57 @@ test("a forced tool turn is auto plus a note after the tool results", () => {
   });
 });
 
-test("an auto tool turn carries no note", () => {
+test("auto and required tool turns carry no note, so history never changes between turns", () => {
+  for (const toolChoice of ["auto", "required"] as const) {
+    const body = anthropicToolRequestBody("system", messages, [], {
+      toolChoice,
+    });
+    expect(body.tool_choice).toEqual({ type: "auto" });
+    expect(body.messages).toEqual([
+      { role: "user", content: "How did I serve?" },
+    ]);
+  }
+});
+
+test("an explicit undefined effort still gets the tool turn's medium default", () => {
   const body = anthropicToolRequestBody("system", messages, [], {
-    toolChoice: "auto",
+    effort: undefined,
   });
-  expect(body.messages).toEqual([
-    { role: "user", content: "How did I serve?" },
-  ]);
+  expect(body.output_config.effort).toBe("medium");
+});
+
+test("fallbacks and their beta header go only to models that take them", () => {
+  for (const model of ["claude-opus-5-5", "claude-sonnet-5-5"]) {
+    const body = anthropicRequestBody("system", messages, { model });
+    expect(body.fallbacks, model).toBe("default");
+    expect(anthropicRequestOptions(model, undefined).headers).toEqual({
+      "anthropic-beta": "server-side-fallback-2026-07-01",
+    });
+  }
+  for (const model of [
+    "claude-haiku-5-5",
+    "claude-haiku-4-5",
+    "claude-opus-4-8",
+  ]) {
+    const body = anthropicRequestBody("system", messages, { model });
+    expect(body, model).not.toHaveProperty("fallbacks");
+    expect(anthropicRequestOptions(model, undefined), model).not.toHaveProperty(
+      "headers",
+    );
+  }
+});
+
+test("effort goes only to models that take it", () => {
+  for (const model of [
+    "claude-haiku-5-5",
+    "claude-sonnet-5-5",
+    "claude-opus-4-8",
+  ]) {
+    const body = anthropicRequestBody("system", messages, { model });
+    expect(body.output_config, model).toHaveProperty("effort", "low");
+  }
+  for (const model of ["claude-haiku-4-5", "claude-sonnet-4-5"]) {
+    const body = anthropicRequestBody("system", messages, { model });
+    expect(body.output_config, model).not.toHaveProperty("effort");
+  }
 });
