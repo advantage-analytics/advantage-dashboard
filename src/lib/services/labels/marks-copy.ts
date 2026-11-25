@@ -345,7 +345,7 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
     case "ending_suspect_line":
       return "The vendor’s tracking put the ball before this winner within 1 m of a line. Most like this turn out to be errors.";
     case "second_serve_called_out":
-      return "The second serve was called out, but one or two shots followed. Check whether it was a double fault.";
+      return "The vendor called the second serve out, but the returner hit it back, so it’s stored as in. Check whether it was a double fault.";
     case "same_player_consecutive":
       return `${names[mark.params.hitter]} hit twice in a row. A shot in between was probably missed.`;
     case "reserve_after_in":
@@ -366,7 +366,7 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
     case "net_hit_contradicts_height":
       return "Marked as hitting the net, but the ball’s height says it cleared it.";
     case "serve_fault":
-      return "The first serve was called out and only one or two shots followed, with no second serve. It may be a fault the returner hit anyway.";
+      return "The vendor called the first serve out, but the returner hit it back and there was no second serve. It may be a fault the returner played anyway.";
     case "shot_after_point_end":
       // Several strokes follow only a miss the labeller called (marks-state.ts
       // `pointEndedEarly`): the call is theirs, so nothing is left to mark.
