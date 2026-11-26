@@ -435,10 +435,48 @@ test.describe("tally", () => {
   });
 });
 
+test.describe("differs: a follow-up must not repeat the previous answer", () => {
+  test("passes a new headline, fails the previous one again, and says when there is nothing to compare", () => {
+    const fresh = gradeTranscript(
+      { differs: true },
+      { ...answered, previousHeadline: "You won more of your long rallies." },
+    );
+    expect(fresh).toMatchObject({ scored: true, pass: true });
+
+    const repeated = gradeTranscript(
+      { differs: true },
+      {
+        ...answered,
+        previousHeadline: "  your FIRST serve climbed over the season. ",
+      },
+    );
+    expect(repeated).toMatchObject({ scored: true, pass: false });
+    if (repeated.scored) {
+      expect(repeated.checks[0].reason).toMatch(
+        /repeated the previous headline/,
+      );
+    }
+
+    const first = gradeTranscript({ differs: true }, answered);
+    expect(first).toMatchObject({ scored: true, pass: true });
+    if (first.scored) {
+      expect(first.checks[0].reason).toMatch(/no previous answer/);
+    }
+  });
+
+  test("refuses a differs that is not true or false", () => {
+    expect(expectProblems({ differs: "yes" })).toEqual([
+      "differs must be true or false",
+    ]);
+  });
+});
+
 test.describe("the committed question lists", () => {
   for (const [file, count] of [
     ["scripts/ask-eval-season.json", 21],
     ["scripts/ask-eval-team.json", 32],
+    ["scripts/ask-eval-follow-ups.json", 24],
+    ["scripts/ask-eval-follow-ups-team.json", 52],
   ] as const) {
     test(`${file}: every entry carries a well-formed expect block`, () => {
       const list = JSON.parse(readFileSync(file, "utf8")) as {
