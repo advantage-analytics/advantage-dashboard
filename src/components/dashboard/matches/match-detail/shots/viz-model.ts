@@ -68,7 +68,7 @@ import {
 } from "../match-filters/approach";
 import type { NetEnding, NetEntry } from "../match-filters/net-game";
 import { hitterHalf, type Hand } from "../match-filters/shot-geometry";
-import { bandKindFor, marksAreShots } from "./cut-kinds";
+import { bandKindFor, isPlacementCut, marksAreShots } from "./cut-kinds";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
@@ -181,6 +181,32 @@ export function withCourtEnds(
   return stored === (filters.ends ?? null)
     ? filters
     : { ...filters, ends: stored };
+}
+
+/**
+ * The court's Placement · Contact · Both control for `chartCut` (the CHART
+ * cut: Returns, never the contact court it may be drawn as), or `undefined`
+ * on a chart with one end. `ends` is saved with a view, so a change edits an
+ * open view exactly as a filter does (`viewId` dropped).
+ */
+export function courtEndsControl<
+  S extends { filters: VizFilters; viewId: string | null },
+>(
+  chartCut: Cut,
+  filters: VizFilters,
+  setState: (update: (prev: S) => S) => void,
+): { value: CourtEnds; onChange: (ends: CourtEnds) => void } | undefined {
+  if (!isPlacementCut(chartCut)) return undefined;
+  return {
+    value: courtEndsFor(chartCut, filters) ?? "placement",
+    onChange: (ends) =>
+      setState((prev) => {
+        const next = withCourtEnds(prev.filters, chartCut, ends);
+        return next === prev.filters
+          ? prev
+          : { ...prev, filters: next, viewId: null };
+      }),
+  };
 }
 
 // Every dimension below is multi-select: an empty list means "any" (no

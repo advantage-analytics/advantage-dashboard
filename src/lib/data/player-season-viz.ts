@@ -650,8 +650,8 @@ export function buildSeasonCards(
   scope?: SeasonFilters,
 ): SeasonCard[] {
   const judged = seasonErrorSplitJudged(perMatch);
-  const scoped = scopeSeasonMatches(perMatch, scope);
   const season = seasonScopeFilters(perMatch, scope);
+  const scoped = keepingScope(perMatch, season);
   return defaultCutsFor(judged).map((cut) =>
     seasonCard(
       scoped,
@@ -702,8 +702,8 @@ export function buildSeasonViewCards(
   scope?: SeasonFilters,
 ): SeasonCard[] {
   const judged = seasonErrorSplitJudged(perMatch);
-  const scoped = scopeSeasonMatches(perMatch, scope);
   const season = seasonScopeFilters(perMatch, scope);
+  const scoped = keepingScope(perMatch, season);
   return views.map((view) =>
     seasonCard(
       scoped,
@@ -1077,9 +1077,27 @@ export function scopeSeasonMatches<T extends SeasonScopeMatch>(
   perMatch: readonly T[],
   scope: SeasonFilters | undefined,
 ): readonly T[] {
-  const applied = seasonScopeFilters(perMatch, scope);
+  return keepingScope(perMatch, seasonScopeFilters(perMatch, scope));
+}
+
+/** `perMatch` narrowed by an already-applied scope (no scope: untouched). */
+function keepingScope<T extends SeasonScopeMatch>(
+  perMatch: readonly T[],
+  applied: SeasonFilters | undefined,
+): readonly T[] {
   if (!applied) return perMatch;
   return perMatch.filter((m) => seasonMatchPasses(m, applied));
+}
+
+/** An applied scope's result, hand and surface in the strip's words. */
+function appliedFilterWords(applied: SeasonFilters): string[] {
+  const words: string[] = [];
+  if (applied.result != null) words.push(SEASON_RESULT_PHRASE[applied.result]);
+  if (applied.opponentHand !== null)
+    words.push(OPPONENT_HAND_PHRASE[applied.opponentHand]);
+  if (applied.surface != null)
+    words.push(SEASON_SURFACE_PHRASE[applied.surface]);
+  return words;
 }
 
 /** What a Matches row reads off a match — the courts' season
@@ -1144,14 +1162,9 @@ export function matchScopeSummary(
 ): MatchScopeSummary | null {
   const applied = seasonScopeFilters(perMatch, scope);
   if (!applied) return null;
-  const words: string[] = [];
-  if (applied.result != null) words.push(SEASON_RESULT_PHRASE[applied.result]);
-  if (applied.opponentHand !== null)
-    words.push(OPPONENT_HAND_PHRASE[applied.opponentHand]);
-  if (applied.surface != null)
-    words.push(SEASON_SURFACE_PHRASE[applied.surface]);
+  const words = appliedFilterWords(applied);
   return {
-    shown: scopeSeasonMatches(perMatch, applied).length,
+    shown: keepingScope(perMatch, applied).length,
     analyzed: perMatch.length,
     words,
   };
@@ -1176,12 +1189,7 @@ export function matchScopeWords(
     },
   );
   if (!applied) return [];
-  const words: string[] = [];
-  if (applied.result != null) words.push(SEASON_RESULT_PHRASE[applied.result]);
-  if (applied.opponentHand !== null)
-    words.push(OPPONENT_HAND_PHRASE[applied.opponentHand]);
-  if (applied.surface != null)
-    words.push(SEASON_SURFACE_PHRASE[applied.surface]);
+  const words = appliedFilterWords(applied);
   const n = applied.matches.length;
   if (n > 0) words.push(`${n} ${n === 1 ? "match" : "matches"}`);
   return words;
@@ -1522,12 +1530,7 @@ export function buildSeasonLightbox(
       filterPhrases.push(`${LOOSENED_LABEL[key] ?? "Filter"}: any`);
   // The season's own filters close the sentence: "Won · Lefties · Clay ·
   // 2 matches".
-  if (applied.result != null)
-    filterPhrases.push(SEASON_RESULT_PHRASE[applied.result]);
-  if (applied.opponentHand !== null)
-    filterPhrases.push(OPPONENT_HAND_PHRASE[applied.opponentHand]);
-  if (applied.surface != null)
-    filterPhrases.push(SEASON_SURFACE_PHRASE[applied.surface]);
+  filterPhrases.push(...appliedFilterWords(applied));
   if (applied.matches.length > 0)
     filterPhrases.push(
       `${applied.matches.length} ${applied.matches.length === 1 ? "match" : "matches"}`,

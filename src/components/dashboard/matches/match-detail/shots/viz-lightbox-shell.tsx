@@ -45,7 +45,7 @@ import {
   viewerFullCourtTransform,
   viewerInitialTransform,
 } from "./court-geometry";
-import { bandKindFor, isPlacementCut } from "./cut-kinds";
+import { bandKindFor, isPlacementCut, isReturnCut } from "./cut-kinds";
 import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
 import type { PlayerChipLabels } from "./player-chip-labels";
@@ -68,7 +68,6 @@ import {
   COUNT_NOUN,
   LegendFilter,
   LightboxFilterPanel,
-  RETURN_CUTS,
   ServeReturnedChips,
   type LightboxAdvancedFilters,
   type LightboxSeasonFilters,
@@ -1188,7 +1187,7 @@ export function VizLightboxShell({
                     )}
                     {/* Returns lead with the serve they answer (board
                         Final-04), behind a hairline from the player chips. */}
-                    {!isDraft && filterPanel && RETURN_CUTS.has(cut) && (
+                    {!isDraft && filterPanel && isReturnCut(cut) && (
                       <>
                         {player && (
                           <span

@@ -1074,13 +1074,11 @@ function CourtEndLabels({
   scale,
   lanes = null,
   placement = true,
-  contact = true,
 }: {
   scale: number;
   /** Approaches' three lane names; `null` draws the two words alone. */
   lanes?: ReturnType<typeof approachLaneText> | null;
   placement?: boolean;
-  contact?: boolean;
 }) {
   const approach = lanes !== null;
   const layout = approachApronLayout(scale);
@@ -1107,18 +1105,16 @@ function CourtEndLabels({
           Placement
         </text>
       )}
-      {contact && (
-        <text
-          data-court-end-label="contact"
-          data-approach-label={approach ? "contact" : undefined}
-          x={VIEWER_COURT.centreX}
-          y={layout.contactY}
-          fontSize={layout.side}
-          fillOpacity={COURT_SIDE_LABEL_OPACITY}
-        >
-          Contact
-        </text>
-      )}
+      <text
+        data-court-end-label="contact"
+        data-approach-label={approach ? "contact" : undefined}
+        x={VIEWER_COURT.centreX}
+        y={layout.contactY}
+        fontSize={layout.side}
+        fillOpacity={COURT_SIDE_LABEL_OPACITY}
+      >
+        Contact
+      </text>
       {lanes !== null &&
         (["left", "middle", "right"] as const).map((lane) => (
           <text

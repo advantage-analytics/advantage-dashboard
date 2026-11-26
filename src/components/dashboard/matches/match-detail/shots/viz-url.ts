@@ -17,6 +17,7 @@ import {
   courtEndsFor,
   filterKeysFor,
   storedCourtEnds,
+  withCourtEnds,
   type Chart,
   type CourtEnds,
   type Cut,
@@ -397,6 +398,22 @@ function parseSeasonFilters(
   });
 }
 
+/** `season`, canonical (ids sorted, so one selection is one query string
+ *  whatever order the ticks came in), written onto `params` under `names`. */
+function writeSeasonFilters(
+  params: URLSearchParams,
+  season: SeasonFilters | null | undefined,
+  names: SeasonFilterParams,
+): void {
+  const canonical = normalizeSeasonFilters(season);
+  if (!canonical) return;
+  if (canonical.opponentHand !== null)
+    params.set(names.hand, canonical.opponentHand);
+  if (canonical.result) params.set(names.result, canonical.result);
+  if (canonical.surface) params.set(names.surface, canonical.surface);
+  for (const id of canonical.matches) params.append(names.match, id);
+}
+
 /* ── The player page's match scope ──────────────────────────────────────── */
 
 /**
@@ -454,14 +471,7 @@ export function matchScopeQuery(
 ): string {
   const next = new URLSearchParams(params.toString());
   for (const key of MATCH_SCOPE_KEYS) next.delete(key);
-  const canonical = normalizeSeasonFilters(scope);
-  if (canonical) {
-    if (canonical.opponentHand !== null)
-      next.set(SCOPE_HAND_PARAM, canonical.opponentHand);
-    if (canonical.result) next.set(SCOPE_RESULT_PARAM, canonical.result);
-    if (canonical.surface) next.set(SCOPE_SURFACE_PARAM, canonical.surface);
-    for (const id of canonical.matches) next.append(SCOPE_MATCH_PARAM, id);
-  }
+  writeSeasonFilters(next, scope, MATCH_SCOPE_PARAMS);
   return next.toString();
 }
 
@@ -1024,16 +1034,8 @@ export function vizStateQuery(
   const ends = storedCourtEnds(state.cut, state.filters.ends);
   if (ends !== null) next.set(COURT_ENDS_PARAM, ends);
 
-  // The season's own filters, canonical (ids sorted) so one selection is
-  // one query string whatever order the ticks came in.
-  const season = normalizeSeasonFilters(state.season);
-  if (season) {
-    if (season.opponentHand !== null)
-      next.set(SEASON_HAND_PARAM, season.opponentHand);
-    if (season.result) next.set(SEASON_RESULT_PARAM, season.result);
-    if (season.surface) next.set(SEASON_SURFACE_PARAM, season.surface);
-    for (const id of season.matches) next.append(SEASON_MATCH_PARAM, id);
-  }
+  // The season's own filters.
+  writeSeasonFilters(next, state.season, LIGHTBOX_SEASON_PARAMS);
 
   return next.toString();
 }
@@ -1130,10 +1132,7 @@ export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
   // Which ends the court draws carries as a choice, re-read against the new
   // cut: dropped on Serves, and dropped where it is that cut's own default
   // (Both, carried onto Approaches). Unsaid stays unsaid — each cut's default.
-  const ends = storedCourtEnds(nextCut, filters.ends);
-  if (ends !== (filters.ends ?? null)) {
-    filters = { ...filters, ends };
-  }
+  filters = withCourtEnds(filters, nextCut, filters.ends ?? null);
   // Error kinds only mean something on the errors cut.
   if (nextCut !== "errors" && filters.error?.length) {
     filters = { ...filters, error: [] };

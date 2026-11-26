@@ -15,14 +15,11 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { LightboxChunkPending } from "@/components/dashboard/loading/lightbox-pending";
 import { useVizState } from "@/components/dashboard/matches/match-detail/shots/use-viz-state";
 import { CUT_LABEL } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
-import { isPlacementCut } from "@/components/dashboard/matches/match-detail/shots/cut-kinds";
 import {
   EMPTY_VIZ_FILTERS,
-  courtEndsFor,
+  courtEndsControl,
   drawnCut,
-  withCourtEnds,
   type Chart,
-  type CourtEnds,
   type Cut,
   type PlayerFilter,
   type VizDot,
@@ -542,18 +539,7 @@ export function SeasonVizLightbox({
   // The court's Placement · Contact · Both, on a chart with both ends: set
   // against the chart cut, saved with a view, so a change edits an open view
   // as a filter does.
-  const courtEnds = isPlacementCut(cut)
-    ? {
-        value: courtEndsFor(cut, state.filters) ?? "placement",
-        onChange: (ends: CourtEnds) =>
-          setState((prev) => {
-            const filters = withCourtEnds(prev.filters, cut, ends);
-            return filters === prev.filters
-              ? prev
-              : { ...prev, filters, viewId: null };
-          }),
-      }
-    : undefined;
+  const courtEnds = courtEndsControl(cut, state.filters, setState);
 
   function choosePlayer(player: PlayerFilter) {
     setState((prev) => ({

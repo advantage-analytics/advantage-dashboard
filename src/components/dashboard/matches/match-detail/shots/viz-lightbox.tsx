@@ -42,13 +42,11 @@ import {
   filterKeysFor,
   HAND_ASSUMED_NOTE,
   LOOSENED_LABEL,
-  withCourtEnds,
-  type CourtEnds,
+  courtEndsControl,
   type PlayerFilter,
   type VizMark,
   type VizFilters,
 } from "./viz-model";
-import { isPlacementCut } from "./cut-kinds";
 import { activeFilterEntries, courtFor, sameFilterValue } from "./viz-url";
 import {
   useErrorSplitJudged,
@@ -526,18 +524,7 @@ export function VizLightbox({
   // may be drawn as). It is saved with a view, so a change edits an open
   // view exactly as a filter does (`viewId` dropped, `editedFrom` kept).
   const chartCut = state.cut ?? cut;
-  const courtEnds = isPlacementCut(chartCut)
-    ? {
-        value: courtEndsFor(chartCut, state.filters) ?? "placement",
-        onChange: (ends: CourtEnds) =>
-          setState((prev) => {
-            const filters = withCourtEnds(prev.filters, chartCut, ends);
-            return filters === prev.filters
-              ? prev
-              : { ...prev, filters, viewId: null };
-          }),
-      }
-    : undefined;
+  const courtEnds = courtEndsControl(chartCut, state.filters, setState);
 
   // Any filter the court is under beyond what "Clear filter" leaves —
   // including the advanced (`match`), Result, Rally and Game groups a saved

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { isReturnCut } from "./cut-kinds";
 import { Bookmark, BookmarkPlus, Crosshair, ScatterChart } from "lucide-react";
 import {
   FloatMenu,
@@ -163,9 +164,7 @@ export function CutMenu({
       <FloatMenuItem
         label="Returns"
         description="Where the return lands or is struck"
-        chosen={
-          state.cut === "returnPlacement" || state.cut === "returnContact"
-        }
+        chosen={isReturnCut(state.cut)}
         onSelect={() => selectCut("returnPlacement")}
       />
       <FloatMenuItem

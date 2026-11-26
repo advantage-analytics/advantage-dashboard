@@ -97,7 +97,7 @@ function contactDividersLabel(
  * "Edit bands…" and the note saying whose bands they are. Renders nothing on
  * a cut without bands. `close` shuts the menu it sits in.
  */
-export function VizBandsMenuRows({
+function VizBandsMenuRows({
   cut,
   onEdit,
   close,

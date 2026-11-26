@@ -12,6 +12,7 @@ import {
 } from "../match-filters/model";
 import type { CountNoun } from "../match-filters/panel-draft";
 import { cn } from "@/lib/utils";
+import { isReturnCut, marksAreShots } from "./cut-kinds";
 import { LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
 import { LEGEND_PICKS, type LegendPick } from "./lightbox-points";
@@ -47,21 +48,8 @@ type PanelKey =
   | "approachTo"
   | "approachDir";
 
-/** The rally cuts: their Rally length is toolbar chips, not a panel row. */
-const RALLY_CUTS: ReadonlySet<Cut> = new Set<Cut>([
-  "rallyPosition",
-  "rallyPlacement",
-]);
-
-/** The return cuts: their serve (`ball`, the serve being returned) is
- *  toolbar chips, not a panel row (board Final-04). */
-export const RETURN_CUTS: ReadonlySet<Cut> = new Set<Cut>([
-  "returnPlacement",
-  "returnContact",
-]);
-
 /** Rally length's segments and what each one counts (board Final-03). */
-export const RALLY_SEGMENTS = [
+const RALLY_SEGMENTS = [
   { value: "short", label: "Short", tooltip: "1–4 shots" },
   { value: "medium", label: "Medium", tooltip: "5–8 shots" },
   { value: "long", label: "Long", tooltip: "9 or more shots" },
@@ -70,8 +58,7 @@ export const RALLY_SEGMENTS = [
 const PRESSURE_VALUES: PressureValue[] = ["pressure", "break", "setMatch"];
 
 /** The scores "Pressure points" means (`isPressurePoint`). */
-export const PRESSURE_POINTS_SCORES =
-  "30–30, 30–40, 40–30, deuce and ad points";
+const PRESSURE_POINTS_SCORES = "30–30, 30–40, 40–30, deuce and ad points";
 
 /** A segmented row's value when the key holds several: matches no option. */
 const MIXED_SEGMENT = "__mixed__";
@@ -302,16 +289,13 @@ export function LightboxFilterPanel({
     });
   // Then the shared run: Rally length, Pressure, Court, Set. Rally shots
   // carry Rally length as toolbar chips instead (board Final-07).
-  if (keys.has("rally") && !RALLY_CUTS.has(cut))
+  if (keys.has("rally") && !marksAreShots(cut))
     sections.push({
       label: "Rally length",
       segmented: [
         {
           key: "rally",
-          options: [
-            { value: null, label: "Any" },
-            ...RALLY_SEGMENTS.map((r) => ({ ...r })),
-          ],
+          options: [{ value: null, label: "Any" }, ...RALLY_SEGMENTS],
         },
       ],
     });
@@ -355,7 +339,7 @@ export function LightboxFilterPanel({
     });
   // 1st or 2nd serve sits after the shared run — except on Returns, whose
   // toolbar carries it as "Serve returned" chips (board Final-04).
-  if (keys.has("ball") && !RETURN_CUTS.has(cut))
+  if (keys.has("ball") && !isReturnCut(cut))
     sections.push({
       label: "Serve",
       segmented: [

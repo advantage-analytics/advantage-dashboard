@@ -507,10 +507,22 @@ export async function loadPlayerSeason(
     caching,
   );
   return {
-    analyzed: perMatch.length,
-    verified: perMatch.filter((m) => m.verified).length,
+    ...foldSeason(perMatch),
     matchesPlayed: counted.length,
     opponentsCount: seasonOpponentCount(sides),
+  };
+}
+
+/** The figures a season is folded from its analyzed matches. */
+function foldSeason(
+  perMatch: PlayerSeason["perMatch"],
+): Pick<
+  PlayerSeason,
+  "analyzed" | "verified" | "groups" | "tallies" | "perMatch"
+> {
+  return {
+    analyzed: perMatch.length,
+    verified: perMatch.filter((m) => m.verified).length,
     groups: foldSeasonRows(perMatch),
     tallies: foldSeasonTallies(perMatch),
     perMatch,
@@ -535,15 +547,7 @@ export function scopePlayerSeason(
 ): PlayerSeason {
   const perMatch = scopeSeasonMatches(season.perMatch, scope);
   if (perMatch === season.perMatch) return season;
-  const kept = [...perMatch];
-  return {
-    ...season,
-    analyzed: kept.length,
-    verified: kept.filter((m) => m.verified).length,
-    groups: foldSeasonRows(kept),
-    tallies: foldSeasonTallies(kept),
-    perMatch: kept,
-  };
+  return { ...season, ...foldSeason([...perMatch]) };
 }
 
 /**

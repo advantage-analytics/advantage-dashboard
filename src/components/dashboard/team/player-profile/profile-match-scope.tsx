@@ -104,7 +104,7 @@ export function ProfileMatchScope({
             aria-hidden="true"
           />
           {shown} of {matches.length}{" "}
-          {matches.length === 1 ? "match" : "matches"}
+          {matches.length === 1 ? MATCH_NOUN.one : MATCH_NOUN.many}
           <Chevron className="size-3" strokeWidth={1.5} aria-hidden="true" />
         </button>
       </PopoverTrigger>

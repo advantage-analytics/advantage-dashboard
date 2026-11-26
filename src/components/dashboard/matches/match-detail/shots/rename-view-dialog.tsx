@@ -27,8 +27,7 @@ import { cn } from "@/lib/utils";
  * (optimistically) and answers a server refusal in its own status line.
  */
 /** What a rename reaches, said under the field until the name is taken. */
-export const RENAME_NOTE =
-  "Changes the name on every match and player profile.";
+const RENAME_NOTE = "Changes the name on every match and player profile.";
 
 export function RenameViewDialog({
   open,
