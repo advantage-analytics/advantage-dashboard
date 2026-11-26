@@ -21,9 +21,11 @@
  *   save_view     the same cut and filters as a saved view (`saved_views`)
  *   export        the visual's rows as a CSV
  *   share         the match page, where Share makes the public link
- *   open_match    the one source match
  *   open_player   the roster player the question tagged (team scope)
- *   open_opponent the Matches list searched for the opponent asked about
+ *
+ * The source match itself is not an action: the answer's signature links it
+ * ("Sep 28 vs. Beau Perez"). "Matches vs. [opponent]" was dropped with it —
+ * the follow-up questions and the tags already reach the opponent.
  *
  * Pure: no React, no database, and nothing from `next/*`, so the page's
  * harness and `tests/ask-actions.spec.ts` can load it as it is.
@@ -40,7 +42,6 @@ import {
   type VizFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import { VIZ_MATCH_FILTERS_PARAM } from "@/components/dashboard/matches/match-detail/shots/viz-url";
-import { askOpponentKey } from "@/lib/data/ask-tags";
 import type { AskSourceMatch, AskVisual } from "@/lib/services/ask/events";
 import {
   figureMatchFilters,
@@ -66,9 +67,7 @@ export type AskActionKind =
   | "save_view"
   | "export"
   | "share"
-  | "open_match"
-  | "open_player"
-  | "open_opponent";
+  | "open_player";
 
 interface AskActionBase {
   kind: AskActionKind;
@@ -80,13 +79,7 @@ interface AskActionBase {
 
 /** A card whose one button is a link. Nothing runs; the page is where it goes. */
 export interface AskLinkAction extends AskActionBase {
-  kind:
-    | "watch"
-    | "visualize"
-    | "share"
-    | "open_match"
-    | "open_player"
-    | "open_opponent";
+  kind: "watch" | "visualize" | "share" | "open_player";
   href: string;
 }
 
@@ -224,16 +217,6 @@ function viewNameFor(label: string): string {
     : name;
 }
 
-/** "Ana Sokolov vs Marcus Hale", "vs Marcus Hale", or "the match". */
-function matchName(match: AskSourceMatch): string {
-  const opponent = match.opponentName ?? "the match";
-  return match.playerName
-    ? `${match.playerName} vs ${opponent}`
-    : match.opponentName
-      ? `vs ${opponent}`
-      : "the match";
-}
-
 // ── The catalogue ───────────────────────────────────────────────────────────
 
 /**
@@ -329,12 +312,6 @@ export function askActionsFor(input: AskActionsInput): AskAction[] {
       // `?share=1` opens the share popover on arrival (share-match-button.tsx).
       href: `${href}?share=1`,
     });
-    out.push({
-      kind: "open_match",
-      label: "Open the match",
-      detail: matchName(one),
-      href,
-    });
   }
 
   const player = tags.find((tag) => tag.kind === "player");
@@ -344,26 +321,6 @@ export function askActionsFor(input: AskActionsInput): AskAction[] {
       label: `Open ${player.label}`,
       detail: "Their profile on the roster",
       href: `/dashboard/team/roster/${encodeURIComponent(player.id)}`,
-    });
-  }
-
-  const first = sources[0];
-  const opponent =
-    tags.find((tag) => tag.kind === "opponent")?.label ??
-    (first?.opponentName &&
-    sources.every(
-      (match) =>
-        askOpponentKey(match.opponentName) ===
-        askOpponentKey(first.opponentName),
-    )
-      ? first.opponentName
-      : null);
-  if (opponent && askOpponentKey(opponent) !== null) {
-    out.push({
-      kind: "open_opponent",
-      label: `Matches vs. ${opponent}`,
-      detail: "Every match against them, in the Matches list",
-      href: `/dashboard/matches?q=${encodeURIComponent(opponent)}`,
     });
   }
 

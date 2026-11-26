@@ -54,10 +54,13 @@ export function AskFeedbackControl({
   feedback,
   onRate,
   lead,
+  trailing,
 }: {
   feedback: AskFeedback | null;
   /** The answer's signature, drawn first on the thumbs' row. */
   lead?: React.ReactNode;
+  /** Drawn after the thumbs on the same row: the answer's ⋯ menu. */
+  trailing?: React.ReactNode;
   /** Saves (or with null, takes back) the thumb; resolves true when it was saved. */
   onRate: (feedback: AskFeedback | null) => Promise<boolean>;
 }) {
@@ -116,6 +119,7 @@ export function AskFeedbackControl({
               aria-hidden="true"
             />
           </Thumb>
+          {trailing}
         </div>
         <p role="status" className="text-micro">
           {said && (

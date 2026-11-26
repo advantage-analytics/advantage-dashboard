@@ -133,9 +133,19 @@ async function calls(page: Page) {
 // An unnamed `<form>` has no accessible role; the composer is the one with
 // the question's textarea.
 const composer = (page: Page) => page.locator("form:has(textarea)").first();
-const cards = (page: Page) => page.getByRole("list", { name: "Next steps" });
-const card = (page: Page, kind: string) =>
-  cards(page).locator(`[data-ask-action="${kind}"]`);
+// What the answer offers beyond watching its points: one ⋯ on the
+// signature's row, opening a menu.
+const actionsRow = (page: Page) => page.locator("[data-ask-actions]");
+const more = (page: Page) =>
+  page.getByRole("button", { name: "More for this answer" });
+const menu = (page: Page) =>
+  page.getByRole("menu", { name: "More for this answer" });
+async function openMenu(page: Page) {
+  await more(page).click();
+  await expect(menu(page)).toBeVisible();
+}
+const item = (page: Page, name: string) =>
+  menu(page).getByRole("menuitem", { name });
 
 test.describe("arriving with a tag", () => {
   test("?match= puts the match on the composer as a chip; nothing is sent", async ({
@@ -175,111 +185,90 @@ test.describe("arriving with a tag", () => {
   });
 });
 
-test.describe("the cards under an answer", () => {
-  test("a saved answer with a figure, a block and one source offers the five", async ({
+test.describe("the actions under an answer", () => {
+  test("a saved answer keeps its actions behind one ⋯ on the signature's row; nothing runs", async ({
     page,
   }) => {
     await openFixture(page, "?c=1");
 
-    await expect(cards(page).getByRole("listitem")).toHaveCount(5);
+    // One control on the signature's row, not a row of its own.
+    await expect(actionsRow(page)).toHaveCount(1);
     await expect(
-      cards(page)
-        .locator("[data-ask-action]")
-        .evaluateAll((nodes) =>
-          nodes.map((node) => node.getAttribute("data-ask-action")),
-        ),
-    ).resolves.toEqual(["pin", "visualize", "save_view", "export", "share"]);
-
-    // Saved, so "Show me these points" is the film's one door: Watch on video
-    // is not offered beside it, and its slot goes to the next action.
-    await expect(card(page, "watch")).toHaveCount(0);
-    await expect(
-      page.getByRole("button", { name: "Show me these points" }),
+      page.locator("[data-ask-provenance] [data-ask-actions]"),
     ).toHaveCount(1);
-    // The next steps sit above the sign-off, inside the answer.
-    const order = await page
-      .locator("[data-ask-actions], [data-ask-provenance]")
-      .evaluateAll((nodes) =>
-        nodes.map((node) =>
-          node.hasAttribute("data-ask-actions") ? "actions" : "sign-off",
-        ),
-      );
-    expect(order).toEqual(["actions", "sign-off"]);
-    await expect(card(page, "visualize").getByRole("link")).toHaveAttribute(
+    await expect(page.getByRole("list", { name: "Next steps" })).toHaveCount(0);
+
+    await openMenu(page);
+    await expect(menu(page).getByRole("menuitem")).toHaveText([
+      "Pin to Home",
+      "See it on the court",
+      "Save as a view",
+      "Download CSV",
+      "Share this match",
+    ]);
+    // Saved, so the film is reached through the Watch line, not the menu;
+    // and the match is the signature's link, not an action.
+    await expect(item(page, "Watch on video")).toHaveCount(0);
+    await expect(item(page, "Open the match")).toHaveCount(0);
+
+    await expect(item(page, "See it on the court")).toHaveAttribute(
       "href",
       /^\/dashboard\/matches\/match-sep-28\?tab=shots&cut=serve/,
     );
-    const download = card(page, "export").getByRole("link");
+    const download = item(page, "Download CSV");
     await expect(download).toHaveAttribute("download", "ask-serve.csv");
     await expect(download).toHaveAttribute("href", /^data:text\/csv/);
-    // Nothing ran on render.
+    // Nothing ran on render, or on opening the menu.
     expect(await calls(page)).toEqual([]);
   });
 
-  test("Pin to Home calls the action with the answer's id, then says where it is", async ({
+  test("Pin to Home calls the action with the answer's id, then offers Open Home and Unpin", async ({
     page,
   }) => {
     await openFixture(page, "?c=1");
 
-    await card(page, "pin")
-      .getByRole("button", { name: "Pin to Home" })
-      .click();
-
+    await openMenu(page);
+    await item(page, "Pin to Home").click();
     await expect
       .poll(() => calls(page))
       .toEqual([{ name: "pinAskAnswer", args: [ANSWER_ID, "personal"] }]);
-    await expect(card(page, "pin").getByRole("status")).toHaveText(
-      "On your Home page",
+    await expect(actionsRow(page).getByRole("status")).toHaveText(
+      "Pinned to your Home page",
     );
-    await expect(
-      card(page, "pin").getByRole("link", { name: "Open Home" }),
-    ).toHaveAttribute("href", "/dashboard");
-    // The Pin button unmounted with the click; focus moved to its successor,
-    // and the one status region (mounted from the start) said where.
-    await expect(
-      card(page, "pin").getByRole("link", { name: "Open Home" }),
-    ).toBeFocused();
-    await expect(card(page, "pin").getByRole("status")).toHaveCount(1);
 
-    await card(page, "pin").getByRole("button", { name: "Unpin" }).click();
+    await openMenu(page);
+    await expect(item(page, "Open Home")).toHaveAttribute("href", "/dashboard");
+    await item(page, "Unpin from Home").click();
     await expect.poll(async () => (await calls(page)).length).toBe(2);
-    await expect(
-      card(page, "pin").getByRole("button", { name: "Pin to Home" }),
-    ).toBeVisible();
-    await expect(
-      card(page, "pin").getByRole("button", { name: "Pin to Home" }),
-    ).toBeFocused();
+    await openMenu(page);
+    await expect(item(page, "Pin to Home")).toBeVisible();
   });
 
   test("an answer already pinned opens pinned; a refused pin says why", async ({
     page,
   }) => {
     await openFixture(page, "?c=1&pinned=1");
-    await expect(card(page, "pin")).toContainText("On your Home page");
-    // A pin read from the saved conversation is not news: the status region
-    // is there, silent, and focus stays where the reader left it.
-    await expect(card(page, "pin").getByRole("status")).toHaveText("");
-    await expect(
-      card(page, "pin").getByRole("link", { name: "Open Home" }),
-    ).not.toBeFocused();
+    // A pin read from the saved conversation is not news: silent.
+    await expect(actionsRow(page).getByRole("status")).toHaveText("");
+    await openMenu(page);
+    await expect(item(page, "Open Home")).toBeVisible();
+    await expect(item(page, "Unpin from Home")).toBeVisible();
 
     await openFixture(page, "?c=1&pin=fail");
-    await card(page, "pin")
-      .getByRole("button", { name: "Pin to Home" })
-      .click();
-    await expect(card(page, "pin").getByRole("alert")).toHaveText(
+    await openMenu(page);
+    await item(page, "Pin to Home").click();
+    await expect(actionsRow(page).getByRole("alert")).toHaveText(
       "This answer has no chart to pin.",
     );
   });
 
-  test("Save view asks for a name in the confirm shell and saves on its action only", async ({
+  test("Save as a view asks for a name in the confirm shell and saves on its action only", async ({
     page,
   }) => {
     await openFixture(page, "?c=1");
 
-    await card(page, "save_view")
-      .getByRole("button", { name: "Save view" })
-      .click();
+    await openMenu(page);
+    await item(page, "Save as a view").click();
     const dialog = page.getByRole("alertdialog");
     await expect(dialog).toContainText("Save this view?");
     const name = dialog.getByRole("textbox", { name: "View name" });
@@ -299,25 +288,21 @@ test.describe("the cards under an answer", () => {
       chart: "scatter",
     });
     await expect(dialog).toHaveCount(0);
-    await expect(card(page, "save_view").getByRole("status")).toHaveText(
+    await expect(actionsRow(page).getByRole("status")).toHaveText(
       "Saved · Second serves, Marcus",
     );
-    await expect(
-      card(page, "save_view").getByRole("link", { name: "Open the view" }),
-    ).toHaveAttribute("href", /&view=view-1$/);
-    // "Save view" was swapped for "Saved": focus lands on the view's link,
-    // not on <body>.
-    await expect(
-      card(page, "save_view").getByRole("link", { name: "Open the view" }),
-    ).toBeFocused();
+    await openMenu(page);
+    await expect(item(page, "Open the saved view")).toHaveAttribute(
+      "href",
+      /&view=view-1$/,
+    );
   });
 
   test("a duplicate name is refused in the dialog", async ({ page }) => {
     await openFixture(page, "?c=1&view=duplicate");
 
-    await card(page, "save_view")
-      .getByRole("button", { name: "Save view" })
-      .click();
+    await openMenu(page);
+    await item(page, "Save as a view").click();
     const dialog = page.getByRole("alertdialog");
     await dialog.getByRole("button", { name: "Save view" }).click();
     await expect(dialog).toContainText("A view with that name already exists.");
@@ -327,15 +312,17 @@ test.describe("the cards under an answer", () => {
     page,
   }) => {
     await openFixture(page, "?c=1&scope=team");
-    // Saved: the film is reached through Show me, not a Watch card.
-    await expect(card(page, "watch")).toHaveCount(0);
-    await card(page, "pin")
-      .getByRole("button", { name: "Pin to Home" })
-      .click();
-    await expect(card(page, "pin")).toContainText("On the team Home");
-    await expect(
-      card(page, "pin").getByRole("link", { name: "Open Home" }),
-    ).toHaveAttribute("href", "/dashboard/team");
+    await openMenu(page);
+    await expect(item(page, "Watch on video")).toHaveCount(0);
+    await item(page, "Pin to Home").click();
+    await expect(actionsRow(page).getByRole("status")).toHaveText(
+      "Pinned to the team Home",
+    );
+    await openMenu(page);
+    await expect(item(page, "Open Home")).toHaveAttribute(
+      "href",
+      "/dashboard/team",
+    );
   });
 });
 
@@ -394,9 +381,7 @@ test.describe("under 768px", () => {
     expect((await prompt.getAttribute("class"))?.split(/\s+/)).toEqual(
       expect.arrayContaining(["max-md:max-w-[92%]"]),
     );
-    // The line of next steps wraps on a phone; no action takes a width.
-    expect((await cards(page).getAttribute("class"))?.split(/\s+/)).toEqual(
-      expect.arrayContaining(["flex-wrap"]),
-    );
+    // The ⋯ rides the signature's row, which wraps on a phone.
+    await expect(more(page)).toBeVisible();
   });
 });

@@ -135,6 +135,12 @@ const visual = (page: Page) => page.locator("figure[data-ask-visual]");
 const sourceLinks = (page: Page) =>
   page.locator("section").getByRole("list").getByRole("link");
 const allControl = (page: Page) => page.getByRole("button", { name: /^All / });
+// What the answer was computed from: a note in the signature line. Over
+// several matches it is "from N matches", which opens the source rows.
+const sourceNote = (page: Page) => page.locator("[data-ask-source-note]");
+async function openSources(page: Page) {
+  await sourceNote(page).click();
+}
 
 async function expectNoProgress(page: Page) {
   await expect(page.getByRole("progressbar")).toHaveCount(0);
@@ -186,7 +192,7 @@ test.describe("a full answer", () => {
     await expectNoProgress(page);
   });
 
-  test("is signed in the footer, under the sources, and nowhere above", async ({
+  test("is signed in the footer, with what it was computed from, and nowhere above", async ({
     page,
   }) => {
     await openFixture(page, "?case=full");
@@ -195,15 +201,18 @@ test.describe("a full answer", () => {
     await expect(
       page.getByText("Advantage Intelligence", { exact: false }),
     ).toHaveCount(1);
-    await expect(signature(page)).toHaveText("Advantage Intelligence");
+    await expect(signature(page)).toHaveText(
+      "Advantage Intelligence · from 4 matches",
+    );
+    // The source rows wait behind the note; no heading above the footer.
+    await expect(
+      page.getByRole("heading", { name: "Computed from 4 matches" }),
+    ).toBeHidden();
+    await expect(sourceNote(page)).toHaveAttribute("aria-expanded", "false");
 
-    const heading = await page
-      .getByRole("heading", { name: "Computed from 4 matches" })
-      .boundingBox();
     const claim = await page.getByText(HEADLINE).boundingBox();
     const foot = await signature(page).boundingBox();
-    expect(claim!.y).toBeLessThan(heading!.y);
-    expect(heading!.y).toBeLessThan(foot!.y);
+    expect(claim!.y).toBeLessThan(foot!.y);
 
     // No engine mark and no gutter: the only drawings in the answer are the
     // source rows' own marks.
@@ -213,7 +222,7 @@ test.describe("a full answer", () => {
     const column = await answer(page).boundingBox();
     expect(claim!.x).toBe(column!.x);
 
-    // Nothing asked for advice, so the footer is the name alone.
+    // Nothing asked for advice, so the footer carries no notice.
     await expect(page.getByText(NO_ADVICE)).toHaveCount(0);
   });
 
@@ -223,7 +232,7 @@ test.describe("a full answer", () => {
     await openFixture(page, "?case=full&advice=1");
 
     await expect(signature(page)).toHaveText(
-      `Advantage Intelligence · ${NO_ADVICE}`,
+      `Advantage Intelligence · from 4 matches · ${NO_ADVICE}`,
     );
     // Once: in the footer, and in none of the evidence paragraphs.
     await expect(page.getByText(NO_ADVICE, { exact: false })).toHaveCount(1);
@@ -244,8 +253,9 @@ test.describe("a full answer", () => {
         hasText: NO_ADVICE,
       }),
     ).toHaveText(NO_ADVICE);
-    // Not said twice, and nothing stripped: the footer is the name alone.
-    await expect(signature(page)).toHaveText("Advantage Intelligence");
+    // Not said twice, and nothing stripped: the footer adds no notice.
+    await expect(signature(page)).toContainText("Advantage Intelligence");
+    await expect(signature(page)).not.toContainText(NO_ADVICE);
     await expect(visual(page)).toHaveCount(0);
   });
 
@@ -302,6 +312,8 @@ test.describe("a full answer", () => {
     page,
   }) => {
     await openFixture(page, "?case=full");
+    await openSources(page);
+    await expect(sourceNote(page)).toHaveAttribute("aria-expanded", "true");
 
     await expect(
       page.getByRole("heading", { name: "Computed from 4 matches" }),
@@ -359,6 +371,7 @@ test.describe("a full answer", () => {
     page,
   }) => {
     await openFixture(page, "?case=full");
+    await openSources(page);
     await allControl(page).click();
 
     const stopped = sourceLinks(page).nth(2);
@@ -382,6 +395,7 @@ test.describe("a full answer", () => {
 
   test("there is no Open Statistics link", async ({ page }) => {
     await openFixture(page, "?case=full");
+    await openSources(page);
     await allControl(page).click();
 
     await expect(page.getByRole("link", { name: /statistics/i })).toHaveCount(
@@ -394,19 +408,16 @@ test.describe("a full answer", () => {
   });
 });
 
-test("a one-match answer reads Computed from 1 match, with no All control", async ({
+test("a one-match answer links its match in the signature, with no list and no All control", async ({
   page,
 }) => {
   await openFixture(page, "?case=one");
 
-  await expect(
-    page.getByRole("heading", { name: "Computed from 1 match", exact: true }),
-  ).toBeVisible();
-  await expect(sourceLinks(page)).toHaveCount(1);
-  await expect(sourceLinks(page).first()).toHaveAttribute(
-    "href",
-    "/dashboard/matches/match-sep-28",
-  );
+  const note = signature(page).getByRole("link");
+  await expect(note).toHaveCount(1);
+  await expect(note).toHaveAttribute("href", "/dashboard/matches/match-sep-28");
+  await expect(note).toContainText("Theo Lindqvist");
+  await expect(page.getByText(/Computed from/)).toHaveCount(0);
   await expect(allControl(page)).toHaveCount(0);
   await expect(page.getByRole("button")).toHaveCount(0);
 });
@@ -1229,6 +1240,7 @@ test.describe("on the team page", () => {
     page,
   }) => {
     await openFixture(page, "?case=full&scope=team");
+    await openSources(page);
 
     await expect(sourceLinks(page).nth(0)).toContainText(
       "Ana Sokolov vs Theo Lindqvist",
@@ -1255,6 +1267,7 @@ test.describe("on the team page", () => {
     page,
   }) => {
     await openFixture(page, "?case=full");
+    await openSources(page);
     await expect(sourceLinks(page).nth(0)).toContainText("Theo Lindqvist");
     await expect(sourceLinks(page).nth(0)).not.toContainText(" vs ");
   });
@@ -1303,7 +1316,7 @@ test.describe("on the team page", () => {
   }) => {
     await openFixture(page, "?case=full&advice=1&scope=team");
     await expect(signature(page)).toHaveText(
-      "Advantage Intelligence · Ask reports what the program's matches show; it does not recommend what to work on.",
+      "Advantage Intelligence · from 4 matches · Ask reports what the program's matches show; it does not recommend what to work on.",
     );
   });
 
@@ -1348,6 +1361,7 @@ test("a pattern answer's source row opens the Video view on its points", async (
   page,
 }) => {
   await openFixture(page, "?case=watch");
+  await openSources(page);
   const watch = page.getByRole("link", { name: /Watch 4 points/ });
   await expect(watch).toHaveCount(1);
   await expect(watch).toHaveAttribute(

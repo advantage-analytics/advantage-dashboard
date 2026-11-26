@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
-  ArrowUpRight,
+  Share2,
   ChevronRight,
   Download,
   Pin,
@@ -243,7 +243,7 @@ const TAIL_ACTIONS: AskAction[] = [
       text: "measure,you\nFirst serve in,37.5%",
     },
   },
-  { kind: "open_match", label: "Open the match", detail: "", href: "#match" },
+  { kind: "share", label: "Share this match", detail: "", href: "#share" },
 ];
 
 const pinAnswer = async () => ({ ok: true as const, pinId: "pin-demo" });
@@ -269,7 +269,7 @@ const TAIL_ICON: Record<string, LucideIcon> = {
   watch: Play,
   pin: Pin,
   export: Download,
-  open_match: ArrowUpRight,
+  share: Share2,
 };
 
 /** A sketch of the actions, dot-separated like the real row. */
