@@ -1,3 +1,4 @@
+import type { LoginDestination } from "@/lib/auth/next-area";
 import {
   flushPostHogAfterResponse,
   getPostHogServerClient,
@@ -28,8 +29,9 @@ export interface ServerAnalyticsEvents {
    * (`login-form.tsx`): Google sign-in ends in `/callback`'s server redirect,
    * and an MCP-connector sign-in lands on `/oauth/consent`, never reaching
    * DashboardShell's identify — so nothing in the browser would report it.
+   * Carries where the sign-in was headed as an area only (`next-area.ts`).
    */
-  login_completed: { method: "google" };
+  login_completed: { method: "google" } & LoginDestination;
 }
 
 export function trackServer<E extends keyof ServerAnalyticsEvents>(

@@ -3,6 +3,8 @@ import { isPostHogConfigured } from "@/lib/posthog-client";
 import type { VideoRejectionReason } from "@/lib/services/upload/types";
 import type { ClaimRoleValue } from "@/lib/services/programs/claim-roles";
 import type { ConnectorApp } from "@/lib/auth/oauth-consent";
+import type { LoginDestination } from "@/lib/auth/next-area";
+import type { LoginFailureReason, LoginMethod } from "@/lib/auth/login-failure";
 import type {
   AcquisitionSource,
   RosterSizeBand,
@@ -20,8 +22,8 @@ import type {
  * Privacy (see instrumentation-client.ts): ids, enums, counts and durations
  * only. Never a name, email, URL, file name, note text or anything read out
  * of a video — the athletes include minors, and the content stays in
- * Supabase. Events captured before this file existed (`login_completed`,
- * `staff_invite_sent`, …) still call posthog-js directly; move one here when
+ * Supabase. Events captured before this file existed (`staff_invite_sent`,
+ * …) still call posthog-js directly; move one here when
  * you next touch it.
  */
 export type MatchViewSource = "list" | "share_link" | "dashboard";
@@ -138,6 +140,17 @@ export interface AnalyticsEvents {
     program_status: "claimed" | "unclaimed";
     role: ClaimRoleValue | null;
   };
+
+  // Sign-in (`/login`). `next_area` / `has_next` say where the sign-in was
+  // headed, as a coarse area only (`next-area.ts`): the captured URL has its
+  // query stripped, so without them a lost `?next=` cannot be told from a
+  // bare visit. Never the path, its query, or anything typed. The Google
+  // `login_completed` is captured on the server: see analytics-server.ts.
+  login_completed: { method: "password" } & LoginDestination;
+  login_failed: {
+    method: LoginMethod;
+    reason: LoginFailureReason;
+  } & LoginDestination;
 
   // The connector sign-in (claude.ai, ChatGPT, … → /oauth/consent). Which app
   // is asking is read from its allowlisted callback (`connectorApp`), never
