@@ -375,7 +375,11 @@ export const OPTIONS = {
   ball: { first: "1st", second: "2nd" },
   court: { deuce: "Deuce", ad: "Ad" },
   zone: { t: "T", body: "Body", wide: "Wide" },
-  pressure: { break: "Break points", setMatch: "Set & match points" },
+  pressure: {
+    pressure: "Pressure points",
+    break: "Break points",
+    setMatch: "Set & match points",
+  },
   result: { won: "Won", lost: "Lost", ace: "Aces" },
   rally: { short: "1–4 shots", medium: "5–8 shots", long: "9+ shots" },
   error: {

@@ -701,18 +701,41 @@ export function pointScoreOption(
   return normalizePointScore(point.pointScoreRaw, point.gameScore);
 }
 
+/** The game scores a pressure point is played at (`isPressurePoint`). */
+const PRESSURE_SCORES: ReadonlySet<PointScoreOption> = new Set([
+  "30-30",
+  "40-30",
+  "30-40",
+  "40-40",
+  "Ad-40",
+  "40-Ad",
+]);
+
+/**
+ * A pressure point: one played at 30–30, 30–40, 40–30, deuce or an
+ * advantage, in either player's service game. THE definition — Score ›
+ * Pressure here, the Visualizations tab's "Pressure points" (`viz-model.ts`)
+ * and the MCP tools all read this one predicate.
+ *
+ * It is the score alone, off the raw point score (`pointScoreOption`):
+ * - a break, set or match point at any other score (15–40, 40–0) is NOT one.
+ *   Those keep their own options, which read the point's flags;
+ * - a no-ad game's deciding point is recorded as 40–40, so it is one;
+ * - no tiebreak point is one: a tiebreak has no game score (3–3 is not
+ *   30–30, and every point of a 6–6 game is the tiebreak);
+ * - a point whose score was never recorded is not one.
+ */
+export function isPressurePoint(
+  point: Pick<MatchPoint, "pointScoreRaw" | "gameScore">,
+): boolean {
+  const score = pointScoreOption(point);
+  return score !== null && PRESSURE_SCORES.has(score);
+}
+
 function matchesScoreType(point: MatchPoint, type: ScoreType): boolean {
   switch (type) {
-    case "pressure": {
-      const grid = pointScoreOption(point);
-      return (
-        grid === "30-30" ||
-        grid === "40-40" ||
-        point.isBreakPoint ||
-        point.isSetPoint ||
-        point.isMatchPoint
-      );
-    }
+    case "pressure":
+      return isPressurePoint(point);
     case "breakpoint":
       return point.isBreakPoint;
     case "setPoint":

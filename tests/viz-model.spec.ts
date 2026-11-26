@@ -7,6 +7,8 @@ import {
   collapseErrorFilter,
   computeViz,
   computeVizStats,
+  foldedMatchFilters,
+  pointMatchesPressure,
   orderStatRows,
   errorKindOf,
   filterKeysFor,
@@ -24,7 +26,9 @@ import {
 } from "@/components/dashboard/matches/match-detail/shots/default-cuts";
 import { buildDefaultTiles } from "@/components/dashboard/matches/match-detail/shots/default-tiles";
 import {
+  OPTIONS,
   activeFilterEntries,
+  parseVizState,
   vizStateQuery,
   type VizState,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
@@ -2359,6 +2363,101 @@ test.describe("computeViz — rallyPosition cut", () => {
     expect(r.total).toBe(2);
     expect(r.count).toBe(1);
     expect(r.dots.map((d) => d.id)).toEqual(["bp-shot"]);
+  });
+
+  test("Pressure points is the score the point was played at, never a break, set or match point elsewhere", () => {
+    const rally = (id: string, over: Partial<MatchPoint>) =>
+      point({
+        ...over,
+        shots: [
+          shot({ shotNumber: 2, isPlayer1: false, id: `${id}-return` }),
+          shot({ shotNumber: 3, isPlayer1: true, id }),
+        ],
+      });
+    const pts = [
+      rally("30-30", { pointScoreRaw: "30-30" }),
+      rally("30-40", { pointScoreRaw: "30-40", isBreakPoint: true }),
+      rally("40-30", { pointScoreRaw: "40-30" }),
+      rally("deuce", { pointScoreRaw: "40-40" }),
+      rally("ad-in", { pointScoreRaw: "AD-40" }),
+      rally("ad-out", { pointScoreRaw: "40-AD", isBreakPoint: true }),
+      rally("bp-15-40", { pointScoreRaw: "15-40", isBreakPoint: true }),
+      rally("sp-40-15", { pointScoreRaw: "40-15", isSetPoint: true }),
+      rally("mp-40-0", { pointScoreRaw: "40-0", isMatchPoint: true }),
+      rally("calm", { pointScoreRaw: "15-15" }),
+      rally("unread", { pointScoreRaw: null }),
+      rally("tiebreak", { pointScoreRaw: "3-3", gameScore: "6-6" }),
+    ];
+    const shown = (pressure: VizFilters["pressure"]) =>
+      computeViz(
+        pts,
+        "rallyPosition",
+        { ...EMPTY_VIZ_FILTERS, pressure },
+        true,
+      ).dots.map((d) => d.id);
+
+    const scores = ["30-30", "30-40", "40-30", "deuce", "ad-in", "ad-out"];
+    expect(shown(["pressure"])).toEqual(scores);
+    // The other two options read the flags, as before.
+    expect(shown(["break"])).toEqual(["30-40", "ad-out", "bp-15-40"]);
+    expect(shown(["setMatch"])).toEqual(["sp-40-15", "mp-40-0"]);
+    // Either/or within the group.
+    expect(shown(["pressure", "setMatch"])).toEqual([
+      ...scores,
+      "sp-40-15",
+      "mp-40-0",
+    ]);
+    for (const p of pts) {
+      expect(pointMatchesPressure(p, "pressure")).toBe(
+        scores.includes(p.shots?.[1]?.id ?? ""),
+      );
+    }
+  });
+
+  test('Pressure points travels the URL, reads "Pressure points" and folds to the Video tab\'s Score › Pressure', () => {
+    expect(Object.entries(OPTIONS.pressure)).toEqual([
+      ["pressure", "Pressure points"],
+      ["break", "Break points"],
+      ["setMatch", "Set & match points"],
+    ]);
+
+    const filters: VizFilters = {
+      ...EMPTY_VIZ_FILTERS,
+      pressure: ["setMatch", "pressure"],
+    };
+    const state: VizState = {
+      cut: "serve",
+      chart: "scatter",
+      filters,
+      viewId: null,
+    };
+    const query = new URLSearchParams(
+      vizStateQuery(new URLSearchParams(), state),
+    );
+    expect(query.getAll("pressure")).toEqual(["setMatch", "pressure"]);
+    // Read back in canonical (`OPTIONS`) order, whatever order it was picked in.
+    expect(parseVizState(query).filters.pressure).toEqual([
+      "pressure",
+      "setMatch",
+    ]);
+    expect(activeFilterEntries(state)).toEqual([
+      { key: "pressure", value: "setMatch", label: "Set & match points" },
+      { key: "pressure", value: "pressure", label: "Pressure points" },
+    ]);
+
+    // The advanced fold names the same points: Score › Pressure is the same
+    // predicate, and the other two keep their flags.
+    const fold = foldedMatchFilters(filters);
+    expect(fold.folded).toEqual(["pressure"]);
+    expect(fold.match.scoreType).toEqual([
+      "setPoint",
+      "matchPoint",
+      "pressure",
+    ]);
+    expect(
+      foldedMatchFilters({ ...EMPTY_VIZ_FILTERS, pressure: ["pressure"] }).match
+        .scoreType,
+    ).toEqual(["pressure"]);
   });
 
   test("the ball filter reads the serve-frame meaning (first/second serve point)", () => {

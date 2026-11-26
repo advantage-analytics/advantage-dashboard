@@ -746,7 +746,7 @@ export function filterOptionPatches(
     for (const zone of ["t", "body", "wide"] as const)
       patches.push({ zone: [zone] });
   if (keys.has("pressure"))
-    for (const pressure of ["break", "setMatch"] as const)
+    for (const pressure of ["pressure", "break", "setMatch"] as const)
       patches.push({ pressure: [pressure] });
   if (keys.has("error"))
     for (const option of errorOptionsFor(errorSplitJudged))

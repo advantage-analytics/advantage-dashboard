@@ -49,6 +49,7 @@ import {
   shotMatchesThen,
   finalShotOf,
   handOf,
+  isPressurePoint,
   lastShotOf,
   type MatchFilterContext,
   type MatchFilterKey,
@@ -90,7 +91,12 @@ export type GameValue = "serving" | "returning";
 export type BallValue = "first" | "second";
 export type CourtSideValue = "deuce" | "ad";
 export type ZoneValue = "t" | "body" | "wide";
-export type PressureValue = "break" | "setMatch";
+/**
+ * `pressure` is the score a point was played at (`isPressurePoint`: 30–30,
+ * 30–40, 40–30, deuce and every advantage); `break` and `setMatch` read the
+ * point's own flags, at whatever score.
+ */
+export type PressureValue = "pressure" | "break" | "setMatch";
 export type ResultValue = "won" | "lost" | "ace";
 export type RallyValue = "short" | "medium" | "long";
 /** The errors cut's error kinds, read off the point's free-text result type. */
@@ -902,13 +908,36 @@ export function pointToReturnDots(
 }
 
 /**
+ * One Pressure option over a point. "pressure" is the score it was played
+ * at — the Video tab's Score › Pressure, one predicate (`isPressurePoint`) —
+ * and never a break, set or match point at another score; those are `break`
+ * and `setMatch`, which read the point's flags.
+ */
+export function pointMatchesPressure(
+  p: Pick<
+    MatchPoint,
+    | "pointScoreRaw"
+    | "gameScore"
+    | "isBreakPoint"
+    | "isSetPoint"
+    | "isMatchPoint"
+  >,
+  value: PressureValue,
+): boolean {
+  if (value === "pressure") return isPressurePoint(p);
+  if (value === "break") return p.isBreakPoint;
+  return p.isSetPoint || p.isMatchPoint;
+}
+
+/**
  * Every group below is OR'd within itself (an empty list means "any", a
  * non-empty list matches when the point satisfies AT LEAST ONE selected
  * value) and the groups are AND'd against each other — a point must clear
  * every non-empty group to match. `pressure` and `result` aren't a single
  * derived value compared against the list (unlike `game`/`ball`/`court`/
  * `zone`/`rally`): each selected value is its own predicate over the point,
- * and any one of them being true is enough (`break` OR `setMatch`; `won`/
+ * and any one of them being true is enough (`pressure` OR `break` OR
+ * `setMatch` — see `pointMatchesPressure`; `won`/
  * `lost` relative to the subject OR the orthogonal `ace` check).
  */
 export function pointMatchesFilters(
@@ -963,9 +992,7 @@ export function pointMatchesFilters(
   }
 
   if (filters.pressure.length) {
-    const matches = filters.pressure.some((v) =>
-      v === "break" ? p.isBreakPoint : p.isSetPoint || p.isMatchPoint,
-    );
+    const matches = filters.pressure.some((v) => pointMatchesPressure(p, v));
     if (!matches) return false;
   }
 
@@ -1151,9 +1178,11 @@ export function foldedMatchFilters(
     "scoreType",
     base.scoreType,
     filters.pressure.flatMap((v) =>
-      v === "break"
-        ? (["breakpoint"] as const)
-        : (["setPoint", "matchPoint"] as const),
+      v === "pressure"
+        ? (["pressure"] as const)
+        : v === "break"
+          ? (["breakpoint"] as const)
+          : (["setPoint", "matchPoint"] as const),
     ),
     (v) => (match.scoreType = v),
   );

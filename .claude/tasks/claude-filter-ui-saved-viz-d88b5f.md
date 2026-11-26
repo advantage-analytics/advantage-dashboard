@@ -19,7 +19,7 @@ ready).
 
 ## T1 · Unify the pressure-points definition
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) src/components/dashboard/matches/match-detail/match-filters/model.ts (`matchesScoreType`, ~:704), src/components/dashboard/matches/match-detail/shots/{viz-model.ts,viz-url.ts}, src/lib/services/mcp/{links.ts,server.ts}, src/lib/services/ask/{actions.ts,compare.ts}, src/lib/data/player-season-viz.ts, tests/{match-filters-model,viz-model,mcp-route,ask-actions,player-season-viz}.spec.ts
 - **routes:** /dashboard/matches/[matchId]

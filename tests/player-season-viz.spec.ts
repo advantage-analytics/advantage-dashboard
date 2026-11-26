@@ -1168,6 +1168,10 @@ test.describe("the Visualizations view, rendered", () => {
     expect(props.filterPanel!.countWith({ pressure: ["break"] })).toBe(
       lightbox.optionCounts["pressure=break"],
     );
+    expect(lightbox.optionCounts).toHaveProperty("pressure=pressure");
+    expect(props.filterPanel!.countWith({ pressure: ["pressure"] })).toBe(
+      lightbox.optionCounts["pressure=pressure"],
+    );
   });
 
   test("each season mark knows its match: the readout's where and \"vs Opponent · date\" lines, and the second click opens that match's Video tab on that point", async () => {
