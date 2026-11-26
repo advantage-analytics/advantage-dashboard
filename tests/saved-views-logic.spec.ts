@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test";
-import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/shots/viz-model";
+import {
+  courtEndsFor,
+  EMPTY_VIZ_FILTERS,
+} from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
   applyIdOrder,
   bandVisibility,
@@ -225,6 +228,80 @@ test("validateVizInput never lets a stray filters.chart/cut/view key override th
     chart: "scatter",
     filters: EMPTY_VIZ_FILTERS,
   });
+});
+
+/* ── court ends (`filters.ends`) ─────────────────────────────────────────
+ * Placement · Contact · Both is stored inside the `filters` JSON — no column
+ * of its own — and only as a choice away from the cut's default. */
+
+test("filtersToParams writes filters.ends as the vends param", () => {
+  const params = filtersToParams({ ends: "contact", ball: ["first"] });
+  expect(params.get("vends")).toBe("contact");
+  expect(params.get("ends")).toBeNull();
+  expect(filtersToParams({ ends: null }).has("vends")).toBe(false);
+});
+
+test("a view's ends survives save and load inside the filters JSON", () => {
+  // Save: what the court holds is validated into the row's `filters`.
+  const saved = validateVizInput({
+    cut: "errors",
+    chart: "scatter",
+    filters: { ...EMPTY_VIZ_FILTERS, ball: ["first"], ends: "contact" },
+  });
+  expect(saved).toEqual({
+    cut: "errors",
+    chart: "scatter",
+    filters: { ...EMPTY_VIZ_FILTERS, ball: ["first"], ends: "contact" },
+  });
+  // The stored jsonb, as Postgres hands it back.
+  const stored: unknown = JSON.parse(JSON.stringify(saved!.filters));
+  expect((stored as { ends: unknown }).ends).toBe("contact");
+
+  // Load: the row maps back to the same view.
+  const view = rowToSavedView(
+    dbRow({ cut: "errors", chart: "scatter", filters: stored }),
+  );
+  expect(view?.filters).toEqual(saved!.filters);
+  expect(view?.filters.ends).toBe("contact");
+});
+
+test("an old saved row without the ends key loads at the cut's default", () => {
+  for (const cut of ["errors", "returnPlacement", "rallyPlacement"]) {
+    const view = rowToSavedView(
+      dbRow({ cut, chart: "scatter", filters: { ball: ["first"] } }),
+    );
+    expect(view?.filters.ends, cut).toBeNull();
+    expect(courtEndsFor(view!.cut, view!.filters), cut).toBe("placement");
+  }
+  const approaches = rowToSavedView(
+    dbRow({ cut: "approaches", chart: "scatter", filters: {} }),
+  );
+  expect(approaches?.filters.ends).toBeNull();
+  expect(courtEndsFor("approaches", approaches!.filters)).toBe("both");
+});
+
+test("a saved view never stores the cut's default, a Serves value or a garbage value", () => {
+  expect(
+    validateVizInput({
+      cut: "approaches",
+      chart: "scatter",
+      filters: { ends: "both" },
+    })?.filters.ends,
+  ).toBeNull();
+  expect(
+    validateVizInput({
+      cut: "serve",
+      chart: "scatter",
+      filters: { ends: "contact" },
+    })?.filters,
+  ).toEqual(EMPTY_VIZ_FILTERS);
+  expect(
+    validateVizInput({
+      cut: "errors",
+      chart: "scatter",
+      filters: { ends: "sideways" },
+    })?.filters.ends,
+  ).toBeNull();
 });
 
 /* ── rowToSavedView / rowToSavedViewRow ───────────────────────────────── */

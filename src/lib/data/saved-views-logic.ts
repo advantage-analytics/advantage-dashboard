@@ -107,8 +107,11 @@ export function filtersToParams(filters: unknown): URLSearchParams {
       // silently fail to round-trip through `parseVizState`.
       const paramKey = key === "set" ? "vset" : paramFor(key);
 
-      if (key === "player") {
-        // The one scalar filter, old or new shape alike.
+      if (key === "player" || key === "ends") {
+        // The two scalars, old or new shape alike. `ends` (which ends of a
+        // shot the court draws) travels as `vends`; a row saved before it
+        // existed has no such key, and one saved at its cut's default stores
+        // null — both skipped above, both read back as the default.
         params.set(paramKey, String(value));
         continue;
       }

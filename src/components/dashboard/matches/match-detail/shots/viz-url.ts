@@ -13,8 +13,12 @@ import {
   EMPTY_VIZ_FILTERS,
   chartAllowedOn,
   collapseErrorFilter,
+  COURT_ENDS,
+  courtEndsFor,
   filterKeysFor,
+  storedCourtEnds,
   type Chart,
+  type CourtEnds,
   type Cut,
   type ErrorValue,
   type PlayerFilter,
@@ -76,6 +80,14 @@ export function sameView(
 
   if (current.cut !== candidate.cut) return false;
   if (current.chart !== candidate.chart) return false;
+  // Which ends the court draws, as resolved: a candidate that says nothing
+  // (a default tile, an old saved row) is its cut's default.
+  if (
+    courtEndsFor(candidate.cut, current.filters) !==
+    courtEndsFor(candidate.cut, candidate.filters)
+  ) {
+    return false;
+  }
 
   for (const key of filterKeysFor(candidate.cut)) {
     if (!sameFilterValue(key, current.filters, candidate.filters)) {
@@ -89,7 +101,8 @@ export function sameView(
 /**
  * Whether `a` and `b` agree on one `VizFilters` key: `player` by value,
  * `match` by `filtersEqual` (a candidate built before advanced filters
- * existed may carry none — read as EMPTY), every list group as a set.
+ * existed may carry none — read as EMPTY), `ends` as stored (absent reads
+ * as `null`, the cut's default), every list group as a set.
  */
 export function sameFilterValue(
   key: keyof VizFilters,
@@ -97,6 +110,7 @@ export function sameFilterValue(
   b: VizFilters,
 ): boolean {
   if (key === "player") return a.player === b.player;
+  if (key === "ends") return (a.ends ?? null) === (b.ends ?? null);
   if (key === "match") {
     return filtersEqual(
       a.match ?? EMPTY_VIZ_FILTERS.match,
@@ -130,8 +144,12 @@ function sameValues(a: readonly unknown[], b: readonly unknown[]): boolean {
  * enter the key, because none of them change WHICH court is drawn, only
  * what's plotted on it. Different whenever `cut` changes (a different
  * court shape), `filters.player` changes (a different subject's court —
- * "you" vs the opponent), or `viewId` changes (a different saved view,
- * even one that happens to share cut/player with the view left behind).
+ * "you" vs the opponent), `viewId` changes (a different saved view,
+ * even one that happens to share cut/player with the view left behind), or
+ * the ends the court draws change (`courtEndsFor`: Returns in Contact is a
+ * different court from Returns in Placement, and each needs its own tile).
+ * The ends enter resolved, so a state that leaves them unsaid and one that
+ * names the cut's default share a key; Serves, which has none, adds nothing.
  * `null` on the wall (`cut === null`): there is no single court to name.
  *
  * A `:draft` suffix when `state.draft === true` — the blank "Create
@@ -145,7 +163,9 @@ function sameValues(a: readonly unknown[], b: readonly unknown[]): boolean {
 export function viewIdentityKey(state: VizState): string | null {
   if (state.cut === null) return null;
   const draftSuffix = state.draft === true ? ":draft" : "";
-  return `${state.filters.player}:${state.cut}:${state.viewId ?? ""}${draftSuffix}`;
+  const ends = courtEndsFor(state.cut, state.filters);
+  const endsSuffix = ends === null ? "" : `:${ends}`;
+  return `${state.filters.player}:${state.cut}:${state.viewId ?? ""}${endsSuffix}${draftSuffix}`;
 }
 
 /**
@@ -515,6 +535,13 @@ const ORDER = [
 export const VIZ_MATCH_FILTERS_PARAM = "vf";
 
 /**
+ * The URL param `VizFilters.ends` travels as: `placement`, `contact` or
+ * `both`. Never `view` — that is the saved-view id. Written only when the
+ * value is not the cut's default (`storedCourtEnds`), and never on Serves.
+ */
+export const COURT_ENDS_PARAM = "vends";
+
+/**
  * The URL param a filter key travels as. `error` is namespaced to `verr`
  * for the same reason `set` is to `vset` (below): a bare `?error=` is the
  * kind of name an auth or redirect flow puts on the page, and every viz
@@ -526,6 +553,7 @@ const NAMESPACED_PARAMS: Readonly<Record<string, string>> = {
   entry: "ventry",
   approachTo: "vto",
   approachDir: "vdir",
+  ends: COURT_ENDS_PARAM,
 };
 
 export function paramFor(key: string): string {
@@ -585,6 +613,7 @@ const VIZ_KEYS = [
   // `&fullscreen=1` link is cleaned off the URL by the next update.
   "fullscreen",
   VIZ_MATCH_FILTERS_PARAM,
+  COURT_ENDS_PARAM,
   ...ORDER.map(paramFor),
 ];
 
@@ -904,6 +933,11 @@ export function vizStateQuery(
     if (match) next.set(VIZ_MATCH_FILTERS_PARAM, match);
   }
 
+  // Which ends the court draws: only a choice away from the cut's default,
+  // so one court is one query string. Serves never writes one.
+  const ends = storedCourtEnds(state.cut, state.filters.ends);
+  if (ends !== null) next.set(COURT_ENDS_PARAM, ends);
+
   // The season's own filters, canonical (ids sorted) so one selection is
   // one query string whatever order the ticks came in.
   const season = normalizeSeasonFilters(state.season);
@@ -920,12 +954,18 @@ export function vizStateQuery(
 
 /**
  * Every filter key back to `EMPTY_VIZ_FILTERS` — `player` included — and
- * `viewId` cleared, keeping `cut`/`chart` as-is. The one "Clear"/"Clear all"
+ * `viewId` cleared, keeping `cut`/`chart` as-is, and `ends` too: which ends
+ * the court draws is not a filter, so clearing filters leaves it alone. The one "Clear"/"Clear all"
  * behavior both `applied-strip.tsx` and `filters-popover.tsx` need, pulled
  * out here so the two don't carry verbatim copies of the same object spread.
  */
 export function clearedFilters(state: VizState): VizState {
-  return { ...state, filters: EMPTY_VIZ_FILTERS, viewId: null };
+  const ends = state.filters.ends ?? null;
+  return {
+    ...state,
+    filters: ends === null ? EMPTY_VIZ_FILTERS : { ...EMPTY_VIZ_FILTERS, ends },
+    viewId: null,
+  };
 }
 
 /**
@@ -1001,6 +1041,13 @@ function withoutWinningFilters(filters: VizFilters): VizFilters {
  * since those still mean something off serve.
  */
 export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
+  // Which ends the court draws carries as a choice, re-read against the new
+  // cut: dropped on Serves, and dropped where it is that cut's own default
+  // (Both, carried onto Approaches). Unsaid stays unsaid — each cut's default.
+  const ends = storedCourtEnds(nextCut, filters.ends);
+  if (ends !== (filters.ends ?? null)) {
+    filters = { ...filters, ends };
+  }
   // Error kinds only mean something on the errors cut.
   if (nextCut !== "errors" && filters.error?.length) {
     filters = { ...filters, error: [] };
@@ -1233,6 +1280,13 @@ function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
   }
 
   filters.match = parseMatchFilters(params.get(VIZ_MATCH_FILTERS_PARAM));
+
+  // Which ends the court draws. The wall has no court, so no value; on a
+  // cut, `storedCourtEnds` keeps only a real choice away from its default.
+  const endsParam = params.get(COURT_ENDS_PARAM);
+  if (cut !== null && COURT_ENDS.includes(endsParam as CourtEnds)) {
+    filters.ends = storedCourtEnds(cut, endsParam as CourtEnds);
+  }
 
   return filters;
 }

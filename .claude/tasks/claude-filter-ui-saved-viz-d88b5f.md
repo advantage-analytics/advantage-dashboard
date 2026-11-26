@@ -87,7 +87,7 @@ ready).
 
 ## T6 · Add the Placement/Contact/Both view state
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) src/components/dashboard/matches/match-detail/shots/viz-url.ts (`VizState` ~:189, `VIZ_KEYS` ~:569, `parseVizState` ~:746, `vizStateQuery` ~:830, `sameView`/`viewIdentityKey` ~:58), src/components/dashboard/matches/match-detail/shots/viz-model.ts (`EMPTY_VIZ_FILTERS`, `KNOWN_FILTER_KEYS`), src/lib/data/saved-views-logic.ts, tests/viz-url.spec.ts, tests/saved-views-logic.spec.ts
 - **done when:**

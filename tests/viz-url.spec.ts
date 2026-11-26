@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/shots/viz-model";
+import {
+  courtEndsFor,
+  defaultCourtEnds,
+  EMPTY_VIZ_FILTERS,
+  withCourtEnds,
+  type Cut,
+} from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import { isPlacementCut } from "@/components/dashboard/matches/match-detail/shots/cut-kinds";
 import {
   activeFilterEntries,
@@ -8,6 +14,7 @@ import {
   canonicalSetValues,
   carryFilters,
   clearedFilters,
+  COURT_ENDS_PARAM,
   errorOptionsFor,
   filtersForCut,
   focusTargetAfterViewChange,
@@ -1407,5 +1414,264 @@ test.describe("approaches cut URL state", () => {
         "rallyPlacement",
       ),
     ).toEqual(EMPTY_VIZ_FILTERS);
+  });
+});
+
+/* ── Placement · Contact · Both (`VizFilters.ends`, `?vends=`) ───────────
+ * Which ends of a shot the court draws. Stored only as a choice away from
+ * the cut's default, so an unsaid value is the default — Both on Approaches,
+ * Placement on Errors, Returns and Rally shots — and Serves has none. */
+
+test.describe("court ends URL state", () => {
+  const PLACEMENT_CUTS: Cut[] = [
+    "errors",
+    "returnPlacement",
+    "returnContact",
+    "rallyPosition",
+    "rallyPlacement",
+  ];
+
+  test("the param is vends, never view", () => {
+    expect(COURT_ENDS_PARAM).toBe("vends");
+  });
+
+  test("an absent value is Placement on Errors, Returns and Rally shots, Both on Approaches, nothing on Serves", () => {
+    for (const cut of PLACEMENT_CUTS) {
+      const s = parseVizState(new URLSearchParams(`cut=${cut}`));
+      expect(s.filters.ends, cut).toBeNull();
+      expect(courtEndsFor(cut, s.filters), cut).toBe("placement");
+      expect(defaultCourtEnds(cut), cut).toBe("placement");
+    }
+    const approaches = parseVizState(new URLSearchParams("cut=approaches"));
+    expect(approaches.filters.ends).toBeNull();
+    expect(courtEndsFor("approaches", approaches.filters)).toBe("both");
+
+    const serve = parseVizState(new URLSearchParams("cut=serve"));
+    expect(serve.filters.ends).toBeNull();
+    expect(courtEndsFor("serve", serve.filters)).toBeNull();
+    expect(defaultCourtEnds("serve")).toBeNull();
+  });
+
+  test("a filters object with no ends key at all resolves to the default", () => {
+    expect(courtEndsFor("errors", {})).toBe("placement");
+    expect(courtEndsFor("approaches", {})).toBe("both");
+    expect(courtEndsFor("serve", {})).toBeNull();
+  });
+
+  test("each value round-trips through parseVizState and vizStateQuery", () => {
+    for (const [cut, ends] of [
+      ["errors", "contact"],
+      ["errors", "both"],
+      ["returnPlacement", "contact"],
+      ["returnContact", "both"],
+      ["rallyPosition", "contact"],
+      ["rallyPlacement", "both"],
+      ["approaches", "placement"],
+      ["approaches", "contact"],
+    ] as const) {
+      const parsed = parseVizState(
+        new URLSearchParams(`tab=shots&cut=${cut}&vends=${ends}`),
+        { errorSplitJudged: true },
+      );
+      expect(parsed.filters.ends, `${cut} ${ends}`).toBe(ends);
+      expect(courtEndsFor(cut, parsed.filters)).toBe(ends);
+
+      const q = new URLSearchParams(
+        vizStateQuery(new URLSearchParams("tab=shots"), parsed),
+      );
+      expect(q.get("vends"), `${cut} ${ends}`).toBe(ends);
+      expect(q.get("tab")).toBe("shots");
+      expect(parseVizState(q, { errorSplitJudged: true })).toEqual(parsed);
+    }
+  });
+
+  test("parsed state is exactly the cut's state plus ends", () => {
+    expect(parseVizState(new URLSearchParams("cut=errors&vends=both"))).toEqual(
+      {
+        cut: "errors",
+        chart: "scatter",
+        viewId: null,
+        filters: { ...EMPTY_VIZ_FILTERS, ends: "both" },
+      },
+    );
+  });
+
+  test("the cut's default is never serialised, named or not", () => {
+    for (const cut of PLACEMENT_CUTS) {
+      const named = parseVizState(
+        new URLSearchParams(`cut=${cut}&vends=placement`),
+      );
+      expect(named.filters.ends, cut).toBeNull();
+      expect(named).toEqual(parseVizState(new URLSearchParams(`cut=${cut}`)));
+      expect(vizStateQuery(new URLSearchParams(), named)).toBe(`cut=${cut}`);
+      // A state holding the default outright (built by hand, not parsed).
+      expect(
+        vizStateQuery(new URLSearchParams(), {
+          cut,
+          chart: "scatter",
+          viewId: null,
+          filters: { ...EMPTY_VIZ_FILTERS, ends: "placement" },
+        }),
+      ).toBe(`cut=${cut}`);
+    }
+    const both = parseVizState(
+      new URLSearchParams("cut=approaches&vends=both"),
+      { errorSplitJudged: true },
+    );
+    expect(both.filters.ends).toBeNull();
+    expect(
+      new URLSearchParams(vizStateQuery(new URLSearchParams(), both)).has(
+        "vends",
+      ),
+    ).toBe(false);
+  });
+
+  test("Serves carries no value and never serialises one", () => {
+    const parsed = parseVizState(
+      new URLSearchParams("cut=serve&vends=contact"),
+    );
+    expect(parsed.filters.ends).toBeNull();
+    expect(vizStateQuery(new URLSearchParams(), parsed)).toBe("cut=serve");
+    expect(
+      vizStateQuery(new URLSearchParams(), {
+        cut: "serve",
+        chart: "scatter",
+        viewId: null,
+        filters: { ...EMPTY_VIZ_FILTERS, ends: "contact" },
+      }),
+    ).toBe("cut=serve");
+    expect(withCourtEnds(EMPTY_VIZ_FILTERS, "serve", "contact")).toBe(
+      EMPTY_VIZ_FILTERS,
+    );
+  });
+
+  test("the wall carries no value, and a garbage value parses away", () => {
+    const wall = parseVizState(new URLSearchParams("tab=shots&vends=contact"));
+    expect(wall.filters).toEqual(EMPTY_VIZ_FILTERS);
+    expect(vizStateQuery(new URLSearchParams("vends=contact"), wall)).toBe("");
+
+    const garbage = parseVizState(new URLSearchParams("cut=errors&vends=net"));
+    expect(garbage.filters.ends).toBeNull();
+  });
+
+  test("vends is a viz key: a stale one is cleaned off by the next write", () => {
+    const q = vizStateQuery(new URLSearchParams("tab=shots&vends=contact"), {
+      cut: "errors",
+      chart: "scatter",
+      viewId: null,
+      filters: EMPTY_VIZ_FILTERS,
+    });
+    expect(q).toBe("tab=shots&cut=errors");
+  });
+
+  test("withCourtEnds stores a choice and drops the cut's default", () => {
+    const contact = withCourtEnds(EMPTY_VIZ_FILTERS, "errors", "contact");
+    expect(contact).toEqual({ ...EMPTY_VIZ_FILTERS, ends: "contact" });
+    expect(withCourtEnds(contact, "errors", "placement").ends).toBeNull();
+    expect(withCourtEnds(contact, "errors", "contact")).toBe(contact);
+    expect(withCourtEnds(EMPTY_VIZ_FILTERS, "approaches", "both")).toBe(
+      EMPTY_VIZ_FILTERS,
+    );
+  });
+
+  test("sameView: two states that differ only in ends are different views", () => {
+    const base = {
+      cut: "errors" as const,
+      chart: "scatter" as const,
+      viewId: null,
+    };
+    const placement = { ...base, filters: EMPTY_VIZ_FILTERS };
+    const contact = {
+      ...base,
+      filters: { ...EMPTY_VIZ_FILTERS, ends: "contact" as const },
+    };
+    expect(sameView(placement, contact)).toBe(false);
+    expect(sameView(contact, placement)).toBe(false);
+    expect(sameView(contact, contact)).toBe(true);
+    // Unsaid and the default named outright are one view.
+    expect(
+      sameView(placement, {
+        ...base,
+        filters: { ...EMPTY_VIZ_FILTERS, ends: "placement" },
+      }),
+    ).toBe(true);
+    // A candidate stored before the key existed is its cut's default.
+    const { ends: _ends, ...legacy } = EMPTY_VIZ_FILTERS;
+    void _ends;
+    expect(
+      sameView(placement, {
+        ...base,
+        filters: legacy as typeof EMPTY_VIZ_FILTERS,
+      }),
+    ).toBe(true);
+    expect(
+      sameView(contact, {
+        ...base,
+        filters: legacy as typeof EMPTY_VIZ_FILTERS,
+      }),
+    ).toBe(false);
+  });
+
+  test("viewIdentityKey: two states that differ only in ends are different courts", () => {
+    const placement = parseVizState(new URLSearchParams("cut=returnPlacement"));
+    const contact = parseVizState(
+      new URLSearchParams("cut=returnPlacement&vends=contact"),
+    );
+    const both = parseVizState(
+      new URLSearchParams("cut=returnPlacement&vends=both"),
+    );
+    const keys = [placement, contact, both].map(viewIdentityKey);
+    expect(new Set(keys).size).toBe(3);
+    // Unsaid and the default named are the same court.
+    expect(
+      viewIdentityKey(
+        parseVizState(
+          new URLSearchParams("cut=returnPlacement&vends=placement"),
+        ),
+      ),
+    ).toBe(viewIdentityKey(placement));
+    // A filter edit under a chosen end is still the same court.
+    expect(
+      viewIdentityKey(
+        parseVizState(
+          new URLSearchParams("cut=returnPlacement&vends=contact&ball=first"),
+        ),
+      ),
+    ).toBe(viewIdentityKey(contact));
+  });
+
+  test("carryFilters re-reads the choice against the new cut", () => {
+    const contact = { ...EMPTY_VIZ_FILTERS, ends: "contact" as const };
+    expect(carryFilters(contact, "rallyPlacement").ends).toBe("contact");
+    expect(carryFilters(contact, "approaches").ends).toBe("contact");
+    expect(carryFilters(contact, "serve").ends).toBeNull();
+    // Both is Approaches' own default, so it stops being a stored choice.
+    const both = { ...EMPTY_VIZ_FILTERS, ends: "both" as const };
+    expect(carryFilters(both, "approaches").ends).toBeNull();
+    expect(carryFilters(both, "errors").ends).toBe("both");
+    // Unsaid stays unsaid: each cut's own default.
+    expect(carryFilters(EMPTY_VIZ_FILTERS, "approaches").ends).toBeNull();
+  });
+
+  test("clearedFilters keeps the ends: it is not a filter", () => {
+    const cleared = clearedFilters({
+      cut: "errors",
+      chart: "scatter",
+      viewId: "view-1",
+      filters: { ...EMPTY_VIZ_FILTERS, ball: ["first"], ends: "contact" },
+    });
+    expect(cleared.filters).toEqual({ ...EMPTY_VIZ_FILTERS, ends: "contact" });
+    expect(cleared.viewId).toBeNull();
+  });
+
+  test("ends is never an applied-filter token", () => {
+    expect(
+      activeFilterEntries({
+        cut: "errors",
+        chart: "scatter",
+        viewId: null,
+        filters: { ...EMPTY_VIZ_FILTERS, ends: "contact" },
+      }),
+    ).toEqual([]);
   });
 });

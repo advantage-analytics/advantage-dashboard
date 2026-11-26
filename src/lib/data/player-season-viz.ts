@@ -1262,6 +1262,8 @@ export function buildSeasonLightbox(
       keys: (Object.keys(EMPTY_VIZ_FILTERS) as (keyof VizFilters)[]).filter(
         (key) =>
           key !== "player" &&
+          // Which ends the court draws is not a filter of the view.
+          key !== "ends" &&
           !sameFilterValue(key, viewFilters, EMPTY_VIZ_FILTERS),
       ),
     };

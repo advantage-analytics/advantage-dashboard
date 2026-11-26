@@ -258,6 +258,8 @@ export function VizLightbox({
             ).filter(
               (key) =>
                 key !== "player" &&
+                // Which ends the court draws is not a filter of the view.
+                key !== "ends" &&
                 !sameFilterValue(key, filters, EMPTY_VIZ_FILTERS),
             ),
             view: {

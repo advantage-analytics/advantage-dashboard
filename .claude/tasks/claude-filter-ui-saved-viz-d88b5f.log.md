@@ -50,3 +50,15 @@ is the runner's. Newest entries at the bottom.
 
 1. court-art.tsx comments (~:722) still describe band labels as "DEEP · 0–13 FT".
 2. The `APPROACH_*` label constants in court-art.tsx may now be used only by the wall art — check for dead exports.
+
+## T6 · Add the Placement/Contact/Both view state — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** viz-model.ts adds `CourtEnds = "placement" | "contact" | "both"`, `VizFilters.ends` (null = the cut's default), `defaultCourtEnds(cut)` (Both on Approaches, none on Serves, Placement elsewhere), `courtEndsFor`, `storedCourtEnds` and the setter `withCourtEnds`. viz-url.ts carries it as `?vends=` (in VIZ_KEYS; parse + serialise; the default is never written), and `sameView`/`viewIdentityKey` compare the resolved value. Saved inside a view's filters JSON via EMPTY_VIZ_FILTERS (saved-views-logic.ts `filtersToParams`), no migration; old rows load at the default. `ends` is not a filter token; `clearedFilters` keeps it, `carryFilters` re-reads it per cut. One-line exclusions in viz-lightbox.tsx and player-season-viz.ts keep it out of a saved view's baseline keys.
+**follow-ups:**
+
+1. T9: because `viewIdentityKey` changes with ends, toggling the switch will run the court morph, scroll and refocus — handle as an in-place toggle if unwanted.
+2. T9: decide whether toggling ends on an open saved view counts as editing it (the baseline excludes ends while `sameView` says it differs).
+3. T9: the lightbox "Clear filter" paths (viz-lightbox.tsx ~:321, season-viz-lightbox.tsx:242) rebuild from EMPTY_VIZ_FILTERS and reset ends, unlike `clearedFilters`.
+4. T7: map old `cut=returnContact` links and saved rows to Returns with `ends: "contact"`.
+5. MCP `open_visualization` has no ends parameter yet.

@@ -83,6 +83,72 @@ export type Cut =
 export type Chart = "scatter" | "zones" | "heat";
 export type PlayerFilter = "you" | "opponent";
 
+/**
+ * Which end of each shot a court draws: where it landed (`placement`), where
+ * it was hit from (`contact`), or the two as a pair (`both`). Not a filter —
+ * it never narrows which shots are plotted — but it lives on `VizFilters`
+ * (`ends`) so a saved view stores it inside its `filters` JSON with no
+ * column of its own.
+ */
+export type CourtEnds = "placement" | "contact" | "both";
+
+export const COURT_ENDS: readonly CourtEnds[] = [
+  "placement",
+  "contact",
+  "both",
+];
+
+/**
+ * The ends `cut` draws when nothing says otherwise: Both for Approaches,
+ * Placement for Errors, Returns and Rally shots. `null` for Serves, which
+ * has no such choice (a serve's contact is the baseline).
+ */
+export function defaultCourtEnds(cut: Cut): CourtEnds | null {
+  if (cut === "serve") return null;
+  return cut === "approaches" ? "both" : "placement";
+}
+
+/**
+ * `ends` as `VizFilters.ends` holds it for `cut`: the value when it is a
+ * real choice away from the cut's default, otherwise `null` — on Serves,
+ * for the default itself, and for anything that is not a `CourtEnds`. One
+ * stored form per drawn court, so equal courts are equal states and a
+ * default never reaches the URL or a saved row.
+ */
+export function storedCourtEnds(
+  cut: Cut,
+  ends: CourtEnds | null | undefined,
+): CourtEnds | null {
+  const fallback = defaultCourtEnds(cut);
+  if (fallback === null || ends == null || ends === fallback) return null;
+  return COURT_ENDS.includes(ends) ? ends : null;
+}
+
+/**
+ * The ends `cut`'s court draws under `filters`: the stored choice, else the
+ * cut's default. `null` only for Serves. Read the value through this, never
+ * `filters.ends` directly — an absent value (an old saved row, a link built
+ * before the switch existed) means the default, which differs by cut.
+ */
+export function courtEndsFor(
+  cut: Cut,
+  filters: { ends?: CourtEnds | null },
+): CourtEnds | null {
+  return storedCourtEnds(cut, filters.ends) ?? defaultCourtEnds(cut);
+}
+
+/** `filters` drawing `ends` on `cut`, kept in stored form (`storedCourtEnds`). */
+export function withCourtEnds(
+  filters: VizFilters,
+  cut: Cut,
+  ends: CourtEnds | null,
+): VizFilters {
+  const stored = storedCourtEnds(cut, ends);
+  return stored === (filters.ends ?? null)
+    ? filters
+    : { ...filters, ends: stored };
+}
+
 // Every dimension below is multi-select: an empty list means "any" (no
 // narrowing), and a non-empty list is OR'd — a point matches the group when
 // it matches ANY selected value. `player` is the one exception and stays a
@@ -142,6 +208,13 @@ export interface VizFilters extends ShotFilterState {
    * players are you/opponent-relative — never the court's subject.
    */
   match: MatchFilters;
+  /**
+   * Which end of each shot the court draws, when it is not the cut's default
+   * (`null`). Not a filter: no `filterKeysFor` list holds it and it never
+   * counts as applied. Read it with `courtEndsFor`, write it with
+   * `withCourtEnds`.
+   */
+  ends: CourtEnds | null;
 }
 
 export const EMPTY_VIZ_FILTERS: VizFilters = {
@@ -159,6 +232,7 @@ export const EMPTY_VIZ_FILTERS: VizFilters = {
   approachTo: [],
   approachDir: [],
   match: EMPTY_MATCH_FILTERS,
+  ends: null,
 };
 
 export type Outcome = "won" | "lost" | "miss";
