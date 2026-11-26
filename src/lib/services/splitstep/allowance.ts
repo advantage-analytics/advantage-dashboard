@@ -19,6 +19,10 @@
  * An admin's own allowance (`videoHoursOverride`) and an admin's unlimited
  * personal workspace behave as before on both sides of the date.
  *
+ * One exception to the date: a personal workspace already on a PAID plan
+ * (bought in December — decision 8) draws that plan, windowed, from the day
+ * it starts. Nothing else is read early.
+ *
  * `windowed` says which ledger read and reserve RPC go with the answer: the
  * month-keyed ones (`billing_month = billingMonth`) before the date, the
  * window-keyed ones (`created_at` in `[windowStart, windowEnd)`) after —
@@ -57,8 +61,9 @@ export interface VideoAllowance {
   windowEnd: Date;
   /**
    * False before `PLANS_BEGIN`: usage is keyed by `billingMonth` and the
-   * month-keyed RPCs reserve. True after: usage is what was created inside
-   * the window and the window-keyed RPCs reserve.
+   * month-keyed RPCs reserve. True after — and before it for a personal
+   * workspace already on a paid plan: usage is what was created inside the
+   * window and the window-keyed RPCs reserve.
    */
   windowed: boolean;
   /** `YYYY-MM-01` for `now`, UTC — what a new ledger row is filed under. */
@@ -129,7 +134,7 @@ export function calendarMonthWindow(now: Date): { start: Date; end: Date } {
  * rather than drifting to the 28th — what Stripe does with a billing anchor
  * and what Postgres does with `anchor + n * interval '1 month'`.
  */
-function addMonthsUtc(anchor: Date, months: number): Date {
+export function addMonthsUtc(anchor: Date, months: number): Date {
   const index = anchor.getUTCFullYear() * 12 + anchor.getUTCMonth() + months;
   const year = Math.floor(index / 12);
   const month = index - year * 12;
@@ -231,7 +236,14 @@ export function allowanceFor(
   const month = calendarMonthWindow(now);
   const monthly = { windowStart: month.start, windowEnd: month.end };
 
-  if (!plansHaveBegun(now)) {
+  // A paid plan's hours apply from the day it starts, even in December
+  // (decision 8), so a personal workspace on one takes the plan path below
+  // whatever the date. Everyone else is on the beta until `PLANS_BEGIN`.
+  const paidEarly =
+    workspace.kind === "personal" &&
+    planHoursSeconds(planFor(workspace.plan).id) > 0;
+
+  if (!plansHaveBegun(now) && !paidEarly) {
     return {
       ...betaAllowance(workspace),
       ...monthly,

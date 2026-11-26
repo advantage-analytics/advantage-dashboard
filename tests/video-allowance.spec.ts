@@ -93,17 +93,8 @@ test.describe("before January 1, 2027: today's answers, by calendar month", () =
         "unlimited",
         UNLIMITED_CAP_SECONDS,
       ],
-      // A plan bought early, a season already assigned, a pilot already
-      // dated: none of it is read until the date.
-      [
-        "a Coach Pro subscriber",
-        personal({
-          plan: "coach-pro",
-          planPeriodStart: "2026-12-15T10:00:00Z",
-        }),
-        "beta",
-        2 * H,
-      ],
+      // A season already assigned, a pilot already dated: neither is read
+      // until the date. (A PAID personal plan is — see the describe below.)
       [
         "a college with a season plan",
         team({ programPlan: { ...SPRING, startsOn: "2026-12-01" } }),
@@ -150,17 +141,73 @@ test.describe("before January 1, 2027: today's answers, by calendar month", () =
   });
 });
 
+test.describe("a plan bought in December: its hours start that day (decision 8)", () => {
+  const DEC_20 = new Date("2026-12-20T12:00:00Z");
+
+  test("a paid plan is drawn before January 1, over its own window", () => {
+    const allowance = allowanceFor(
+      personal({ plan: "coach-pro", planPeriodStart: "2026-12-15T10:00:00Z" }),
+      DEC_20,
+    );
+    expect([allowance.kind, allowance.capSeconds]).toEqual(["plan", 10 * H]);
+    expect(allowance.windowed).toBe(true);
+    expect(allowance.billingMonth).toBe("2026-12-01");
+    expect(iso(allowance)).toEqual(
+      window("2026-12-15T10:00:00Z", "2027-01-15T10:00:00Z"),
+    );
+  });
+
+  test("the same window on both sides of January 1", () => {
+    const coach = personal({
+      plan: "coach",
+      planPeriodStart: "2026-12-15T10:00:00Z",
+    });
+    const before = allowanceFor(coach, LAST_BETA_INSTANT);
+    const after = allowanceFor(coach, FIRST_PLAN_INSTANT);
+    expect([before.kind, before.capSeconds]).toEqual(["plan", 5 * H]);
+    expect(iso(before)).toEqual(iso(after));
+    expect(before.windowed).toBe(true);
+  });
+
+  test("an override and an admin keep their precedence over the plan", () => {
+    const override = allowanceFor(
+      personal({ plan: "coach", videoHoursOverride: 6.5 }),
+      DEC_20,
+    );
+    expect([override.kind, override.capSeconds]).toEqual(["override", 6.5 * H]);
+    expect(override.windowed).toBe(true);
+    const admin = allowanceFor(
+      personal({ plan: "coach", unlimitedVideo: true }),
+      DEC_20,
+    );
+    expect(admin.kind).toBe("unlimited");
+  });
+
+  test("Free, legacy pro and a team are still on the beta", () => {
+    for (const plan of ["free", "pro", null, "enterprise"]) {
+      const allowance = allowanceFor(personal({ plan }), DEC_20);
+      expect([allowance.kind, allowance.windowed]).toEqual(["beta", false]);
+    }
+    // A team reads no personal plan, whatever rides on the workspace.
+    const college = allowanceFor(team({ plan: "coach-pro" }), DEC_20);
+    expect([college.kind, college.capSeconds]).toEqual(["beta", 75 * H]);
+  });
+});
+
 test.describe("from January 1, 2027: a personal workspace draws its plan", () => {
   test("the switch is the first instant of January 1, UTC", () => {
-    const coach = personal({ plan: "coach" });
-    expect(allowanceFor(coach, LAST_BETA_INSTANT).kind).toBe("beta");
-    const after = allowanceFor(coach, FIRST_PLAN_INSTANT);
-    expect(after.kind).toBe("plan");
+    const free = personal();
+    expect(allowanceFor(free, LAST_BETA_INSTANT).kind).toBe("beta");
+    const after = allowanceFor(free, FIRST_PLAN_INSTANT);
+    expect(after.kind).toBe("none");
     expect(after.windowed).toBe(true);
     expect(after.billingMonth).toBe("2027-01-01");
     // 7 pm on December 31 in New York is already January 1 in UTC.
     expect(
-      allowanceFor(coach, new Date("2026-12-31T19:00:00-05:00")).kind,
+      allowanceFor(
+        personal({ plan: "coach" }),
+        new Date("2026-12-31T19:00:00-05:00"),
+      ).kind,
     ).toBe("plan");
   });
 

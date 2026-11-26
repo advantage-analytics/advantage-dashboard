@@ -52,6 +52,20 @@ export function plansHaveBegun(now: Date = new Date()): boolean {
   return now.getTime() >= Date.parse(`${PLANS_BEGIN}T00:00:00Z`);
 }
 
+/**
+ * Whether plans and extra hours can be BOUGHT at `now`. From `PLANS_BEGIN`
+ * always. Before it, only once the owner sets `NEXT_PUBLIC_PLANS_ON_SALE=1`
+ * (decision 8: a subscription bought in December is billed that day and its
+ * hours start that day) — which waits on the Stripe products existing.
+ * Unset, checkout opens on January 1.
+ *
+ * Selling and enforcing are two switches: `plansHaveBegun()` is when the
+ * beta allowances end for everyone, this is when a card can be charged.
+ */
+export function plansOnSale(now: Date = new Date()): boolean {
+  return plansHaveBegun(now) || process.env.NEXT_PUBLIC_PLANS_ON_SALE === "1";
+}
+
 /** No pilot runs past this day, whatever its own end date says. */
 export const PILOT_LATEST_END = "2027-05-31";
 
