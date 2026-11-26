@@ -220,7 +220,7 @@ test.describe("ProfileInsightEmpty — two reasons, two sentences", () => {
 });
 
 test.describe("ProfileStatisticsView — which fills the insight slot", () => {
-  async function renderView(analyzed: number) {
+  async function renderView(analyzed: number, seasonAnalyzed?: number) {
     // The real fold, imported here so the view gets real rows and tallies.
     const { foldSeasonRows, foldSeasonTallies } =
       await import("@/lib/data/player-season");
@@ -235,8 +235,14 @@ test.describe("ProfileStatisticsView — which fills the insight slot", () => {
         analyzed,
         groups: foldSeasonRows([]),
         tallies: foldSeasonTallies([]),
-        evidence: analyzed > 0 ? { parts: EVIDENCE, text: "2 analyzed" } : null,
-        insightSignature: analyzed > 0 ? "2:m-a,m-b:2 analyzed" : "",
+        // The evidence and signature are the WHOLE season's.
+        evidence:
+          (seasonAnalyzed ?? analyzed) > 0
+            ? { parts: EVIDENCE, text: "2 analyzed" }
+            : null,
+        insightSignature:
+          (seasonAnalyzed ?? analyzed) > 0 ? "2:m-a,m-b:2 analyzed" : "",
+        ...(seasonAnalyzed === undefined ? {} : { seasonAnalyzed }),
       }),
     );
   }
@@ -255,5 +261,38 @@ test.describe("ProfileStatisticsView — which fills the insight slot", () => {
     expect(html).toContain('data-testid="insight-empty"');
     expect(html).toContain('data-reason="unwritten"');
     expect(html).not.toContain('data-testid="insight-card"');
+  });
+
+  // The page's match scope folds the cards over fewer matches than the
+  // insight card speaks for (`/api/player-insight` writes from the whole
+  // season): the card says so in one quiet line.
+  const note = (html: string) =>
+    /<p data-insight-scope-note="" class="([^"]+)">([^<]+)<\/p>/.exec(html);
+
+  test("under a match scope the card notes it covers the whole season", async () => {
+    const html = await renderView(2, 3);
+    const found = note(html);
+    expect(found?.[2]).toBe(
+      "Covers all 3 analyzed matches, not just the 2 shown.",
+    );
+    expect(found?.[1]).toContain("text-[11px]");
+    expect(found?.[1]).toContain("text-[var(--ink-500)]");
+    // Inside the card, under the evidence line.
+    expect(html.indexOf("data-insight-scope-note")).toBeGreaterThan(
+      html.indexOf('data-testid="insight-card"'),
+    );
+  });
+
+  test("a scope that keeps no analyzed match still draws the season's card, noted", async () => {
+    const html = await renderView(0, 3);
+    expect(html).toContain('data-testid="insight-card"');
+    expect(note(html)?.[2]).toBe(
+      "Covers all 3 analyzed matches, not just the 0 shown.",
+    );
+  });
+
+  test("no scope — or one that keeps every match — draws no note", async () => {
+    expect(await renderView(2)).not.toContain("data-insight-scope-note");
+    expect(await renderView(3, 3)).not.toContain("data-insight-scope-note");
   });
 });

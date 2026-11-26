@@ -23,6 +23,7 @@ import {
   VIEWER_MISS_FILL,
 } from "./court-art";
 import {
+  VIEWER_APPROACH_FRAME,
   VIEWER_COURT,
   VIEWER_HEAT_DOT_RADIUS,
   projectViewerDot,
@@ -218,6 +219,33 @@ function approachApronLayout(scale: number) {
     contactY: VIEWER_COURT.nearBaselineY + reach - APRON_FONT_DESCENT * side,
   };
 }
+/**
+ * Every other chart's two words in Both (and "Contact" alone in Contact):
+ * the outer corners of the whole-length frame (`VIEWER_APPROACH_FRAME`) —
+ * "Placement" in the far apron's top-left, "Contact" in the near apron's
+ * bottom-left — set from the left edge. Centred past each baseline (where
+ * Approaches stacks its wing names) they sat exactly where the marks
+ * gather: long landings straight behind the far baseline, contacts struck
+ * from behind the near one. The frame's outer corners are the apron's
+ * emptiest ground — past the doubles alley on one axis and past the
+ * bulk of the deep balls on the other — and inside the stage at the
+ * default framing, which fits that frame. `CORNER_INSET` units (× the
+ * scale) hold each word off the frame's edges.
+ */
+const CORNER_INSET = 4;
+
+function cornerLabelLayout(scale: number) {
+  const size = COURT_LABEL_SIZE * scale;
+  const frame = VIEWER_APPROACH_FRAME;
+  return {
+    size,
+    x: frame.minX + CORNER_INSET * scale,
+    placementY: frame.minY + CORNER_INSET * scale + APRON_FONT_ASCENT * size,
+    contactY:
+      frame.minY + frame.h - CORNER_INSET * scale - APRON_FONT_DESCENT * size,
+  };
+}
+
 /** Centre of each hitter's-view third of the singles court (`laneOf`). */
 const APPROACH_LANE_X = (() => {
   const third = (VIEWER_COURT.singlesRight - VIEWER_COURT.singlesLeft) / 3;
@@ -1065,10 +1093,11 @@ export function LightboxCourt({
  * Approaches adds its lanes (`approach-map-v9.html`, the wall card's
  * `ApproachCourtArt` labels): the opponent's wing over each third just past
  * the far baseline (the hitter's "Left · Middle · Right" where no one hand
- * sides it, `approachLaneText`), with "Placement" stacked above them. Every
- * other chart passes none and keeps the same two baselines for its words:
- * "Contact" has to sit out past the marks struck from behind the baseline
- * either way, and "Placement" mirrors it.
+ * sides it, `approachLaneText`), with "Placement" stacked above them, both
+ * words centred. Every other chart passes none and sets its words in the
+ * frame's outer left corners instead (`cornerLabelLayout`): centred past the
+ * baselines they sat under the long landings and the deep contacts, and the
+ * marks hid them.
  */
 function CourtEndLabels({
   scale,
@@ -1082,6 +1111,17 @@ function CourtEndLabels({
 }) {
   const approach = lanes !== null;
   const layout = approachApronLayout(scale);
+  const corner = cornerLabelLayout(scale);
+  // Approaches centres its words over the lanes; every other chart sets them
+  // in the frame's outer corners, clear of the marks.
+  const end = approach
+    ? {
+        x: VIEWER_COURT.centreX,
+        placementY: layout.placementY,
+        contactY: layout.contactY,
+        size: layout.side,
+      }
+    : corner;
   return (
     <g
       data-court-end-labels=""
@@ -1090,16 +1130,16 @@ function CourtEndLabels({
       fill={LINE_COLOR}
       fontFamily="var(--font-mono)"
       letterSpacing={COURT_LABEL_TRACKING * scale}
-      textAnchor="middle"
+      textAnchor={approach ? "middle" : "start"}
       style={{ textTransform: "uppercase", pointerEvents: "none" }}
     >
       {placement && (
         <text
           data-court-end-label="placement"
           data-approach-label={approach ? "placement" : undefined}
-          x={VIEWER_COURT.centreX}
-          y={layout.placementY}
-          fontSize={layout.side}
+          x={end.x}
+          y={end.placementY}
+          fontSize={end.size}
           fillOpacity={COURT_SIDE_LABEL_OPACITY}
         >
           Placement
@@ -1108,9 +1148,9 @@ function CourtEndLabels({
       <text
         data-court-end-label="contact"
         data-approach-label={approach ? "contact" : undefined}
-        x={VIEWER_COURT.centreX}
-        y={layout.contactY}
-        fontSize={layout.side}
+        x={end.x}
+        y={end.contactY}
+        fontSize={end.size}
         fillOpacity={COURT_SIDE_LABEL_OPACITY}
       >
         Contact

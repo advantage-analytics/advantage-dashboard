@@ -273,6 +273,17 @@ export function MatchesFilterPanel<K extends string>({
         // The panel keeps its own ↑/↓/Esc: `useRowSelection`'s window key
         // listener stands down for anything under this attribute.
         data-row-keys="ignore"
+        // Opening focuses the panel itself, not its first control. That
+        // control can carry a dark tooltip (Pressure points, first on Rally
+        // shots), and Radix opens a tooltip on focus: the opening's own
+        // programmatic focus put it up over the section's heading before the
+        // reader had pointed at anything. Focus stays inside the panel (Esc
+        // and Tab work as before); Tab reaches the first control, whose
+        // tooltip a keyboard reader then asked for.
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          (event.target as HTMLElement | null)?.focus({ preventScroll: true });
+        }}
         onCloseAutoFocus={(event) => {
           if (!handedOffRef.current) return;
           handedOffRef.current = false;

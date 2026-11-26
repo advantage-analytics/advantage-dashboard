@@ -1024,6 +1024,40 @@ test("the page's match scope (?sm=): the wall is drawn over the scoped matches, 
   expect(errors).toEqual([]);
 });
 
+test("Clear filter on a card under the page's match scope returns its Matches row to the PAGE scope, not the whole season", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  const wall = page.getByRole("list", { name: "Default views" });
+  const serveCard = wall.getByRole("link", { name: /^All serves, Avery Kim/ });
+  const serve = page.getByRole("dialog", { name: "All serves" });
+
+  // The page scoped to m-1 and m-3; the card narrowed further, to m-1 alone.
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&hands=1&delay=100&sm=m-1&sm=m-3`,
+  );
+  await expect(serveCard).toBeVisible({ timeout: 8_000 });
+  const href = new URL((await serveCard.getAttribute("href"))!, origin);
+  href.searchParams.delete("vm");
+  href.searchParams.append("vm", "m-1");
+  await page.goto(href.toString());
+  await expect(marks(serve).first()).toBeVisible({ timeout: 8_000 });
+  const strip = serve.locator("[data-viz-filter-strip]");
+  await expect(strip).toContainText("1 match");
+
+  await strip.getByRole("button", { name: "Clear filter" }).click();
+  await expect
+    .poll(() => {
+      const q = new URL(page.url()).searchParams;
+      return [q.getAll("vm").join(","), q.getAll("sm").join(",")];
+    })
+    .toEqual(["m-1,m-3", "m-1,m-3"]);
+  await expect(strip).toContainText("2 matches");
+  expect(errors).toEqual([]);
+});
+
 test("the title row's \"N of M matches\" picker: a dialog of the sheet's own draft, Show writes the page scope and closes, and the facts line's Show all clears it", async ({
   page,
 }) => {

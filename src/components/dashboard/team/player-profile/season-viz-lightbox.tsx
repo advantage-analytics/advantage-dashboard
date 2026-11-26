@@ -508,8 +508,16 @@ export function SeasonVizLightbox({
     court.optionCounts[optionCountKey(patch)] ?? 0;
 
   function clearFilters() {
+    // The card's Matches row goes back to where it started — the PAGE's
+    // scope (`?sres=` / `?sopp=` / `?ssurf=` / `?sm=`, read from the URL
+    // now), which a card opened from the wall carries in — never to the
+    // whole season under a scoped page. No scope: the whole season.
+    const pageScope = parseMatchScope(
+      new URLSearchParams(searchParams.toString()),
+    );
     setState((prev) => ({
       ...withoutSeasonFilters(prev),
+      ...(pageScope ? { season: pageScope } : {}),
       // Which ends the court draws is not a filter: Clear keeps the
       // reader's Placement · Contact · Both, as `clearedFilters` does.
       filters: { ...court.clearFilters, ends: prev.filters.ends ?? null },

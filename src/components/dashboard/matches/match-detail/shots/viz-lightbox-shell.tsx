@@ -45,7 +45,12 @@ import {
   viewerFullCourtTransform,
   viewerInitialTransform,
 } from "./court-geometry";
-import { bandKindFor, isPlacementCut, isReturnCut } from "./cut-kinds";
+import {
+  bandKindFor,
+  isPlacementCut,
+  isReturnCut,
+  marksAreShots,
+} from "./cut-kinds";
 import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
 import type { PlayerChipLabels } from "./player-chip-labels";
@@ -66,8 +71,12 @@ import {
 } from "./lightbox-court";
 import {
   COUNT_NOUN,
+  EntryChips,
+  ErrorTypeChips,
   LegendFilter,
   LightboxFilterPanel,
+  RallyLengthChips,
+  ServeChips,
   ServeReturnedChips,
   type LightboxAdvancedFilters,
   type LightboxSeasonFilters,
@@ -779,6 +788,25 @@ export function VizLightboxShell({
     filtersTriggerRef.current?.focus({ preventScroll: true });
   }, [drawerPhase]);
   const advancedFilters = filterPanel?.advanced;
+  // The toolbar's lead chips for this chart (see the toolbar), or none.
+  const ToolbarChips = isReturnCut(cut)
+    ? ServeReturnedChips
+    : cut === "serve"
+      ? ServeChips
+      : marksAreShots(cut)
+        ? RallyLengthChips
+        : cut === "approaches"
+          ? EntryChips
+          : null;
+  const toolbarChips = !filterPanel ? null : cut === "errors" ? (
+    <ErrorTypeChips
+      filters={filters}
+      setFilters={filterPanel.onChange}
+      errorSplitJudged={filterPanel.errorSplitJudged}
+    />
+  ) : ToolbarChips ? (
+    <ToolbarChips filters={filters} setFilters={filterPanel.onChange} />
+  ) : null;
   const seasonFilters = filterPanel?.season;
   const drawerShown =
     drawerPhase !== "closed" &&
@@ -1176,7 +1204,10 @@ export function VizLightboxShell({
               >
                 {/* Court column */}
                 <div className="flex min-w-0 shrink-0 flex-col gap-3 md:min-h-0 md:max-w-[800px] md:flex-1 md:shrink">
-                  <div className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3">
+                  <div
+                    data-lightbox-toolbar=""
+                    className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3"
+                  >
                     {player && (
                       <PlayerChips
                         value={player.value}
@@ -1185,9 +1216,14 @@ export function VizLightboxShell({
                         className="flex gap-1.5"
                       />
                     )}
-                    {/* Returns lead with the serve they answer (board
-                        Final-04), behind a hairline from the player chips. */}
-                    {!isDraft && filterPanel && isReturnCut(cut) && (
+                    {/* The chart's lead chips, behind a hairline from the
+                        player chips: Returns the serve they answer, Serves
+                        1st or 2nd (board Final-04), Rally shots their rally
+                        length (Final-07), Errors their type, Approaches
+                        their way to the net. Drawn in a draft too — the
+                        Filters menu is not, and the chips hold the one
+                        control for these keys. */}
+                    {filterPanel && toolbarChips !== null && (
                       <>
                         {player && (
                           <span
@@ -1195,12 +1231,19 @@ export function VizLightboxShell({
                             className="h-4 w-px bg-[var(--border-medium)]"
                           />
                         )}
-                        <ServeReturnedChips
-                          filters={filters}
-                          setFilters={filterPanel.onChange}
-                        />
+                        {toolbarChips}
                       </>
                     )}
+                    {/* The spacer: the chart menu and Filters sit at the
+                        row's right end (the Final boards). The bands
+                        receipt reads into it, right-aligned beside them. */}
+                    <span
+                      aria-hidden="true"
+                      data-toolbar-spacer=""
+                      className="min-w-0 flex-1 truncate text-right text-[11px] text-[var(--ink-600)]"
+                    >
+                      {receipt?.message}
+                    </span>
                     {controls && (
                       <ControlsSlot
                         render={controls}
@@ -1217,7 +1260,6 @@ export function VizLightboxShell({
                         engaged={anyCut}
                         result={result}
                         sets={filterPanel.sets}
-                        errorSplitJudged={filterPanel.errorSplitJudged}
                         countWith={filterPanel.countWith}
                         advanced={filterPanel.advanced}
                         onOpenAdvanced={openAdvanced}
@@ -1225,14 +1267,6 @@ export function VizLightboxShell({
                         triggerRef={filtersTriggerRef}
                         season={filterPanel.season}
                       />
-                    )}
-                    {receipt !== null && (
-                      <span
-                        aria-hidden="true"
-                        className="ml-auto truncate text-[11px] text-[var(--ink-600)]"
-                      >
-                        {receipt.message}
-                      </span>
                     )}
                   </div>
 
@@ -1425,10 +1459,15 @@ export function VizLightboxShell({
                   </div>
 
                   {!isDraft && (
-                    <div className="flex items-center justify-between gap-3 [&>*:first-child]:min-w-0">
-                      {/* The legend, then the bands menu beside it (plan
-                          2026-11-25 §4: bands left the chart menu). */}
-                      <div className="flex items-center gap-2">
+                    <div
+                      data-lightbox-legend-row=""
+                      className="flex items-center justify-between gap-3"
+                    >
+                      {/* The legend keys and its quiet notes on the left,
+                          the bands menu at the row's far right (the Final
+                          boards; plan 2026-11-25 §4: bands left the chart
+                          menu). */}
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
                         {chart === "scatter" ? (
                           <LegendFilter
                             items={legend}
@@ -1461,49 +1500,51 @@ export function VizLightboxShell({
                             )}
                           </div>
                         )}
-                        {bandsMenu && (
+                        {(showNotDrawn || sentenceNote || contactLine) && (
+                          <div className="flex shrink-0 items-center gap-3">
+                            {/* Some approaches drawn, some not: the same
+                              sentence as a quiet line at the legend's end, so
+                              the marks on court never read as every approach
+                              counted. */}
+                            {showNotDrawn && (
+                              <p
+                                data-viz-not-drawn=""
+                                className="text-micro m-0 leading-6 text-[var(--ink-600)] tabular-nums"
+                              >
+                                {notDrawnLine}
+                              </p>
+                            )}
+                            {/* A drawn mark's wing rests on a hand the match
+                              does not hold: said here, once, whether or not
+                              a filter strip is up. */}
+                            {sentenceNote && (
+                              <p
+                                data-viz-hand-assumed=""
+                                className="text-micro m-0 leading-6 text-[var(--ink-600)]"
+                              >
+                                {sentenceNote}
+                              </p>
+                            )}
+                            {/* Some shown shots have no recorded contact:
+                              said once, quietly, so a court drawing contact
+                              never reads as every shot's. */}
+                            {contactLine !== null && (
+                              <p
+                                data-viz-contact-recorded=""
+                                className="m-0 text-[11px] leading-6 text-[var(--ink-500)] tabular-nums"
+                              >
+                                {contactLine}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {bandsMenu && (
+                        <div className="flex shrink-0 items-center">
                           <ControlsSlot
                             render={bandsMenu}
                             enterBandEdit={enterBandEdit}
                           />
-                        )}
-                      </div>
-                      {(showNotDrawn || sentenceNote || contactLine) && (
-                        <div className="flex shrink-0 items-center gap-3">
-                          {/* Some approaches drawn, some not: the same
-                              sentence as a quiet line at the legend's end, so
-                              the marks on court never read as every approach
-                              counted. */}
-                          {showNotDrawn && (
-                            <p
-                              data-viz-not-drawn=""
-                              className="text-micro m-0 leading-6 text-[var(--ink-600)] tabular-nums"
-                            >
-                              {notDrawnLine}
-                            </p>
-                          )}
-                          {/* A drawn mark's wing rests on a hand the match
-                              does not hold: said here, once, whether or not
-                              a filter strip is up. */}
-                          {sentenceNote && (
-                            <p
-                              data-viz-hand-assumed=""
-                              className="text-micro m-0 leading-6 text-[var(--ink-600)]"
-                            >
-                              {sentenceNote}
-                            </p>
-                          )}
-                          {/* Some shown shots have no recorded contact:
-                              said once, quietly, so a court drawing contact
-                              never reads as every shot's. */}
-                          {contactLine !== null && (
-                            <p
-                              data-viz-contact-recorded=""
-                              className="m-0 text-[11px] leading-6 text-[var(--ink-500)] tabular-nums"
-                            >
-                              {contactLine}
-                            </p>
-                          )}
                         </div>
                       )}
                     </div>

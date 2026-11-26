@@ -4,8 +4,8 @@ import { startStyledHarness } from "./fixtures/viz-styled-harness-server";
 /**
  * The Approaches cut's Filters panel and applied sentence (plan step 9),
  * through the real `ShotsTab` → `VizLightbox` over the shared net-point
- * match (`fixtures/viz-approach-filters-harness.tsx`): the panel's three
- * checklist groups, the card's baseline (`entry: ["approach"]`) kept out of
+ * match (`fixtures/viz-approach-filters-harness.tsx`): the panel's two
+ * checklist groups, the toolbar's Way to the net chips, the card's baseline (`entry: ["approach"]`) kept out of
  * the strip, Clear going back to approaches only, and the right-handed
  * caveat.
  */
@@ -23,7 +23,22 @@ test.afterAll(async () => {
   await close?.();
 });
 
-const APPROACH_SECTIONS = ["Way to the net", "Approach to", "Direction"];
+const APPROACH_SECTIONS = ["Approach to", "Direction"];
+
+/** The toolbar's Way to the net chips (All · Approach · Serve and volley ·
+ *  Drawn in), which replaced the menu's Way to the net section. */
+function entryChips(page: Page) {
+  return page
+    .getByRole("dialog")
+    .first()
+    .getByRole("group", { name: "Way to the net" });
+}
+
+async function pressedOf(chips: Locator) {
+  return chips.evaluateAll((els) =>
+    els.map((el) => el.getAttribute("aria-pressed")),
+  );
+}
 
 /** Opens the Approaches wall card, as a reader does. */
 async function openApproaches(page: Page, query = "") {
@@ -48,11 +63,22 @@ async function openPanel(page: Page) {
   return panel;
 }
 
-test("the approaches cut's panel has three checklist groups; no other cut has them", async ({
+test("the approaches cut's panel has two checklist groups and its toolbar the Way to the net chips; no other cut has them", async ({
   page,
 }) => {
   const { errors } = await openApproaches(page);
+  // Way to the net is the toolbar's lead chips, one at a time; the card's
+  // baseline (approaches only) lights Approach.
+  const chips = entryChips(page).getByRole("button");
+  await expect(chips).toHaveText([
+    "All",
+    "Approach",
+    "Serve and volley",
+    "Drawn in",
+  ]);
+  expect(await pressedOf(chips)).toEqual(["false", "true", "false", "false"]);
   const panel = await openPanel(page);
+  await expect(panel).not.toContainText("Way to the net");
   const labels = panel.locator("[data-filter-panel-sections] p");
   for (const label of APPROACH_SECTIONS)
     await expect(
@@ -61,9 +87,6 @@ test("the approaches cut's panel has three checklist groups; no other cut has th
 
   // Checklists, not segmented rows: every option is a checkbox, none a radio.
   for (const name of [
-    /^Approach\b/,
-    /^Serve and volley\b/,
-    /^Drawn in\b/,
     /^Their backhand\b/,
     /^Middle\b/,
     /^Their forehand\b/,
@@ -74,15 +97,11 @@ test("the approaches cut's panel has three checklist groups; no other cut has th
   await expect(panel.getByRole("checkbox", { name: /^Middle\b/ })).toHaveCount(
     2,
   );
-  for (const name of ["Their backhand", "Crosscourt", "Approach"])
+  for (const name of ["Their backhand", "Crosscourt"])
     await expect(panel.getByRole("radio", { name })).toHaveCount(0);
-  // The card is approaches: its own tick is on, the others off.
-  await expect(
-    panel.getByRole("checkbox", { name: /^Approach\b/ }),
-  ).toHaveAttribute("aria-checked", "true");
   await expect(
     panel.getByRole("checkbox", { name: /^Serve and volley\b/ }),
-  ).toHaveAttribute("aria-checked", "false");
+  ).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   // Every other cut: none of the three.
@@ -95,14 +114,15 @@ test("the approaches cut's panel has three checklist groups; no other cut has th
   ]) {
     await page.goto(`${origin}/?tab=shots&cut=${cut}`);
     const other = await openPanel(page);
-    for (const label of APPROACH_SECTIONS)
+    for (const label of [...APPROACH_SECTIONS, "Way to the net"])
       await expect(other).not.toContainText(label);
     await page.keyboard.press("Escape");
+    await expect(entryChips(page)).toHaveCount(0);
   }
   expect(errors).toEqual([]);
 });
 
-test("the approaches menu leads with its three groups, then Rally length, Pressure, Court, Set, with Advanced filters last", async ({
+test("the approaches menu leads with Approach to and Direction, then Rally length, Pressure, Court, Set, with Advanced filters last", async ({
   page,
 }) => {
   const { errors } = await openApproaches(page);
@@ -112,14 +132,14 @@ test("the approaches menu leads with its three groups, then Rally length, Pressu
       .locator("[data-filter-panel-sections] > div > p")
       .allTextContents()
   ).filter((l) => l !== "Set");
-  // Set shows for a match of two sets or more; Serve (1st · 2nd) stays after
-  // the shared run until the toolbar's serve chips replace it.
+  // Set shows for a match of two sets or more. No Way to the net (the
+  // toolbar's chips) and no Serve row: 1st or 2nd serve is Advanced
+  // filters › Serve › Type.
   expect(labels).toEqual([
     ...APPROACH_SECTIONS,
     "Rally length",
     "Pressure",
     "Court",
-    "Serve",
   ]);
   const advancedLast = await panel.evaluate((root) => {
     const sections = root.querySelector("[data-filter-panel-sections]")!;
@@ -152,7 +172,7 @@ test("the card's baseline is not an applied filter; Serve and volley is, and Cle
   ).not.toHaveAttribute("data-engaged", "true");
 
   // Narrowed on the baseline: the strip names the narrowing alone.
-  let panel = await openPanel(page);
+  const panel = await openPanel(page);
   await panel.getByRole("checkbox", { name: /^Their backhand\b/ }).click();
   await page.keyboard.press("Escape");
   await expect(strip).toBeVisible();
@@ -164,11 +184,13 @@ test("the card's baseline is not an applied filter; Serve and volley is, and Cle
   await expect(page).toHaveURL(/ventry=approach/);
   await expect(page).not.toHaveURL(/vto=/);
 
-  // Serve and volley ticked: an applied filter, named in the strip.
-  panel = await openPanel(page);
-  await panel.getByRole("checkbox", { name: /^Serve and volley\b/ }).click();
+  // Serve and volley picked: an applied filter, named in the strip.
+  const chips = entryChips(page).getByRole("button");
+  await entryChips(page)
+    .getByRole("button", { name: "Serve and volley" })
+    .click();
   await expect(page).toHaveURL(/ventry=serve-volley/);
-  await page.keyboard.press("Escape");
+  expect(await pressedOf(chips)).toEqual(["false", "false", "true", "false"]);
   await expect(strip).toBeVisible();
   await expect(strip).toContainText("Serve and volley");
 
@@ -177,17 +199,11 @@ test("the card's baseline is not an applied filter; Serve and volley is, and Cle
   await expect(strip).toHaveCount(0);
   await expect(page).toHaveURL(/ventry=approach(&|$)/);
   await expect(page).not.toHaveURL(/serve-volley/);
-  panel = await openPanel(page);
-  await expect(
-    panel.getByRole("checkbox", { name: /^Approach\b/ }),
-  ).toHaveAttribute("aria-checked", "true");
-  await expect(
-    panel.getByRole("checkbox", { name: /^Serve and volley\b/ }),
-  ).toHaveAttribute("aria-checked", "false");
+  expect(await pressedOf(chips)).toEqual(["false", "true", "false", "false"]);
 
-  // Approach unticked (every way in): named, and Clear undoes it too.
-  await panel.getByRole("checkbox", { name: /^Approach\b/ }).click();
-  await page.keyboard.press("Escape");
+  // All (every way in): named, and Clear undoes it too.
+  await entryChips(page).getByRole("button", { name: "All" }).click();
+  await expect(page).toHaveURL(/ventry=any/);
   await expect(strip).toContainText("Way to the net: any");
   await strip.getByRole("button", { name: "Clear filter" }).click();
   await expect(strip).toHaveCount(0);
@@ -195,7 +211,7 @@ test("the card's baseline is not an applied filter; Serve and volley is, and Cle
   expect(errors).toEqual([]);
 });
 
-test("opened by URL with no ventry, the cut is on its baseline: no strip, Filters not engaged, Approach ticked", async ({
+test("opened by URL with no ventry, the cut is on its baseline: no strip, Filters not engaged, Approach lit", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -209,16 +225,11 @@ test("opened by URL with no ventry, the cut is on its baseline: no strip, Filter
   await expect(
     dialog.getByRole("button", { name: "Filters" }),
   ).not.toHaveAttribute("data-engaged", "true");
-  const panel = await openPanel(page);
-  await expect(
-    panel.getByRole("checkbox", { name: /^Approach\b/ }),
-  ).toHaveAttribute("aria-checked", "true");
-  await expect(
-    panel.getByRole("checkbox", { name: /^Serve and volley\b/ }),
-  ).toHaveAttribute("aria-checked", "false");
+  const chips = entryChips(page).getByRole("button");
+  expect(await pressedOf(chips)).toEqual(["false", "true", "false", "false"]);
 
   // Every way in survives a reload under its own spelling.
-  await panel.getByRole("checkbox", { name: /^Approach\b/ }).click();
+  await entryChips(page).getByRole("button", { name: "All" }).click();
   await expect(page).toHaveURL(/ventry=any/);
   await page.reload();
   const reloaded = page.getByRole("dialog", { name: "Approaches" });

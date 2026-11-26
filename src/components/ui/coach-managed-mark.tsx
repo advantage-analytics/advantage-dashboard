@@ -1,3 +1,5 @@
+"use client";
+
 import { UserRoundCog } from "lucide-react";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { cn } from "@/lib/utils";
@@ -18,6 +20,15 @@ import { cn } from "@/lib/utils";
  *
  * A name truncates before the glyph does: hosts put it `shrink-0` after the
  * name, like the Matches list's unread dot.
+ *
+ * A client module on purpose. `ChromeTooltip` hands the glyph's `<span>` to
+ * Radix's `TooltipTrigger asChild`, whose Slot clones a real element and
+ * renders NOTHING for anything else. Built in a Server Component (the player
+ * page's rail, via `PlayerIdentity`), that span crossed the RSC boundary as a
+ * reference the server render had not resolved yet: the SSR HTML left the
+ * glyph out, the browser drew it, and every load of a coach-managed
+ * player's page failed to hydrate. Built here, the span is the client's own
+ * element on both renders (`tests/server-slot-children.spec.ts`).
  */
 export function CoachManagedMark({
   side = "bottom",

@@ -709,7 +709,7 @@ test("Errors in Both: a shot with no recorded contact draws its landing alone, w
   expect(errors).toEqual([]);
 });
 
-test("Errors in Both names its ends: PLACEMENT over the far baseline, CONTACT under the near one, in the court's label type", async ({
+test("Errors in Both names its ends: PLACEMENT in the far apron's outer corner, CONTACT in the near one's, in the court's label type", async ({
   page,
 }) => {
   const { stage, errors } = await openWith(page, "cut=errors&ends=both");
@@ -762,8 +762,70 @@ test("Errors in Both names its ends: PLACEMENT over the far baseline, CONTACT un
     Math.min(...glyphs.map((g) => g.top)),
   );
   expect(c.y).toBeGreaterThanOrEqual(Math.max(...glyphs.map((g) => g.bottom)));
+  // In the outer left corners, set from the left edge — not centred over
+  // the baselines, where the long landings and deep contacts gather.
+  await expect(stage.locator("[data-court-end-labels]")).toHaveAttribute(
+    "text-anchor",
+    "start",
+  );
+  const middle = stageBox.x + stageBox.width / 2;
+  expect(p.x + p.width).toBeLessThan(middle);
+  expect(c.x + c.width).toBeLessThan(middle);
+  expect(Math.abs(p.x - c.x)).toBeLessThan(1);
   expect(errors).toEqual([]);
 });
+
+// The words used to sit centred just past each baseline, which is where a
+// real court's marks gather — long landings behind the far baseline,
+// contacts struck from behind the near one — so the marks covered them.
+// `?deep=1` puts a pair there; no word may share any mark's ground.
+for (const cut of ["errors", "returnPlacement", "rallyPlacement"] as const) {
+  test(`${cut} in Both keeps PLACEMENT and CONTACT clear of every mark, inside the stage`, async ({
+    page,
+  }) => {
+    const { stage, errors } = await openWith(
+      page,
+      `cut=${cut}&ends=both&deep=1`,
+      5,
+    );
+    const stageBox = (await stage.boundingBox())!;
+    const words = stage.locator("[data-court-end-labels] text");
+    await expect(words).toHaveCount(2);
+    const wordBoxes = await words.evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const r = node.getBoundingClientRect();
+        return {
+          text: node.textContent ?? "",
+          box: { x: r.x, y: r.y, width: r.width, height: r.height },
+        };
+      }),
+    );
+    // Every drawn end of every mark: landing glyphs and contact rings.
+    const markBoxes = await stage
+      .locator("[data-viz-mark] [data-viz-mark-glyph]")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const r = node.getBoundingClientRect();
+          return {
+            id:
+              node.closest("[data-viz-mark]")?.getAttribute("data-viz-mark") ??
+              "",
+            box: { x: r.x, y: r.y, width: r.width, height: r.height },
+          };
+        }),
+      );
+    expect(markBoxes.length).toBeGreaterThanOrEqual(9);
+    for (const word of wordBoxes) {
+      expect(inside(word.box, stageBox), word.text).toBe(true);
+      for (const mark of markBoxes) {
+        expect(overlaps(word.box, mark.box), `${word.text} / ${mark.id}`).toBe(
+          false,
+        );
+      }
+    }
+    expect(errors).toEqual([]);
+  });
+}
 
 test("Errors in Placement draws landings only, and in Contact contact marks only", async ({
   page,

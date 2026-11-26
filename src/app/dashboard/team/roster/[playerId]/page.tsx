@@ -582,7 +582,9 @@ async function MatchScopePicker({
  * The insight card stays the WHOLE season's — its evidence line and its
  * signature both: `/api/player-insight` writes its claim from the whole
  * season, and a scoped evidence line under it would put two seasons on one
- * card (and spend a model call per scope).
+ * card (and spend a model call per scope). So that the card stays honest
+ * beside scoped figures, it is handed the whole season's count and prints
+ * its scope note ("Covers all 3 analyzed matches, not just the 2 shown.").
  */
 async function ProfileStatisticsBody({
   programId,
@@ -614,6 +616,8 @@ async function ProfileStatisticsBody({
         tallies={season.tallies}
         evidence={buildSeasonEvidence(whole)}
         insightSignature={seasonInsightSignature(whole)}
+        // The card is the whole season's: under a scope it says so.
+        seasonAnalyzed={whole.analyzed}
       />
     </ProfileViewWhen>
   );

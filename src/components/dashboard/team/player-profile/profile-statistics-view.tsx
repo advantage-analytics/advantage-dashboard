@@ -59,6 +59,7 @@ export function ProfileStatisticsView({
   tallies,
   evidence,
   insightSignature,
+  seasonAnalyzed = analyzed,
 }: {
   /** The roster's own id (`profile.playerId`) — what the insight route resolves. */
   playerId: string;
@@ -76,10 +77,17 @@ export function ProfileStatisticsView({
   evidence: SeasonEvidence | null;
   /** `seasonInsightSignature(season)` — keys the card's session cache. */
   insightSignature: string;
+  /**
+   * The WHOLE season's analyzed matches, when the page's match scope folded
+   * the cards over fewer (`analyzed`). The insight card is the whole
+   * season's, so a difference puts its scope note on it. Defaults to
+   * `analyzed`: no scope, no note.
+   */
+  seasonAnalyzed?: number;
 }) {
   return (
     <>
-      {analyzed > 0 && evidence ? (
+      {seasonAnalyzed > 0 && evidence ? (
         // Keyed on the signature: a season that changes under the card
         // remounts it, so its cache lookup and stream start over cleanly.
         <ProfileInsightCard
@@ -88,6 +96,7 @@ export function ProfileStatisticsView({
           firstName={firstName}
           evidence={evidence.parts}
           signature={insightSignature}
+          scopeNote={insightScopeNote(seasonAnalyzed, analyzed)}
         />
       ) : (
         <ProfileInsightEmpty firstName={firstName} />
@@ -135,4 +144,19 @@ export function ProfileStatisticsView({
       </div>
     </>
   );
+}
+
+/**
+ * The insight card's scope note: the card speaks for the whole season, the
+ * rest of the tab for the `shown` matches the page's scope keeps — "Covers
+ * all 3 analyzed matches, not just the 2 shown." Null when nothing is left
+ * out.
+ */
+export function insightScopeNote(
+  seasonAnalyzed: number,
+  shown: number,
+): string | null {
+  if (shown >= seasonAnalyzed) return null;
+  const noun = seasonAnalyzed === 1 ? "match" : "matches";
+  return `Covers all ${seasonAnalyzed} analyzed ${noun}, not just the ${shown} shown.`;
 }

@@ -276,9 +276,10 @@ test("the Filters panel is the Matches panel over the cut's own keys, and Clear 
   await dialog.getByRole("button", { name: "Filters" }).click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
   await expect(panel).toBeVisible();
-  await expect(panel).toContainText("Serve");
   await expect(panel).toContainText("Court");
   await expect(panel).toContainText("Zone");
+  // Serves choose 1st or 2nd in the toolbar's chips, not the menu.
+  await expect(panel.getByText("Serve", { exact: true })).toHaveCount(0);
   // The season's own groups are the profile's alone: one match has one
   // opponent.
   await expect(panel).not.toContainText("Opponent plays");
@@ -323,8 +324,9 @@ async function filterSections(page: Page, cut: string) {
   return { panel, labels, advancedLast };
 }
 
-/** Set shows only for a match of two or more sets; Serve (1st · 2nd) stays
- *  after the shared run on every chart but Returns, whose toolbar carries it. */
+/** Set shows only for a match of two or more sets. No chart has a Serve
+ *  row: Returns and Serves carry it as toolbar chips; Rally shots, Errors
+ *  and Approaches reach it in Advanced filters › Serve › Type. */
 const withoutSet = (labels: string[]) => labels.filter((l) => l !== "Set");
 
 test("the Filters menu leads with the chart's own sections, then Rally length, Pressure, Court, Set, with Advanced filters last", async ({
@@ -333,12 +335,12 @@ test("the Filters menu leads with the chart's own sections, then Rally length, P
   await page.setViewportSize({ width: 1512, height: 982 });
 
   const serves = await filterSections(page, "serve");
+  // No Serve row: the toolbar's 1st serve · 2nd serve chips carry it.
   expect(withoutSet(serves.labels)).toEqual([
     "Zone",
     "Rally length",
     "Pressure",
     "Court",
-    "Serve",
   ]);
   expect(serves.advancedLast).toBe(true);
   // Zone is one lane at a time: Any · Wide · Body · T.
@@ -372,21 +374,21 @@ test("the Filters menu leads with the chart's own sections, then Rally length, P
     await page.keyboard.press("Escape");
   }
 
+  // Errors' type is the toolbar's lead chips, not a section.
   const errorsCut = await filterSections(page, "errors");
   expect(withoutSet(errorsCut.labels)).toEqual([
-    "Error type",
     "Rally length",
     "Pressure",
     "Court",
-    "Serve",
   ]);
   expect(errorsCut.advancedLast).toBe(true);
   await page.keyboard.press("Escape");
 
-  // Rally shots carry Rally length as toolbar chips, not a Filters section.
+  // Rally shots carry Rally length as toolbar chips, not a Filters section,
+  // and no Serve row: 1st or 2nd serve is Advanced filters › Serve › Type.
   for (const cut of ["rallyPlacement", "rallyPosition"]) {
     const rally = await filterSections(page, cut);
-    expect(withoutSet(rally.labels)).toEqual(["Pressure", "Court", "Serve"]);
+    expect(withoutSet(rally.labels)).toEqual(["Pressure", "Court"]);
     expect(rally.advancedLast).toBe(true);
     await page.keyboard.press("Escape");
   }
@@ -448,13 +450,254 @@ test("Returns lead with Serve returned chips (All · vs 1st serve · vs 2nd serv
     await expect(page).not.toHaveURL(/ball=/);
   }
 
-  // Every other chart keeps its Serve row and has no such chips.
+  // No other chart has these chips (Serves has its own, unnamed for returns).
   await page.goto(`${origin}/?tab=shots&cut=serve`);
   await expect(
     page.getByRole("dialog").first().getByRole("group", {
       name: "Serve returned",
     }),
   ).toHaveCount(0);
+});
+
+/** A chip group's aria-pressed, in order. */
+const pressedOf = (chips: Locator) =>
+  chips.evaluateAll((els) => els.map((el) => el.getAttribute("aria-pressed")));
+
+test("Serves lead with Serve chips (All · 1st serve · 2nd serve) over the ball filter", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog").first();
+  const group = dialog.getByRole("group", { name: "Serve", exact: true });
+  const chips = group.getByRole("button");
+  await expect(chips).toHaveText(["All", "1st serve", "2nd serve"]);
+  expect(await pressedOf(chips)).toEqual(["true", "false", "false"]);
+
+  const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
+  await expect(marks.first()).toBeAttached();
+  const before = await marks.count();
+  await group.getByRole("button", { name: "2nd serve" }).click();
+  await expect(page).toHaveURL(/ball=second/);
+  expect(await pressedOf(chips)).toEqual(["false", "false", "true"]);
+  await expect.poll(() => marks.count()).toBeLessThan(before);
+
+  await group.getByRole("button", { name: "1st serve" }).click();
+  await expect(page).toHaveURL(/ball=first/);
+  await group.getByRole("button", { name: "All" }).click();
+  await expect(page).not.toHaveURL(/ball=/);
+});
+
+test("Rally shots and Rally position lead with Rally length chips (All · Short · Medium · Long) over the rally key", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  for (const cut of ["rallyPlacement", "rallyPosition"]) {
+    await page.goto(`${origin}/?tab=shots&cut=${cut}`);
+    const dialog = page.getByRole("dialog").first();
+    const group = dialog.getByRole("group", { name: "Rally length" });
+    const chips = group.getByRole("button");
+    await expect(chips).toHaveText(["All", "Short", "Medium", "Long"]);
+    expect(await pressedOf(chips)).toEqual(["true", "false", "false", "false"]);
+    await group.getByRole("button", { name: "Long" }).click();
+    await expect(page).toHaveURL(/rally=long/);
+    expect(await pressedOf(chips)).toEqual(["false", "false", "false", "true"]);
+    await group.getByRole("button", { name: "All" }).click();
+    await expect(page).not.toHaveURL(/rally=/);
+  }
+  // Serves keeps Rally length in its Filters menu and has no such chips.
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  await expect(
+    page.getByRole("dialog").first().getByRole("group", {
+      name: "Rally length",
+    }),
+  ).toHaveCount(0);
+});
+
+test("Rally shots, Errors and Approaches reach 1st or 2nd serve in Advanced filters › Serve › Type, since their menus have no Serve row", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  for (const cut of ["rallyPlacement", "errors", "approaches"]) {
+    await page.goto(`${origin}/?tab=shots&cut=${cut}`);
+    const dialog = page.getByRole("dialog").first();
+    const drawer = await openAdvancedDrawer(page, dialog);
+    await expect(drawer).toBeVisible();
+    await expect(
+      drawer.getByText("First serve", { exact: true }),
+    ).toBeAttached();
+    await expect(
+      drawer.getByText("Second serve", { exact: true }),
+    ).toBeAttached();
+  }
+});
+
+test("Errors lead with Error type chips over the error key: this unjudged match offers All · Errors · Double faults, as its menu did", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=errors`);
+  const dialog = page.getByRole("dialog").first();
+  const group = dialog.getByRole("group", { name: "Error type" });
+  const chips = group.getByRole("button");
+  // Nobody judged this match's errors forced or unforced: one Errors chip
+  // holds both kinds (`errorOptionsFor`), never a Forced that draws nothing.
+  await expect(chips).toHaveText(["All", "Errors", "Double faults"]);
+  expect(await pressedOf(chips)).toEqual(["true", "false", "false"]);
+
+  await group.getByRole("button", { name: "Double faults" }).click();
+  await expect(page).toHaveURL(/verr=double/);
+  expect(await pressedOf(chips)).toEqual(["false", "false", "true"]);
+
+  await group.getByRole("button", { name: "Errors", exact: true }).click();
+  await expect(page).not.toHaveURL(/verr=[^&]*double/);
+  await expect(page).toHaveURL(/verr=/);
+  expect(await pressedOf(chips)).toEqual(["false", "true", "false"]);
+
+  await group.getByRole("button", { name: "All" }).click();
+  await expect(page).not.toHaveURL(/verr=/);
+  expect(await pressedOf(chips)).toEqual(["true", "false", "false"]);
+});
+
+test("Approaches lead with Way to the net chips (All · Approach · Serve and volley · Drawn in) over the entry key, one at a time", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=approaches`);
+  const dialog = page.getByRole("dialog").first();
+  const group = dialog.getByRole("group", { name: "Way to the net" });
+  const chips = group.getByRole("button");
+  await expect(chips).toHaveText([
+    "All",
+    "Approach",
+    "Serve and volley",
+    "Drawn in",
+  ]);
+  // The card's baseline is approaches only.
+  expect(await pressedOf(chips)).toEqual(["false", "true", "false", "false"]);
+  await group.getByRole("button", { name: "Drawn in" }).click();
+  await expect(page).toHaveURL(/ventry=drawn-in/);
+  expect(await pressedOf(chips)).toEqual(["false", "false", "false", "true"]);
+  await group.getByRole("button", { name: "All" }).click();
+  await expect(page).toHaveURL(/ventry=any/);
+  expect(await pressedOf(chips)).toEqual(["true", "false", "false", "false"]);
+  // A list of two (a saved view, a Statistics row) lights no chip.
+  await page.goto(
+    `${origin}/?tab=shots&cut=approaches&ventry=approach&ventry=serve-volley`,
+  );
+  const mixed = page
+    .getByRole("dialog")
+    .first()
+    .getByRole("group", { name: "Way to the net" })
+    .getByRole("button");
+  await expect(mixed).toHaveCount(4);
+  expect(await pressedOf(mixed)).toEqual(["false", "false", "false", "false"]);
+});
+
+test("the toolbar runs player chips, a hairline, the lead chips, then the chart menu and Filters at its right end", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  for (const [cut, group] of [
+    ["serve", "Serve"],
+    ["returnPlacement", "Serve returned"],
+    ["errors", "Error type"],
+    ["approaches", "Way to the net"],
+    ["rallyPlacement", "Rally length"],
+  ] as const) {
+    await page.goto(`${origin}/?tab=shots&cut=${cut}`);
+    const dialog = page.getByRole("dialog").first();
+    const toolbar = dialog.locator("[data-lightbox-toolbar]");
+    const players = toolbar.getByRole("group", { name: "Player" });
+    const chips = toolbar.getByRole("group", { name: group, exact: true });
+    const chart = toolbar.getByRole("button", { name: "Scatter" });
+    const filtersButton = toolbar.getByRole("button", {
+      name: "Filters",
+      exact: true,
+    });
+    await expect(chips).toBeVisible();
+    // Chart menu and Filters are the toolbar's last two children, in order.
+    const tail = await toolbar.evaluate((root) =>
+      [...root.children].slice(-2).map((el) => {
+        const button =
+          el instanceof HTMLButtonElement ? el : el.querySelector("button");
+        return button?.textContent?.trim() ?? "";
+      }),
+    );
+    expect(tail[0]).toContain("Scatter");
+    expect(tail[1]).toContain("Filters");
+    const [tb, p, c, m, f] = await Promise.all(
+      [toolbar, players, chips, chart, filtersButton].map(
+        async (l) => (await l.boundingBox())!,
+      ),
+    );
+    // Left-packed: players, then the lead chips; right-aligned: the chart
+    // menu, then Filters flush with the column's right edge.
+    expect(p.x).toBeLessThan(c.x);
+    expect(c.x + c.width).toBeLessThan(m.x);
+    expect(m.x + m.width).toBeLessThanOrEqual(f.x);
+    expect(Math.abs(tb.x + tb.width - (f.x + f.width))).toBeLessThan(2);
+    // A gap between them: the spacer, not chips packed against the menu.
+    expect(m.x - (c.x + c.width)).toBeGreaterThan(24);
+    // One row.
+    expect(Math.abs(m.y + m.height / 2 - (c.y + c.height / 2))).toBeLessThan(4);
+  }
+});
+
+test("a draft keeps the chart's toolbar chips: Returns' Serve returned, Serves' Serve, Rally shots' Rally length, Errors' Error type, Approaches' Way to the net", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  for (const [cut, group] of [
+    ["returnPlacement", "Serve returned"],
+    ["serve", "Serve"],
+    ["rallyPlacement", "Rally length"],
+    ["errors", "Error type"],
+    ["approaches", "Way to the net"],
+  ] as const) {
+    await page.goto(`${origin}/?tab=shots&cut=${cut}&draft=1`);
+    const dialog = page.getByRole("dialog").first();
+    await expect(dialog.getByText("Pick what to plot")).toBeVisible();
+    // The Filters menu is a draft's to leave out; the chips are not.
+    await expect(
+      dialog.getByRole("button", { name: "Filters", exact: true }),
+    ).toHaveCount(0);
+    const chips = dialog.getByRole("group", { name: group, exact: true });
+    await expect(chips).toBeVisible();
+    if (cut === "returnPlacement") {
+      await chips.getByRole("button", { name: "vs 2nd serve" }).click();
+      await expect(page).toHaveURL(/ball=second/);
+      await expect(
+        chips.getByRole("button", { name: "vs 2nd serve" }),
+      ).toHaveAttribute("aria-pressed", "true");
+    }
+  }
+});
+
+test("opening Filters on Rally shots puts up no tooltip: the Pressure heading stays clear until Pressure points is pointed at", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  for (const cut of ["rallyPlacement", "rallyPosition"]) {
+    const { panel } = await filterSections(page, cut);
+    // Longer than the tooltip's 400ms open delay.
+    await page.waitForTimeout(700);
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await expect(panel.getByText("Pressure", { exact: true })).toBeVisible();
+    // Focus is the panel's own, not its first control's.
+    expect(
+      await panel.evaluate((root) => root.contains(document.activeElement)),
+    ).toBe(true);
+    await expect(
+      panel.getByRole("checkbox", { name: /^Pressure points\b/ }),
+    ).not.toBeFocused();
+    // Pointing at it still names its scores.
+    await panel.getByRole("checkbox", { name: /^Pressure points\b/ }).hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "30–30, 30–40, 40–30, deuce and ad points",
+    );
+    await page.keyboard.press("Escape");
+  }
 });
 
 test("Rally length is Any · Short · Medium · Long with no counts, writes the rally key, and names its shots on hover; Pressure points lists its scores", async ({
@@ -700,12 +943,11 @@ test("3 · narrowing the All serves card: the title stays the card's, the denomi
   const [n1, m1] = await read();
   // On the card, the denominator is the card's own points: all of them.
   expect(n1).toBe(m1);
-  await dialog.getByRole("button", { name: "Filters" }).click();
-  const panel = page.getByRole("dialog", { name: "Filter the court" });
-  // Serve (1st · 2nd) is the last segmented row, after the shared run.
-  const serve = panel.getByRole("radiogroup").last();
-  await serve.getByRole("radio", { name: "1st" }).click();
-  await page.keyboard.press("Escape");
+  // 1st or 2nd serve is the toolbar's Serve chips.
+  await dialog
+    .getByRole("group", { name: "Serve", exact: true })
+    .getByRole("button", { name: "1st serve" })
+    .click();
   await expect(page).toHaveURL(/ball=first/);
   // The card holds no filter of its own, so it is still the card, with the
   // first-serve filter named in the strip.
@@ -1127,15 +1369,11 @@ test("R4·3 · loosening a view's own filter is named in the strip, and Clear pu
   const dialog = page.getByRole("dialog", { name: "Saved first serves" });
   const strip = dialog.locator("[data-viz-filter-strip]");
   await expect(strip).toHaveCount(0);
-  await dialog.getByRole("button", { name: "Filters" }).click();
-  const panel = page.getByRole("dialog", { name: "Filter the court" });
-  // Serve (1st · 2nd) is the last segmented row, after the shared run.
-  await panel
-    .getByRole("radiogroup")
-    .last()
-    .getByRole("radio", { name: "Any" })
+  // The view's 1st serve, let go in the toolbar's Serve chips.
+  await dialog
+    .getByRole("group", { name: "Serve", exact: true })
+    .getByRole("button", { name: "All" })
     .click();
-  await page.keyboard.press("Escape");
   await expect(page).not.toHaveURL(/ball=first/);
   await expect(strip).toContainText("Serve: any");
   await strip.getByRole("button", { name: "Clear filter" }).click();
@@ -1325,6 +1563,12 @@ test("the Bands menu beside the legend carries the depth rows a placement cut ha
     (await legend.boundingBox())!,
   ];
   expect(Math.abs(t.y + t.height / 2 - (l.y + l.height / 2))).toBeLessThan(4);
+  // At the row's far right end, the legend keys on its left.
+  const row = dialog.locator("[data-lightbox-legend-row]");
+  const r = (await row.boundingBox())!;
+  expect(l.x).toBeLessThan(t.x);
+  expect(Math.abs(r.x + r.width - (t.x + t.width))).toBeLessThan(2);
+  expect(t.x - (l.x + l.width)).toBeGreaterThan(24);
   await trigger.click();
   const menu = page.getByRole("menu", { name: "Depth bands" });
   await expect(menu).toBeVisible();
