@@ -73,7 +73,7 @@ ready).
 
 ## T5 · Show names only on the lightbox court
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/components/dashboard/matches/match-detail/shots/lightbox-court.tsx (`ServeBoxLabels` ~:1523, `ApproachApronLabels` ~:820), src/components/dashboard/matches/match-detail/shots/viz-bands-overlay.tsx (`BandRate` ~~:139), tests/viz-approach-lightbox-browser.spec.ts (~~:328-376, :435-451), tests/viz-all-zones-browser.spec.ts, tests/viz-serve-zones-browser.spec.ts
 - **routes:** /dashboard/matches/[matchId]

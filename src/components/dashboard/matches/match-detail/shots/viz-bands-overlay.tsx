@@ -12,7 +12,6 @@ import {
   heatBoundsFor,
   zoneOpacity,
 } from "./court-geometry";
-import { useTweenedNumber } from "./use-tweened-number";
 import type { StatRow, VizBandZones } from "./viz-model";
 
 /**
@@ -27,7 +26,7 @@ import type { StatRow, VizBandZones } from "./viz-model";
  * property of the COURT's depth, not of the lines, and stopping at the
  * sideline, or at the art's edge, would have made it look like a zone.
  *
- * ## Where the numbers come from
+ * ## Names only — the Statistics panel owns the numbers
  *
  * It is INERT: `pointer-events: none` and `aria-hidden`. The bands are a
  * backdrop, and a `<title>` on each one would put a native browser tooltip
@@ -36,18 +35,13 @@ import type { StatRow, VizBandZones } from "./viz-model";
  * screen-reader user either: the stats card behind the viewer carries every
  * band row as `statRowAnnouncement`'s own sentence.
  *
- * `% · n` on the right of each band is looked up out of `statRows` — the
- * SAME `computeVizStats` Depth group the stats card prints, handed down by
- * the viewer. Nothing is counted a second time here: a band and its row are
- * matched by `BandRow.key`, which is what both `depthBandRows`/
- * `contactBandRows` and the stat rows are built from. (By key and not by
- * index: the Depth group is in band order today, but it was sorted by win
- * rate until 2026-11-14, and a pairing that depended on the order would
- * break silently the day it changed again.)
- *
- * A band with no shots in it prints nothing at all rather than "0% · 0" —
- * the same rule `ServeBoxLabels` already follows for an empty service box,
- * and the guardrails' "unmeasured values are omitted, never 0".
+ * Plan 2026-11-25 §5 (boards Court-labels-11/-12/-8): a band prints its
+ * NAME and, on its own line beneath, its RANGE ("DEEP" / "0–9 FT") — no
+ * `% · n`. The Statistics panel beside the court prints every band's rate,
+ * and its row hover outlines the band here. `statRows` still feeds the
+ * Zones wash and the `data-count`/`data-win-pct` attributes, matched by
+ * `BandRow.key` (never by index — the Depth group was sorted by win rate
+ * until 2026-11-14, and a pairing by order would break silently).
  *
  * ## Why this is `memo`'d
  *
@@ -58,37 +52,69 @@ import type { StatRow, VizBandZones } from "./viz-model";
  * nor the zoom touches them.
  */
 
-/** P2k's own type scale, in viewBox units — SVG `font-size` attributes that
- *  scale with the art, not CSS type (see `viz-fullscreen-court.tsx`'s note on
- *  why `check-design-drift.mjs` does not police these). */
-const BAND_LABEL_SIZE = 5.6;
-const BAND_LABEL_TRACKING = 0.4;
-const BAND_RATE_SIZE = 6.4;
-const BAND_COUNT_SIZE = 6.2;
+/* ── The lightbox court's type ("Today, refined", plan §5) ──────────────── */
+// SVG `font-size`/`letter-spacing` ATTRIBUTES in viewBox units — they scale
+// with the art, so they are part of the drawing's geometry, not CSS type
+// (`check-design-drift.mjs` does not police them). The art is drawn at
+// `VIEWER_COURT.artPx.w` px across `VIEWER_COURT.viewBox.w` units at 100%
+// zoom (652 / 366 ≈ 1.78 px a unit), so each value below is the board's px
+// figure divided through by that. Shared by `ServeBoxLabels`,
+// `ApproachApronLabels` (`lightbox-court.tsx`) and the band labels here.
+const COURT_PX_PER_UNIT = VIEWER_COURT.artPx.w / VIEWER_COURT.viewBox.w;
+/** Every court name: mono caps at the 11px equivalent (≈ 6.18 units). */
+export const COURT_LABEL_SIZE = 11 / COURT_PX_PER_UNIT;
+/** Even 1.4px tracking (≈ 0.79 units). */
+export const COURT_LABEL_TRACKING = 1.4 / COURT_PX_PER_UNIT;
+/** A name — a zone, a band, an approach wing — in white at 86%. */
+export const COURT_LABEL_OPACITY = 0.86;
+/** The quieter words: a side's title ("DEUCE COURT", "Placement") and a
+ *  band's range line, at 78% — still inside the 78–90% the boards set. */
+export const COURT_SIDE_LABEL_OPACITY = 0.78;
 
 /**
- * The labels live on the green, never on the court, and on one line: the
- * caps label ends just outside the left doubles sideline and runs leftward
- * across the apron (and past the art, which draws `overflow: visible`); the
- * rate starts just outside the right one. A label used to start at the
- * viewBox's left gutter and run on, so "DEEP · 0–4 M" crossed the alley
+ * The labels live on the green, never on the court: each line ends just
+ * outside the left doubles sideline and runs leftward across the apron (and
+ * past the art, which draws `overflow: visible`). A label used to start at
+ * the viewBox's left gutter and run on, so "DEEP · 0–4 M" crossed the alley
  * onto the blue.
  */
 const BAND_LABEL_GAP = 4;
 const BAND_LABEL_X = VIEWER_COURT.doubles.x - BAND_LABEL_GAP;
-const BAND_RATE_X =
-  VIEWER_COURT.doubles.x + VIEWER_COURT.doubles.w + BAND_LABEL_GAP;
 
 /** How far the wash runs past the art on each side: the stage shows apron
  *  beyond the art's own box whenever it is wider than the court, and a wash
  *  that stopped there read as a box drawn on the green. */
 export const BAND_BLEED = 600;
 
-/** How far below a band's top edge its label sits, and the height below
- *  which the label centres in the band instead (a thin band would otherwise
- *  push its own label out through the bottom edge). */
-const BAND_LABEL_INSET = 9.6;
-const BAND_LABEL_MIN_H = 18;
+/** `--font-mono`'s ascent and descent as fractions of the size (rounded
+ *  up), and the range line's baseline below the name's, in sizes. */
+const BAND_FONT_ASCENT = 1.05;
+const BAND_FONT_DESCENT = 0.3;
+const BAND_LINE_STEP = 1.25;
+/** Clear space between a band's top edge and its name's box — the 3.7 units
+ *  the one-line 5.6-unit label had (9.6 inset − its ascent). */
+const BAND_LABEL_PAD = 3.7;
+
+/**
+ * The name's baseline in a band from `top` to `bottom`, for a label of
+ * `lines` lines at `scale`: `BAND_LABEL_PAD` under the band's top edge, or —
+ * when the band is too thin to hold the block that way — centred in it (a
+ * thin band would otherwise push its own label out through the bottom edge).
+ */
+function bandLabelBaseline(
+  top: number,
+  bottom: number,
+  lines: 1 | 2,
+  scale: number,
+): number {
+  const size = COURT_LABEL_SIZE * scale;
+  const ascent = BAND_FONT_ASCENT * size;
+  const block =
+    ascent + (lines - 1) * BAND_LINE_STEP * size + BAND_FONT_DESCENT * size;
+  const pad = BAND_LABEL_PAD * scale;
+  if (bottom - top >= block + 2 * pad) return top + pad + ascent;
+  return (top + bottom) / 2 - block / 2 + ascent;
+}
 
 /** Bands thinner than this never draw: a divider sitting all but exactly on
  *  its half's own edge would otherwise leave a hairline of wash with a label
@@ -101,26 +127,30 @@ function bandOpacity(index: number): number {
 }
 
 /**
- * The caps line at a band's left edge — "DEEP · 0–13 FT", never wrapped.
+ * A band's two lines at its left edge: the caps name ("DEEP"), then its
+ * range on its own line beneath ("0–13 FT").
  *
  * A CONTACT row's `label` and `rangeLabel` are the same sentence (its label
- * IS its range — "0–5 ft behind"), so printing both would read "0–5 FT
- * BEHIND · 0–5 FT BEHIND". One or the other, never both.
+ * IS its range — "0–5 ft behind"), so it prints one line, never the same
+ * words twice.
+ *
+ * P2m: while the editor is open the range stays in lower case ("0–12 ft"),
+ * so the numbers being dragged read as numbers rather than as part of a
+ * heading, and a contact row prints as written.
  */
-function bandCaps(row: BandRow): string {
-  if (row.rangeLabel === row.label) return row.label.toUpperCase();
-  return `${row.label.toUpperCase()} · ${row.rangeLabel.toUpperCase()}`;
-}
-
-/**
- * P2m: while the editor is open a band's label reads "DEEP 0–12 ft" — the
- * caps name, then the range in lower case, so the numbers being dragged read
- * as numbers rather than as part of a heading. A contact row has no separate
- * name (its label IS its range), so it prints as written: "0–5 ft behind".
- */
-function bandEditingLabel(row: BandRow): string {
-  if (row.rangeLabel === row.label) return row.label;
-  return `${row.label.toUpperCase()} ${row.rangeLabel}`;
+function bandLines(
+  row: BandRow,
+  editing: boolean,
+): { name: string; range: string | null } {
+  if (row.rangeLabel === row.label)
+    return {
+      name: editing ? row.label : row.label.toUpperCase(),
+      range: null,
+    };
+  return {
+    name: row.label.toUpperCase(),
+    range: editing ? row.rangeLabel : row.rangeLabel.toUpperCase(),
+  };
 }
 
 /** A band's wash eases to its new weight (Zones) with the counts beside it,
@@ -129,47 +159,6 @@ function bandEditingLabel(row: BandRow): string {
 const BAND_WASH_TRANSITION = {
   transition: "fill-opacity var(--duration-reveal) var(--ease-chart)",
 } as const;
-
-/**
- * A band's `% · n`, counting to new values as the Statistics column's rows
- * do (`useTweenedNumber`), so a pick or a filter reads as the bands
- * changing. A rate that appears — a band that had no shots — fades in
- * (the global `fadeIn` keyframe, opacity only).
- */
-function BandRate({
-  y,
-  pct,
-  count,
-  scale,
-}: {
-  y: number;
-  pct: number;
-  count: number;
-  scale: number;
-}) {
-  const shownPct = useTweenedNumber(pct);
-  const shownCount = useTweenedNumber(count);
-  return (
-    <text
-      x={BAND_RATE_X}
-      y={y}
-      fill={LINE_COLOR}
-      fillOpacity={0.8}
-      fontFamily="var(--font-sans)"
-      fontSize={BAND_RATE_SIZE * scale}
-      className="animate-[fadeIn_var(--duration-enter)_var(--ease-chart)]"
-    >
-      {shownPct}%
-      <tspan
-        fontFamily="var(--font-mono)"
-        fontSize={BAND_COUNT_SIZE * scale}
-        fillOpacity={0.6}
-      >
-        {` · ${shownCount}`}
-      </tspan>
-    </text>
-  );
-}
 
 export interface VizBandsOverlayProps {
   kind: "depth" | "contact";
@@ -182,10 +171,9 @@ export interface VizBandsOverlayProps {
   statRows: StatRow[] | null;
   /**
    * Phase 2B, Task 4: the band editor is open and `rows`/`dividersFt` are the
-   * live DRAFT. Labels switch to the editing style, and the `% · n` on the
-   * right is hidden — those numbers were counted against the SAVED bands,
-   * and printing them beside a draft band would claim a rate for a slice of
-   * the court nobody has counted.
+   * live DRAFT. Labels switch to the editing style, and the Zones wash falls
+   * back to the alternating bands — its weights were counted against the
+   * SAVED bands, not the draft.
    */
   editing?: boolean;
   zones?: boolean;
@@ -230,15 +218,16 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
         const height = bottom - top;
         if (height < BAND_MIN_H) return null;
 
-        const caps = editing ? bandEditingLabel(row) : bandCaps(row);
-        const labelY =
-          height >= BAND_LABEL_MIN_H * labelScale
-            ? top + BAND_LABEL_INSET * labelScale
-            : (top + bottom) / 2 + 2.2 * labelScale;
+        const lines = bandLines(row, editing);
+        const size = COURT_LABEL_SIZE * labelScale;
+        const nameY = bandLabelBaseline(
+          top,
+          bottom,
+          lines.range === null ? 1 : 2,
+          labelScale,
+        );
 
         const stat = statRows?.find((r) => r.key === row.key) ?? null;
-        const hasRate =
-          !editing && stat !== null && stat.count > 0 && stat.winPct !== null;
 
         return (
           <g
@@ -260,27 +249,32 @@ export const VizBandsOverlay = memo(function VizBandsOverlay({
               }
               style={BAND_WASH_TRANSITION}
             />
-            <text
-              data-viz-band-label=""
-              x={BAND_LABEL_X}
-              y={labelY}
+            <g
               textAnchor="end"
               fill={LINE_COLOR}
-              fillOpacity={0.72}
               fontFamily="var(--font-mono)"
-              fontSize={BAND_LABEL_SIZE * labelScale}
-              letterSpacing={BAND_LABEL_TRACKING * labelScale}
+              fontSize={size}
+              letterSpacing={COURT_LABEL_TRACKING * labelScale}
             >
-              {caps}
-            </text>
-            {hasRate && (
-              <BandRate
-                y={labelY}
-                pct={stat.winPct ?? 0}
-                count={stat.count}
-                scale={labelScale}
-              />
-            )}
+              <text
+                data-viz-band-label=""
+                x={BAND_LABEL_X}
+                y={nameY}
+                fillOpacity={COURT_LABEL_OPACITY}
+              >
+                {lines.name}
+              </text>
+              {lines.range !== null && (
+                <text
+                  data-viz-band-range=""
+                  x={BAND_LABEL_X}
+                  y={nameY + BAND_LINE_STEP * size}
+                  fillOpacity={COURT_SIDE_LABEL_OPACITY}
+                >
+                  {lines.range}
+                </text>
+              )}
+            </g>
           </g>
         );
       })}

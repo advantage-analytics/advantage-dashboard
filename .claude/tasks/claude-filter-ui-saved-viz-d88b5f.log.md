@@ -41,3 +41,12 @@ is the runner's. Newest entries at the bottom.
 
 1. Until T7, Return contact is reachable only from its wall card (agreed).
 2. The menu's label now repeats the heading row inside `VizBandsMenuRows`; drop the inner heading in a polish pass.
+
+## T5 · Show names only on the lightbox court — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** Lightbox court prints names only. `ServeBoxLabels` keeps WIDE/BODY/T and DEUCE COURT/AD COURT; the % and count row is gone and its hit strip became a transparent rect over each served cell (hover, tap-to-pin, readout and aria sentence kept; steps aside on the Zones chart). `BandRate` removed; band labels are name + range on two lines ("DEEP" / "0–9 FT"), one line for contact bands. Shared constants in viz-bands-overlay.tsx: COURT_LABEL_SIZE (11px ≈ 6.18 units), COURT_LABEL_TRACKING (1.4px ≈ 0.79), COURT_LABEL_OPACITY 0.86, COURT_SIDE_LABEL_OPACITY 0.78, used by ServeBoxLabels, band labels and ApproachApronLabels. court-art.tsx and BAND_BLEED untouched. Specs in viz-serve-zones-browser and viz-approach-lightbox-browser. Widget-states: SVG labels only, no loader or Suspense region touched.
+**follow-ups:**
+
+1. court-art.tsx comments (~:722) still describe band labels as "DEEP · 0–13 FT".
+2. The `APPROACH_*` label constants in court-art.tsx may now be used only by the wall art — check for dead exports.

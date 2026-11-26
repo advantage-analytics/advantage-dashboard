@@ -339,6 +339,17 @@ for (const hand of ["right", "unknown"] as const) {
     const group = stage.locator("[data-approach-labels]");
     await expect(group).toHaveAttribute("font-family", "var(--font-mono)");
     await expect(group).toHaveAttribute("fill", "#FFFFFF");
+    // Plan §5: the court's one type — every word at one size, white at
+    // 78–90%.
+    const words = stage.locator("[data-approach-labels] text");
+    const sizes = new Set<string | null>();
+    for (let i = 0; i < (await words.count()); i++) {
+      sizes.add(await words.nth(i).getAttribute("font-size"));
+      const opacity = Number(await words.nth(i).getAttribute("fill-opacity"));
+      expect(opacity).toBeGreaterThanOrEqual(0.78);
+      expect(opacity).toBeLessThanOrEqual(0.9);
+    }
+    expect(sizes.size).toBe(1);
     expect(errors).toEqual([]);
   });
 }
@@ -487,3 +498,58 @@ for (const viewport of VIEWPORTS) {
     expect([...returns.errors, ...errors]).toEqual([]);
   });
 }
+
+/* ── Plan §5: the court prints names only ─────────────────────────────── */
+
+test("a band label is its name with the range on its own line beneath, and no figures", async ({
+  page,
+}) => {
+  const { stage, errors } = await openBanded(
+    page,
+    "returnPlacement",
+    VIEWPORTS[0],
+  );
+  const bands = stage.locator("[data-viz-bands] [data-viz-band]");
+  const n = await bands.count();
+  expect(n).toBeGreaterThan(0);
+  for (let i = 0; i < n; i++) {
+    const band = bands.nth(i);
+    const name = band.locator("[data-viz-band-label]");
+    const range = band.locator("[data-viz-band-range]");
+    const nameText = (await name.textContent()) ?? "";
+    const rangeText = (await range.textContent()) ?? "";
+    // "DEEP" / "0–9 FT": the name holds no figure, the range is its own line.
+    expect(nameText).toMatch(/^[A-Z ]+$/);
+    expect(rangeText).toMatch(/^\d+–\d+ FT$/);
+    expect(await name.getAttribute("x")).toBe(await range.getAttribute("x"));
+    const nameBox = (await name.boundingBox())!;
+    const rangeBox = (await range.boundingBox())!;
+    expect(rangeBox.y).toBeGreaterThanOrEqual(nameBox.y + nameBox.height - 1);
+    // Right-aligned at the same edge.
+    expect(
+      Math.abs(nameBox.x + nameBox.width - (rangeBox.x + rangeBox.width)),
+    ).toBeLessThan(1);
+    // Mono caps at the 11px equivalent with 1.4px tracking, white at 78–90%.
+    const type = name.locator("..");
+    await expect(type).toHaveAttribute("font-family", "var(--font-mono)");
+    expect(Number(await type.getAttribute("font-size"))).toBeCloseTo(
+      (11 * 366) / 652,
+      2,
+    );
+    expect(Number(await type.getAttribute("letter-spacing"))).toBeCloseTo(
+      (1.4 * 366) / 652,
+      2,
+    );
+    for (const text of [name, range]) {
+      const opacity = Number(await text.getAttribute("fill-opacity"));
+      expect(opacity).toBeGreaterThanOrEqual(0.78);
+      expect(opacity).toBeLessThanOrEqual(0.9);
+    }
+  }
+  // Nothing the bands print is a rate or a count.
+  const words = await stage
+    .locator("[data-viz-bands] text")
+    .evaluateAll((nodes) => nodes.map((node) => node.textContent ?? ""));
+  for (const word of words) expect(word, word).not.toMatch(/%|·/);
+  expect(errors).toEqual([]);
+});

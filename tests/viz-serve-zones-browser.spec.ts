@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import { createServer, type Server } from "node:http";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -115,15 +115,25 @@ test("Serve placement → Zones renders six cells and agrees with scatter, playe
   await expect(focused.locator("circle")).toHaveCount(0);
   await expect(fullscreen.locator("[data-viz-mark]")).toHaveCount(0);
   const deuce = '[data-serve-zone="deuce-wide"]';
+  // Plan §5: the lightbox court prints names only — the zone's rate and
+  // count live in the Statistics panel. Its zone still answers the pointer,
+  // and its sentence still carries the figures for a screen reader.
+  await expectNamesOnly(fullscreen);
   await expect(focused.locator(`${deuce} text`)).toHaveText(["2", "100%"]);
-  await expect(fullscreen.locator(`${deuce} text`)).toHaveText(["100%", "2"]);
+  await expect(fullscreen.locator(deuce)).toHaveAttribute(
+    "aria-label",
+    /100% of 2 points won/,
+  );
   await page.getByRole("button", { name: "Switch player" }).click();
   await expect(focused.locator(`${deuce} text`)).toHaveText(["12", "17%"]);
-  await expect(fullscreen.locator(`${deuce} text`)).toHaveText(["17%", "12"]);
+  await expect(fullscreen.locator(deuce)).toHaveAttribute(
+    "aria-label",
+    /17% of 12 points won/,
+  );
+  await expectNamesOnly(fullscreen);
   await page.getByRole("button", { name: "Deuce wide, second set" }).click();
   await expect(page.locator("output")).toHaveText("6 of 42");
   await expect(focused.locator(`${deuce} text`)).toHaveText(["6", "17%"]);
-  await expect(fullscreen.locator(`${deuce} text`)).toHaveText(["17%", "6"]);
   await expect(focused.locator('[data-serve-zone="ad-wide"] text')).toHaveCount(
     0,
   );
@@ -160,6 +170,30 @@ test("Serve placement → Zones renders six cells and agrees with scatter, playe
   expect(errors).toEqual([]);
 });
 
+test("on Scatter the lightbox court names its zones without figures, and a zone still answers hover and a tap", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(`${origin}/?view=shots&cut=serve`);
+  const fullscreen = page.getByTestId("fullscreen");
+  await expect(fullscreen.locator("[data-viz-mark]")).toHaveCount(42);
+  await expect(fullscreen.locator("[data-serve-zone-cell]")).toHaveCount(0);
+  await expectNamesOnly(fullscreen);
+  // The zone's hit area is its own service-box cell, under the marks.
+  const zone = fullscreen.locator('[data-serve-zone="deuce-wide"]');
+  const readout = fullscreen.locator("[data-viz-readout]");
+  await zone.scrollIntoViewIfNeeded();
+  const box = (await zone.boundingBox())!;
+  // A corner of the cell, clear of the marks clustered at its middle.
+  await page.mouse.move(box.x + 2, box.y + 2);
+  await expect(readout).toContainText("deuce wide");
+  await page.mouse.click(box.x + 2, box.y + 2);
+  await page.mouse.move(0, 0);
+  await expect(readout).toContainText("deuce wide");
+  expect(errors).toEqual([]);
+});
+
 test("a mark pinned on Scatter does not stop the fullscreen zones answering on Zones", async ({
   page,
 }) => {
@@ -192,3 +226,28 @@ test("Zones with only faults keeps the six empty cells instead of falling back t
   ).toHaveCount(6);
   await expect(page.locator("[data-serve-zone] text")).toHaveCount(0);
 });
+
+/**
+ * Plan §5: every word the lightbox court prints is a name — the six zone
+ * names and the two side words — and none of them holds a figure.
+ */
+async function expectNamesOnly(fullscreen: Locator) {
+  const zoneLabels = fullscreen.locator("[data-serve-zone-label]");
+  await expect(zoneLabels).toHaveText([
+    "WIDE",
+    "BODY",
+    "T",
+    "T",
+    "BODY",
+    "WIDE",
+  ]);
+  await expect(fullscreen.locator("[data-serve-side-label]")).toHaveText([
+    "DEUCE COURT",
+    "AD COURT",
+  ]);
+  await expect(fullscreen.locator("[data-serve-zone] text")).toHaveCount(0);
+  const words = await fullscreen
+    .locator("svg text")
+    .evaluateAll((nodes) => nodes.map((node) => node.textContent ?? ""));
+  for (const word of words) expect(word, word).not.toMatch(/\d|%/);
+}

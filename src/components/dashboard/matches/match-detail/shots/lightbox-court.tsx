@@ -10,10 +10,6 @@ import {
 import {
   ACE_STAR_FILL,
   ACE_STAR_RADIUS_RATIO,
-  APPROACH_LABEL_INK,
-  APPROACH_LABEL_TRACKING,
-  APPROACH_LANE_LABEL_OPACITY,
-  APPROACH_SIDE_LABEL_OPACITY,
   APRON_FILL,
   approachLaneText,
   approachLeftLaneSide,
@@ -41,6 +37,10 @@ import {
 import type { PanZoom, Size } from "./pan-zoom";
 import {
   BAND_BLEED,
+  COURT_LABEL_OPACITY,
+  COURT_LABEL_SIZE,
+  COURT_LABEL_TRACKING,
+  COURT_SIDE_LABEL_OPACITY,
   VizBandsOverlay,
   type VizBandsOverlayProps,
 } from "./viz-bands-overlay";
@@ -110,24 +110,19 @@ export type CourtOutline =
       index: number;
     };
 
-/* ── Type scale inside the art ───────────────────────────────────────────── */
-// These are SVG `font-size` ATTRIBUTES in viewBox units, not CSS `text-[Npx]`
-// — the art scales with the zoom, so they are part of the drawing's geometry
-// (they come straight from the handoff's own markup), not of the type scale
-// `scripts/check-design-drift.mjs` polices.
-const ZONE_LABEL_SIZE = 6;
-const COURT_SIDE_LABEL_SIZE = 6;
-const ZONE_PCT_SIZE = 6.4;
-const ZONE_COUNT_SIZE = 5.6;
+/* ── Type inside the art ─────────────────────────────────────────────────── */
+// Every word on this court is set in one style — `COURT_LABEL_*`
+// (`viz-bands-overlay.tsx`): mono caps at the 11px equivalent, 1.4px
+// tracking, white at 78–90%. They are SVG attributes in viewBox units, so
+// they scale with the art (and are not the type scale
+// `scripts/check-design-drift.mjs` polices).
 
 // Fix round 1: derived from `VIEWER_COURT` rather than transcribed from the
 // frame's absolute coordinates, so moving the court moves its labels with it.
 // The gaps are the handoff's own spacing, measured off its numbers:
-// 112 = farServiceY - 4.5, 5 = farBaselineY - 9, 249/257 = netY + 13/21.
+// 112 = farServiceY - 4.5, 5 = farBaselineY - 9.
 const ZONE_LABEL_Y = VIEWER_COURT.farServiceY - 4.5;
 const COURT_SIDE_LABEL_Y = VIEWER_COURT.farBaselineY - 9;
-const ZONE_PCT_Y = VIEWER_COURT.netY + 13;
-const ZONE_COUNT_Y = VIEWER_COURT.netY + 21;
 // The two service boxes' own centres — the frame's hand-entered 213 / 307.
 const DEUCE_LABEL_X = (VIEWER_COURT.singlesLeft + VIEWER_COURT.centreX) / 2;
 const AD_LABEL_X = (VIEWER_COURT.centreX + VIEWER_COURT.singlesRight) / 2;
@@ -136,13 +131,11 @@ const AD_LABEL_X = (VIEWER_COURT.centreX + VIEWER_COURT.singlesRight) / 2;
 // baseline): "Placement" and the wing names above the far baseline, "Contact"
 // below the near one — on the apron only, never on the court.
 //
-// T23: the opened court multiplies these by `viewerApproachLabelScale`, so
-// they open no smaller than a landing cut's band labels (5.6 units at that
-// cut's zoom) — the wing names at a hair over that, the side words a step
-// up. They are the lightbox's own: the wall card's `ApproachCourtArt` keeps
-// `court-art.tsx`'s `APPROACH_*_LABEL_SIZE`.
-const APPROACH_LIGHTBOX_SIDE_SIZE = 6.4;
-const APPROACH_LIGHTBOX_LANE_SIZE = 5.8;
+// T23: the opened court multiplies the court type by
+// `viewerApproachLabelScale`, so its words open at the size a landing cut's
+// band labels do at that cut's zoom. Plan §5: side words and wing names are
+// one size (`COURT_LABEL_SIZE`). The wall card's `ApproachCourtArt` keeps
+// `court-art.tsx`'s own `APPROACH_*` type.
 // The lines are stacked by the face's own extent rather than at fixed Ys,
 // so they clear each other at every scale: a line's box runs about an
 // ascent above its baseline and a descent below it (`--font-mono`'s metrics,
@@ -163,8 +156,8 @@ const APPROACH_LINE_GAP = 2.2;
  * the contact marks instead of hugging the baseline under them.
  */
 function approachApronLayout(scale: number) {
-  const side = APPROACH_LIGHTBOX_SIDE_SIZE * scale;
-  const lane = APPROACH_LIGHTBOX_LANE_SIZE * scale;
+  const side = COURT_LABEL_SIZE * scale;
+  const lane = COURT_LABEL_SIZE * scale;
   const laneY =
     VIEWER_COURT.farBaselineY -
     APPROACH_BASELINE_GAP * scale -
@@ -681,6 +674,7 @@ export function LightboxCourt({
             <ServeBoxLabels
               zoneStats={zoneStats}
               subjectName={subjectName}
+              cellsDrawn={zoneCells !== null}
               onZoneHover={setHoveredZone}
               onZonePin={setPinnedZone}
             />
@@ -830,9 +824,9 @@ function ApproachApronLabels({
     <g
       data-approach-labels=""
       aria-hidden="true"
-      fill={APPROACH_LABEL_INK}
+      fill={LINE_COLOR}
       fontFamily="var(--font-mono)"
-      letterSpacing={APPROACH_LABEL_TRACKING * scale}
+      letterSpacing={COURT_LABEL_TRACKING * scale}
       textAnchor="middle"
       style={{ textTransform: "uppercase", pointerEvents: "none" }}
     >
@@ -841,7 +835,7 @@ function ApproachApronLabels({
         x={VIEWER_COURT.centreX}
         y={layout.placementY}
         fontSize={layout.side}
-        fillOpacity={APPROACH_SIDE_LABEL_OPACITY}
+        fillOpacity={COURT_SIDE_LABEL_OPACITY}
       >
         Placement
       </text>
@@ -850,7 +844,7 @@ function ApproachApronLabels({
         x={VIEWER_COURT.centreX}
         y={layout.contactY}
         fontSize={layout.side}
-        fillOpacity={APPROACH_SIDE_LABEL_OPACITY}
+        fillOpacity={COURT_SIDE_LABEL_OPACITY}
       >
         Contact
       </text>
@@ -861,7 +855,7 @@ function ApproachApronLabels({
           x={APPROACH_LANE_X[lane]}
           y={layout.laneY}
           fontSize={layout.lane}
-          fillOpacity={APPROACH_LANE_LABEL_OPACITY}
+          fillOpacity={COURT_LABEL_OPACITY}
         >
           {laneText[lane]}
         </text>
@@ -1515,19 +1509,27 @@ function Mark({
 
 /**
  * The serve cut's service-box vocabulary (P2b): WIDE·BODY·T twice across the
- * far service boxes, DEUCE COURT / AD COURT above the far baseline, and each
- * zone's own `% / n` under the net — the SAME "points won" rate the stats
- * card prints (`ZoneStats.winPct`), never a second, differently-derived
- * figure. A zone with no serves in it prints nothing rather than "0% / 0".
+ * far service boxes and DEUCE COURT / AD COURT above the far baseline —
+ * names only (plan §5). Each zone's rate and count live in the Statistics
+ * panel, whose row hover outlines the zone here.
+ *
+ * A zone with serves in it still answers the pointer: a transparent hit area
+ * over its service-box cell (under the marks, so it never takes one's
+ * hover) shows the zone's readout on hover and pins it on a tap, and carries
+ * the zone's sentence for a screen reader. On Zones the cells themselves
+ * (`data-serve-zone-cell`) take the pointer, so the hit area stands aside.
  */
 function ServeBoxLabels({
   zoneStats,
   subjectName,
+  cellsDrawn,
   onZoneHover,
   onZonePin,
 }: {
   zoneStats: Record<ZoneKey, ZoneStats> | null;
   subjectName: string;
+  /** The Zones chart's own cells are drawn and answer the pointer. */
+  cellsDrawn: boolean;
   onZoneHover: (zone: ZoneKey | null) => void;
   onZonePin: (zone: ZoneKey) => void;
 }) {
@@ -1535,82 +1537,65 @@ function ServeBoxLabels({
     <>
       <g
         fill={LINE_COLOR}
-        fillOpacity={0.5}
         fontFamily="var(--font-mono)"
-        fontSize={COURT_SIDE_LABEL_SIZE}
-        letterSpacing={0.6}
+        fontSize={COURT_LABEL_SIZE}
+        letterSpacing={COURT_LABEL_TRACKING}
         textAnchor="middle"
         aria-hidden="true"
+        style={{ pointerEvents: "none" }}
       >
-        <text x={DEUCE_LABEL_X} y={COURT_SIDE_LABEL_Y}>
+        <text
+          data-serve-side-label=""
+          x={DEUCE_LABEL_X}
+          y={COURT_SIDE_LABEL_Y}
+          fillOpacity={COURT_SIDE_LABEL_OPACITY}
+        >
           DEUCE COURT
         </text>
-        <text x={AD_LABEL_X} y={COURT_SIDE_LABEL_Y}>
+        <text
+          data-serve-side-label=""
+          x={AD_LABEL_X}
+          y={COURT_SIDE_LABEL_Y}
+          fillOpacity={COURT_SIDE_LABEL_OPACITY}
+        >
           AD COURT
         </text>
-      </g>
-      <g
-        fill={LINE_COLOR}
-        fillOpacity={0.66}
-        fontFamily="var(--font-mono)"
-        fontSize={ZONE_LABEL_SIZE}
-        letterSpacing={0.6}
-        textAnchor="middle"
-        aria-hidden="true"
-      >
         {ZONES.map((zone, index) => {
           const cell = zoneCellX(index);
           return (
-            <text key={zone.key} x={(cell.x1 + cell.x2) / 2} y={ZONE_LABEL_Y}>
+            <text
+              key={zone.key}
+              data-serve-zone-label={zone.key}
+              x={(cell.x1 + cell.x2) / 2}
+              y={ZONE_LABEL_Y}
+              fillOpacity={COURT_LABEL_OPACITY}
+            >
               {zone.label.toUpperCase()}
             </text>
           );
         })}
       </g>
       {zoneStats !== null && (
-        <g textAnchor="middle" fill={LINE_COLOR}>
+        <g style={cellsDrawn ? { pointerEvents: "none" } : undefined}>
           {ZONES.map((zone, index) => {
             const stats = zoneStats[zone.key];
             if (stats.count === 0) return null;
             const cell = zoneCellX(index);
-            const cx = (cell.x1 + cell.x2) / 2;
             return (
-              <g
+              <rect
                 key={zone.key}
                 data-serve-zone={zone.key}
                 role="img"
                 aria-label={`${subjectName} — ${zone.key.replace("-", " ")}: ${stats.winPct}% of ${stats.count} points won`}
+                x={cell.x1}
+                y={VIEWER_COURT.farServiceY}
+                width={cell.x2 - cell.x1}
+                height={VIEWER_COURT.netY - VIEWER_COURT.farServiceY}
+                fill="transparent"
                 onMouseEnter={() => onZoneHover(zone.key)}
                 onMouseLeave={() => onZoneHover(null)}
                 onClick={() => onZonePin(zone.key)}
-              >
-                {/* The two numbers alone are a sliver to aim at, and less to
-                    a finger. Under the marks, so it never takes one's hover. */}
-                <rect
-                  x={cell.x1}
-                  y={VIEWER_COURT.netY}
-                  width={cell.x2 - cell.x1}
-                  height={ZONE_COUNT_Y + 3 - VIEWER_COURT.netY}
-                  fill="transparent"
-                />
-                <text
-                  x={cx}
-                  y={ZONE_PCT_Y}
-                  fontFamily="var(--font-sans)"
-                  fontSize={ZONE_PCT_SIZE}
-                >
-                  {stats.winPct}%
-                </text>
-                <text
-                  x={cx}
-                  y={ZONE_COUNT_Y}
-                  fontFamily="var(--font-mono)"
-                  fontSize={ZONE_COUNT_SIZE}
-                  fillOpacity={0.6}
-                >
-                  {stats.count}
-                </text>
-              </g>
+              />
             );
           })}
         </g>
