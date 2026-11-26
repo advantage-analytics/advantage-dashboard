@@ -75,6 +75,12 @@ Picked screens (frame ids in the mockups):
 
 ## Stage 2: from January 1 (decide later)
 
+> **Superseded (2026-11-25).** Stage 2 is now
+> [`2027-pricing.md`](2027-pricing.md), which follows the landing site's plans
+> (Coach / Coach Pro, college season plans, $35 extra hours). Everything below
+> in this stage, including "Stage 2 build", its open questions and the unit
+> economics, is kept only as history.
+
 Draft only. Decide these by **December 1**, when players get the "free hours
 end Dec 31" notice and email, so the move on January 1 has somewhere to land.
 
