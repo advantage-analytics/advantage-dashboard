@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { PlanCheckoutDialog } from "@/components/dashboard/billing/plan-checkout-dialog";
 import { FileStepContent } from "@/components/dashboard/matches/new-match-wizard/FileStepContent";
 import {
@@ -471,11 +472,7 @@ export function Plans2027Preview({
   if (chosen.kind === "email") {
     return (
       <Frame label={chosen.label}>
-        <iframe
-          aria-label={chosen.label}
-          srcDoc={emails[chosen.email] ?? ""}
-          className="h-[900px] w-full max-w-[720px] rounded-[var(--radius-card)] border border-[var(--border-card)]"
-        />
+        <EmailFrame label={chosen.label} html={emails[chosen.email] ?? ""} />
       </Frame>
     );
   }
@@ -631,6 +628,24 @@ function FileStepState({ plan }: { plan: "free" | "coach" }) {
 }
 
 /* ---------- Stage F surfaces ---------- */
+
+/** An email in an iframe sized to its own content, so no message is cut off. */
+function EmailFrame({ label, html }: { label: string; html: string }) {
+  const [height, setHeight] = useState(900);
+  return (
+    <iframe
+      aria-label={label}
+      srcDoc={html}
+      scrolling="no"
+      onLoad={(event) => {
+        const doc = event.currentTarget.contentDocument;
+        if (doc) setHeight(doc.documentElement.scrollHeight);
+      }}
+      style={{ height }}
+      className="w-full max-w-[720px] rounded-[var(--radius-card)] border border-[var(--border-card)]"
+    />
+  );
+}
 
 function Frame({
   label,
