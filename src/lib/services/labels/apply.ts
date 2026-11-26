@@ -12,7 +12,14 @@
  *
  * What is read from the labels and how:
  * - A point is a live `label_points` row (no tombstone) whose ending is not
- *   `let_replayed` / `not_a_point`, in `point_index` order.
+ *   `not_a_point`, in `point_index` order.
+ * - A replayed let (`let_replayed`) is written whole, strokes and all, so the
+ *   Video tab can show it, and flagged `let_replayed` (`LET_REPLAYED_FLAG`)
+ *   with `result_type` 'Let' (`LET_POINT_RESULT`). It is no point: the score
+ *   before it is the score before the point that replays it (it never moves
+ *   `labelScores`), it carries no pressure flag and no rally length, and its
+ *   `won_by_player1` — NOT NULL — is a placeholder, the server. Every reader
+ *   that counts must skip the flag.
  * - Its strokes are the live ones (`isLiveShot` with ghosts on: no tombstone,
  *   no site-removed stroke the labeller never restored), in video order.
  * - A let serve (`isLetServe`) is replayed, not played: it is written at
@@ -71,7 +78,6 @@ import { gameKey, labelScores, type LabelGameBand } from "./score";
 import { labelSetScores } from "./set-scores";
 import {
   isLetServe,
-  isNonPointEnding,
   isServeStroke,
   liveShotsInOrder,
   opponent,
@@ -89,10 +95,12 @@ import {
 /** The flag every applied point carries; persist-transcript.ts guards on it. */
 export {
   HAND_LABELLED_FLAG,
+  LET_REPLAYED_FLAG,
   OFF_VIDEO_FLAG,
 } from "@/lib/services/splitstep/derivation/flags";
 import {
   HAND_LABELLED_FLAG,
+  LET_REPLAYED_FLAG,
   OFF_VIDEO_FLAG,
 } from "@/lib/services/splitstep/derivation/flags";
 
@@ -171,6 +179,11 @@ export interface AppliedRows {
    */
   letsKept: number;
   /**
+   * Replayed lets (`let_replayed`) written as `LET_REPLAYED_FLAG` points,
+   * which no statistic reads.
+   */
+  letPointsKept: number;
+  /**
    * Strokes other than serves before a point's counted serve — hit at a
    * fault or a let — dropped from the written shots (`splitPointStrokes`).
    */
@@ -218,6 +231,12 @@ export function shotTypeOf(stroke: LabelStroke | null): string | null {
  * every serve count (`calculate_match_stats`, the serve and return readers).
  */
 export const LET_RESULT = "Let";
+
+/**
+ * `points.result_type` on a replayed let (`LET_REPLAYED_FLAG`). The flag, not
+ * this string, is what readers filter on.
+ */
+export const LET_POINT_RESULT = "Let";
 
 /**
  * `label_shots.result` → `shots.result` (inverts `labelShotResult`). A let is
@@ -342,9 +361,22 @@ export function vendorShotFacts(
 
 // ── The build ────────────────────────────────────────────────────────────────
 
-/** Whether a label point becomes a `points` row at all. */
+/**
+ * Whether a label point becomes a `points` row at all: every live one but a
+ * `not_a_point` row. A replayed let does, flagged (`isLetPoint`).
+ */
 function isAppliedPoint(point: Pick<LabelPoint, "status" | "ending">): boolean {
-  return point.status !== "deleted" && !isNonPointEnding(point.ending);
+  return point.status !== "deleted" && point.ending !== "not_a_point";
+}
+
+/** A replayed let: written whole, flagged `let_replayed`, counted as nothing. */
+function isLetPoint(point: Pick<LabelPoint, "ending">): boolean {
+  return point.ending === "let_replayed";
+}
+
+/** A built row is a replayed let (`LET_REPLAYED_FLAG`). */
+export function isLetPointRow(point: Pick<AppliedPointRow, "flags">): boolean {
+  return point.flags.includes(LET_REPLAYED_FLAG);
 }
 
 /**
@@ -531,10 +563,31 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
 
   const rows: AppliedPointRow[] = [];
   let letsKept = 0;
+  let letPointsKept = 0;
   let droppedBeforeServe = 0;
   for (const point of points) {
     if (!isAppliedPoint(point)) continue;
     const at = `point ${point.pointIndex + 1}`;
+    if (isLetPoint(point)) {
+      const row = buildLetPointRow(point, {
+        at,
+        pointNumber: rows.length + 1,
+        vendor,
+        scores,
+        playOrder,
+        bandByGame,
+        setsBefore,
+      });
+      problems.push(...row.problems);
+      warnings.push(...row.warnings);
+      if (row.row) {
+        rows.push(row.row);
+        letPointsKept += 1;
+        letsKept += row.lets;
+        droppedBeforeServe += row.dropped;
+      }
+      continue;
+    }
 
     const { server, winner, setNumber, gameNumber } = point;
     if (server === null) problems.push(`${at}: no server`);
@@ -672,16 +725,101 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
     problems,
     warnings,
     letsKept,
+    letPointsKept,
     droppedBeforeServe,
+  };
+}
+
+/**
+ * One replayed let's row. Its strokes are written as any point's are
+ * (`buildShotRows`, no ending), so the Video tab can play and list them; the
+ * score columns are the score it was played at, which the point that replays
+ * it starts from too. Nothing on it is a fact a statistic may read.
+ */
+function buildLetPointRow(
+  point: LabelPoint,
+  ctx: {
+    at: string;
+    pointNumber: number;
+    vendor: ReadonlyMap<number, VendorShotFacts> | undefined;
+    scores: ReturnType<typeof labelScores>;
+    playOrder: ReadonlyMap<string, number>;
+    bandByGame: ReadonlyMap<string, LabelGameBand>;
+    setsBefore: ReadonlyMap<number, Record<LabelSide, number>>;
+  },
+): {
+  row: AppliedPointRow | null;
+  lets: number;
+  dropped: number;
+  problems: string[];
+  warnings: string[];
+} {
+  const { at } = ctx;
+  const problems: string[] = [];
+  const { server, setNumber, gameNumber } = point;
+  if (server === null) problems.push(`${at} (a let): no server`);
+  if (setNumber === null || gameNumber === null) {
+    problems.push(`${at} (a let): no set or game number`);
+  }
+  if (server === null || setNumber === null || gameNumber === null) {
+    return { row: null, lets: 0, dropped: 0, problems, warnings: [] };
+  }
+  const live = liveShotsInOrder(point, true);
+  const built = buildShotRows(live, server, null, ctx.vendor, `${at} (a let)`);
+  const window = live
+    .map((shot) => shot.videoTime)
+    .filter((t): t is number => t !== null);
+  const first = window.length > 0 ? Math.min(...window) : null;
+  const end = window.length > 0 ? Math.max(...window) : null;
+  const band = ctx.bandByGame.get(gameKey(point));
+  const games = band ? parseGamesBefore(band.gamesBefore) : { p1: 0, p2: 0 };
+  const sets = ctx.setsBefore.get(setNumber) ?? { p1: 0, p2: 0 };
+  return {
+    row: {
+      point_number: ctx.pointNumber,
+      set_number: setNumber,
+      game_number: ctx.playOrder.get(gameKey(point)) ?? gameNumber,
+      server_is_player1: server === "p1",
+      // NOT NULL, and meaningless: the server, by convention. Every reader
+      // skips the row by its flag before it could read this.
+      won_by_player1: server === "p1",
+      // Null like an off-video point's: AVG(rally_length) skips it.
+      rally_length: null,
+      result_type: LET_POINT_RESULT,
+      is_break_point: false,
+      is_set_point: false,
+      is_match_point: false,
+      set_score: serverFirst(sets, server),
+      game_score: serverFirst(games, server),
+      point_score: pointScoreOf(
+        ctx.scores.points.get(point.id)?.scoreBefore ?? null,
+        (point.gameType ?? "game") !== "game" && server === "p2",
+      ),
+      video_time: first,
+      duration:
+        first !== null && end !== null ? Math.max(0, end - first) : null,
+      flags: [HAND_LABELLED_FLAG, LET_REPLAYED_FLAG],
+      derived: true,
+      labelPointId: point.id,
+      errorKind: null,
+      pointIndex: point.pointIndex,
+      shots: built.shots,
+    },
+    lets: built.lets,
+    dropped: built.dropped,
+    problems: [...problems, ...built.problems],
+    warnings: built.warnings,
   };
 }
 
 /** The dry-run / write-summary lines for lets and dropped strokes (always printed). */
 export function letsAndDroppedLines(
-  built: Pick<AppliedRows, "letsKept" | "droppedBeforeServe">,
+  built: Pick<AppliedRows, "letsKept" | "droppedBeforeServe"> &
+    Partial<Pick<AppliedRows, "letPointsKept">>,
 ): string[] {
   return [
     `lets kept: ${built.letsKept} (replayed serves, written at shot 0, counted as nothing)`,
+    `let points kept: ${built.letPointsKept ?? 0} (replayed points, written flagged let_replayed, counted as nothing)`,
     `strokes before the serve dropped: ${built.droppedBeforeServe} (hit at a fault or a let)`,
   ];
 }
@@ -730,7 +868,9 @@ export interface SideStats {
 }
 
 export interface ExpectedStats {
+  /** Points that count: a replayed let (`isLetPointRow`) is not one. */
   points: number;
+  /** Every shot written, a let point's included. */
   shots: number;
   games: number;
   p1: SideStats;
@@ -773,8 +913,12 @@ export function expectedStats(
   const stats = { p1: emptySide(), p2: emptySide() };
   const servedGames = new Set<string>();
   let shots = 0;
+  let counted = 0;
   for (const point of points) {
     shots += point.shots.length;
+    // A replayed let is written to be shown, never counted.
+    if (isLetPointRow(point)) continue;
+    counted += 1;
     const server: LabelSide = point.server_is_player1 ? "p1" : "p2";
     const receiver = opponent(server);
     const winner: LabelSide = point.won_by_player1 ? "p1" : "p2";
@@ -826,7 +970,7 @@ export function expectedStats(
     }
   }
   return {
-    points: points.length,
+    points: counted,
     shots,
     games: servedGames.size,
     ...stats,

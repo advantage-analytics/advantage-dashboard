@@ -11,6 +11,7 @@ import {
 import { getMyPlayerIds, isMe } from "@/lib/data/player-identity-server";
 import { playerSeat, youSeat } from "@/lib/data/viewer-side";
 import { getMatchPointsFromSupabase } from "@/lib/data/match-points-server";
+import { withoutLetPoints } from "@/lib/data/let-points";
 import { formatMatchDayLong } from "@/lib/data/match-day";
 import { matchContextCaption, scoreWinner } from "@/lib/data/match-utils";
 import { formatMatchDuration } from "@/lib/format/duration";
@@ -671,7 +672,7 @@ export async function loadMatchDetail(
   const rosterIdsPromise = resolveRosterSeatIds(supabase, dbRow);
   const [
     statsResult,
-    points,
+    pointsRead,
     kpiHistory,
     eventId,
     uploadedBy,
@@ -682,8 +683,11 @@ export async function loadMatchDetail(
     verificationPending,
   ] = await Promise.all([
     getMatchStatisticsFromSupabase(matchId, supabase),
+    // With the replayed lets, which are split off below: one read serves the
+    // counted points and the Video tab's let rows.
     getMatchPointsFromSupabase(matchId, supabase, {
       programId: dbRow.program_id,
+      includeLetReplayed: true,
     }),
     // The history needs to know which ids mean "me" — a coach may have
     // recorded this athlete's earlier matches against a roster profile they
@@ -721,6 +725,13 @@ export async function loadMatchDetail(
     // Same wave: one `match_label_states` read, none for a verified match.
     resolveVerificationPending(supabase, dbRow),
   ]);
+
+  // `points` never holds a replayed let (let-points.ts): every statistic on
+  // the report reads it. The lets ride apart, for the Video tab's list only.
+  const points = pointsRead ? withoutLetPoints(pointsRead) : null;
+  const letPoints = pointsRead
+    ? pointsRead.filter((point) => point.letReplayed)
+    : [];
 
   const profiles = new Map<string, PlayerProfile>();
   for (const profile of profileResult.data ?? []) {
@@ -767,6 +778,8 @@ export async function loadMatchDetail(
     // this loader is awaited by the layout first, and a throw from the layout
     // skips `[matchId]/error.tsx`. `page.tsx` turns it into the error.
     points,
+    // Replayed lets, shown in the Video tab's list and counted nowhere.
+    letPoints,
     keyMoments: dbRow.key_moments?.length
       ? dbRow.key_moments
       : FILLER_KEY_MOMENTS,

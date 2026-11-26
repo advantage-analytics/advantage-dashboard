@@ -119,6 +119,8 @@ export function sampleMatchData(): SampleMatchDetail {
       ...point,
       player: seat(point.player, `points[${i}].player`),
     })),
+    // The sample is a SwingVision-shaped report with no labelled lets.
+    letPoints: [],
     kpiHistory: null,
   };
 }

@@ -45,6 +45,7 @@ import { requestMatchInsights } from "@/lib/services/splitstep/request-insights"
 import {
   buildAppliedRows,
   expectedStats,
+  isLetPointRow,
   pointInsertRow,
   vendorShotFacts,
   type AppliedPointRow,
@@ -545,7 +546,10 @@ async function relinkBookmarks(
   const timeOf = new Map(
     backup.points.map((p) => [p.id as string, p.video_time as number | null]),
   );
-  const timed = points.filter((p) => p.video_time !== null);
+  // A replayed let is no point to keep a bookmark on.
+  const timed = points.filter(
+    (p) => p.video_time !== null && !isLetPointRow(p),
+  );
   const rows: Row[] = [];
   for (const bookmark of backup.bookmarks) {
     const t = timeOf.get(bookmark.point_id as string);

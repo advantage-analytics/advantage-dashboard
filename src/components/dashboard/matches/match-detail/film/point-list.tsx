@@ -176,6 +176,7 @@ export type { FilmListTone } from "./point-list-tone";
 
 /** One frozen empty slice, so "no well" never re-renders a memoized row. */
 const NO_STOPS: ShotStop[] = [];
+const NO_LETS: MatchPoint[] = [];
 
 /** A list with no owner of the focus state simply follows. */
 const FOLLOW: PointFocus = { mode: "follow" };
@@ -275,6 +276,27 @@ interface PointListProps {
    * Stable identity, please — the list is memoized on it.
    */
   nowPlaying?: { id: string; index: number | null } | null;
+  /**
+   * Replayed lets (`letReplayed`, let-points.ts), drawn among the points as
+   * "Let · Replayed" while nothing is filtered. Never in `allPoints` or
+   * `visiblePoints`, so no count, filter or walk sees one. Stable identity.
+   */
+  letPoints?: MatchPoint[];
+}
+
+/** The let rows' title: what the labeller called it, and nothing more. */
+export const LET_ROW_TITLE = "Let · Replayed";
+
+/**
+ * The points with the replayed lets slotted in where they were played, by
+ * `pointNumber`. Only for an unfiltered list: a let matches no filter.
+ */
+export function withLetRows(
+  points: MatchPoint[],
+  lets: readonly MatchPoint[],
+): MatchPoint[] {
+  if (lets.length === 0) return points;
+  return [...points, ...lets].sort((a, b) => a.pointNumber - b.pointNumber);
 }
 
 export interface GameGroup {
@@ -391,6 +413,7 @@ export const PointList = memo(function PointList({
   onHoldPoint = NOOP,
   onFollow = NOOP,
   nowPlaying = null,
+  letPoints = NO_LETS,
 }: PointListProps) {
   const t = LIST_TONE[tone];
   const displayedPointId =
@@ -425,17 +448,24 @@ export const PointList = memo(function PointList({
   const { hasGameScore: showGameScore, hasPointScore: showPointScore } =
     useMemo(() => scoreColumns(allPoints), [allPoints]);
 
+  // The rows drawn: the cut, with the replayed lets back among them while
+  // nothing is filtered. The count below still reads `visiblePoints`.
+  const rowPoints = useMemo(
+    () => (filtered ? visiblePoints : withLetRows(visiblePoints, letPoints)),
+    [filtered, visiblePoints, letPoints],
+  );
+
   const groups = useMemo(
     () =>
       groupPointsByGame(
-        visiblePoints,
+        rowPoints,
         allPoints,
         youIsPlayer1,
         youName,
         oppName,
         showGameScore,
       ),
-    [allPoints, visiblePoints, youIsPlayer1, youName, oppName, showGameScore],
+    [allPoints, rowPoints, youIsPlayer1, youName, oppName, showGameScore],
   );
 
   const clearAll = filmFilters.clearAll;
@@ -661,6 +691,16 @@ export const PointList = memo(function PointList({
                     </div>
 
                     {group.points.map((point) => {
+                      if (point.letReplayed) {
+                        return (
+                          <LetRow
+                            key={point.id}
+                            point={point}
+                            showPointScore={showPointScore}
+                            tone={tone}
+                          />
+                        );
+                      }
                       const isYou = point.wonByPlayer1 === youIsPlayer1;
                       const isActive = point.id === activePointId;
                       const isOpen = point.id === displayedPointId && wellOpen;
@@ -1201,6 +1241,51 @@ export const PointRow = memo(function PointRow({
           className="absolute bottom-0 left-0 h-0.5 bg-[var(--blue)]"
           style={{ width: filmProgressWidth(activeStart, activeEnd) }}
         />
+      )}
+    </div>
+  );
+});
+
+/**
+ * A replayed let among the points: played on the video, then replayed, so it
+ * is no point. It names nobody — no winner's mark, no detail line, since its
+ * `wonByPlayer1` is a placeholder — and carries the score it was played at,
+ * which the point that replays it starts from too. Not a seek target: the
+ * film's stops are built from the points alone.
+ */
+const LetRow = memo(function LetRow({
+  point,
+  showPointScore,
+  tone,
+}: {
+  point: MatchPoint;
+  showPointScore: boolean;
+  tone: FilmListTone;
+}) {
+  const t = ROW_TONE[tone];
+  const pointScore = readPointScore(point);
+  return (
+    <div
+      data-point-id={point.id}
+      data-let-replayed=""
+      className={cn(t.root, "cursor-default")}
+    >
+      {/* The mark's column, empty, so the title lines up with the points'. */}
+      <span aria-hidden="true" className="shrink-0 basis-[34px]" />
+      <span className="flex min-w-0 flex-col gap-px">
+        <span className={t.detail} style={t.detailStyle}>
+          {LET_ROW_TITLE}
+        </span>
+      </span>
+      <div className="flex-1" />
+      {showPointScore && pointScore !== null && (
+        <span
+          className={t.score}
+          // The detail's ink, not the score's: nothing on the row is a fact.
+          style={{ ...t.scoreStyle, color: t.detailStyle.color }}
+        >
+          {pointScoreLabel(pointScore)}
+        </span>
       )}
     </div>
   );

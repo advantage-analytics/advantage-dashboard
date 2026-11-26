@@ -86,6 +86,8 @@ function fakeClient(failPointPage?: number) {
       eq: () => builder,
       is: () => builder,
       limit: () => builder,
+      // The let-point filter (let-points.ts).
+      not: () => builder,
       in(column: string, values: unknown[]) {
         if (table === "points") {
           pointIn.push([column, values]);
