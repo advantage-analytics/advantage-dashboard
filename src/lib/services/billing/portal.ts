@@ -19,7 +19,12 @@ import {
   PORTAL_CONFIGURATION_ENV,
   portalConfigurationId,
 } from "@/lib/stripe/prices";
-import { SIGN_IN_REFUSAL, refuse, type BillingResult } from "./http";
+import {
+  SIGN_IN_REFUSAL,
+  errorMessage,
+  refuse,
+  type BillingResult,
+} from "./http";
 import type { CheckoutUser } from "./checkout";
 import { readBillingUser } from "./subscription";
 
@@ -66,7 +71,7 @@ export async function openPortal(params: {
   } catch (error) {
     console.error("[billing] could not open the portal", {
       userId: user.id,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
     return refuse(
       "checkout_unavailable",

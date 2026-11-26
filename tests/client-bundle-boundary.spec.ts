@@ -23,7 +23,6 @@ const SRC = resolve("src");
 const SERVER_ONLY = [
   "lib/supabase/admin.ts",
   "lib/supabase/server.ts",
-  "lib/user/roles.ts",
   // Imports `@azure/storage-blob`, which signs with the storage account key and
   // is a `serverExternalPackages` entry precisely so it never bundles. The
   // wizard runs the SAME media inspection locally, from
