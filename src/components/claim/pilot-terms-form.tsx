@@ -24,12 +24,13 @@ import {
  * The pilot terms screen's body, for both team-creation flows (design
  * `2026-09-26-pilot-terms-design.html`, frames A, A.1, B and C).
  *
- * Every word comes in on `copy`, built by `pilotTermsCopy()` beside
- * `PILOT_TERMS_VERSION`; this file holds layout and behaviour only, so the
+ * Every word comes in on `copy`, built by `termsCopyFor()` beside the
+ * version ids in `pilot-terms.ts`; this file holds layout and behaviour only, so the
  * text a coach accepted and the version recorded for it cannot drift apart.
  *
- * Terms 1–2 wear a blue `TermMark` (what the program gets), 4–5 an ink one
- * (what we reserve). Term 3 is the one statement the coach makes, so it is a
+ * The pilot's terms 1–2 wear a blue `TermMark` (what the program gets), 4–5
+ * an ink one (what we reserve); the team terms have one blue row and the same
+ * two ink ones. Term 3 is the one statement the coach makes, so it is a
  * checkbox, set apart in a `--surface-subtle` well BELOW the list: the
  * `TermMark` rule forbids blue marks stacked above a blue checkbox. The single
  * primary button stays disabled (opacity, never a recolour) until it is
@@ -41,16 +42,22 @@ export function PilotTermsForm({
   copy,
   version,
   token,
+  programKey,
   refused = false,
 }: {
   flow: PilotTermsFlow;
   /** The program's or team's own name line. */
   eyebrow: string;
   copy: PilotTermsCopy;
-  /** The `PILOT_TERMS_VERSION` this copy was rendered under. */
+  /** The terms version (`TermsVersion`) this copy was rendered under. */
   version: string;
   /** College only: the signed-in link's `?token=`, carried back to verify. */
   token?: string | null;
+  /**
+   * College only: the program key in the screen's path, passed back so the
+   * accept resolves the terms version from what the screen resolved it from.
+   */
+  programKey?: string | null;
   /** Open in frame C: the last attempt was refused for want of acceptance. */
   refused?: boolean;
 }) {
@@ -72,7 +79,7 @@ export function PilotTermsForm({
       // `acceptPilotTermsForClaim`). Anything else returned is a refusal.
       const result =
         flow === "college"
-          ? await acceptPilotTermsForClaim({ version, token })
+          ? await acceptPilotTermsForClaim({ version, token, programKey })
           : await acceptPilotTermsAndCreateTeam({ version });
       if (result?.ok && "next" in result && result.next) {
         window.location.assign(result.next);

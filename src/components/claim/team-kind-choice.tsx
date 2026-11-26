@@ -38,7 +38,8 @@ const OPTIONS: {
     icon: GraduationCap,
     title: "A college program",
     sub: "You'll claim it from the list; recorded staff confirm it.",
-    foot: "NCAA · NAIA · NJCAA · 75h shared",
+    // The page passes this card's note (`collegeCardFoot()`); see below.
+    foot: null,
     destination: "/claim/program",
   },
   {
@@ -51,7 +52,16 @@ const OPTIONS: {
   },
 ];
 
-export function TeamKindChoice() {
+export function TeamKindChoice({
+  collegeFoot,
+}: {
+  /**
+   * The college card's footer note, from `collegeCardFoot()` on the server:
+   * "75h shared" is the pilot's promise and stops being one on January 1,
+   * 2027, and a client component must not read the date itself.
+   */
+  collegeFoot: string;
+}) {
   const router = useRouter();
   const [kind, setKind] = useState<Kind | null>(null);
 
@@ -65,6 +75,7 @@ export function TeamKindChoice() {
         {OPTIONS.map((option) => {
           const selected = kind === option.id;
           const Icon = option.icon;
+          const foot = option.id === "college" ? collegeFoot : option.foot;
           return (
             <button
               key={option.id}
@@ -97,9 +108,9 @@ export function TeamKindChoice() {
                 </span>
                 <span className="text-body-sm max-w-[32ch]">{option.sub}</span>
               </div>
-              {option.foot && (
+              {foot && (
                 <span className="text-micro mt-1 border-t border-[var(--border-hairline)] pt-3">
-                  {option.foot}
+                  {foot}
                 </span>
               )}
             </button>

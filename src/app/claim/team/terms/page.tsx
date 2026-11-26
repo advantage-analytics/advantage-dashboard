@@ -2,14 +2,19 @@ import { redirect } from "next/navigation";
 import { ClaimShell } from "@/components/claim/claim-shell";
 import { PilotTermsForm } from "@/components/claim/pilot-terms-form";
 import type { CustomOrgType } from "@/lib/services/programs/create-actions";
-import {
-  PILOT_TERMS_VERSION,
-  pilotTermsCopy,
-} from "@/lib/services/programs/pilot-terms";
+import { termsCopyFor } from "@/lib/services/programs/pilot-terms";
+import { resolveTermsVersion } from "@/lib/services/programs/pilot-terms-server";
 import { quotaTierFor } from "@/lib/services/splitstep/quota";
+import { termsNamingCopy } from "@/lib/billing/claim-copy";
+import { plansHaveBegun } from "@/lib/billing/plans";
+import { createClient } from "@/lib/supabase/server";
+import { loginRedirectPath } from "@/lib/auth/request-path";
 import { readPendingTeam } from "../pending-team";
 
-export const metadata = { title: "Pilot terms" };
+/** "Pilot terms" before January 1, 2027, "Team terms" from it. */
+export function generateMetadata() {
+  return { title: termsNamingCopy(plansHaveBegun()).pageTitle };
+}
 
 /** The eyebrow's type half. "Other" has no honest label, so it shows none. */
 const ORG_LABEL: Record<CustomOrgType, string | null> = {
@@ -29,13 +34,30 @@ const ORG_LABEL: Record<CustomOrgType, string | null> = {
  * there is nothing to accept terms FOR, so the coach goes back to choosing a
  * type. The hours are the tier the new team will actually draw from,
  * `quotaTierFor()` for a team of this org type: the individual figure, never
- * the collegiate one. The layout already requires a session.
+ * the collegiate one.
+ *
+ * The layout requires a session, but a layout's redirect does not stop its
+ * page from rendering, and from January 1 the version is asked of a database
+ * function that does not answer signed out. So this turns a signed-out
+ * visitor around itself, to the same sign-in the layout sends them to,
+ * before resolving anything.
+ *
+ * A team that does not exist yet is on no pilot, so the version is the date's
+ * alone (`resolveTermsVersion`): the pilot terms before January 1, 2027, the
+ * team terms from it, which print no hours at all.
  */
 export default async function TeamPilotTermsPage() {
   const pending = await readPendingTeam();
   if (!pending) redirect("/claim/team/type");
 
-  const copy = pilotTermsCopy({
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect(await loginRedirectPath("/claim/team"));
+
+  const version = await resolveTermsVersion(supabase);
+  const copy = termsCopyFor(version, {
     flow: "team",
     accountType: quotaTierFor({ kind: "team", orgType: pending.orgType }),
   });
@@ -53,7 +75,7 @@ export default async function TeamPilotTermsPage() {
         flow="team"
         eyebrow={eyebrow}
         copy={copy}
-        version={PILOT_TERMS_VERSION}
+        version={version}
       />
     </ClaimShell>
   );

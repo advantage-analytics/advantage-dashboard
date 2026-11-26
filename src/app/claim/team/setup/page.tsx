@@ -4,6 +4,11 @@ import { ClaimShell, AsidePanel } from "@/components/claim/claim-shell";
 import { TeamSetupForm } from "@/components/claim/team-setup-form";
 import { isCustomOrgType, readPendingTeam } from "../pending-team";
 import { loginRedirectPath } from "@/lib/auth/request-path";
+import {
+  claimOnPlans,
+  teamSetupAsideCopy,
+  termsNamingCopy,
+} from "@/lib/billing/claim-copy";
 
 export const metadata = { title: "Set up your team" };
 
@@ -22,7 +27,9 @@ export const metadata = { title: "Set up your team" };
  * right column. Its budget line is deliberately absent: `quotaTierFor()` gives
  * a self-serve custom org the individual figure, not the collegiate 75h, so the
  * design's "shared-hour budget" footnote would be a promise the code doesn't
- * keep. Back returns to 7.1; ✕ leaves setup per the Stage 7 chrome convention.
+ * keep. From January 1, 2027 the footnote and the third row say what is true
+ * of a team with no plan (`teamSetupAsideCopy`): a new team is on no pilot,
+ * so the date alone decides. Back returns to 7.1; ✕ leaves setup per the Stage 7 chrome convention.
  */
 export default async function TeamSetupPage({
   searchParams,
@@ -51,6 +58,8 @@ export default async function TeamSetupPage({
 
   const pending = await readPendingTeam();
   const parked = pending?.orgType === type ? pending : null;
+  const onPlans = claimOnPlans();
+  const aside = teamSetupAsideCopy(onPlans);
 
   return (
     <ClaimShell
@@ -61,12 +70,8 @@ export default async function TeamSetupPage({
       aside={
         <AsidePanel
           title="How this differs from a college team"
-          items={[
-            "No school to find and no address to confirm",
-            "You're the owner the moment you create it",
-            "Sending video works right away — nothing is held",
-          ]}
-          footnote="Pilot pricing applies."
+          items={[...aside.items]}
+          footnote={aside.footnote}
         />
       }
     >
@@ -75,6 +80,7 @@ export default async function TeamSetupPage({
         defaultOwnerName={parked?.ownerName || profileName}
         defaultTeamName={parked?.name ?? ""}
         defaultTeam={parked?.team ?? null}
+        termsRefusal={termsNamingCopy(onPlans).setupFormRefusal}
       />
     </ClaimShell>
   );

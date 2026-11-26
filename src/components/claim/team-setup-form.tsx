@@ -40,7 +40,7 @@ import { squadsFor, type Squad } from "@/lib/data/squad";
 /** Long enough to stop typing, short enough not to feel laggy. */
 const DEBOUNCE_MS = 180;
 
-function reasonMessage(reason: string): string {
+function reasonMessage(reason: string, termsRefusal: string): string {
   switch (reason) {
     case "limit-reached":
       return (
@@ -50,7 +50,7 @@ function reasonMessage(reason: string): string {
     // `continueToPilotTerms` routes this one to the terms screen itself, so
     // it only reaches the form if that navigation failed.
     case "terms-not-accepted":
-      return "Something changed with the pilot terms. Try again to see them.";
+      return termsRefusal;
     case "invalid-name":
       return "Give the team a name between 2 and 120 characters.";
     case "invalid-owner-name":
@@ -89,6 +89,7 @@ export function TeamSetupForm({
   defaultOwnerName,
   defaultTeamName = "",
   defaultTeam = null,
+  termsRefusal,
 }: {
   orgType: CustomOrgType;
   defaultOwnerName: string;
@@ -96,6 +97,11 @@ export function TeamSetupForm({
   defaultTeamName?: string;
   /** The parked Team answer, on the same return trip. Null: not yet asked. */
   defaultTeam?: Squad | null;
+  /**
+   * The `terms-not-accepted` sentence, from `termsNamingCopy()` on the
+   * server: it names "the pilot terms" only while those are the terms.
+   */
+  termsRefusal: string;
 }) {
   const copy = TYPE_LABEL[orgType];
   const [teamName, setTeamName] = useState(defaultTeamName);
@@ -162,7 +168,8 @@ export function TeamSetupForm({
         ownerName,
         team,
       });
-      if (result && !result.ok) setError(reasonMessage(result.reason));
+      if (result && !result.ok)
+        setError(reasonMessage(result.reason, termsRefusal));
     });
   }
 

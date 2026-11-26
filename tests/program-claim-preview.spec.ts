@@ -20,6 +20,13 @@ test("an unclaimed program invites the coach to set it up", () => {
   expect(p.description).toContain("Free through December 31, 2026");
 });
 
+test("from January 1 the invitation promises a free setup, not a free season", () => {
+  const p = claimPreview({ ...base, status: "unclaimed", onPlans: true });
+  expect(p.title).toBe("Set up Univ. of Texas Permian Basin Men's Tennis");
+  expect(p.description).toContain("Setting up is free.");
+  expect(p.description).not.toMatch(/Free through|December|budget/);
+});
+
 test("a suspended program reads like the page it links to: set it up", () => {
   expect(claimPreview({ ...base, status: "suspended" }).eyebrow).toBe(
     "Set up your program",
