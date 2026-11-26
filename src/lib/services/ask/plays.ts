@@ -124,14 +124,27 @@ export function losingPlaysSubject(
  * (by last_shot_number), not from the view's last_direction, so ask.shots
  * is built once per query rather than twice.
  */
-export function losingPlaysSql(subject: AskPlaysSubject): string {
+export function losingPlaysSql(
+  subject: AskPlaysSubject,
+  rally: AskRallyLength | null = null,
+  court: AskPlaysCourt | null = null,
+): string {
   // `mine` is the viewer's side; `i_won` is too.
   const theirs = subject === "mine" ? "true" : "false";
   const lost = subject === "mine" ? "false" : "true";
+  const filter = pointFilter(rally, court);
+  // A rally length or a side narrows the shots to the points that have it.
+  const shotPoints =
+    filter === ""
+      ? ""
+      : `\n  and (s.match_id, s.point_number) in (
+    select p.match_id, p.point_number from ask.point_plays p
+    where p.match_id in (select match_id from scope)${filter}
+  )`;
   return `with sh as (
   select s.match_id, s.point_number, s.shot_number, s.mine, s.shot_type, s.direction, s.result
   from ask.shots s
-  where s.match_id in (select match_id from scope)
+  where s.match_id in (select match_id from scope)${shotPoints}
 ),
 ended as (
   select p.match_id, p.has_shots, p.i_won, p.last_mine,
@@ -143,7 +156,7 @@ ended as (
     group by match_id, point_number, shot_number, coalesce(shot_type, ''), mine
   ) l on l.match_id = p.match_id and l.point_number = p.point_number
     and l.shot_number = p.last_shot_number and l.label = coalesce(p.last_shot_type, '') and l.mine = p.last_mine
-  where p.match_id in (select match_id from scope)
+  where p.match_id in (select match_id from scope)${filter}
 ),
 grouped as (
   select case when shot_type in ('First Serve', 'Second Serve') then 'serve' else 'rally' end as section,
@@ -179,9 +192,14 @@ where place <= ${MAX_ASK_PLAYS_ROWS}
 order by case section when 'total' then 0 when 'rally' then 1 when 'serve' then 2 when 'lost_error' then 3 else 4 end, place`;
 }
 
-/** Whether `sql` is one of the two losing-plays queries. */
+/** Whether `sql` is one of the losing-plays queries, with or without a rally length or a side. */
 export function isLosingPlaysSql(sql: string): boolean {
-  return sql === losingPlaysSql("mine") || sql === losingPlaysSql("opponent");
+  const rally = rallyLengthOfPlaysSql(sql);
+  const court = courtOfPlaysSql(sql);
+  return (
+    sql === losingPlaysSql("mine", rally, court) ||
+    sql === losingPlaysSql("opponent", rally, court)
+  );
 }
 
 // ── Writing the answer ───────────────────────────────────────────────────────
@@ -206,8 +224,19 @@ export interface AskPlaysVoice {
 export function losingPlaysVoice(
   subject: AskPlaysSubject,
   name: string | null,
+  team = false,
 ): AskPlaysVoice {
   if (name) return { name, possessive: `${name}'s`, second: false, subject };
+  // A team's answer over several of its players: never "you", which on the
+  // team page is the coach reading it.
+  if (subject === "mine" && team) {
+    return {
+      name: "the team",
+      possessive: "the team's",
+      second: false,
+      subject,
+    };
+  }
   if (subject === "mine") {
     return { name: "you", possessive: "your", second: true, subject };
   }
@@ -280,7 +309,10 @@ export function buildLosingPlaysAnswer(
   rows: readonly AskRow[],
   voice: AskPlaysVoice,
   matchCount: number,
+  rallyLength: AskRallyLength | null = null,
+  court: AskPlaysCourt | null = null,
 ): string | null {
+  const within = playsFilterPhrase(rallyLength, court);
   const indexed = rows.map((row, index) => ({ row, ref: `r${index + 1}` }));
   const total = indexed.find((entry) => entry.row.section === "total");
   if (!total || count(total.row.missed) === 0) return null;
@@ -302,7 +334,7 @@ export function buildLosingPlaysAnswer(
   let headline: string;
   if (rally.length > 0) {
     const top = rally.slice(0, 2);
-    headline = `${sentenceCase(voice.possessive)} most-missed rally shots were ${joined(
+    headline = `${sentenceCase(voice.possessive)} most-missed rally shots${within} were ${joined(
       top.map(
         (entry) =>
           `the ${phrase(entry.row)} (${missedOf(entry)}, ${cell(entry.ref, "miss_pct")})`,
@@ -310,16 +342,21 @@ export function buildLosingPlaysAnswer(
     )}.`;
   } else if (serve.length > 0) {
     const top = serve[0];
-    headline = `${sentenceCase(voice.possessive)} most-missed serve was the ${phrase(top.row)}: ${missedOf(top)} were faults.`;
+    headline = `${sentenceCase(voice.possessive)} most-missed serve${within} was the ${phrase(top.row)}: ${missedOf(top)} were faults.`;
   } else {
     const top = errors[0];
-    headline = `${sentenceCase(voice.possessive)} most common losing shot was the ${phrase(top.row)}, which missed to end ${cell(top.ref, "shots")} points.`;
+    headline = `${sentenceCase(voice.possessive)} most common losing shot${within} was the ${phrase(top.row)}, which missed to end ${cell(top.ref, "shots")} points.`;
   }
 
   // ── The tree: rally shots as branches — the stroke, then the direction,
   // the miss rate as the bar — most missed first; the table when a row
   // cannot be a branch ──
-  const caption = `${sentenceCase(voice.possessive)} rally shots by direction, most often missed first.`;
+  const caption = `${sentenceCase(voice.possessive)} rally shots${within} by direction, most often missed first.`;
+  // The Video filter has the rally bands and no side: a narrowed answer
+  // links only when its film would hold exactly the points it counted.
+  const band = rallyLength === null ? undefined : rallyFilterBand(rallyLength);
+  const linkable =
+    voice.subject !== undefined && court === null && band !== null;
   const shown = rally.slice(0, ASK_TABLE_ROWS);
   const branches = shown.map((entry) => ({
     entry,
@@ -337,9 +374,9 @@ export function buildLosingPlaysAnswer(
             `SERIES: Shots ${S} Missed ${S} Miss rate`,
             // Whose shots, so each branch can open the film on the points
             // it was hit in (`tree.ts`); a voice with no side draws no links.
-            ...(voice.subject
+            ...(linkable && voice.subject
               ? [
-                  `${ASK_VISUAL_WATCH_PREFIX} ${treeWatchFields({ kind: "plays", subject: voice.subject }).join(` ${S} `)}`,
+                  `${ASK_VISUAL_WATCH_PREFIX} ${treeWatchFields({ kind: "plays", subject: voice.subject, ...(band ? { rally: band } : {}) }).join(` ${S} `)}`,
                 ]
               : []),
             ...branches.map(
@@ -361,7 +398,7 @@ export function buildLosingPlaysAnswer(
   const points = cell(total.ref, "shots");
   if (errors.length > 0) {
     ended.push(
-      `Of the ${points} points ${voice.name} lost, the most common finish was ${voice.second ? "your" : "their"} own miss: ${joined(
+      `Of the ${points} points ${voice.name} lost${within}, the most common finish was ${voice.second ? "your" : "their"} own miss: ${joined(
         errors
           .slice(0, 3)
           .map(
@@ -370,7 +407,7 @@ export function buildLosingPlaysAnswer(
       )}.`,
     );
   } else {
-    ended.push(`${sentenceCase(voice.name)} lost ${points} points.`);
+    ended.push(`${sentenceCase(voice.name)} lost ${points} points${within}.`);
   }
   if (winners.length > 0) {
     ended.push(
@@ -410,14 +447,16 @@ export function buildLosingPlaysAnswer(
         )}`,
       );
     }
-    paragraphs.push(`On serve, ${voice.possessive} ${parts.join("; ")}.`);
+    paragraphs.push(
+      `On serve${within}, ${voice.possessive} ${parts.join("; ")}.`,
+    );
   }
 
   // ── What it was counted from ──
   const withShots = count(total.row.missed);
   paragraphs.push(
     withShots < matchCount
-      ? `Counted from the shots of ${cell(total.ref, "missed")} of the ${cell(total.ref, "matches_in_scope")} matches here; the others have no shot-by-shot data. A shot type with fewer than eight balls in one direction is left out.`
+      ? `Counted from the shots of ${cell(total.ref, "missed")} of the ${cell(total.ref, "matches_in_scope")} matches here; the others have ${within === "" ? "no shot-by-shot data" : `no recorded shot${within}`}. A shot type with fewer than eight balls in one direction is left out.`
       : withShots === 1
         ? "Counted from the shots of this one match. A shot type with fewer than eight balls in one direction is left out."
         : `Counted from the shots of ${cell(total.ref, "missed")} matches. A shot type with fewer than eight balls in one direction is left out.`,
@@ -480,6 +519,7 @@ export function winningPlaysSubject(
 export function winningPlaysSql(
   subject: AskPlaysSubject,
   rally: AskRallyLength | null = null,
+  court: AskPlaysCourt | null = null,
 ): string {
   const theirs = subject === "mine" ? "true" : "false";
   return `with ended as (
@@ -487,7 +527,7 @@ export function winningPlaysSql(
     p.last_mine, p.last_shot_type, p.last_direction, p.last_result,
     p.prev_mine, p.prev_shot_type, p.prev_direction
   from ask.point_plays p
-  where p.match_id in (select match_id from scope)${rally === null ? "" : `\n${rallyFilter(rally)}`}
+  where p.match_id in (select match_id from scope)${pointFilter(rally, court)}
 ),
 credited as (
   select last_shot_type as stroke, last_direction as direction, 'winner' as kind
@@ -528,12 +568,13 @@ from ranked
 where place <= ${MAX_ASK_TABLE_ROWS}`;
 }
 
-/** Whether `sql` is one of the winning-plays queries, with or without a rally length. */
+/** Whether `sql` is one of the winning-plays queries, with or without a rally length or a side. */
 export function isWinningPlaysSql(sql: string): boolean {
   const rally = rallyLengthOfPlaysSql(sql);
+  const court = courtOfPlaysSql(sql);
   return (
-    sql === winningPlaysSql("mine", rally) ||
-    sql === winningPlaysSql("opponent", rally)
+    sql === winningPlaysSql("mine", rally, court) ||
+    sql === winningPlaysSql("opponent", rally, court)
   );
 }
 
@@ -666,6 +707,49 @@ function rallyFilter(rally: AskRallyLength): string {
     : `    and p.rally_length between ${rally.min} and ${rally.max}`;
 }
 
+/** The service court a plays question is narrowed to, as ask.point_plays.court spells it. */
+export type AskPlaysCourt = "Deuce" | "Ad";
+
+/** The query's lines that keep only the points a rally length and a side name; "" for neither. */
+function pointFilter(
+  rally: AskRallyLength | null,
+  court: AskPlaysCourt | null,
+): string {
+  return [
+    ...(rally === null ? [] : [rallyFilter(rally)]),
+    ...(court === null ? [] : [`    and p.court = '${court}'`]),
+  ]
+    .map((line) => `\n${line}`)
+    .join("");
+}
+
+/**
+ * The side a plays question names, only when it names it AS a side or a
+ * court ("on the ad side", "deuce court"); null otherwise. A bare "at
+ * deuce" is the score, which the plays queries cannot narrow to — that
+ * question stays the planner's.
+ */
+export function playsCourtOf(question: string): AskPlaysCourt | null {
+  const deuce = /\bdeuce\s+(?:side|court)s?\b/i.test(question);
+  const ad = /\b(?:ad|advantage)\s+(?:side|court)s?\b/i.test(question);
+  if (deuce === ad) return null;
+  return deuce ? "Deuce" : "Ad";
+}
+
+/** The side a plays query was narrowed to, read back from its sql. */
+export function courtOfPlaysSql(sql: string): AskPlaysCourt | null {
+  const court = /\n {4}and p\.court = '(Deuce|Ad)'\n/.exec(sql);
+  return court ? (court[1] as AskPlaysCourt) : null;
+}
+
+/** " in rallies of up to four shots on the ad side", or "" for no filter. */
+export function playsFilterPhrase(
+  rally: AskRallyLength | null,
+  court: AskPlaysCourt | null,
+): string {
+  return `${rally === null ? "" : ` in ${rallyPhrase(rally)}`}${court === null ? "" : ` on the ${court === "Ad" ? "ad" : "deuce"} side`}`;
+}
+
 /** The rally length a plays query was narrowed to, read back from its sql. */
 export function rallyLengthOfPlaysSql(sql: string): AskRallyLength | null {
   const between = /\n {4}and p\.rally_length between (\d+) and (\d+)\n/.exec(
@@ -714,8 +798,9 @@ export function buildWinningPlaysAnswer(
   voice: AskPlaysVoice,
   matchCount: number,
   rally: AskRallyLength | null = null,
+  court: AskPlaysCourt | null = null,
 ): string | null {
-  const within = rally === null ? "" : ` in ${rallyPhrase(rally)}`;
+  const within = playsFilterPhrase(rally, court);
   const indexed = rows.map((row, index) => ({ row, ref: `r${index + 1}` }));
   const total = indexed.find((entry) => entry.row.section === "total");
   const plays = indexed.filter((entry) => entry.row.section === "play");
@@ -738,8 +823,9 @@ export function buildWinningPlaysAnswer(
     return steps ? [{ entry, steps }] : [];
   });
   const band = rally === null ? undefined : rallyFilterBand(rally);
+  // The Video filter has no side: a side-narrowed answer draws no links.
   const watch: AskTreeWatch | null =
-    voice.subject && band !== null
+    voice.subject && band !== null && court === null
       ? {
           kind: "plays",
           subject: voice.subject,
@@ -774,7 +860,7 @@ export function buildWinningPlaysAnswer(
   const withShots = count(total.row.errors_drawn);
   paragraphs.push(
     withShots < matchCount
-      ? `Counted from the shots of ${cell(total.ref, "errors_drawn")} of the ${cell(total.ref, "matches_in_scope")} matches here; the others have no shot-by-shot data.`
+      ? `Counted from the shots of ${cell(total.ref, "errors_drawn")} of the ${cell(total.ref, "matches_in_scope")} matches here; the others have ${within === "" ? "no shot-by-shot data" : `no recorded shot${within}`}.`
       : withShots === 1
         ? "Counted from the shots of this one match."
         : `Counted from the shots of ${cell(total.ref, "errors_drawn")} matches.`,
