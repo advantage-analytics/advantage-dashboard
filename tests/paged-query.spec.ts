@@ -190,7 +190,12 @@ test("getMatchPointsFromSupabase attaches every shot across three pages", async 
     [2000, 2999],
   ]);
   // The total order pages depend on — without it pages overlap or skip.
-  expect(shotOrder.slice(0, 3)).toEqual(["point_id", "shot_number", "id"]);
+  expect(shotOrder.slice(0, 4)).toEqual([
+    "point_id",
+    "shot_number",
+    "video_time",
+    "id",
+  ]);
   expect(result).toHaveLength(POINTS);
   const shotIds = result!.flatMap((point) =>
     (point.shots ?? []).map((shot) => shot.id),

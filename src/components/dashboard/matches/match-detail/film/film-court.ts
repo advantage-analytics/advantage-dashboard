@@ -1,5 +1,6 @@
 import type { MatchPoint, MatchShot } from "@/lib/data/match-points-server";
 
+import { isLetResult } from "@/lib/data/serve-return-shots";
 import { netPathX } from "../net-crossing";
 import { rallyNumbering } from "./film-shots";
 import { REACHED_EPSILON_SECONDS } from "./film-timeline";
@@ -543,6 +544,8 @@ export function matchMarks(
     if (youLow === null) continue;
     const numbering = rallyNumbering(shots);
     shots.forEach((shot, i) => {
+      // A let's landing is no bounce of the match: the serve was hit again.
+      if (isLetResult(shot.result)) return;
       const mark = bounceMark(
         shot,
         youLow,

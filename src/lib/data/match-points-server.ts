@@ -348,6 +348,9 @@ export async function getMatchPointsFromSupabase(
       .eq("match_id", matchId)
       .order("point_id", { ascending: true })
       .order("shot_number", { ascending: true })
+      // Several rows share shot 0 (a fault, a let, a feed): in the order
+      // they were hit, not by uuid. `id` last keeps the paging order total.
+      .order("video_time", { ascending: true, nullsFirst: false })
       .order("id", { ascending: true })
       .range(from, to);
     // The helper stops at the first error, so this logs exactly once.

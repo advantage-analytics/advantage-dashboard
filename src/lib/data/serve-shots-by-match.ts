@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllPages } from "@/lib/data/paged-query";
+import { isLetResult } from "@/lib/data/serve-return-shots";
 
 /** The `points` side of a serve row — what both serve maps read. */
 export type ServeShotPoint = {
@@ -78,6 +79,8 @@ export async function fetchServeShotsForMatches(
   const rows: ServeShotRow[] = [];
   for (const { shots, ...point } of points) {
     for (const shot of shots ?? []) {
+      // A let serve was hit again: no serve of the point's.
+      if (isLetResult(shot.result)) continue;
       rows.push({ ...shot, point_id: point.id, points: point });
     }
   }

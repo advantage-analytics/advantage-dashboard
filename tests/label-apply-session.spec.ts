@@ -52,7 +52,8 @@ function plan(
     built: {
       problems: fields.problems ?? [],
       warnings: [],
-      letsLeftOut: 0,
+      letsKept: 0,
+      droppedBeforeServe: 0,
       points: Array.from({ length: fields.points ?? 1 }, (_, i) => ({
         point_number: i + 1,
         shots: [],

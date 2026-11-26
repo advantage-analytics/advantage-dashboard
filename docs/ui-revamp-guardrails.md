@@ -365,6 +365,27 @@ be. Doubles teams and existing users depend on it.
 > but this section's "no backfills" rule was not read or quoted to them until after
 > it was applied. Not a precedent for backfills.
 
+> **A user-approved exception, added 2026-11-26: `calculate_match_stats` does not
+> count a let serve.**
+>
+> A hand-labelled publish (`labels/apply.ts`) writes each let serve as a `shots`
+> row at `shot_number` 0 with `result = 'Let'` and no zone, so the report can show
+> it. Migration `20261126110611_let_serves_count_as_nothing` adds
+> `AND s.result IS DISTINCT FROM 'Let'` to the four serve counts that carry no
+> result filter (`first_serves` and `second_serves`, each player) and nothing
+> else: the `= 'In'` counts and the zone counts already leave a let out. The
+> same migration drops let rows from `ask.shots`'s `placed` CTE. Both are
+> patched from the live definitions, assert exactly how many places they change
+> (4 and 1), and were dry-run against production in a rolled-back transaction.
+> No row carried `result = 'Let'` when it was applied; no SwingVision or vendor
+> writer emits that value. **No backfill**: the function was not re-run, and
+> nothing changes until a labelled match is published again.
+>
+> **The approval.** The owner approved the plan in session ("yes build then
+> /pr-check"), which named the statistics function and the Ask view as the two
+> database changes. This section's "stop and ask" rule was quoted to them by
+> `/pr-check` on 2026-11-26, after the approval.
+
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >
 > Not a code path — a single hand-run `UPDATE`, approved by the owner in

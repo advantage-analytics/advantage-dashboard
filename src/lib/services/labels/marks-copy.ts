@@ -38,6 +38,8 @@ export const MARK_LABEL: Record<LabelMarkCode, string> = {
   first_serve_fault_alone: "Fault, no second serve",
   serve_in_landing_out: "Serve in, landing outside the box",
   serve_after_serve_in: "Serve after a serve in play",
+  hit_before_serve: "Hit before the serve?",
+  first_serve_after_let: "First serve after a let?",
   serves_from_both_sides: "Serves from both sides",
   serve_by_receiver: "Serve by the receiver",
   placement_missing: "No placement",
@@ -238,6 +240,7 @@ export const HINT_ACTION_LABEL = {
   second_serve_as_first: "Make it a second serve",
   shot_after_point_end: "Split here",
   serve_after_serve_in: "Split here",
+  first_serve_after_let: "Make it a first serve",
   serves_from_both_sides: "Split here",
   groundstroke_at_net: "Make it a volley",
 } as const;
@@ -413,10 +416,16 @@ export function markHover(mark: LabelMark, names: MarkNames): string {
       return "The point stops on a first serve that missed. Most often the serve was in: place its landing in the box. If it did miss, add the second serve.";
     case "serve_in_landing_out":
       return mark.params.landing === "net"
-        ? "The serve counts as in, but its landing is on the server’s side of the net. It publishes as in with no placement: place the bounce in the box to count where it went."
-        : "The serve counts as in, but its landing is outside the service box. It publishes as in with no placement: place the bounce in the box to count where it went.";
+        ? "The serve counts as in, but its landing is on the server’s side of the net. It publishes with that landing: place the bounce in the box if that is where it went."
+        : "The serve counts as in, but its landing is outside the service box. It publishes with that landing: place the bounce in the box if that is where it went.";
     case "serve_after_serve_in":
       return "A let that was played, or two points in one rally.";
+    case "hit_before_serve": {
+      const n = mark.params.strokes.length;
+      return `${n === 1 ? "A shot was" : `${n} shots were`} hit before the serve was played again. Nothing is in play until then: remove ${n === 1 ? "it" : "them"} unless the serve was really in.`;
+    }
+    case "first_serve_after_let":
+      return "Only a let comes before it, and a let is replayed with the same serve: this is the first serve.";
     case "serves_from_both_sides":
       return "The same player serves from the deuce side and from the ad side in this point. A server only changes sides for a new point, so this is most often two points in one: split at the second of them.";
     case "serve_by_receiver": {

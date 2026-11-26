@@ -202,8 +202,8 @@ export function landingMiss(shot: ShotGeometry): string | null {
  * placed, a serve not stored in, and any other stroke. An in serve cannot
  * have come down outside the service box, so such a landing is the wrong
  * bounce: the console says so on the open point (marks-state.ts
- * `serveInLandingOut`) and the publish writes the serve without it
- * (apply.ts).
+ * `serveInLandingOut`); the publish writes the call and the landing as the
+ * labeller left them (apply.ts).
  *
  * `"net"` is read from which side of the net the CONTACT is on, so a contact
  * stored on the wrong side would make a good landing read as one. Measured
