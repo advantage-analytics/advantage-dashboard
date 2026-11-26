@@ -53,8 +53,8 @@ import { TeamOpponentsTable } from "./team-opponents-table";
  * ── The selection ───────────────────────────────────────────────────────────
  * The shared peek-drawer model, `useRowSelection`, mirrored into
  * `?opponent=<group key>`: a row click opens the drawer beside the column and
- * the table gives up Program and Plays; re-clicking the row, Esc or the X
- * closes it; ↑/↓ step through `visibleOpponents`. `selectedId` is the washed
+ * the table gives up Program, Faced by and Plays; re-clicking the row, Esc or
+ * the X closes it; ↑/↓ step through `visibleOpponents`. `selectedId` is the washed
  * row and `drawerId` the record the drawer draws — they part for the 200ms of
  * the slide-out.
  */

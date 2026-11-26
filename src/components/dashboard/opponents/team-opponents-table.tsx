@@ -37,8 +37,8 @@ import {
  * it. The links inside it travel and stop their own clicks. A form bar's
  * readout also names which of ours played that match.
  *
- * Beside the open drawer (`compact`) Program and Plays slide shut; the drawer
- * states both under the name. Their cells stay in the DOM — the six tracks
+ * Beside the open drawer (`compact`) Program, Faced by and Plays slide shut;
+ * the drawer states all three. Their cells stay in the DOM — the six tracks
  * are what lets the browser interpolate the shift — and are clipped by their
  * own `min-w-0 overflow-hidden` at zero width.
  */
@@ -64,7 +64,7 @@ export function TeamOpponentsTable({
    * swaps the table for a line on the bare page.
    */
   empty?: React.ReactNode;
-  /** The drawer is open beside the table: Program and Plays collapse. */
+  /** The drawer is open beside the table: Program, Faced by and Plays collapse. */
   compact?: boolean;
 }) {
   return (
@@ -135,8 +135,16 @@ function TeamOpponentRow({
         unattached={opponent.unattached}
       />
 
-      {/* Faced by — clipped to its track, so a long first name truncates. */}
-      <span className="flex min-w-0 items-center">
+      {/* Faced by — clipped to its track, so a long first name truncates.
+          Beside the drawer its track is zero wide: the cell clips to nothing
+          and goes inert, so Tab never lands on a trigger nobody can see. */}
+      <span
+        className={cn(
+          "flex min-w-0 items-center",
+          compact && "overflow-hidden",
+        )}
+        inert={compact}
+      >
         <FacedByStack players={opponent.facedBy} />
       </span>
 
