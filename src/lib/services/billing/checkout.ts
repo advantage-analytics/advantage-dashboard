@@ -23,6 +23,10 @@
  * `video_credits` row per Checkout Session, by its unique columns) and
  * `syncSubscription()` (a pure function of what Stripe holds). Whichever
  * arrives second changes nothing.
+ *
+ * `already_subscribed` below is checked when a session is created, which two
+ * checkouts open at once both pass. The second one PAID is caught where the
+ * row is written: `syncSubscription()` cancels and refunds it.
  */
 
 import type Stripe from "stripe";
@@ -682,6 +686,18 @@ export async function confirmCheckout(params: {
     }
     const sync = result.sync;
     if (sync.outcome === "pending") return pending("plan");
+    if (sync.outcome === "duplicate") {
+      // A second plan paid for while the first is live: not written, and
+      // cancelled and refunded by the sync (or about to be, by its retry).
+      return refuse(
+        "already_subscribed",
+        409,
+        sync.cancelled && sync.refunded
+          ? "You already have a plan, so this second payment was refunded."
+          : "You already have a plan. This second payment will be refunded.",
+        "duplicate_subscription",
+      );
+    }
     if (sync.outcome !== "synced") return later("plan", sync.outcome);
     return {
       ok: true,

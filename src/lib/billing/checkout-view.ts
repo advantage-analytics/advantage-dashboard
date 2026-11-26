@@ -84,6 +84,23 @@ export type PreviewState =
   | { status: "ready"; preview: UpgradePreviewView }
   | { status: "failed"; message: string };
 
+/**
+ * What a refused `POST /api/billing/upgrade` does to the quote on screen.
+ * A refusal says why the charge did not go through, not that the price is
+ * gone: the row, the figure and "Continue to pay $X" stay, the sentence
+ * shows beside them and the button stays pressable once the card is fixed.
+ * Only `quote_changed` — the figure moved — asks for the price again.
+ */
+export function afterUpgradeRefusal(
+  preview: PreviewState,
+  code: string | undefined,
+): { preview: PreviewState; refetch: boolean } {
+  if (code === "quote_changed") {
+    return { preview: { status: "loading" }, refetch: true };
+  }
+  return { preview, refetch: false };
+}
+
 export type CheckoutChoice = PaidPlan | "hours" | "upgrade";
 
 export interface CheckoutSelection {

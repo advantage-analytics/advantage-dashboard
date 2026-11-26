@@ -2,13 +2,23 @@
  * The Stripe Customer Portal — server only. Card, invoices and cancelling
  * (at the end of the period, which the portal configuration sets); never a
  * plan switch.
+ *
+ * It opens ONLY on our own configuration (`STRIPE_PORTAL_CONFIGURATION`,
+ * plan switching off). With none set, Stripe would fall back to the
+ * account's default configuration, which anyone with Dashboard access can
+ * turn plan switching on in — and a switch made there skips
+ * `/api/billing/upgrade` and its credit rule. So an unset variable is a
+ * refusal, never a session.
  */
 
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { PLAN_HREF } from "@/lib/services/credits/packs";
-import { portalConfigurationId } from "@/lib/stripe/prices";
+import {
+  PORTAL_CONFIGURATION_ENV,
+  portalConfigurationId,
+} from "@/lib/stripe/prices";
 import { SIGN_IN_REFUSAL, refuse, type BillingResult } from "./http";
 import type { CheckoutUser } from "./checkout";
 import { readBillingUser } from "./subscription";
@@ -35,10 +45,22 @@ export async function openPortal(params: {
       );
     }
     const configuration = portalConfigurationId();
+    if (!configuration) {
+      console.error("[billing] the portal has no configuration to open on", {
+        userId: user.id,
+        missing: PORTAL_CONFIGURATION_ENV,
+      });
+      return refuse(
+        "price_not_configured",
+        503,
+        "Billing isn't available yet. Try again later.",
+        PORTAL_CONFIGURATION_ENV,
+      );
+    }
     const session = await stripe.billingPortal.sessions.create({
       customer: row.stripe_customer_id,
       return_url: `${origin}${PLAN_HREF}`,
-      ...(configuration ? { configuration } : {}),
+      configuration,
     });
     return { ok: true, value: { url: session.url } };
   } catch (error) {

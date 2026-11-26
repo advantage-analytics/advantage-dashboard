@@ -165,6 +165,7 @@ type DialogState = {
   mode: CheckoutMode;
   account: CheckoutAccount;
   preview?: PreviewState;
+  refusal?: string;
   wizard?: boolean;
   pending?: boolean;
 };
@@ -276,14 +277,13 @@ const STATES: Record<string, State> = {
   },
   "upgrade-refused": {
     kind: "dialog",
-    label: "Dialog — Upgrade, refused (card needs updating)",
+    label: "Dialog — Upgrade, refused (card needs updating, quote kept)",
     page: PAGE_COACH,
     mode: { kind: "upgrade" },
     account: ACCOUNT_COACH,
-    preview: {
-      status: "failed",
-      message: "Update your card before upgrading.",
-    },
+    // The quote stays on screen; only the sentence is added.
+    preview: PREVIEW_DAYS,
+    refusal: "Update your card before upgrading.",
   },
   pending: {
     kind: "dialog",
@@ -328,6 +328,7 @@ export function Plans2027Preview({ state }: { state: string | null }) {
           mode={chosen.mode}
           account={chosen.account}
           preview={chosen.preview}
+          refusal={chosen.refusal}
           onDone={noop}
           paymentPending={chosen.pending}
           sendsAfterPay={chosen.wizard}

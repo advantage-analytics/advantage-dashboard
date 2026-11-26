@@ -12,9 +12,16 @@ export type BillingRefusalCode =
   | "invalid_request"
   /** Plans and hours are not being sold yet — `plansOnSale()`. */
   | "plans_not_on_sale"
-  /** A Stripe price or coupon this item needs is not in the environment. */
+  /**
+   * A Stripe object this needs is not in the environment: a price, the
+   * first-month coupon, or the portal configuration.
+   */
   | "price_not_configured"
-  /** Already on a subscription: a change goes through upgrade, not checkout. */
+  /**
+   * Already on a subscription: a change goes through upgrade, not checkout.
+   * Also what confirm answers for a second subscription that was paid anyway
+   * and has been cancelled and refunded (`detail: "duplicate_subscription"`).
+   */
   | "already_subscribed"
   /** No subscription to upgrade, open a portal for, or change. */
   | "no_subscription"

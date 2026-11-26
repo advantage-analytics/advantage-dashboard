@@ -3,8 +3,11 @@ import type Stripe from "stripe";
 
 import { confirmCheckout } from "@/lib/services/billing/checkout";
 import { handleStripeEvent } from "@/lib/services/billing/webhook";
+import { DUPLICATE_MARK } from "@/lib/services/billing/subscription";
 import {
+  connectionLost,
   fakeAdmin,
+  fakeInvoice,
   fakeStripe,
   fakeSubscription,
   fakeUser,
@@ -765,6 +768,312 @@ test.describe("confirming a plan", () => {
       expect(result.ok ? null : result.error.code).toBe("not_found");
     }
     expect(db.writes).toEqual([]);
+  });
+});
+
+/**
+ * `already_subscribed` is checked when a checkout session is created, so two
+ * checkouts opened side by side can both be paid. The second subscription
+ * must never rewrite the row: it is cancelled and refunded instead.
+ */
+test.describe("one subscription per user", () => {
+  /** On Coach (`sub_1`, live), and a second, paid, Coach Pro `sub_2`. */
+  function twice(
+    over: {
+      first?: Parameters<typeof fakeSubscription>[0];
+      user?: ReturnType<typeof fakeUser>;
+    } = {},
+  ) {
+    const second = fakeSubscription({
+      id: "sub_2",
+      price: "price_pro_m",
+      latest_invoice: "in_2",
+      metadata: { user_id: "u1" },
+    });
+    const db = fakeAdmin({ users: [over.user ?? onCoach()] });
+    const api = fakeStripe({
+      subscriptions: [
+        fakeSubscription({ latest_invoice: "in_1", ...over.first }),
+        second,
+      ],
+      invoices: [
+        fakeInvoice({ id: "in_1" }),
+        fakeInvoice({ id: "in_2", subscription: "sub_2", paid: 30000 }),
+      ],
+    });
+    const send = (type: string, object: unknown) =>
+      handleStripeEvent({
+        event: stripeEvent(type, object),
+        stripe: api.stripe,
+        admin: db.admin,
+      });
+    const count = (name: string) =>
+      api.names().filter((called) => called === name).length;
+    return { db, api, send, second, count, row: () => db.user("u1")! };
+  }
+  const secondSession = () =>
+    planSession({ id: "cs_test_second00000", subscription: "sub_2" });
+
+  test("a second paid subscription is cancelled and refunded, and the row is not touched", async () => {
+    const { db, api, send, row } = twice();
+
+    const answer = await send("checkout.session.completed", secondSession());
+    expect(answer).toEqual({
+      status: 200,
+      body: { received: true, outcome: "duplicate" },
+    });
+
+    expect(row()).toEqual(onCoach());
+    expect(db.writes).toEqual([]);
+
+    expect(api.argsOf("subscriptions.cancel")).toEqual([
+      "sub_2",
+      {
+        invoice_now: false,
+        prorate: false,
+        cancellation_details: { comment: `${DUPLICATE_MARK}sub_1` },
+      },
+      { idempotencyKey: "duplicate-subscription-cancel:sub_2" },
+    ]);
+    expect(api.subscriptions.get("sub_2")?.status).toBe("canceled");
+    // The first subscription is neither cancelled nor refunded.
+    expect(api.subscriptions.get("sub_1")?.status).toBe("active");
+    expect(api.argsOf("refunds.create")).toEqual([
+      {
+        charge: "ch_in_2",
+        reason: "duplicate",
+        metadata: {
+          kind: "duplicate_subscription",
+          subscription: "sub_2",
+          kept: "sub_1",
+        },
+      },
+      { idempotencyKey: "duplicate-subscription-refund:in_2" },
+    ]);
+    expect(api.refunds).toEqual([
+      expect.objectContaining({ charge: "ch_in_2", amount: 30000 }),
+    ]);
+
+    // One clear line: the user and both subscriptions.
+    expect(logged).toHaveLength(1);
+    expect(logged[0][0]).toContain("duplicate subscription");
+    expect(logged[0][1]).toMatchObject({
+      userId: "u1",
+      keptSubscriptionId: "sub_1",
+      duplicateSubscriptionId: "sub_2",
+    });
+  });
+
+  test("the first one being behind on payment or on a trial still counts as live", async () => {
+    for (const status of ["past_due", "trialing"] as const) {
+      const { send, row, api } = twice({ first: { status } });
+      const before = { ...row() };
+      const answer = await send("customer.subscription.created", {
+        id: "sub_2",
+      });
+      expect(answer.body).toEqual({ received: true, outcome: "duplicate" });
+      expect(row()).toEqual(before);
+      expect(api.refunds).toHaveLength(1);
+    }
+  });
+
+  test("every later event for the duplicate changes nothing: one cancel, one refund", async () => {
+    const { db, send, row, second, count, api } = twice();
+
+    await send("customer.subscription.created", second);
+    await send("checkout.session.completed", secondSession());
+    await send("invoice.paid", invoice("sub_2"));
+    await send("customer.subscription.updated", second);
+    // The `deleted` our own cancel causes, carrying Stripe's canceled copy.
+    const deleted = await send(
+      "customer.subscription.deleted",
+      api.subscriptions.get("sub_2"),
+    );
+    expect(deleted).toEqual({
+      status: 200,
+      body: { received: true, outcome: "superseded" },
+    });
+    await send("customer.subscription.deleted", api.subscriptions.get("sub_2"));
+
+    expect(row()).toEqual(onCoach());
+    expect(db.writes).toEqual([]);
+    expect(count("subscriptions.cancel")).toBe(1);
+    expect(count("refunds.create")).toBe(1);
+    expect(api.refunds).toHaveLength(1);
+    expect(logged).toHaveLength(1);
+
+    // And the plan they kept still syncs as before.
+    await send("invoice.paid", invoice("sub_1"));
+    expect(row()).toMatchObject({
+      plan: "coach",
+      plan_status: "active",
+      stripe_subscription_id: "sub_1",
+    });
+  });
+
+  test("a row pointing at an ended subscription is replaced, as before", async () => {
+    for (const first of [
+      { status: "canceled" },
+      { status: "unpaid" },
+    ] as const) {
+      const { send, row, api } = twice({ first });
+      const answer = await send("checkout.session.completed", secondSession());
+      expect(answer.body).toEqual({ received: true, outcome: "synced" });
+      expect(row()).toMatchObject({
+        plan: "coach-pro",
+        stripe_subscription_id: "sub_2",
+      });
+      expect(api.names()).not.toContain("subscriptions.cancel");
+      expect(api.refunds).toEqual([]);
+    }
+
+    // And one Stripe no longer has at all.
+    const { send, row, api } = twice();
+    api.subscriptions.delete("sub_1");
+    await send("checkout.session.completed", secondSession());
+    expect(row().stripe_subscription_id).toBe("sub_2");
+    expect(api.refunds).toEqual([]);
+  });
+
+  test("the held subscription cannot be read: nothing is overwritten, cancelled or refunded, and Stripe retries", async () => {
+    const { db, api, send, row } = twice();
+    api.fail["subscriptions.retrieve"] = (id) =>
+      id === "sub_1" ? connectionLost() : null;
+
+    const answer = await send("checkout.session.completed", secondSession());
+    expect(answer.status).toBe(500);
+    expect(row()).toEqual(onCoach());
+    expect(db.writes).toEqual([]);
+    expect(api.names()).not.toContain("subscriptions.cancel");
+    expect(api.refunds).toEqual([]);
+  });
+
+  test("the cancel fails: loud, no overwrite, no refund yet, and the retry finishes it", async () => {
+    const { db, api, send, row, count } = twice();
+    api.fail["subscriptions.cancel"] = () => connectionLost();
+
+    const failed = await send("checkout.session.completed", secondSession());
+    expect(failed).toEqual({
+      status: 500,
+      body: { error: "Duplicate subscription not settled" },
+    });
+    expect(row()).toEqual(onCoach());
+    expect(db.writes).toEqual([]);
+    expect(api.refunds).toEqual([]);
+    expect(logged.map((line) => line[0])).toEqual([
+      "[billing] DUPLICATE SUBSCRIPTION NOT CANCELLED",
+    ]);
+    expect(logged[0][1]).toMatchObject({
+      userId: "u1",
+      keptSubscriptionId: "sub_1",
+      duplicateSubscriptionId: "sub_2",
+    });
+
+    api.fail["subscriptions.cancel"] = undefined;
+    const retried = await send("checkout.session.completed", secondSession());
+    expect(retried.body).toEqual({ received: true, outcome: "duplicate" });
+    expect(api.subscriptions.get("sub_2")?.status).toBe("canceled");
+    expect(count("refunds.create")).toBe(1);
+    expect(row()).toEqual(onCoach());
+  });
+
+  test("the refund fails: loud, no overwrite, and any later event makes it — once", async () => {
+    const { db, api, send, row, count } = twice();
+    api.fail["refunds.create"] = () => connectionLost();
+
+    const failed = await send("checkout.session.completed", secondSession());
+    expect(failed.status).toBe(500);
+    expect(api.subscriptions.get("sub_2")?.status).toBe("canceled");
+    expect(api.refunds).toEqual([]);
+    expect(logged.map((line) => line[0])).toEqual([
+      "[billing] DUPLICATE SUBSCRIPTION NOT REFUNDED",
+    ]);
+
+    // Still failing when the cancel's own `deleted` arrives: asked again.
+    const deleted = () =>
+      send("customer.subscription.deleted", api.subscriptions.get("sub_2"));
+    expect((await deleted()).status).toBe(500);
+
+    api.fail["refunds.create"] = undefined;
+    expect(await deleted()).toEqual({
+      status: 200,
+      body: { received: true, outcome: "superseded" },
+    });
+    expect(api.refunds).toHaveLength(1);
+
+    // Redelivered, and the original session event retried: nothing more.
+    await deleted();
+    await send("checkout.session.completed", secondSession());
+    expect(api.refunds).toHaveLength(1);
+    expect(count("subscriptions.cancel")).toBe(1);
+    expect(row()).toEqual(onCoach());
+    expect(db.writes).toEqual([]);
+  });
+
+  test("a refund Stripe already made (the key expired, or made by hand) reads as done", async () => {
+    const { api, send, count } = twice();
+    api.charges.get("ch_in_2")!.refunded = true;
+    const answer = await send("checkout.session.completed", secondSession());
+    expect(answer.body).toEqual({ received: true, outcome: "duplicate" });
+    expect(count("refunds.create")).toBe(0);
+    expect(api.subscriptions.get("sub_2")?.status).toBe("canceled");
+  });
+
+  test("two first payments landing together: one plan on the row, the other undone", async () => {
+    // Nothing on the row yet, so neither event can see the other's
+    // subscription when it reads: the write itself has to pick one.
+    const { db, api, send, row } = twice({
+      user: fakeUser({ id: "u1", stripe_customer_id: "cus_1" }),
+    });
+    const answers = await Promise.all([
+      send("customer.subscription.created", { id: "sub_1" }),
+      send("customer.subscription.created", { id: "sub_2" }),
+    ]);
+    expect(answers.map((answer) => answer.body.outcome).sort()).toEqual([
+      "duplicate",
+      "synced",
+    ]);
+
+    const kept = row().stripe_subscription_id as string;
+    const undone = kept === "sub_1" ? "sub_2" : "sub_1";
+    expect(row().plan).toBe(kept === "sub_1" ? "coach" : "coach-pro");
+    expect(api.subscriptions.get(kept)?.status).toBe("active");
+    expect(api.subscriptions.get(undone)?.status).toBe("canceled");
+    expect(api.refunds.map((refund) => refund.charge)).toEqual([
+      `ch_in_${undone.slice(-1)}`,
+    ]);
+    // Only the winner ever changed the row.
+    expect(db.tables.users[0]).toMatchObject({ stripe_subscription_id: kept });
+  });
+
+  test("an event's stale copy of a vanished subscription is not grounds to cancel or refund", async () => {
+    const { db, api, send, row, second } = twice();
+    api.subscriptions.delete("sub_2");
+    const answer = await send("customer.subscription.updated", second);
+    expect(answer.body).toEqual({ received: true, outcome: "superseded" });
+    expect(row()).toEqual(onCoach());
+    expect(db.writes).toEqual([]);
+    expect(api.names()).not.toContain("subscriptions.cancel");
+    expect(api.refunds).toEqual([]);
+  });
+
+  test("confirm says so, rather than promising a plan", async () => {
+    const { db, api, row } = twice();
+    api.sessions.set("cs_test_second00000", secondSession());
+    const result = await confirmCheckout({
+      stripe: api.stripe,
+      admin: db.admin,
+      user: { id: "u1", email: null },
+      sessionId: "cs_test_second00000",
+    });
+    expect(
+      result.ok
+        ? null
+        : [result.error.code, result.error.status, result.error.detail],
+    ).toEqual(["already_subscribed", 409, "duplicate_subscription"]);
+    expect(result.ok ? "" : result.error.message).toContain("refunded");
+    expect(row()).toEqual(onCoach());
+    expect(api.refunds).toHaveLength(1);
   });
 });
 

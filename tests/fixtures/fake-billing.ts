@@ -13,8 +13,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  *    (23505) and its user foreign key (23503), because idempotent fulfilment
  *    is built on exactly those;
  *  - Stripe's customers (and their balance transactions), subscriptions,
- *    invoices, checkout sessions, portal sessions and payment intents.
- *    Balance transactions honour idempotency keys, as Stripe does.
+ *    invoices (with their charge), refunds, checkout sessions, portal
+ *    sessions and payment intents. Balance transactions, cancels and refunds
+ *    honour idempotency keys, as Stripe does; cancelling a subscription that
+ *    is already canceled and refunding a charge that is already refunded
+ *    fail the way Stripe fails them.
  *
  * Every Stripe call is appended to `calls`, so a spec can assert the ORDER of
  * calls, which is what the upgrade's failure handling depends on.
@@ -118,6 +121,8 @@ export function fakeAdmin(seed: {
 
   const builder = (table: string, op: "select" | "update", values?: Row) => {
     const filters: Array<(row: Row) => boolean> = [];
+    /** `update(...).select()`: answer with the rows that were written. */
+    let returning = false;
     const matching = () =>
       tables[table].filter((row) => filters.every((keep) => keep(row)));
     const run = () => {
@@ -125,12 +130,22 @@ export function fakeAdmin(seed: {
       if (error) return { data: null, error };
       if (op === "update") {
         writes.push({ table, values: values! });
-        for (const row of matching()) Object.assign(row, values);
-        return { data: null, error: null };
+        // Matched BEFORE the write: a filter on a column being changed must
+        // not lose the row it just changed.
+        const written = matching();
+        for (const row of written) Object.assign(row, values);
+        return {
+          data: returning ? written.map((row) => ({ ...row })) : null,
+          error: null,
+        };
       }
       return { data: matching().map((row) => ({ ...row })), error: null };
     };
     const chain = {
+      select() {
+        returning = true;
+        return chain;
+      },
       eq(column: string, value: unknown) {
         filters.push((row) => row[column] === value);
         return chain;
@@ -219,6 +234,7 @@ export function fakeSubscription(over: {
   metadata?: Record<string, string>;
   cancel_at_period_end?: boolean;
   schedule?: string | null;
+  latest_invoice?: string | null;
 }): Stripe.Subscription {
   return {
     id: over.id ?? "sub_1",
@@ -229,6 +245,8 @@ export function fakeSubscription(over: {
     current_period_end: seconds(over.end ?? "2027-05-01T00:00:00Z"),
     cancel_at_period_end: over.cancel_at_period_end ?? false,
     schedule: over.schedule ?? null,
+    latest_invoice: over.latest_invoice ?? null,
+    cancellation_details: null,
     metadata: over.metadata ?? {},
     items: {
       data: [{ id: "si_1", price: { id: over.price ?? "price_coach_m" } }],
@@ -266,6 +284,67 @@ const missing = (what: string) =>
     "resource_missing",
   );
 
+export interface FakeInvoice {
+  id: string;
+  status: string;
+  subscription: string | null;
+  customer: string;
+  /** What the card paid: after discounts, tax included. */
+  amount_paid: number;
+  total: number;
+  tax: number;
+  total_excluding_tax: number | null;
+  charge: string | null;
+  payment_intent: string | null;
+  lines: { data: Array<{ period: { start: number; end: number } }> };
+}
+
+/**
+ * A subscription's invoice for one period. `paid` is the price after
+ * discounts and BEFORE tax, `tax` what Stripe Tax added on top.
+ */
+export function fakeInvoice(over: {
+  id?: string;
+  subscription?: string;
+  customer?: string;
+  status?: string;
+  paid?: number;
+  tax?: number;
+  start?: string;
+  end?: string;
+  charge?: string | null;
+  payment_intent?: string | null;
+  /** Leave `total_excluding_tax` off, as a newer API version might. */
+  noTotalExcludingTax?: boolean;
+}): FakeInvoice {
+  const paid = over.paid ?? 15000;
+  const tax = over.tax ?? 0;
+  const id = over.id ?? "in_1";
+  return {
+    id,
+    status: over.status ?? "paid",
+    subscription: over.subscription ?? "sub_1",
+    customer: over.customer ?? "cus_1",
+    amount_paid: (over.status ?? "paid") === "paid" ? paid + tax : 0,
+    total: paid + tax,
+    tax,
+    total_excluding_tax: over.noTotalExcludingTax ? null : paid,
+    charge: over.charge === undefined ? `ch_${id}` : over.charge,
+    payment_intent:
+      over.payment_intent === undefined ? `pi_${id}` : over.payment_intent,
+    lines: {
+      data: [
+        {
+          period: {
+            start: seconds(over.start ?? "2027-04-01T00:00:00Z"),
+            end: seconds(over.end ?? "2027-05-01T00:00:00Z"),
+          },
+        },
+      ],
+    },
+  };
+}
+
 type BalanceTransaction = {
   id: string;
   amount: number;
@@ -277,6 +356,8 @@ export function fakeStripe(seed: {
   subscriptions?: Stripe.Subscription[];
   sessions?: Stripe.Checkout.Session[];
   paidInvoices?: Array<{ customer: string; amount_paid: number }>;
+  /** Invoices `invoices.retrieve` answers; each one's charge starts unrefunded. */
+  invoices?: FakeInvoice[];
   paymentIntents?: Record<string, Record<string, string>>;
   balance?: BalanceTransaction[];
   /** What "now" is for objects Stripe stamps (`created`). */
@@ -288,6 +369,31 @@ export function fakeStripe(seed: {
   const sessions = new Map(
     (seed.sessions ?? []).map((session) => [session.id, session]),
   );
+  const invoices = new Map(
+    (seed.invoices ?? []).map((invoice) => [invoice.id, invoice]),
+  );
+  /** Charges by id: `refunded` flips when a refund is made. */
+  const charges = new Map(
+    (seed.invoices ?? [])
+      .filter((invoice) => invoice.charge)
+      .map((invoice) => [
+        invoice.charge!,
+        {
+          id: invoice.charge!,
+          amount: invoice.amount_paid,
+          refunded: false,
+          payment_intent: invoice.payment_intent,
+        },
+      ]),
+  );
+  const refunds: Array<{
+    id: string;
+    charge: string;
+    amount: number;
+    reason?: string;
+    metadata?: Record<string, string>;
+  }> = [];
+  const replays = new Map<string, unknown>();
   const balance: BalanceTransaction[] = [...(seed.balance ?? [])];
   const idempotent = new Map<string, BalanceTransaction>();
   const calls: Array<{ name: string; args: unknown[] }> = [];
@@ -382,8 +488,82 @@ export function fakeStripe(seed: {
         call("subscriptions.update", [id, params, options], () =>
           applyUpdate(id, params),
         ),
+      cancel: (
+        id: string,
+        params?: { cancellation_details?: { comment?: string } },
+        options?: { idempotencyKey?: string },
+      ) =>
+        call("subscriptions.cancel", [id, params, options], () => {
+          const key = options?.idempotencyKey;
+          if (key && replays.has(key)) return replays.get(key);
+          const before = subscriptions.get(id);
+          // Stripe answers 404 for a subscription that is already canceled.
+          if (!before || before.status === "canceled") {
+            throw missing("subscription");
+          }
+          const after = {
+            ...before,
+            status: "canceled",
+            cancellation_details: {
+              comment: params?.cancellation_details?.comment ?? null,
+              feedback: null,
+              reason: "cancellation_requested",
+            },
+          } as unknown as Stripe.Subscription;
+          subscriptions.set(id, after);
+          if (key) replays.set(key, after);
+          return after;
+        }),
+    },
+    refunds: {
+      create: (
+        params: {
+          charge?: string;
+          payment_intent?: string;
+          reason?: string;
+          metadata?: Record<string, string>;
+        },
+        options?: { idempotencyKey?: string },
+      ) =>
+        call("refunds.create", [params, options], () => {
+          const key = options?.idempotencyKey;
+          if (key && replays.has(key)) return replays.get(key);
+          const charge = params.charge
+            ? charges.get(params.charge)
+            : [...charges.values()].find(
+                (c) => c.payment_intent === params.payment_intent,
+              );
+          if (!charge) throw missing("charge");
+          if (charge.refunded) {
+            throw new FakeStripeError(
+              "Charge has already been refunded.",
+              "StripeInvalidRequestError",
+              400,
+              "charge_already_refunded",
+            );
+          }
+          charge.refunded = true;
+          const refund = {
+            id: `re_${refunds.length + 1}`,
+            charge: charge.id,
+            amount: charge.amount,
+            reason: params.reason,
+            metadata: params.metadata,
+          };
+          refunds.push(refund);
+          if (key) replays.set(key, refund);
+          return refund;
+        }),
     },
     invoices: {
+      retrieve: (id: string, params?: { expand?: string[] }) =>
+        call("invoices.retrieve", [id, params], () => {
+          const invoice = invoices.get(id);
+          if (!invoice) throw missing("invoice");
+          return params?.expand?.includes("charge") && invoice.charge
+            ? { ...invoice, charge: { ...charges.get(invoice.charge)! } }
+            : { ...invoice };
+        }),
       list: (params: { customer: string }) =>
         call("invoices.list", [params], () => ({
           data: (seed.paidInvoices ?? []).filter(
@@ -440,6 +620,10 @@ export function fakeStripe(seed: {
     else end.setUTCMonth(end.getUTCMonth() + 1);
     const after = {
       ...before,
+      // The update bills the new period at once, on a new invoice.
+      latest_invoice: before.latest_invoice
+        ? `${before.latest_invoice}_upgrade`
+        : null,
       current_period_start: Math.floor(start.getTime() / 1000),
       current_period_end: Math.floor(end.getTime() / 1000),
       metadata: params.metadata ?? before.metadata,
@@ -456,6 +640,9 @@ export function fakeStripe(seed: {
     balance,
     subscriptions,
     sessions,
+    invoices,
+    charges,
+    refunds,
     applyUpdate,
     /** The names of the calls made, in order. */
     names: () => calls.map((entry) => entry.name),

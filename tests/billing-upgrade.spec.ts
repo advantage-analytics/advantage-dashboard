@@ -12,6 +12,7 @@ import {
   cardDeclined,
   connectionLost,
   fakeAdmin,
+  fakeInvoice,
   fakeStripe,
   fakeSubscription,
   fakeUser,
@@ -81,6 +82,86 @@ test.describe("the credit", () => {
       daysLeft: 15,
       hoursLeftSeconds: 23 * 60,
     });
+  });
+
+  test("a half-off first month: paid $75, 15 days left → $37.50 credit, pays $262.50", () => {
+    // More than half the hours left (3h12m of 5h), so the days set it.
+    const quote = quoteUpgrade({
+      from: "coach",
+      to: "coach-pro",
+      period: "monthly",
+      ...APRIL,
+      now: new Date("2027-04-16T00:00:00Z"),
+      usedSeconds: 5 * H - (3 * H + 12 * 60),
+      paidForPeriodCents: 7500,
+    });
+    expect(quote).toMatchObject({
+      creditCents: 3750,
+      payTodayCents: 26250,
+      creditBasis: "days",
+      // Both shares are of what was paid, so the dialog's two figures agree
+      // with the credit: 15/30 and 3h12m/5h of $75.
+      daysCreditCents: 3750,
+      hoursCreditCents: 4800,
+      creditBaseCents: 7500,
+      // The list price is still the list price.
+      oldPeriodPriceCents: 15000,
+      newPeriodPriceCents: 30000,
+    });
+  });
+
+  test("a half-off month with the hours nearly gone: the hours share of $75", () => {
+    const quote = quoteUpgrade({
+      from: "coach",
+      to: "coach-pro",
+      period: "monthly",
+      ...APRIL,
+      now: new Date("2027-04-16T00:00:00Z"),
+      usedSeconds: 5 * H - 23 * 60,
+      paidForPeriodCents: 7500,
+    });
+    expect(quote).toMatchObject({
+      creditCents: 575,
+      payTodayCents: 29425,
+      creditBasis: "hours",
+    });
+  });
+
+  test("what was paid is the basis only up to list price; unreadable is list price", () => {
+    const at = (paidForPeriodCents: number | null | undefined) =>
+      quoteUpgrade({
+        from: "coach",
+        to: "coach-pro",
+        period: "monthly",
+        ...APRIL,
+        now: new Date("2027-04-16T00:00:00Z"),
+        usedSeconds: 0,
+        paidForPeriodCents,
+      });
+    // Paid full price: the plan's first worked example, unchanged.
+    expect(at(15000)).toMatchObject({
+      creditCents: 7500,
+      payTodayCents: 22500,
+    });
+    // Never more than list, whatever an invoice says.
+    expect(at(99999)).toMatchObject({
+      creditCents: 7500,
+      creditBaseCents: 15000,
+    });
+    for (const unreadable of [undefined, null, Number.NaN]) {
+      expect(at(unreadable)).toMatchObject({
+        creditCents: 7500,
+        creditBaseCents: 15000,
+      });
+    }
+    // Paid nothing (a free month): nothing to credit, never negative.
+    for (const nothing of [0, -500]) {
+      expect(at(nothing)).toMatchObject({
+        creditCents: 0,
+        payTodayCents: 30000,
+        creditBaseCents: 0,
+      });
+    }
   });
 
   test("decision 7's own example: 24m of 5h left credits $12, not $75", () => {
@@ -293,12 +374,17 @@ function usage(
 }
 
 function setup(
-  over: { now?: Date; sub?: Parameters<typeof fakeSubscription>[0] } = {},
+  over: {
+    now?: Date;
+    sub?: Parameters<typeof fakeSubscription>[0];
+    invoices?: ReturnType<typeof fakeInvoice>[];
+  } = {},
 ) {
   let now = over.now ?? NOW;
   const db = fakeAdmin({ users: [subscriber()], usage: USAGE });
   const api = fakeStripe({
     subscriptions: [fakeSubscription(over.sub ?? {})],
+    invoices: over.invoices,
     now: () => now,
   });
   const run = (extra: { expectedPayTodayCents?: number } = {}) =>
@@ -632,6 +718,160 @@ test.describe("making the upgrade", () => {
       plan_period: "yearly",
       plan_period_end: "2028-07-10T00:00:00.000Z",
     });
+  });
+});
+
+/**
+ * The credit is a share of what the customer PAID for the current period
+ * (the period's invoice, after discounts, before tax), never of list price:
+ * a half-off first month upgraded at once must not be credited $75 of the
+ * $75 it cost.
+ */
+test.describe("the credit comes from what was paid", () => {
+  const SUB = { latest_invoice: "in_1" };
+  const preview = (world: ReturnType<typeof setup>) =>
+    previewUpgrade({
+      stripe: world.api.stripe,
+      admin: world.db.admin,
+      user: USER,
+      now: NOW,
+    });
+
+  test("a half-off first month: the preview and the charge are both $37.50 / $262.50", async () => {
+    // $75 after the coupon, plus tax that is no part of the basis.
+    const world = setup({
+      sub: SUB,
+      invoices: [fakeInvoice({ paid: 7500, tax: 619 })],
+    });
+
+    const shown = await preview(world);
+    expect(shown.ok && shown.value).toMatchObject({
+      creditCents: 3750,
+      payTodayCents: 26250,
+      creditBasis: "days",
+      daysCreditCents: 3750,
+      hoursCreditCents: 4800,
+      creditBaseCents: 7500,
+      oldPeriodPriceCents: 15000,
+    });
+    expect(world.api.names()).toEqual([
+      "subscriptions.retrieve",
+      "invoices.retrieve",
+    ]);
+    expect(world.api.argsOf("invoices.retrieve")?.[0]).toBe("in_1");
+
+    // The dialog sends back what it showed; the charge is that number.
+    const done = await world.run({ expectedPayTodayCents: 26250 });
+    expect(done).toMatchObject({
+      ok: true,
+      value: { payTodayCents: 26250, creditCents: 3750 },
+    });
+    expect(world.api.balance.map((t) => t.amount)).toEqual([-3750]);
+
+    // What list price would have charged is refused as a moved quote.
+    const other = setup({
+      sub: SUB,
+      invoices: [fakeInvoice({ paid: 7500 })],
+    });
+    const stale = await other.run({ expectedPayTodayCents: 22500 });
+    expect(stale.ok ? null : stale.error.code).toBe("quote_changed");
+    expect(other.api.balance).toEqual([]);
+  });
+
+  test("a full-price month is the plan's worked example, read from its invoice", async () => {
+    const world = setup({
+      sub: SUB,
+      invoices: [fakeInvoice({ paid: 15000, tax: 1238 })],
+    });
+    const shown = await preview(world);
+    expect(shown.ok && shown.value).toMatchObject({
+      creditCents: 7500,
+      payTodayCents: 22500,
+      creditBaseCents: 15000,
+    });
+  });
+
+  test("an invoice above list price never credits more than list", async () => {
+    const world = setup({
+      sub: SUB,
+      invoices: [fakeInvoice({ paid: 40000 })],
+    });
+    const shown = await preview(world);
+    expect(shown.ok && shown.value).toMatchObject({
+      creditCents: 7500,
+      creditBaseCents: 15000,
+    });
+  });
+
+  test("without `total_excluding_tax`, it is the total less its tax", async () => {
+    const world = setup({
+      sub: SUB,
+      invoices: [
+        fakeInvoice({ paid: 7500, tax: 619, noTotalExcludingTax: true }),
+      ],
+    });
+    const shown = await preview(world);
+    expect(shown.ok && shown.value).toMatchObject({ creditCents: 3750 });
+  });
+
+  test("an invoice that cannot be read falls back to list price, and says so", async () => {
+    const cases: Array<[string, Parameters<typeof setup>[0], boolean]> = [
+      ["no_latest_invoice", {}, false],
+      [
+        "invoice_read_failed",
+        { sub: SUB, invoices: [fakeInvoice({ paid: 7500 })] },
+        true,
+      ],
+      [
+        "invoice_open",
+        { sub: SUB, invoices: [fakeInvoice({ paid: 7500, status: "open" })] },
+        false,
+      ],
+      [
+        "invoice_of_another_subscription",
+        {
+          sub: SUB,
+          invoices: [fakeInvoice({ paid: 7500, subscription: "sub_9" })],
+        },
+        false,
+      ],
+      [
+        "invoice_not_for_this_period",
+        {
+          sub: SUB,
+          invoices: [
+            fakeInvoice({
+              paid: 7500,
+              start: "2027-03-01T00:00:00Z",
+              end: "2027-04-01T00:00:00Z",
+            }),
+          ],
+        },
+        false,
+      ],
+    ];
+    for (const [reason, seed, failRead] of cases) {
+      const lines: unknown[][] = [];
+      console.error = (...args: unknown[]) => void lines.push(args);
+      const world = setup(seed);
+      if (failRead) {
+        world.api.fail["invoices.retrieve"] = () => connectionLost();
+      }
+
+      const shown = await preview(world);
+      expect(shown.ok && shown.value, reason).toMatchObject({
+        creditCents: 7500,
+        payTodayCents: 22500,
+        creditBaseCents: 15000,
+      });
+      expect(lines, reason).toHaveLength(1);
+      expect(String(lines[0][0]), reason).toContain("falls back to list price");
+      expect(lines[0][1], reason).toMatchObject({
+        userId: "u1",
+        subscriptionId: "sub_1",
+        reason,
+      });
+    }
   });
 });
 

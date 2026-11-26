@@ -11,7 +11,10 @@
  *
  * ── Order of Stripe calls, and what each failure leaves ────────────────────
  *
- *   0. read    subscription, usage → the quote. Nothing written.
+ *   0. read    subscription, its current period's paid invoice, usage → the
+ *              quote. Nothing written. The credit is a share of what that
+ *              invoice charged before tax (`periodPaidCents()`), so a
+ *              discounted first month is never credited at list price.
  *   1. sweep   an earlier attempt's credit that never got its upgrade is
  *              reversed (see "The record" below). Fails → stop, nothing new.
  *   2. credit  customers.createBalanceTransaction(−credit), tagged with this
@@ -164,6 +167,76 @@ async function readSliceUsedSeconds(
   return sumUsedSeconds((data ?? []) as UsageRow[]);
 }
 
+/**
+ * What the customer paid for the subscription's CURRENT period, before tax
+ * and after discounts — the basis of the credit. Null when it cannot be
+ * established, and the caller then falls back to list price (logged here).
+ *
+ * The invoice is the subscription's `latest_invoice`, and is only believed
+ * when it is paid, is this subscription's, and bills the current period (a
+ * line whose period starts where the subscription's does). `quoteUpgrade()`
+ * caps the figure at list price.
+ */
+async function periodPaidCents(
+  stripe: Stripe,
+  subscription: Stripe.Subscription,
+  userId: string,
+): Promise<number | null> {
+  const fallback = (reason: string, error?: unknown) => {
+    console.error(
+      "[billing] upgrade credit falls back to list price: the period's invoice could not be read",
+      {
+        userId,
+        subscriptionId: subscription.id,
+        reason,
+        ...(error === undefined ? {} : { error: message(error) }),
+      },
+    );
+    return null;
+  };
+
+  const invoiceId = expandableId(
+    subscription.latest_invoice as string | { id: string } | null,
+  );
+  if (!invoiceId) return fallback("no_latest_invoice");
+
+  let invoice: Stripe.Invoice;
+  try {
+    invoice = await stripe.invoices.retrieve(invoiceId);
+  } catch (error) {
+    return fallback("invoice_read_failed", error);
+  }
+
+  if (invoice.status !== "paid") return fallback(`invoice_${invoice.status}`);
+  const invoiceSubscription = expandableId(
+    invoice.subscription as string | { id: string } | null,
+  );
+  if (invoiceSubscription && invoiceSubscription !== subscription.id) {
+    return fallback("invoice_of_another_subscription");
+  }
+  const periodStart = subscription.current_period_start as number | undefined;
+  const lines = invoice.lines?.data ?? [];
+  if (
+    typeof periodStart !== "number" ||
+    !lines.some((line) => line.period?.start === periodStart)
+  ) {
+    return fallback("invoice_not_for_this_period");
+  }
+
+  // After discounts, before tax. `total_excluding_tax` is exactly that in the
+  // API version this SDK pins; `total − tax` is the same figure without it.
+  const paid =
+    typeof invoice.total_excluding_tax === "number"
+      ? invoice.total_excluding_tax
+      : typeof invoice.total === "number"
+        ? invoice.total - (invoice.tax ?? 0)
+        : null;
+  if (paid === null || !Number.isFinite(paid) || paid < 0) {
+    return fallback("invoice_without_a_total");
+  }
+  return paid;
+}
+
 /** Step 0: everything an upgrade is decided from. Writes nothing. */
 async function prepareUpgrade(params: {
   stripe: Stripe;
@@ -240,6 +313,12 @@ async function prepareUpgrade(params: {
       period.start,
       now,
     );
+    // The same read feeds the preview and the charge, so they agree.
+    const paidForPeriodCents = await periodPaidCents(
+      stripe,
+      subscription,
+      user.id,
+    );
     return {
       ok: true,
       value: {
@@ -256,6 +335,7 @@ async function prepareUpgrade(params: {
           periodEnd: new Date(period.end),
           now,
           usedSeconds,
+          paidForPeriodCents,
         }),
       },
     };

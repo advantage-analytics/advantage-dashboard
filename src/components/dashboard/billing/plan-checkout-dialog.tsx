@@ -9,6 +9,7 @@ import { ConfirmAside } from "@/components/ui/confirm-dialog";
 import { LiveDots } from "@/components/ui/live-dots";
 import { StatePill } from "@/components/ui/state-pill";
 import {
+  afterUpgradeRefusal,
   buildCheckoutView,
   initialSelection,
   needsUpgradePreview,
@@ -104,6 +105,7 @@ export function PlanCheckoutDialog({
   paymentPending = false,
   onPaymentPending,
   preview,
+  refusal,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -127,6 +129,8 @@ export function PlanCheckoutDialog({
    * `/api/billing/upgrade/preview` itself.
    */
   preview?: PreviewState;
+  /** A refusal already on screen (the design preview's fixtures). */
+  refusal?: string;
 }) {
   const needed = mode.kind === "paywall" ? mode.neededSeconds : "none";
   const picked = mode.kind === "choose" ? `${mode.plan}:${mode.period}` : "";
@@ -148,6 +152,7 @@ export function PlanCheckoutDialog({
             startPending={paymentPending}
             onPaymentPending={onPaymentPending}
             previewOverride={preview}
+            initialProblem={refusal}
           />
         )}
       </DialogPrimitive.Portal>
@@ -190,6 +195,7 @@ function PlanCheckoutContent({
   startPending,
   onPaymentPending,
   previewOverride,
+  initialProblem,
 }: {
   mode: CheckoutMode;
   account: CheckoutAccount;
@@ -200,6 +206,7 @@ function PlanCheckoutContent({
   startPending: boolean;
   onPaymentPending?: () => void;
   previewOverride?: PreviewState;
+  initialProblem?: string;
 }) {
   const wantsPreview = needsUpgradePreview(mode, account);
   const [selection, setSelection] = useState<CheckoutSelection>(() =>
@@ -208,7 +215,7 @@ function PlanCheckoutContent({
   const [phase, setPhase] = useState<Phase>(
     startPending ? { kind: "pending" } : { kind: "choose" },
   );
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblem] = useState<string | null>(initialProblem ?? null);
   const [fetched, setFetched] = useState<PreviewState>(
     wantsPreview && !previewOverride
       ? { status: "loading" }
@@ -364,8 +371,10 @@ function PlanCheckoutContent({
       }
       const refusal = answer?.body as Refusal;
       // The figure moved since it was shown: fetch the new one, charge nothing.
-      if (refusal?.code === "quote_changed" && !previewOverride) {
-        setFetched({ status: "loading" });
+      // Any other refusal leaves the quote on screen, row and amount.
+      const next = afterUpgradeRefusal(preview, refusal?.code);
+      if (next.refetch && !previewOverride) {
+        setFetched(next.preview);
         setPreviewNonce((n) => n + 1);
       }
       setProblem(
@@ -376,7 +385,7 @@ function PlanCheckoutContent({
       );
       setPhase({ kind: "choose" });
     },
-    [onDone, previewOverride],
+    [onDone, preview, previewOverride],
   );
 
   const onPrimary = () => {

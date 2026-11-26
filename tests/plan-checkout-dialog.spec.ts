@@ -76,6 +76,7 @@ const { PlanCheckoutDialog } = createLoader({ stubs }).load(
     sendsAfterPay?: boolean;
     paymentPending?: boolean;
     preview?: PreviewState;
+    refusal?: string;
   }>;
 };
 
@@ -128,6 +129,7 @@ function draw(
   account: CheckoutAccount,
   extra: {
     preview?: PreviewState;
+    refusal?: string;
     wizard?: boolean;
     paymentPending?: boolean;
   } = {},
@@ -140,6 +142,7 @@ function draw(
       account,
       onDone: noop,
       preview: extra.preview,
+      refusal: extra.refusal,
       sendsAfterPay: extra.wizard,
       onShortenTrim: extra.wizard ? noop : undefined,
       paymentPending: extra.paymentPending,
@@ -270,6 +273,20 @@ test("Upgrade: bars while the price loads, and the refusal sentence when it cann
     /<p role="alert"[^>]*>Update your card before upgrading\.<\/p>/,
   );
   expect(refused).toMatch(/<button[^>]*disabled=""[^>]*>Continue to pay</);
+});
+
+test("Upgrade: a refused charge keeps the quote, the amount and the button, and adds the sentence", () => {
+  const html = draw({ kind: "upgrade" }, COACH, {
+    preview: preview(3 * H + 12 * M),
+    refusal: "Update your card before upgrading.",
+  });
+  expect(radios(html).join(" ")).toContain("Coach Pro");
+  expect(primary(html)).toEqual(["Continue to pay $225"]);
+  expect(html).toContain("$225");
+  expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Continue to pay/);
+  expect(html).toMatch(
+    /<p role="alert"[^>]*>Update your card before upgrading\.<\/p>/,
+  );
 });
 
 test("Extra hours: quick picks and one row, never a plan", () => {

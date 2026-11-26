@@ -5,9 +5,17 @@
  * new plan's full period price, less a credit for the unused part of the old
  * plan, and the new plan's full hours fresh.
  *
- *   credit = old plan's price for the period
+ *   credit = what the old plan cost for the period
  *            × min(share of the period's TIME left,
  *                  share of the period's plan HOURS left)
+ *
+ * "What the old plan cost" is what the customer PAID for the current period
+ * before tax (`paidForPeriodCents`: the period's invoice after discounts),
+ * never more than the list price. A first-month half-off subscriber paid $75
+ * for the month, so 15 of 30 days left credits $37.50, not $75 — a credit
+ * from list price would hand back more than was paid. This function stays
+ * pure: the server reads the invoice and passes the figure in; with none
+ * given, the list price is the basis.
  *
  * The smaller share, so hours already used are never refunded: half the
  * month left but 23m of 5h left credits $11.50, not $75. Stripe's own
@@ -19,8 +27,8 @@
  * started count in full, the current one by what is left of it, and the past
  * ones not at all (used or lapsed).
  *
- * Integer cents, rounded half-up, never negative, the credit never above the
- * old price. Exact: the shares are compared and multiplied as integers
+ * Integer cents, rounded half-up, never negative, the credit never above
+ * what was paid (and so never above the old price). Exact: the shares are compared and multiplied as integers
  * (BigInt), never as floats. Before tax — Stripe Tax adds its own line.
  *
  * Client-safe and pure: the dialog shows these numbers and the server
@@ -65,6 +73,12 @@ export interface UpgradeInput {
    * monthly plan, this month's slice for a yearly one.
    */
   usedSeconds: number;
+  /**
+   * What the customer paid for the CURRENT period of the old plan, before
+   * tax and after discounts, in cents. Capped at the list price; omitted or
+   * unreadable → the list price.
+   */
+  paidForPeriodCents?: number | null;
 }
 
 export interface UpgradeQuote {
@@ -87,8 +101,14 @@ export interface UpgradeQuote {
   hoursLeftSeconds: number;
   /** The new plan's full price for one period. */
   newPeriodPriceCents: number;
-  /** The old plan's full price for one period. */
+  /** The old plan's full (list) price for one period. */
   oldPeriodPriceCents: number;
+  /**
+   * What the credit is a share of: what was paid for the current period,
+   * never above `oldPeriodPriceCents`. The three credit figures above are
+   * all shares of THIS, so they stay consistent with one another.
+   */
+  creditBaseCents: number;
   /** When the new plan next bills, a UTC day `YYYY-MM-DD`. */
   nextBillingDay: string;
   /**
@@ -132,6 +152,11 @@ export function quoteUpgrade(input: UpgradeInput): UpgradeQuote {
 
   const oldPeriodPriceCents = periodPriceCents(from, period);
   const newPeriodPriceCents = periodPriceCents(to, period);
+  const paid = input.paidForPeriodCents;
+  const creditBaseCents =
+    typeof paid === "number" && Number.isFinite(paid)
+      ? clamp(Math.round(paid), 0, oldPeriodPriceCents)
+      : oldPeriodPriceCents;
 
   const totalMs = Math.max(0, periodEnd.getTime() - periodStart.getTime());
   const leftMs = clamp(periodEnd.getTime() - now.getTime(), 0, totalMs);
@@ -158,14 +183,14 @@ export function quoteUpgrade(input: UpgradeInput): UpgradeQuote {
     (timeD > BigInt(0) ? timeN * hoursD <= hoursN * timeD : true);
   const creditBasis = daysIsSmaller ? "days" : "hours";
 
-  const creditCap = Math.min(oldPeriodPriceCents, newPeriodPriceCents);
+  const creditCap = Math.min(creditBaseCents, newPeriodPriceCents);
   const daysCreditCents = clamp(
-    shareOf(oldPeriodPriceCents, timeN, timeD),
+    shareOf(creditBaseCents, timeN, timeD),
     0,
     creditCap,
   );
   const hoursCreditCents = clamp(
-    shareOf(oldPeriodPriceCents, hoursN, hoursD),
+    shareOf(creditBaseCents, hoursN, hoursD),
     0,
     creditCap,
   );
@@ -181,6 +206,7 @@ export function quoteUpgrade(input: UpgradeInput): UpgradeQuote {
     hoursLeftSeconds,
     newPeriodPriceCents,
     oldPeriodPriceCents,
+    creditBaseCents,
     nextBillingDay: addMonthsUtc(now, yearly ? 12 : 1)
       .toISOString()
       .slice(0, 10),

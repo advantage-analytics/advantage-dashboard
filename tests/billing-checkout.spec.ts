@@ -577,27 +577,47 @@ test.describe("the portal", () => {
     return { result, api };
   };
 
-  test("opens for the user's own customer and returns to Settings › Plan", async () => {
-    const { result, api } = await portal(returning());
-    expect(result).toEqual({
-      ok: true,
-      value: { url: "https://billing.stripe.test/session" },
+  test("opens for the user's own customer, on our configuration, and returns to Settings › Plan", async () => {
+    await withEnv({ STRIPE_PORTAL_CONFIGURATION: "bpc_123" }, async () => {
+      const { result, api } = await portal(returning());
+      expect(result).toEqual({
+        ok: true,
+        value: { url: "https://billing.stripe.test/session" },
+      });
+      expect(api.argsOf("billingPortal.sessions.create")).toEqual([
+        {
+          customer: "cus_1",
+          return_url: "https://app.example/dashboard/settings/plan",
+          configuration: "bpc_123",
+        },
+      ]);
     });
-    expect(api.argsOf("billingPortal.sessions.create")).toEqual([
-      {
-        customer: "cus_1",
-        return_url: "https://app.example/dashboard/settings/plan",
-      },
-    ]);
   });
 
-  test("uses the no-plan-switching configuration when one is set", async () => {
-    await withEnv({ STRIPE_PORTAL_CONFIGURATION: "bpc_123" }, async () => {
-      const { api } = await portal(returning());
-      expect(api.argsOf("billingPortal.sessions.create")?.[0]).toMatchObject({
-        configuration: "bpc_123",
-      });
-    });
+  test("no configuration: refused, never the account's default portal", async () => {
+    // The default configuration may have plan switching on, which would
+    // change a plan without `/api/billing/upgrade`.
+    const realError = console.error;
+    console.error = () => {};
+    try {
+      for (const value of [undefined, "", "not_a_configuration"]) {
+        await withEnv({ STRIPE_PORTAL_CONFIGURATION: value }, async () => {
+          const { result, api } = await portal(returning());
+          expect(
+            result.ok
+              ? null
+              : [result.error.code, result.error.status, result.error.detail],
+          ).toEqual([
+            "price_not_configured",
+            503,
+            "STRIPE_PORTAL_CONFIGURATION",
+          ]);
+          expect(api.names()).not.toContain("billingPortal.sessions.create");
+        });
+      }
+    } finally {
+      console.error = realError;
+    }
   });
 
   test("nothing to manage for someone who never bought anything", async () => {

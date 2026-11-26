@@ -20,7 +20,9 @@
  * and `invoice.payment_failed` all do ONE thing: name a subscription, which
  * `syncSubscription()` then re-fetches and writes. No handler applies a delta
  * from the event body, so duplicates and out-of-order delivery are harmless —
- * see that file for what each subscription status writes.
+ * see that file for what each subscription status writes. A second live
+ * subscription for a user already on one is not written at all: it is
+ * cancelled and refunded there, and answered 500 here until both are done.
  *
  * ── Refunds and disputes ───────────────────────────────────────────────────
  * `charge.refunded` and `charge.dispute.created` take a purchase's UNSPENT
@@ -48,7 +50,7 @@ import {
   fulfilHoursCheckout,
   fulfilPlanCheckout,
 } from "./checkout";
-import { syncSubscription } from "./subscription";
+import { syncSubscription, type SyncOutcome } from "./subscription";
 
 export interface WebhookAnswer {
   status: number;
@@ -67,6 +69,18 @@ const retry = (error: string): WebhookAnswer => ({
 
 const message = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
+
+/**
+ * A sync's answer. A duplicate subscription that could not be both cancelled
+ * and refunded is a 500, so Stripe sends the event again and the rest is
+ * done then (both steps are idempotent; the row is untouched meanwhile).
+ */
+function syncAnswer(sync: SyncOutcome): WebhookAnswer {
+  if (sync.outcome === "duplicate" && !(sync.cancelled && sync.refunded)) {
+    return retry("Duplicate subscription not settled");
+  }
+  return received({ outcome: sync.outcome });
+}
 
 /** Purchases whose refund must wait for the purchase to be recorded. */
 const HOURS_KINDS: ReadonlySet<string> = new Set([
@@ -92,11 +106,9 @@ async function handleCheckoutSession(
           metadata: session.metadata,
         });
       }
-      return received(
-        result.ok
-          ? { outcome: result.sync.outcome }
-          : { skipped: result.reason },
-      );
+      return result.ok
+        ? syncAnswer(result.sync)
+        : received({ skipped: result.reason });
     } catch (error) {
       console.error("[stripe webhook] could not record the plan", {
         eventId: event.id,
@@ -161,7 +173,7 @@ async function handleSubscription(
       subscriptionId,
       fallback,
     });
-    return received({ outcome: sync.outcome });
+    return syncAnswer(sync);
   } catch (error) {
     console.error("[stripe webhook] could not sync the subscription", {
       eventId: event.id,

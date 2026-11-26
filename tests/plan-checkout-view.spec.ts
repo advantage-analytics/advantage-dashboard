@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 import {
   EXTRA_HOURS_MAX,
   EXTRA_HOURS_MIN,
+  afterUpgradeRefusal,
   buildCheckoutView,
   checkoutScene,
   extraHoursToCover,
@@ -482,6 +483,51 @@ test.describe("Upgrade", () => {
     expect(refused.action).toBeNull();
     expect(refused.problem).toBe("Update your card before upgrading.");
     expect(refused.rows.map((r) => r.id)).toEqual(["current"]);
+  });
+});
+
+test.describe("A refused upgrade", () => {
+  const ready = {
+    status: "ready" as const,
+    preview: {
+      ...quoteUpgrade({
+        from: "coach",
+        to: "coach-pro",
+        period: "monthly",
+        periodStart: new Date("2027-04-14T00:00:00Z"),
+        periodEnd: new Date("2027-05-14T00:00:00Z"),
+        now: new Date("2027-04-29T00:00:00Z"),
+        usedSeconds: planHoursSeconds("coach") - (3 * H + 12 * M),
+      }),
+      period: "monthly" as const,
+    },
+  };
+
+  test("payment_failed keeps the quote: same row, same amount, same action", () => {
+    const next = afterUpgradeRefusal(ready, "payment_failed");
+    expect(next).toEqual({ preview: ready, refetch: false });
+    const before = view({ kind: "upgrade" }, COACH, { preview: ready });
+    const after = view({ kind: "upgrade" }, COACH, { preview: next.preview });
+    expect(after).toEqual(before);
+    expect(after.rows.map((r) => r.id)).toEqual(["upgrade", "current"]);
+    expect(after.primary).toBe("Continue to pay $225");
+    expect(after.action).toEqual({ kind: "upgrade", payTodayCents: 22500 });
+  });
+
+  test("quote_changed asks for the price again, and the new numbers replace the old", () => {
+    const next = afterUpgradeRefusal(ready, "quote_changed");
+    expect(next).toEqual({ preview: { status: "loading" }, refetch: true });
+    expect(
+      view({ kind: "upgrade" }, COACH, { preview: next.preview }).action,
+    ).toBeNull();
+
+    const moved: PreviewState = {
+      status: "ready",
+      preview: { ...ready.preview, payTodayCents: 25000 },
+    };
+    const v = view({ kind: "upgrade" }, COACH, { preview: moved });
+    expect(v.primary).toBe("Continue to pay $250");
+    expect(v.action).toEqual({ kind: "upgrade", payTodayCents: 25000 });
   });
 });
 

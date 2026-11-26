@@ -28,6 +28,21 @@
  *
  * A price that maps to no plan (`planForPriceId()`) changes nothing and logs.
  *
+ * ── One subscription per user ──────────────────────────────────────────────
+ * Checkout refuses a second plan (`already_subscribed`), but only when the
+ * session is CREATED: two checkouts opened side by side can both be paid.
+ * So the rule is enforced again here, where the row is written:
+ *
+ *   A live subscription for a user whose row already holds a DIFFERENT
+ *   subscription that is itself still live in Stripe (re-fetched, not taken
+ *   from the row) never overwrites the row. It is the duplicate: it is
+ *   cancelled at once and its payment refunded — `settleDuplicate()`.
+ *
+ * A row pointing at a subscription that has ended (or that Stripe no longer
+ * has) is replaced, as before. And the write itself is a compare-and-set on
+ * the subscription id that was read, so two first events for two different
+ * subscriptions cannot both land: the loser re-reads and finds the winner.
+ *
  * The user is the row holding the subscription's customer
  * (`stripe_customer_id`), else the user id our own checkout put on the
  * session / subscription metadata — never an email.
@@ -145,12 +160,199 @@ export type SyncOutcome =
   | { outcome: "unknown_price"; userId: string; priceId: string | null }
   /** An ended subscription that is not the one the user is on. */
   | { outcome: "superseded"; userId: string }
+  /**
+   * A second live subscription for a user already on a live one. Nothing was
+   * written. `cancelled` and `refunded` say whether it is fully undone; when
+   * either is false the caller should have the event retried.
+   */
+  | {
+      outcome: "duplicate";
+      userId: string;
+      keptSubscriptionId: string;
+      duplicateSubscriptionId: string;
+      cancelled: boolean;
+      refunded: boolean;
+    }
   /** `incomplete`: the first payment has not gone through. */
   | { outcome: "pending"; userId: string };
 
 function isMissingResource(error: unknown): boolean {
   const e = error as { code?: string; statusCode?: number } | null;
   return e?.code === "resource_missing" || e?.statusCode === 404;
+}
+
+const errorText = (error: unknown) =>
+  error instanceof Error ? error.message : String(error);
+
+/**
+ * Left on a duplicate as its cancellation comment, with the id of the
+ * subscription that was kept — set BY the cancel call, so a subscription
+ * carries it exactly when we cancelled it as a duplicate. It is how a later
+ * event for the cancelled duplicate knows to make sure the refund was made.
+ */
+export const DUPLICATE_MARK = "duplicate_of:";
+
+function isMarkedDuplicate(subscription: Stripe.Subscription): boolean {
+  return (
+    subscription.cancellation_details?.comment?.startsWith(DUPLICATE_MARK) ??
+    false
+  );
+}
+
+/** Whether the subscription the row holds is still live in Stripe, asked now. */
+async function isLiveInStripe(stripe: Stripe, id: string): Promise<boolean> {
+  try {
+    return LIVE.has((await stripe.subscriptions.retrieve(id)).status);
+  } catch (error) {
+    // Gone from Stripe is not live. Anything else is "cannot be sure": throw,
+    // so nothing is overwritten and the event is retried.
+    if (isMissingResource(error)) return false;
+    throw error;
+  }
+}
+
+/**
+ * Refund the payment of a duplicate's latest invoice, in full (tax included).
+ * Idempotent three ways: a charge Stripe already shows as refunded is left
+ * alone, the refund carries an idempotency key on the invoice, and Stripe's
+ * own `charge_already_refunded` reads as done. Throws on any other failure.
+ */
+async function refundLatestInvoice(
+  stripe: Stripe,
+  subscription: Stripe.Subscription,
+  keptSubscriptionId: string | null,
+): Promise<"refunded" | "already_refunded" | "nothing_paid"> {
+  const invoiceId = expandableId(
+    subscription.latest_invoice as string | { id: string } | null,
+  );
+  if (!invoiceId) return "nothing_paid";
+
+  const invoice = await stripe.invoices.retrieve(invoiceId, {
+    expand: ["charge"],
+  });
+  if (invoice.status !== "paid" || (invoice.amount_paid ?? 0) <= 0) {
+    return "nothing_paid";
+  }
+  const charge = invoice.charge;
+  if (charge && typeof charge === "object" && charge.refunded) {
+    return "already_refunded";
+  }
+  const chargeId = expandableId(charge as string | { id: string } | null);
+  const paymentIntent = expandableId(
+    invoice.payment_intent as string | { id: string } | null,
+  );
+  if (!chargeId && !paymentIntent) {
+    throw new Error(`Paid invoice ${invoice.id} names no charge to refund`);
+  }
+
+  try {
+    await stripe.refunds.create(
+      {
+        ...(chargeId
+          ? { charge: chargeId }
+          : { payment_intent: paymentIntent! }),
+        reason: "duplicate",
+        metadata: {
+          kind: "duplicate_subscription",
+          subscription: subscription.id,
+          ...(keptSubscriptionId ? { kept: keptSubscriptionId } : {}),
+        },
+      },
+      { idempotencyKey: `duplicate-subscription-refund:${invoice.id}` },
+    );
+  } catch (error) {
+    if (
+      (error as { code?: string } | null)?.code === "charge_already_refunded"
+    ) {
+      return "already_refunded";
+    }
+    throw error;
+  }
+  return "refunded";
+}
+
+/**
+ * Undo a duplicate: cancel it now, then refund what it charged. The row is
+ * not touched by this, whatever happens.
+ *
+ *   cancel   `subscriptions.cancel` with no final invoice and no proration,
+ *            marked `duplicate_of:<kept>`, idempotency key on the duplicate's
+ *            id. Stripe saying it no longer exists reads as cancelled.
+ *            Fails → logged loudly; the refund is NOT attempted (the
+ *            subscription is still live and still paid, which is the state a
+ *            retry starts from) and the caller asks for a retry.
+ *   refund   `refundLatestInvoice()`. Fails → logged loudly, caller asks for
+ *            a retry. The duplicate is canceled by then, so the retry — and
+ *            the `customer.subscription.deleted` the cancel itself sends —
+ *            arrives at the ended branch of `syncSubscription()`, which sees
+ *            the mark and comes back here for the refund alone.
+ */
+async function settleDuplicate(params: {
+  stripe: Stripe;
+  userId: string;
+  kept: string;
+  duplicate: Stripe.Subscription;
+  /** The duplicate is already canceled and marked: only the refund is owed. */
+  alreadyCancelled?: boolean;
+}): Promise<Extract<SyncOutcome, { outcome: "duplicate" }>> {
+  const { stripe, userId, kept, duplicate } = params;
+  const ids = {
+    userId,
+    keptSubscriptionId: kept,
+    duplicateSubscriptionId: duplicate.id,
+  };
+  const outcome = (cancelled: boolean, refunded: boolean) => ({
+    outcome: "duplicate" as const,
+    ...ids,
+    cancelled,
+    refunded,
+  });
+
+  if (!params.alreadyCancelled) {
+    try {
+      await stripe.subscriptions.cancel(
+        duplicate.id,
+        {
+          invoice_now: false,
+          prorate: false,
+          cancellation_details: { comment: `${DUPLICATE_MARK}${kept}` },
+        },
+        { idempotencyKey: `duplicate-subscription-cancel:${duplicate.id}` },
+      );
+    } catch (error) {
+      if (!isMissingResource(error)) {
+        // Loud on purpose: this user is paying for two subscriptions until a
+        // retry, or a person, cancels the second.
+        console.error("[billing] DUPLICATE SUBSCRIPTION NOT CANCELLED", {
+          ...ids,
+          error: errorText(error),
+        });
+        return outcome(false, false);
+      }
+    }
+  }
+
+  let refund: Awaited<ReturnType<typeof refundLatestInvoice>>;
+  try {
+    refund = await refundLatestInvoice(stripe, duplicate, kept);
+  } catch (error) {
+    // Loud on purpose: the duplicate is cancelled but its money is still ours.
+    console.error("[billing] DUPLICATE SUBSCRIPTION NOT REFUNDED", {
+      ...ids,
+      error: errorText(error),
+    });
+    return outcome(true, false);
+  }
+
+  // One line per duplicate undone. A later event for the same duplicate finds
+  // the charge already refunded and says nothing.
+  if (!params.alreadyCancelled || refund === "refunded") {
+    console.error(
+      "[billing] duplicate subscription cancelled and refunded; the row was not changed",
+      { ...ids, refund },
+    );
+  }
+  return outcome(true, true);
 }
 
 async function findUser(
@@ -202,11 +404,14 @@ export async function syncSubscription(params: {
   const { admin, stripe, subscriptionId } = params;
 
   let subscription: Stripe.Subscription;
+  /** Whether `subscription` is what Stripe holds now, not an event's copy. */
+  let fresh = true;
   try {
     subscription = await stripe.subscriptions.retrieve(subscriptionId);
   } catch (error) {
     if (!params.fallback || !isMissingResource(error)) throw error;
     subscription = params.fallback;
+    fresh = false;
   }
 
   const customerId = expandableId(
@@ -222,16 +427,26 @@ export async function syncSubscription(params: {
     return { outcome: "no_user" };
   }
 
-  const write = async (values: Record<string, unknown>) => {
-    const { error } = await admin
-      .from("users")
-      .update(values)
-      .eq("id", user.id);
+  /**
+   * Write the row only if it still holds the subscription id that was read
+   * (`held`). False when it has moved on underneath us: nothing was written.
+   */
+  const write = async (
+    values: Record<string, unknown>,
+    held: string | null,
+  ): Promise<boolean> => {
+    const mine = admin.from("users").update(values).eq("id", user.id);
+    const { data, error } = await (
+      held === null
+        ? mine.is("stripe_subscription_id", null)
+        : mine.eq("stripe_subscription_id", held)
+    ).select("id");
     if (error) {
       throw new Error(`Could not write the plan: ${error.message}`, {
         cause: error,
       });
     }
+    return (data?.length ?? 0) > 0;
   };
 
   if (subscription.status === "incomplete") {
@@ -244,6 +459,26 @@ export async function syncSubscription(params: {
     // one the row never held (a first payment that never completed) has
     // nothing to end — and must not mark a Free user as a past customer.
     if (user.stripe_subscription_id !== subscription.id) {
+      // A duplicate we cancelled: make sure its refund was made (a no-op once
+      // it has been). The row is not this subscription's either way.
+      if (
+        subscription.status === "canceled" &&
+        isMarkedDuplicate(subscription)
+      ) {
+        const kept =
+          subscription.cancellation_details!.comment!.slice(
+            DUPLICATE_MARK.length,
+          ) ||
+          (user.stripe_subscription_id ?? "");
+        const settled = await settleDuplicate({
+          stripe,
+          userId: user.id,
+          kept,
+          duplicate: subscription,
+          alreadyCancelled: true,
+        });
+        if (!settled.refunded) return settled;
+      }
       return { outcome: "superseded", userId: user.id };
     }
     // `canceled` and `incomplete_expired` are final, so the slot is freed.
@@ -251,15 +486,20 @@ export async function syncSubscription(params: {
     const final =
       subscription.status === "canceled" ||
       subscription.status === "incomplete_expired";
-    await write({
-      plan: "free",
-      plan_period: null,
-      plan_status: "canceled",
-      plan_period_start: null,
-      plan_period_end: null,
-      stripe_subscription_id: final ? null : subscription.id,
-      ...(customerId ? { stripe_customer_id: customerId } : {}),
-    });
+    const ended = await write(
+      {
+        plan: "free",
+        plan_period: null,
+        plan_status: "canceled",
+        plan_period_start: null,
+        plan_period_end: null,
+        stripe_subscription_id: final ? null : subscription.id,
+        ...(customerId ? { stripe_customer_id: customerId } : {}),
+      },
+      subscription.id,
+    );
+    // Replaced between the read and the write: it is no longer theirs to end.
+    if (!ended) return { outcome: "superseded", userId: user.id };
     return {
       outcome: "synced",
       userId: user.id,
@@ -283,7 +523,7 @@ export async function syncSubscription(params: {
   const status: PlanStatus =
     subscription.status === "past_due" ? "past_due" : "active";
   const period = subscriptionPeriod(subscription);
-  await write({
+  const values = {
     plan: sold.plan,
     plan_period: sold.period,
     plan_status: status,
@@ -291,12 +531,39 @@ export async function syncSubscription(params: {
     plan_period_end: period.end,
     stripe_subscription_id: subscription.id,
     ...(customerId ? { stripe_customer_id: customerId } : {}),
-  });
-  return {
-    outcome: "synced",
-    userId: user.id,
-    plan: sold.plan,
-    period: sold.period,
-    status,
   };
+
+  // Compare-and-set on the id the row held when it was read. Losing means
+  // another event wrote first: read again and decide again (the row now
+  // holds this subscription — write it — or another, which is then judged
+  // like any other held subscription).
+  let held = user.stripe_subscription_id;
+  for (let pass = 0; pass < 3; pass += 1) {
+    if (held && held !== subscription.id) {
+      if (await isLiveInStripe(stripe, held)) {
+        // An event's stale copy of a subscription Stripe no longer has is
+        // not grounds to cancel or refund anything: just do not overwrite.
+        if (!fresh) return { outcome: "superseded", userId: user.id };
+        return settleDuplicate({
+          stripe,
+          userId: user.id,
+          kept: held,
+          duplicate: subscription,
+        });
+      }
+    }
+    if (await write(values, held)) {
+      return {
+        outcome: "synced",
+        userId: user.id,
+        plan: sold.plan,
+        period: sold.period,
+        status,
+      };
+    }
+    const again = await readBillingUser(admin, "id", user.id);
+    if (!again) return { outcome: "no_user" };
+    held = again.stripe_subscription_id;
+  }
+  throw new Error("Could not write the plan: the row kept changing");
 }
