@@ -51,7 +51,11 @@ const OBJECT =
   "\\s+(?:match(?:es)?|video(?:s)?|game(?:s)?|footage|recording(?:s)?|file(?:s)?|swingvision(?:\\s+(?:file|export|data))?)";
 const TAIL =
   "(?:\\s+(?:video|videos|file|files|footage|export|data))?" +
-  "(?:\\s+(?:here|now|please|for\\s+analysis|to\\s+(?:advantage|analyse|analyze|the\\s+app|ask)))*";
+  "(?:\\s+(?:here|now|please|for\\s+analysis|to\\s+(?:advantage|analyse|analyze|the\\s+app|ask)))*" +
+  // "…a match for Maya Chen", "…for my team": who it is for, up to three
+  // words. Longer reads as a question riding on the request, the planner's.
+  "(?:\\s+for(?:\\s+[a-z]+){1,3})?" +
+  "(?:\\s+(?:here|now|please))*";
 
 /** A verb and what it uploads: "upload a match", "add my video", "send match footage". */
 const UPLOAD_WITH_OBJECT = new RegExp(

@@ -153,7 +153,6 @@ export function askStarters(
 export function askFollowUps(question: string, scope: AskScope): AskStarter[] {
   const text = question.toLowerCase();
   const team = scope.kind === "team";
-  const we = team ? "the team" : "I";
   const my = team ? "the team's" : "my";
   const picks: string[] = [];
 
@@ -174,7 +173,11 @@ export function askFollowUps(question: string, scope: AskScope): AskStarter[] {
     /\b(record|win|won|wins)\b/.test(text) &&
     !/clay|hard|surface/.test(text)
   ) {
-    picks.push(`Am ${we === "I" ? "I" : "we"} better on hard courts or clay?`);
+    picks.push(
+      team
+        ? "Is the team better on hard courts or clay?"
+        : "Am I better on hard courts or clay?",
+    );
   }
   if (/\b(improve|work on|practise|practice|fix)\b/.test(text)) {
     picks.push(`How has ${my} first serve percentage changed this season?`);
