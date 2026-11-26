@@ -13,6 +13,7 @@ import {
 import type { CountNoun } from "../match-filters/panel-draft";
 import { cn } from "@/lib/utils";
 import { LegendMark } from "./legend-mark";
+import { LifecycleChip } from "./lifecycle-chip";
 import { LEGEND_PICKS, type LegendPick } from "./lightbox-points";
 import type { LegendItem } from "./viz-labels";
 import {
@@ -50,6 +51,13 @@ type PanelKey =
 const RALLY_CUTS: ReadonlySet<Cut> = new Set<Cut>([
   "rallyPosition",
   "rallyPlacement",
+]);
+
+/** The return cuts: their serve (`ball`, the serve being returned) is
+ *  toolbar chips, not a panel row (board Final-04). */
+export const RETURN_CUTS: ReadonlySet<Cut> = new Set<Cut>([
+  "returnPlacement",
+  "returnContact",
 ]);
 
 /** Rally length's segments and what each one counts (board Final-03). */
@@ -172,7 +180,8 @@ export interface LightboxAdvancedFilters {
  * Approaches' three groups (checklists: the model's groups are multi-select,
  * plan decision Q7) — then Rally length (Any · Short · Medium · Long; not on
  * Rally shots, whose toolbar carries it), Pressure, Court and Set, then the
- * Serve row, with Advanced filters last. Segmented rows carry no counts; a
+ * Serve row (not on Returns, whose toolbar carries it as `ServeReturnedChips`),
+ * with Advanced filters last. Segmented rows carry no counts; a
  * checklist option carries the count it alone would leave. Applied live,
  * with Clear and the live count in the footer. Only the keys
  * `filterKeysFor(cut)` allows appear, so a pick can never be one the court
@@ -344,9 +353,9 @@ export function LightboxFilterPanel({
         },
       ],
     });
-  // 1st or 2nd serve has no other control yet: it sits after the shared run
-  // until the toolbar's serve chips replace it (plan task 3).
-  if (keys.has("ball"))
+  // 1st or 2nd serve sits after the shared run — except on Returns, whose
+  // toolbar carries it as "Serve returned" chips (board Final-04).
+  if (keys.has("ball") && !RETURN_CUTS.has(cut))
     sections.push({
       label: "Serve",
       segmented: [
@@ -441,6 +450,53 @@ export function LightboxFilterPanel({
           : []),
       ]}
     />
+  );
+}
+
+/* ── Returns' serve chips ──────────────────────────────────────────────── */
+
+const SERVE_RETURNED = [
+  { value: null, label: "All" },
+  { value: "first", label: "vs 1st serve" },
+  { value: "second", label: "vs 2nd serve" },
+] as const;
+
+/**
+ * The Returns toolbar's lead chips (board Final-04): All · vs 1st serve ·
+ * vs 2nd serve over the `ball` key, which on a return cut already reads the
+ * serve being returned. One at a time; a list of both (a saved view, a
+ * Statistics row) lights none, as the panel's segmented rows do.
+ */
+export function ServeReturnedChips({
+  filters,
+  setFilters,
+}: {
+  filters: VizFilters;
+  setFilters: (next: VizFilters) => void;
+}) {
+  const current =
+    filters.ball.length === 0
+      ? null
+      : filters.ball.length === 1
+        ? filters.ball[0]
+        : MIXED_SEGMENT;
+  return (
+    <div className="flex gap-1.5" role="group" aria-label="Serve returned">
+      {SERVE_RETURNED.map((option) => (
+        <LifecycleChip
+          key={option.label}
+          pressed={current === option.value}
+          onClick={() =>
+            setFilters({
+              ...filters,
+              ball: option.value === null ? [] : [option.value],
+            })
+          }
+        >
+          {option.label}
+        </LifecycleChip>
+      ))}
+    </div>
   );
 }
 

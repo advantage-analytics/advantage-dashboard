@@ -324,7 +324,7 @@ async function filterSections(page: Page, cut: string) {
 }
 
 /** Set shows only for a match of two or more sets; Serve (1st · 2nd) stays
- *  after the shared run until the toolbar's serve chips replace it. */
+ *  after the shared run on every chart but Returns, whose toolbar carries it. */
 const withoutSet = (labels: string[]) => labels.filter((l) => l !== "Set");
 
 test("the Filters menu leads with the chart's own sections, then Rally length, Pressure, Court, Set, with Advanced filters last", async ({
@@ -360,15 +360,17 @@ test("the Filters menu leads with the chart's own sections, then Rally length, P
   await expect(page).not.toHaveURL(/zone=wide/);
   await page.keyboard.press("Escape");
 
-  const returns = await filterSections(page, "returnPlacement");
-  expect(withoutSet(returns.labels)).toEqual([
-    "Rally length",
-    "Pressure",
-    "Court",
-    "Serve",
-  ]);
-  expect(returns.advancedLast).toBe(true);
-  await page.keyboard.press("Escape");
+  // Returns carry the serve they answer as toolbar chips, not a Serve row.
+  for (const cut of ["returnPlacement", "returnContact"]) {
+    const returns = await filterSections(page, cut);
+    expect(withoutSet(returns.labels)).toEqual([
+      "Rally length",
+      "Pressure",
+      "Court",
+    ]);
+    expect(returns.advancedLast).toBe(true);
+    await page.keyboard.press("Escape");
+  }
 
   const errorsCut = await filterSections(page, "errors");
   expect(withoutSet(errorsCut.labels)).toEqual([
@@ -388,6 +390,71 @@ test("the Filters menu leads with the chart's own sections, then Rally length, P
     expect(rally.advancedLast).toBe(true);
     await page.keyboard.press("Escape");
   }
+});
+
+test("Returns lead with Serve returned chips (All · vs 1st serve · vs 2nd serve) over the ball filter; vs 2nd serve narrows the court", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  for (const cut of ["returnPlacement", "returnContact"]) {
+    await page.goto(`${origin}/?tab=shots&cut=${cut}&fixture=returns`);
+    const dialog = page.getByRole("dialog").first();
+    const group = dialog.getByRole("group", { name: "Serve returned" });
+    const chips = group.getByRole("button");
+    await expect(chips).toHaveText(["All", "vs 1st serve", "vs 2nd serve"]);
+    const pressed = () =>
+      chips.evaluateAll((els) =>
+        els.map((el) => el.getAttribute("aria-pressed")),
+      );
+    expect(await pressed()).toEqual(["true", "false", "false"]);
+
+    const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
+    await expect(marks.first()).toBeAttached();
+    const before = await marks.count();
+    expect(before).toBeGreaterThan(0);
+
+    await group.getByRole("button", { name: "vs 2nd serve" }).click();
+    await expect(page).toHaveURL(/ball=second/);
+    expect(await pressed()).toEqual(["false", "false", "true"]);
+    await expect.poll(() => marks.count()).toBeLessThan(before);
+    const second = await marks.count();
+    expect(second).toBeGreaterThan(0);
+
+    // The other half: together the two are every return.
+    await group.getByRole("button", { name: "vs 1st serve" }).click();
+    await expect(page).toHaveURL(/ball=first/);
+    expect(await pressed()).toEqual(["false", "true", "false"]);
+    await expect.poll(() => marks.count()).toBe(before - second);
+
+    // The ball filter set elsewhere (a link) lights its chip.
+    await page.goto(
+      `${origin}/?tab=shots&cut=${cut}&fixture=returns&ball=second`,
+    );
+    await expect(
+      page
+        .getByRole("dialog")
+        .first()
+        .getByRole("group", { name: "Serve returned" })
+        .getByRole("button", { name: "vs 2nd serve" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    // All lets go of it.
+    await page
+      .getByRole("dialog")
+      .first()
+      .getByRole("group", { name: "Serve returned" })
+      .getByRole("button", { name: "All" })
+      .click();
+    await expect(page).not.toHaveURL(/ball=/);
+  }
+
+  // Every other chart keeps its Serve row and has no such chips.
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  await expect(
+    page.getByRole("dialog").first().getByRole("group", {
+      name: "Serve returned",
+    }),
+  ).toHaveCount(0);
 });
 
 test("Rally length is Any · Short · Medium · Long with no counts, writes the rally key, and names its shots on hover; Pressure points lists its scores", async ({

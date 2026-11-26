@@ -47,7 +47,7 @@ ready).
 
 ## T3 · Add Returns serve-returned toolbar chips
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T2
 - **files:** (guess) src/components/dashboard/matches/match-detail/shots/{viz-lightbox-shell.tsx,lightbox-filters.tsx,viz-model.ts} (`ball` facet ~:937), tests/viz-lightbox-browser.spec.ts

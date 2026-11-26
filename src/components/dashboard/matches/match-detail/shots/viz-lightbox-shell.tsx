@@ -65,6 +65,8 @@ import {
   COUNT_NOUN,
   LegendFilter,
   LightboxFilterPanel,
+  RETURN_CUTS,
+  ServeReturnedChips,
   type LightboxAdvancedFilters,
   type LightboxSeasonFilters,
 } from "./lightbox-filters";
@@ -1095,6 +1097,22 @@ export function VizLightboxShell({
                         labels={player.labels}
                         className="flex gap-1.5"
                       />
+                    )}
+                    {/* Returns lead with the serve they answer (board
+                        Final-04), behind a hairline from the player chips. */}
+                    {!isDraft && filterPanel && RETURN_CUTS.has(cut) && (
+                      <>
+                        {player && (
+                          <span
+                            aria-hidden="true"
+                            className="h-4 w-px bg-[var(--border-medium)]"
+                          />
+                        )}
+                        <ServeReturnedChips
+                          filters={filters}
+                          setFilters={filterPanel.onChange}
+                        />
+                      </>
                     )}
                     {controls && (
                       <ControlsSlot

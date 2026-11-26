@@ -22,3 +22,13 @@ is the runner's. Newest entries at the bottom.
 1. Rally shots has no rally-length control until its toolbar chips land (it had none before either).
 2. `OPTIONS.rally.long` reads "9+ shots" while the tooltip says "9 or more shots" — align.
 3. Decide where 1st/2nd serve lives on Serves, Errors, Approaches and Rally shots once Returns gets its chips (T3).
+
+## T3 · Add Returns serve-returned toolbar chips — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** Both return cuts get a "Serve returned" chip group (All · vs 1st serve · vs 2nd serve, LifecycleChip, aria-pressed from `ball`) in the lightbox toolbar after the player chips (viz-lightbox-shell.tsx), wired through the Filters menu's onChange; the Returns Filters menu drops its Serve row (lightbox-filters.tsx). New browser spec on both return cuts; the lightbox harness gained an opt-in `?fixture=returns` with return marks. Widget-states: toolbar chips, no loader or Suspense region touched.
+**follow-ups:**
+
+1. Rally shots has no rally-length control at all since T2 (board Final-07 shows toolbar chips) — needs a task; reuse this chip-group pattern.
+2. Board Final-04 shows lead chips on other charts too (Serves 1st/2nd, Errors type, Approaches way to the net); only Returns has them.
+3. The chips hide while the lightbox is in draft state — check at /pr-check.
