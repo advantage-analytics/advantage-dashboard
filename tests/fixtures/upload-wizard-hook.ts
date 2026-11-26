@@ -371,9 +371,26 @@ export function uploadWizardHarness(
       currentBillingMonth: () => "2026-09",
       freeHoursReturnOn: () => "Oct 1",
     },
+    // The resolver the meter reads: the harness's cap, on a fixed calendar
+    // month, keyed the month way (before January 1, 2027).
+    "@/lib/services/splitstep/allowance": {
+      allowanceFor: () => ({
+        kind: "beta",
+        capSeconds: options.quotaCapSeconds ?? 7200,
+        windowStart: new Date("2026-09-01T00:00:00Z"),
+        windowEnd: new Date("2026-10-01T00:00:00Z"),
+        windowed: false,
+        billingMonth: "2026-09-01",
+      }),
+      allowanceResetsOn: () => "Oct 1",
+    },
     "@/lib/services/splitstep/quota": {
       accountTypeFor: () => "user",
       monthlyCapSecondsFor: () => options.quotaCapSeconds ?? 7200,
+      // Pure, so the real ones: the month filter and the team's total read
+      // go to the harness's own Supabase mock.
+      scopeToAllowance: quota.scopeToAllowance,
+      readProgramUsedSeconds: quota.readProgramUsedSeconds,
       // Pure, so the real one.
       sumUsedSeconds: quota.sumUsedSeconds,
       readCreditBalance: async () => ({

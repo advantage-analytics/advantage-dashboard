@@ -1,10 +1,21 @@
 import { createClient } from "@/lib/supabase/server";
+import { plansHaveBegun } from "@/lib/billing/plans";
 import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
+import { isMissingFunction } from "@/lib/supabase/missing-function";
 import {
-  monthlyCapSecondsFor,
+  allowanceFor,
+  allowanceResetsOn,
+  type AllowanceWorkspace,
+  type VideoAllowance,
+} from "@/lib/services/splitstep/allowance";
+import {
   NO_CREDITS,
   readCreditBalance,
+  readProgramUsedSeconds,
+  scopeToAllowance,
+  windowArgs,
 } from "@/lib/services/splitstep/quota";
+import { formatResetDate } from "@/lib/data/usage-format";
 import type { Workspace } from "@/lib/workspace/types";
 
 /**
@@ -15,9 +26,67 @@ import type { Workspace } from "@/lib/workspace/types";
  * does not count, and once a job finishes `actual_seconds` is the truth. A page
  * that showed a different total from the one that refuses a submission would be
  * worse than no page, because the person would believe the page.
+ *
+ * WHICH rows is `allowanceFor()`'s answer, the same one the reservation uses:
+ * the calendar month until January 1, 2027, the allowance's own window after
+ * (a subscription's month, a team's season). The month stepper still asks for
+ * a `billingMonth`; the month `now` is in reads the current allowance, and
+ * any other month reads that calendar month's ledger as history.
  */
 
-export interface PersonalUsage {
+/** What both usage shapes say about the period their figures cover. */
+interface UsagePeriod {
+  /**
+   * The day the figures turn over, as `"Feb 1"` — `allowanceResetsOn()` for
+   * the current allowance, the first of the next month for a past month.
+   * Null when nothing comes back (no allowance, or no cap).
+   */
+  resetsOn?: string | null;
+  /** ISO instant the period ends: the window's end, or the month's. */
+  windowEnd?: string;
+}
+
+/**
+ * The ledger scope and period for one read: the current allowance when
+ * `billingMonth` is the month `now` is in, that calendar month otherwise.
+ */
+function periodFor(
+  allowance: VideoAllowance,
+  billingMonth: string,
+): {
+  scope: Pick<
+    VideoAllowance,
+    "windowed" | "billingMonth" | "windowStart" | "windowEnd"
+  >;
+  period: Required<UsagePeriod>;
+} {
+  if (billingMonth === allowance.billingMonth) {
+    return {
+      scope: allowance,
+      period: {
+        resetsOn: allowanceResetsOn(allowance),
+        windowEnd: allowance.windowEnd.toISOString(),
+      },
+    };
+  }
+  const start = new Date(`${billingMonth}T00:00:00Z`);
+  const end = new Date(start);
+  end.setUTCMonth(end.getUTCMonth() + 1);
+  return {
+    scope: {
+      windowed: false,
+      billingMonth,
+      windowStart: start,
+      windowEnd: end,
+    },
+    period: {
+      resetsOn: formatResetDate(billingMonth),
+      windowEnd: end.toISOString(),
+    },
+  };
+}
+
+export interface PersonalUsage extends UsagePeriod {
   usedSeconds: number;
   capSeconds: number;
   /** `YYYY-MM-01`, the `processing_usage.billing_month` key. */
@@ -40,7 +109,7 @@ export interface ProgramUsageLine {
   matchCount: number;
 }
 
-export interface ProgramUsage {
+export interface ProgramUsage extends UsagePeriod {
   usedSeconds: number;
   capSeconds: number;
   billingMonth: string;
@@ -57,39 +126,36 @@ export interface ProgramUsage {
  * Takes the personal workspace rather than resolving it: every caller already
  * holds the workspace context, and asking GoTrue again only serialized a round
  * trip in front of a query that was ready to run. The workspace, not just the
- * id, because a pilot individual's cap is 10h rather than 2h —
- * `monthlyCapSecondsFor()` answers that, the same as the spend.
+ * id, because the cap and its window hang off the workspace's own fields —
+ * `allowanceFor()` answers that, the same as the spend.
  */
 export async function getPersonalUsage(
-  personal: Pick<
-    Workspace,
-    | "id"
-    | "kind"
-    | "orgType"
-    | "individualPilot"
-    | "unlimitedVideo"
-    | "videoHoursOverride"
-  >,
+  personal: AllowanceWorkspace & Pick<Workspace, "id">,
   billingMonth: string,
+  now: Date = new Date(),
 ): Promise<PersonalUsage> {
   const supabase = await createClient();
   const userId = personal.id;
-  const capSeconds = monthlyCapSecondsFor(personal);
+  const allowance = allowanceFor(personal, now);
+  const capSeconds = allowance.capSeconds;
+  const { scope, period } = periodFor(allowance, billingMonth);
 
   // RLS already restricts this to `created_by = auth.uid()`; the account filter
   // is what separates a personal upload from one the same person made inside a
   // program, which bills the program's ledger instead.
   const [{ data, error }, credits] = await Promise.all([
-    supabase
-      .from("processing_usage")
-      .select("reserved_seconds, actual_seconds")
-      .eq("account_id", userId)
-      .eq("account_type", "individual")
-      .eq("billing_month", billingMonth)
-      .eq("released", false),
+    scopeToAllowance(
+      supabase
+        .from("processing_usage")
+        .select("reserved_seconds, actual_seconds")
+        .eq("account_id", userId)
+        .eq("account_type", "individual")
+        .eq("released", false),
+      scope,
+    ),
     // The owner reads their own credits under RLS. A failed read shows none
     // rather than failing the page; the reservation is still the authority.
-    readCreditBalance(supabase, userId).catch((creditError: unknown) => {
+    readCreditBalance(supabase, userId, now).catch((creditError: unknown) => {
       console.error("[usage] could not read video credits", {
         error:
           creditError instanceof Error
@@ -103,6 +169,7 @@ export async function getPersonalUsage(
     creditSeconds: credits.seconds,
     grantedSeconds: credits.grantedSeconds,
     nextCreditExpiresAt: credits.nextExpiresAt,
+    ...period,
   };
 
   if (error) {
@@ -120,11 +187,18 @@ export async function getPersonalUsage(
   return { usedSeconds, capSeconds, billingMonth, ...creditFields };
 }
 
-/** A program's zeroed ledger — what a caller outside a program should see. */
-export function emptyProgramUsage(billingMonth: string): ProgramUsage {
+/**
+ * A program's zeroed ledger — what a caller outside a program should see.
+ * The beta's program figure until January 1, 2027; after it, no program has
+ * hours without a plan or a pilot, so the cap is zero too.
+ */
+export function emptyProgramUsage(
+  billingMonth: string,
+  now: Date = new Date(),
+): ProgramUsage {
   return {
     usedSeconds: 0,
-    capSeconds: getMonthlyCapSeconds("program"),
+    capSeconds: plansHaveBegun(now) ? 0 : getMonthlyCapSeconds("program"),
     billingMonth,
     lines: [],
   };
@@ -143,35 +217,42 @@ export async function getProgramUsage(
   programId: string,
   billingMonth: string,
   /**
-   * The program's `org_type` and admin-granted `pilot_eligible`, from the
-   * workspace the caller already resolved. Decides the cap FIGURE only — the
-   * ledger reads below are unchanged. A verified collegiate program, or a
-   * custom org an admin put on the pool, shows the program tier; every other
-   * custom org shows the individual figure `reserveQuota()` will actually
-   * enforce against it, per `quotaTierFor()` — a page showing 75 hours while
-   * the spend refuses at 2 would be exactly the divergence this file's header
-   * forbids.
-   *
-   * A null `orgType` is `Workspace.orgType`'s type-level "personal" case,
-   * which no caller here has: every team workspace resolves a NOT NULL
-   * `org_type`. If it ever arrives, `quotaTierFor()` maps it to the reduced
-   * figure — the fail-closed direction for a number that meters paid vendor
-   * spend.
+   * The program's workspace, or the fields of it the allowance hangs off
+   * (`org_type`, the pilot's switch and dates, the season plan). Decides the
+   * cap and its window — `allowanceFor()`, the answer `reserveQuota()`
+   * enforces. A page showing 75 hours while the spend refuses at 0 would be
+   * exactly the divergence this file's header forbids, so a caller that
+   * leaves a field out gets the fail-closed figure, never a guess.
    */
-  tier: Pick<Workspace, "orgType" | "pilotEligible">,
+  tier: Omit<AllowanceWorkspace, "kind">,
+  now: Date = new Date(),
 ): Promise<ProgramUsage> {
   const supabase = await createClient();
-  const capSeconds = monthlyCapSecondsFor({ kind: "team", ...tier });
+  const allowance = allowanceFor({ ...tier, kind: "team" }, now);
+  const capSeconds = allowance.capSeconds;
+  const { scope, period } = periodFor(allowance, billingMonth);
 
-  const [totalResult, linesResult] = await Promise.all([
-    supabase.rpc("program_usage_total", {
-      p_program_id: programId,
-      p_billing_month: billingMonth,
-    }),
+  const linesByMonth = () =>
     supabase.rpc("program_usage_by_member", {
       p_program_id: programId,
-      p_billing_month: billingMonth,
-    }),
+      p_billing_month: scope.billingMonth,
+    });
+  const [totalResult, linesResult] = await Promise.all([
+    readProgramUsedSeconds(supabase, programId, scope),
+    scope.windowed
+      ? supabase
+          .rpc("program_usage_by_member_between", {
+            p_program_id: programId,
+            ...windowArgs(scope),
+          })
+          // The month's lines if the window read is not on this database
+          // yet — the same degradation `readProgramUsedSeconds()` makes.
+          .then((result) =>
+            result.error && isMissingFunction(result.error)
+              ? linesByMonth()
+              : result,
+          )
+      : linesByMonth(),
   ]);
 
   if (totalResult.error || linesResult.error) {
@@ -179,7 +260,7 @@ export async function getProgramUsage(
       total: totalResult.error?.message,
       lines: linesResult.error?.message,
     });
-    return { usedSeconds: 0, capSeconds, billingMonth, lines: [] };
+    return { usedSeconds: 0, capSeconds, billingMonth, lines: [], ...period };
   }
 
   const lines = (
@@ -199,9 +280,10 @@ export async function getProgramUsage(
   }));
 
   return {
-    usedSeconds: Number(totalResult.data ?? 0),
+    usedSeconds: totalResult.usedSeconds,
     capSeconds,
     billingMonth,
     lines,
+    ...period,
   };
 }

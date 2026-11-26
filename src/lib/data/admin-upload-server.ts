@@ -8,11 +8,12 @@ import type {
   Workspace,
   WorkspaceContextValue,
 } from "@/lib/workspace/types";
-import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import {
-  monthlyCapSecondsFor,
-  peekQuota,
-} from "@/lib/services/splitstep/quota";
+  readPlanPeriodStart,
+  readProgramPlanRef,
+} from "@/lib/billing/plan-fields";
+import { allowanceFor } from "@/lib/services/splitstep/allowance";
+import { peekQuota, scopeToAllowance } from "@/lib/services/splitstep/quota";
 import { getInitials } from "@/lib/data/match-utils";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
 import { UNLIMITED_CAP_SECONDS } from "@/lib/data/usage-format";
@@ -279,7 +280,7 @@ export const getAdminUploadContext = cache(
       const program = await admin
         .from("programs")
         .select(
-          "id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, pilot_eligible, time_zone",
+          "id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, pilot_eligible, pilot_ends_on, pilot_ended_at, time_zone",
         )
         .eq("id", programId)
         .maybeSingle();
@@ -291,6 +292,8 @@ export const getAdminUploadContext = cache(
           message: "That program no longer exists.",
         };
       const p = program.data;
+      // The team's season plan, which decides its hours from January 1, 2027.
+      const programPlan = await readProgramPlanRef(admin, programId);
       const workspace: Workspace = {
         id: p.id,
         kind: "team",
@@ -298,6 +301,9 @@ export const getAdminUploadContext = cache(
         team: p.team,
         orgType: p.org_type,
         pilotEligible: p.pilot_eligible === true,
+        pilotEndsOn: p.pilot_ends_on,
+        pilotEndedAt: p.pilot_ended_at,
+        programPlan,
         timeZone: p.time_zone,
         programStatus: p.status,
         // Not the dashboard's rule: the console uploads for teams that are not
@@ -312,18 +318,22 @@ export const getAdminUploadContext = cache(
         mark: p.school_name.trim().charAt(0).toUpperCase(),
         iconUrl: null,
       };
-      const billingMonth = currentBillingMonth(deps.now());
+      // The cap and the rows it counts, from the resolver the reservation
+      // reads: the calendar month until January 1, 2027, the window after.
+      const allowance = allowanceFor(workspace, deps.now());
+      const billingMonth = allowance.billingMonth;
       const [roster, usage] = await Promise.all([
         readRoster(admin, programId, actor.id),
         readAllPages(
-          admin
-            .from("processing_usage")
-            .select("actual_seconds, reserved_seconds")
-            .eq("account_id", programId)
-            .eq("account_type", "program")
-            .eq("billing_month", billingMonth)
-            .eq("released", false)
-            .order("id"),
+          scopeToAllowance(
+            admin
+              .from("processing_usage")
+              .select("actual_seconds, reserved_seconds")
+              .eq("account_id", programId)
+              .eq("account_type", "program")
+              .eq("released", false),
+            allowance,
+          ).order("id"),
           "context read failed",
         ),
       ]);
@@ -332,7 +342,7 @@ export const getAdminUploadContext = cache(
           sum + Number(row.actual_seconds ?? row.reserved_seconds ?? 0),
         0,
       );
-      const capSeconds = monthlyCapSecondsFor(workspace);
+      const capSeconds = allowance.capSeconds;
       return {
         ok: true,
         context: {
@@ -373,6 +383,7 @@ interface PlayerRow {
   individual_pilot: boolean | null;
   is_admin: boolean | null;
   video_hours_override: number | string | null;
+  plan: string | null;
 }
 
 /**
@@ -422,7 +433,7 @@ export const getAdminPersonalUploadContext = cache(
       const read = await admin
         .from("users")
         .select(
-          "id, first_name, last_name, email, avatar_path, hand, backhand, individual_pilot, is_admin, video_hours_override",
+          "id, first_name, last_name, email, avatar_path, hand, backhand, individual_pilot, is_admin, video_hours_override, plan",
         )
         .eq("id", userId)
         .maybeSingle();
@@ -457,6 +468,8 @@ export const getAdminPersonalUploadContext = cache(
         row.video_hours_override == null
           ? null
           : Number(row.video_hours_override);
+      // The anchor of the player's hours window, in its own tolerant read.
+      const planPeriodStart = await readPlanPeriodStart(admin, userId);
       // The player's own workspace exactly as the dashboard builds it, so the
       // cap and the peek are the figures the player would see themselves.
       const own: Workspace = {
@@ -473,6 +486,8 @@ export const getAdminPersonalUploadContext = cache(
         individualPilot: row.individual_pilot === true,
         unlimitedVideo: row.is_admin === true,
         videoHoursOverride: Number.isFinite(override) ? override : null,
+        plan: row.plan,
+        planPeriodStart,
         programStatus: null,
         playersCanUpload: false,
         uploadPolicy: "everyone",
@@ -480,7 +495,8 @@ export const getAdminPersonalUploadContext = cache(
         memberUploadEnabled: true,
         myPlayerId: null,
       };
-      const peek = await peekQuota(admin, own);
+      const now = deps.now();
+      const peek = await peekQuota(admin, own, now);
       const playerAllowance = {
         usedSeconds: peek.usedSeconds,
         capSeconds: peek.capSeconds,
@@ -493,7 +509,7 @@ export const getAdminPersonalUploadContext = cache(
         billing === "free"
           ? { ...own, unlimitedVideo: true, videoHoursOverride: null }
           : own;
-      const billingMonth = currentBillingMonth(deps.now());
+      const billingMonth = allowanceFor(own, now).billingMonth;
       return {
         ok: true,
         context: {

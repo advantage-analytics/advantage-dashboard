@@ -141,6 +141,10 @@ import { loadEligibleRoster } from "./eligible-roster";
 import { uploadEligibility } from "@/lib/workspace/upload-eligibility";
 import type { RosterIdentity } from "@/lib/workspace/upload-eligibility";
 import type { Workspace } from "@/lib/workspace/types";
+import {
+  readPlanPeriodStart,
+  readProgramPlanRef,
+} from "@/lib/billing/plan-fields";
 
 import {
   classifyFailure,
@@ -1269,7 +1273,7 @@ async function resolveAutoRetryWorkspace(params: {
     // admin's stays uncapped.
     const { data: owner, error: ownerError } = await supabase
       .from("users")
-      .select("individual_pilot, is_admin, video_hours_override")
+      .select("individual_pilot, is_admin, video_hours_override, plan")
       .eq("id", userId)
       .maybeSingle();
     if (ownerError) return null;
@@ -1289,6 +1293,10 @@ async function resolveAutoRetryWorkspace(params: {
         owner?.video_hours_override == null
           ? null
           : Number(owner.video_hours_override),
+      // The owner's plan and its period, which decide the hours a retry
+      // draws from January 1, 2027 — see `Workspace.plan`.
+      plan: (owner?.plan as string | null | undefined) ?? null,
+      planPeriodStart: await readPlanPeriodStart(supabase, userId),
       programStatus: null,
       playersCanUpload: false,
       uploadPolicy: "everyone",
@@ -1301,7 +1309,7 @@ async function resolveAutoRetryWorkspace(params: {
   const { data, error } = await supabase
     .from("program_members")
     .select(
-      "role, upload_enabled, programs!inner(status, players_can_upload, upload_policy, org_type, pilot_eligible)",
+      "role, upload_enabled, programs!inner(status, players_can_upload, upload_policy, org_type, pilot_eligible, pilot_ends_on, pilot_ended_at)",
     )
     .eq("program_id", programId)
     .eq("user_id", userId)
@@ -1319,6 +1327,8 @@ async function resolveAutoRetryWorkspace(params: {
           upload_policy: string;
           org_type: string;
           pilot_eligible: boolean;
+          pilot_ends_on?: string | null;
+          pilot_ended_at?: string | null;
         }
       | {
           status: string;
@@ -1326,6 +1336,8 @@ async function resolveAutoRetryWorkspace(params: {
           upload_policy: string;
           org_type: string;
           pilot_eligible: boolean;
+          pilot_ends_on?: string | null;
+          pilot_ended_at?: string | null;
         }[];
   };
   const program = Array.isArray(row.programs) ? row.programs[0] : row.programs;
@@ -1346,6 +1358,11 @@ async function resolveAutoRetryWorkspace(params: {
     // once an admin granted it — see `quotaTierFor()`.
     orgType: program.org_type as Workspace["orgType"],
     pilotEligible: program.pilot_eligible === true,
+    // From January 1, 2027 the hours come from a running pilot or a season
+    // plan — the same three facts `listProgramWorkspaces()` carries.
+    pilotEndsOn: program.pilot_ends_on ?? null,
+    pilotEndedAt: program.pilot_ended_at ?? null,
+    programPlan: await readProgramPlanRef(supabase, programId),
     role: row.role as Workspace["role"],
     mark: "",
     // Same rule listProgramWorkspaces() uses: 'active' means the claim

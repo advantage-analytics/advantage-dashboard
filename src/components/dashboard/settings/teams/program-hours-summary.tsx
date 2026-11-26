@@ -7,6 +7,7 @@ import { YouPill } from "@/components/ui/you-pill";
 import type { ProgramUsage } from "@/lib/data/usage-server";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 import {
+  daysUntil,
   daysUntilReset,
   formatHoursLong,
   formatResetDate,
@@ -102,8 +103,16 @@ export function ProgramHoursSummary({
   const fraction = usageFraction(usage.usedSeconds, usage.capSeconds);
   const severity = hoursSeverity(fraction);
   const left = Math.max(0, usage.capSeconds - usage.usedSeconds);
-  const resetDate = formatResetDate(usage.billingMonth);
-  const days = daysUntilReset(usage.billingMonth);
+  // The period the figures were read over: the allowance's own window (a
+  // season, a pilot month), which `getProgramUsage()` names. Null means
+  // nothing comes back — a team with no plan and no pilot.
+  const resetDate =
+    usage.resetsOn === undefined
+      ? formatResetDate(usage.billingMonth)
+      : usage.resetsOn;
+  const days = usage.windowEnd
+    ? daysUntil(usage.windowEnd)
+    : daysUntilReset(usage.billingMonth);
   const matches = usage.lines.reduce(
     (total, line) => total + line.matchCount,
     0,
@@ -119,9 +128,11 @@ export function ProgramHoursSummary({
           Program hours
         </span>
         <span className="flex-1" />
-        <span className="text-[11px] text-[var(--ink-500)]">
-          Resets {resetDate} · in {days} {days === 1 ? "day" : "days"}
-        </span>
+        {resetDate && (
+          <span className="text-[11px] text-[var(--ink-500)]">
+            Resets {resetDate} · in {days} {days === 1 ? "day" : "days"}
+          </span>
+        )}
       </div>
 
       <div className="flex flex-wrap items-baseline gap-2">
@@ -144,7 +155,9 @@ export function ProgramHoursSummary({
               aria-hidden="true"
             />
             {severity === "spent"
-              ? `Spent — uploads pause until ${resetDate}`
+              ? resetDate
+                ? `Spent — uploads pause until ${resetDate}`
+                : "Spent"
               : "Running low"}
           </span>
         )}

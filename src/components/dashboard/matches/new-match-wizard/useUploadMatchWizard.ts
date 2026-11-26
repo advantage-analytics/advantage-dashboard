@@ -47,19 +47,21 @@ import {
   uploadAndSubmitVideo,
   type VideoUploadEvent,
 } from "@/lib/services/splitstep/submit-match-video";
+import { freeHoursReturnOn } from "@/lib/services/splitstep/config";
 import {
-  currentBillingMonth,
-  freeHoursReturnOn,
-} from "@/lib/services/splitstep/config";
+  allowanceFor,
+  allowanceResetsOn,
+} from "@/lib/services/splitstep/allowance";
 import {
   accountTypeFor,
-  monthlyCapSecondsFor,
   NO_CREDITS,
   readCreditBalance,
+  readProgramUsedSeconds,
+  scopeToAllowance,
   sumUsedSeconds,
 } from "@/lib/services/splitstep/quota";
 import type { CreditsAdded } from "@/components/dashboard/credits/add-hours-dialog";
-import { formatResetDate, secondsLeft } from "@/lib/data/usage-format";
+import { secondsLeft } from "@/lib/data/usage-format";
 import { SUBMISSION_RESPONSE_INTERRUPTED_MESSAGE } from "@/lib/admin/uploads/types";
 import { adminUploadApproval } from "@/lib/admin/uploads/approval";
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
@@ -606,8 +608,8 @@ export interface UseUploadMatchWizardReturn {
   remainingQuotaSeconds?: number;
   /** This month's allowance for the active workspace — 2h personal, 75h program. */
   quotaCapSeconds: number;
-  /** When the allowance comes back, already formatted — "Sep 1". */
-  quotaResetsOn: string;
+  /** When the allowance comes back, already formatted — "Sep 1" — or null when nothing does. */
+  quotaResetsOn: string | null;
   /**
    * The two buckets behind `remainingQuotaSeconds` for a personal workspace:
    * free hours left this month, then credits. `remainingQuotaSeconds` is
@@ -1294,12 +1296,20 @@ export function useUploadMatchWizard({
   // Cap by tier, not by ledger: a custom org files under the program ledger
   // (`quotaAccountType` above, which the remaining-quota read filters on) but
   // draws the individual figure until a paid plan raises it — quotaTierFor().
+  // The one resolver the reservation reads: the cap, and the month or window
+  // its usage is summed over. Cheap and pure, so it is asked on every render;
+  // the reading below keys on its primitives, which change only when the
+  // month or window does.
+  const quotaAllowance = allowanceFor(eligibilityWorkspace);
   const quotaCapSeconds =
-    admin?.context.videoAllowance.capSeconds ??
-    monthlyCapSecondsFor(eligibilityWorkspace);
-  // "Sep 1". Settings › Usage already answers "when does this come back" from
-  // the same billing-month key, so the wizard asks it rather than re-deriving.
-  const quotaResetsOn = formatResetDate(currentBillingMonth());
+    admin?.context.videoAllowance.capSeconds ?? quotaAllowance.capSeconds;
+  // "Sep 1": the day that allowance turns over, or null when nothing comes
+  // back (a team with no plan and no pilot).
+  const quotaResetsOn = allowanceResetsOn(quotaAllowance);
+  const quotaWindowed = quotaAllowance.windowed;
+  const quotaBillingMonth = quotaAllowance.billingMonth;
+  const quotaWindowStart = quotaAllowance.windowStart.toISOString();
+  const quotaWindowEnd = quotaAllowance.windowEnd.toISOString();
 
   /**
    * Seconds left in this month's allowance, for the trim step's cost warning
@@ -1348,23 +1358,32 @@ export function useUploadMatchWizard({
       let used: number;
       let credits = 0;
       let granted = 0;
+      const scope = {
+        windowed: quotaWindowed,
+        billingMonth: quotaBillingMonth,
+        windowStart: new Date(quotaWindowStart),
+        windowEnd: new Date(quotaWindowEnd),
+      };
 
       if (eligibilityWorkspace.kind === "team") {
-        const { data, error } = await supabase.rpc("program_usage_total", {
-          p_program_id: eligibilityWorkspace.id,
-          p_billing_month: currentBillingMonth(),
-        });
+        const { usedSeconds, error } = await readProgramUsedSeconds(
+          supabase,
+          eligibilityWorkspace.id,
+          scope,
+        );
 
         if (error || cancelled) return;
-        used = Number(data ?? 0);
+        used = usedSeconds;
       } else {
-        const { data, error } = await supabase
-          .from("processing_usage")
-          .select("reserved_seconds, actual_seconds")
-          .eq("account_id", eligibilityWorkspace.id)
-          .eq("account_type", quotaAccountType)
-          .eq("billing_month", currentBillingMonth())
-          .eq("released", false);
+        const { data, error } = await scopeToAllowance(
+          supabase
+            .from("processing_usage")
+            .select("reserved_seconds, actual_seconds")
+            .eq("account_id", eligibilityWorkspace.id)
+            .eq("account_type", quotaAccountType)
+            .eq("released", false),
+          scope,
+        );
 
         if (error || cancelled) return;
 
@@ -1400,6 +1419,10 @@ export function useUploadMatchWizard({
     eligibilityWorkspace.kind,
     quotaAccountType,
     quotaCapSeconds,
+    quotaWindowed,
+    quotaBillingMonth,
+    quotaWindowStart,
+    quotaWindowEnd,
     isTrimStep,
     quotaReadNonce,
   ]);

@@ -8,3 +8,12 @@
 export function isMissingFunction(error: { code?: string }): boolean {
   return error.code === "PGRST202" || error.code === "42883";
 }
+
+/**
+ * Whether an error says a column is not on this database: PostgreSQL's
+ * `42703` (`undefined_column`), which PostgREST passes through for a column
+ * a select names. By code only, like the two beside it.
+ */
+export function isMissingColumn(error: { code?: string }): boolean {
+  return error.code === "42703";
+}

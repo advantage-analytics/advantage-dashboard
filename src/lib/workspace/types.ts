@@ -224,6 +224,33 @@ export interface Workspace {
    */
   programPlan?: ProgramPlanRef | null;
   /**
+   * `programs.pilot_ends_on` — the pilot's last free day, inclusive,
+   * `YYYY-MM-DD`. With `pilotEligible` and `pilotEndedAt` it decides whether
+   * a team's pilot is still running from January 1, 2027 — see
+   * `pilotIsRunning()` in `services/splitstep/allowance.ts`.
+   *
+   * Optional and fail-closed: a constructor that does not read the column
+   * leaves the team off the pilot. Absent for a personal workspace.
+   */
+  pilotEndsOn?: string | null;
+  /** `programs.pilot_ended_at` — set when an admin ended the pilot early. */
+  pilotEndedAt?: string | null;
+  /**
+   * `users.plan` of the PERSONAL workspace's owner — the plan whose hours
+   * this workspace draws from January 1, 2027. Carried here, not only on
+   * `Viewer`, because the admin console builds a personal workspace for
+   * someone else and the hours are the owner's. Read it through `planFor()`.
+   *
+   * Absent or null reads as Free, and always for a team workspace.
+   */
+  plan?: string | null;
+  /**
+   * `users.plan_period_start` of the personal workspace's owner, an ISO
+   * instant — the anchor of the month-long window a paid plan's hours cover
+   * (`hoursWindow()`). Null or absent falls back to the calendar month.
+   */
+  planPeriodStart?: string | null;
+  /**
    * `programs.status` as the server read it — the column `canSubmitVideo` is
    * derived from, carried raw. Null for a personal workspace, which has no
    * program row.

@@ -44,7 +44,7 @@ export default async function TeamPage({
   const [data, usage, pendingSeconds, seats] = await Promise.all([
     getTeamSettings(programId),
     getProgramUsage(programId, billingMonth, program),
-    getProgramUsagePending(programId, billingMonth),
+    getProgramUsagePending(programId, billingMonth, program),
     getProgramSeatUsage(programId),
   ]);
   if (!data) redirect("/dashboard/settings/teams");

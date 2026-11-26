@@ -62,7 +62,10 @@ export function BetaHeaderMeter() {
 
 type PillHours = Pick<HoursLeft, "remainingSeconds" | "capSeconds"> &
   Partial<
-    Pick<HoursLeft, "creditSeconds" | "grantedSeconds" | "nextCreditExpiresAt">
+    Pick<
+      HoursLeft,
+      "creditSeconds" | "grantedSeconds" | "nextCreditExpiresAt" | "resetsOn"
+    >
   >;
 
 /**
@@ -130,11 +133,15 @@ export function BetaMeterPill({
   // never pay for the Date and Intl work behind the default.
   // A team's allowance resets every month; a player's free hours stop after
   // Dec 31, so in December there is no date to promise them.
+  // A team's own answer rides on the hours read (`HoursLeft.resetsOn`): the
+  // day its window turns over, or null for a team with nothing to come back.
   const resetsOnOrDefault = () =>
     resetsOn !== undefined
       ? resetsOn
       : teamHours
-        ? formatResetDate(currentBillingMonth())
+        ? ready?.resetsOn !== undefined
+          ? ready.resetsOn
+          : formatResetDate(currentBillingMonth())
         : freeHoursReturnOn();
 
   const freeOf = ready
@@ -169,11 +176,7 @@ export function BetaMeterPill({
           ? "Admin accounts have no monthly cap. Click for Plan."
           : teamHours
             ? out
-              ? outOfHoursDetail(
-                  ready,
-                  true,
-                  resetsOnOrDefault() ?? formatResetDate(currentBillingMonth()),
-                )
+              ? outOfHoursDetail(ready, true, resetsOnOrDefault())
               : `${freeOf} video hours left`
             : out
               ? resetsOnOrDefault()
@@ -289,13 +292,14 @@ export function BetaMeterPill({
 function outOfHoursDetail(
   hours: PillHours,
   teamHours: boolean,
-  resetsOn: string,
+  resetsOn: string | null,
 ): string {
   const cap = formatHoursShort(hours.capSeconds);
   const unit = cap === "1" ? "video hour" : "video hours";
-  return teamHours
-    ? `Your team has used its ${cap} ${unit} this month. They reset on ${resetsOn}.`
-    : `You've used your ${cap} ${unit} this month. They reset on ${resetsOn}.`;
+  const used = teamHours
+    ? `Your team has used its ${cap} ${unit} this month.`
+    : `You've used your ${cap} ${unit} this month.`;
+  return resetsOn ? `${used} They reset on ${resetsOn}.` : used;
 }
 
 /**

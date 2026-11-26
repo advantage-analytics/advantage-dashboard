@@ -1,4 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  allowanceFor,
+  type AllowanceWorkspace,
+} from "@/lib/services/splitstep/allowance";
+import { windowArgs } from "@/lib/services/splitstep/quota";
+import { isMissingFunction } from "@/lib/supabase/missing-function";
 import type { ProgramRole, Workspace } from "@/lib/workspace/types";
 
 /**
@@ -62,16 +68,36 @@ export async function getProgramSeatUsage(
  * A SUBSET of `getProgramUsage().usedSeconds`, never an addition to it — the
  * total already counts an unfinished job at its reserved figure. The summary
  * says "includes X reserved", and adding the two would double-count.
+ *
+ * Read over the same period as `getProgramUsage()`: the program's current
+ * allowance window when `billingMonth` is this month and plans have begun,
+ * that calendar month otherwise. `tier` is the program's workspace.
  */
 export async function getProgramUsagePending(
   programId: string,
   billingMonth: string,
+  tier?: Omit<AllowanceWorkspace, "kind">,
+  now: Date = new Date(),
 ): Promise<number> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("program_usage_pending", {
-    p_program_id: programId,
-    p_billing_month: billingMonth,
-  });
+  const allowance = tier ? allowanceFor({ ...tier, kind: "team" }, now) : null;
+  const byMonth = () =>
+    supabase.rpc("program_usage_pending", {
+      p_program_id: programId,
+      p_billing_month: billingMonth,
+    });
+  let result =
+    allowance?.windowed && allowance.billingMonth === billingMonth
+      ? await supabase.rpc("program_usage_pending_between", {
+          p_program_id: programId,
+          ...windowArgs(allowance),
+        })
+      : null;
+  // The month's figure if the window read is not on this database yet.
+  if (!result || (result.error && isMissingFunction(result.error))) {
+    result = await byMonth();
+  }
+  const { data, error } = result;
 
   if (error) {
     console.error("[teams] could not read pending usage", {

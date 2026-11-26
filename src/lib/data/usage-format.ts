@@ -131,6 +131,22 @@ export function daysUntilReset(
   return Math.max(0, Math.round((reset.getTime() - today) / 86_400_000));
 }
 
+/** Whole UTC days from `now`'s day to the day of an ISO instant, never negative. */
+export function daysUntil(instant: string, now: Date = new Date()): number {
+  const end = new Date(instant);
+  const endDay = Date.UTC(
+    end.getUTCFullYear(),
+    end.getUTCMonth(),
+    end.getUTCDate(),
+  );
+  const today = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+  );
+  return Math.max(0, Math.round((endDay - today) / 86_400_000));
+}
+
 /**
  * How loudly a quota meter should speak.
  *

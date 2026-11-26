@@ -46,7 +46,9 @@ import {
 } from "@/lib/data/admin-team-links";
 import type { ProgramUsage } from "@/lib/data/usage-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
-import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
+import { readProgramPlanRef } from "@/lib/billing/plan-fields";
+import { allowanceFor } from "@/lib/services/splitstep/allowance";
+import { scopeToAllowance } from "@/lib/services/splitstep/quota";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
 import type {
   EventsPolicy,
@@ -720,27 +722,40 @@ interface RawUsageRow {
  * thing deliberately dropped: it exists to stop a player reading the whole
  * program's ledger, and an admin is neither.
  *
- * The cap comes from `monthlyCapSecondsFor({ kind: 'team', ...tier })` rather
- * than `getMonthlyCapSeconds('program')` — a custom org files under the program
- * ledger but draws the individual figure until an admin grants
- * `pilot_eligible`, and printing 75 hours beside a spend that refuses at 2 is
- * the exact divergence `quotaTierFor()` exists to prevent.
+ * The cap and the rows it counts come from `allowanceFor()`, the resolver the
+ * reservation reads — printing 75 hours beside a spend that refuses at 2 (or,
+ * from January 1, 2027, at 0) is the exact divergence it exists to prevent.
  */
 async function readUsage(
   admin: SupabaseClient,
   programId: string,
   billingMonth: string,
-  tier: Pick<Workspace, "orgType" | "pilotEligible">,
+  tier: Pick<
+    Workspace,
+    "orgType" | "pilotEligible" | "pilotEndsOn" | "pilotEndedAt"
+  >,
 ): Promise<ProgramUsage> {
-  const capSeconds = monthlyCapSecondsFor({ kind: "team", ...tier });
+  // The season plan decides the cap and its window from January 1, 2027, so
+  // it is read first; no plan (or no table yet) is the fail-closed figure.
+  const allowance = allowanceFor({
+    kind: "team",
+    ...tier,
+    programPlan: await readProgramPlanRef(admin, programId),
+  });
+  const capSeconds = allowance.capSeconds;
 
-  const { data, error } = await admin
-    .from("processing_usage")
-    .select("created_by, reserved_seconds, actual_seconds, job_id")
-    .eq("account_id", programId)
-    .eq("account_type", "program")
-    .eq("billing_month", billingMonth)
-    .eq("released", false);
+  const { data, error } = await scopeToAllowance(
+    admin
+      .from("processing_usage")
+      .select("created_by, reserved_seconds, actual_seconds, job_id")
+      .eq("account_id", programId)
+      .eq("account_type", "program")
+      .eq("released", false),
+    // The caller's month when it is not the one the allowance is for.
+    billingMonth === allowance.billingMonth
+      ? allowance
+      : { ...allowance, windowed: false, billingMonth },
+  );
 
   if (error) {
     console.error("[admin team] could not read program usage", {
@@ -1449,7 +1464,12 @@ export const getAdminTeam = cache(
         .eq("status", "open")
         .order("created_at", { ascending: true }),
       readSeatUsage(admin, programId, row.seats ?? 0),
-      readUsage(admin, programId, billingMonth, { orgType, pilotEligible }),
+      readUsage(admin, programId, billingMonth, {
+        orgType,
+        pilotEligible,
+        pilotEndsOn: row.pilot_ends_on,
+        pilotEndedAt: row.pilot_ended_at,
+      }),
       readPilot(admin, row, viewer.id),
       readPlan(programId),
       readConference(admin, programId, row.conference_id),

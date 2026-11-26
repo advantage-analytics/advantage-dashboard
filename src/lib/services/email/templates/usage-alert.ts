@@ -36,6 +36,11 @@ export interface UsageAlertInput {
   capSeconds: number;
   /** `YYYY-MM-01` — the billing month the numbers belong to. */
   billingMonth: string;
+  /**
+   * The day the allowance turns over, when it is not the first of next
+   * month: a season's hours run to the day after the season ends.
+   */
+  resetsOn?: string;
 }
 
 export function usageAlertEmail(input: UsageAlertInput): EmailMessage {
@@ -47,10 +52,11 @@ export function usageAlertEmail(input: UsageAlertInput): EmailMessage {
     usedSeconds,
     capSeconds,
     billingMonth,
+    resetsOn,
   } = input;
 
   const left = secondsLeft(usedSeconds, capSeconds);
-  const resets = formatResetDate(billingMonth);
+  const resets = resetsOn ?? formatResetDate(billingMonth);
   const greeting = recipientName ? `${recipientName}, ` : "";
 
   const content: EmailContent =
