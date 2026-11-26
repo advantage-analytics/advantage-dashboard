@@ -25,6 +25,16 @@
  *   vp9.mkv             Matroska (not WebM: a different reader path)
  *   audio-only.webm     readable container, no video track
  *
+ * One fixture is NOT made here, because Mediabunny can't write a codec it
+ * can't read: extra-audio.mov (video-conversion-tracks.spec.ts) is H.264 + AAC
+ * plus a second audio track in IMA ADPCM (`ima4`), standing in for an iPhone's
+ * spatial-audio `apac` track. Also synthesised, with ffmpeg:
+ *
+ *   ffmpeg -f lavfi -i testsrc2=size=64x64:rate=30 -f lavfi -i sine=f=440 \
+ *     -f lavfi -i sine=f=660 -t 1 -map 0:v -map 1:a -map 2:a -c:v libx264 \
+ *     -g 30 -pix_fmt yuv420p -c:a:0 aac -b:a:0 32k -c:a:1 adpcm_ima_qt \
+ *     extra-audio.mov
+ *
  * H.264 is used where the container allows it because that is what a phone
  * exports; VP9 is used for the Matroska pair because that is what those
  * containers carry in practice.
