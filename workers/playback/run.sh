@@ -224,9 +224,7 @@ encode() {
 # its 2189.075 s end; the encode left them out and the copy was refused three
 # times for "losing" frames no player ever shows. Both files are cut at the
 # upload's end, so a copy that keeps them still compares.
-VIDEO_END="$(probe_stream duration)"
-VIDEO_START="$(probe_stream start_time)"
-VIDEO_END="$(awk -v d="$VIDEO_END" -v s="$VIDEO_START" \
+VIDEO_END="$(awk -v d="$(probe_stream duration)" -v s="$(probe_stream start_time)" \
   'BEGIN { if (d + 0 > 0) printf "%.6f", d + (s + 0); else print "" }')"
 shown_times() {
   ffprobe -v error -select_streams v:0 -show_entries packet=pts_time \
