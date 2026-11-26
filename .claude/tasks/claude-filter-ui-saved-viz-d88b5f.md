@@ -157,7 +157,7 @@ ready).
 
 ## T11 · Pin bands and approach lanes on click
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T5
 - **files:** (guess) src/components/dashboard/matches/match-detail/shots/viz-bands-overlay.tsx (inert today, `pointer-events: none` ~:225, :324), src/components/dashboard/matches/match-detail/shots/lightbox-court.tsx (`setPinnedZone` ~:474, `ApproachApronLabels`), src/components/dashboard/matches/match-detail/shots/{viz-lightbox-shell.tsx,lightbox-stats.tsx}, tests/viz-all-zones-browser.spec.ts, tests/viz-approach-lightbox-browser.spec.ts

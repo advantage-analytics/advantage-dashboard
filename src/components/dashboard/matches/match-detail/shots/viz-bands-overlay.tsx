@@ -35,6 +35,10 @@ import type { StatRow, VizBandZones } from "./viz-model";
  * screen-reader user either: the stats card behind the viewer carries every
  * band row as `statRowAnnouncement`'s own sentence.
  *
+ * A band still pins on a click (plan §8), but not here: `lightbox-court.tsx`
+ * lays its own transparent hit areas (`BandHitAreas`) over the court lines
+ * and under the marks, and leaves them out while the band editor is open.
+ *
  * Plan 2026-11-25 §5 (boards Court-labels-11/-12/-8): a band prints its
  * NAME and, on its own line beneath, its RANGE ("DEEP" / "0–9 FT") — no
  * `% · n`. The Statistics panel beside the court prints every band's rate,

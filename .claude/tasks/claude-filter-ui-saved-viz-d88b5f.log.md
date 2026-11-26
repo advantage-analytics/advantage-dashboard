@@ -111,3 +111,14 @@ is the runner's. Newest entries at the bottom.
 3. Errors titles don't include the out/net call.
 4. `MarkPill`/`MarkCard` hard-code rounded-full and pixel values — check against DS primitives at /pr-check.
 5. No visual check yet of the card with its Hit from / Landed rows (text-only browser assertions).
+
+## T11 · Pin bands and approach lanes on click — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** lightbox-court.tsx adds `BandHitAreas` (each drawn depth/contact band, above the court lines and under the marks; not rendered while the band editor is open) and `LaneHitAreas` (each far-court third, wing name to net). A click pins via the serve-zone pattern (`useDismissOnNextPress`), drawing the Statistics-hover dashed outline (a hovered row still wins) and a new lane outline. The pinned row is lit through a new `highlight` prop on lightbox-stats.tsx (existing hover styling), carried by viz-lightbox-shell.tsx; lanes map to "Approach to" rows via the opponent's hand. URL and filters unchanged. Heat blobs no longer take clicks. Specs in viz-lightbox-browser (depth + contact) and viz-approach-filters-browser (lanes) — the task's listed harnesses lack Statistics rows/URL. Widget-states: SVG hit areas only.
+**follow-ups:**
+
+1. No browser spec drags the band editor's dividers while bands are clickable (every harness disables "Edit bands…").
+2. Hovering an "Approach to" row doesn't outline its lane yet; only serve and band rows outline on hover.
+3. On a court mixing opponent hands, an outer lane pins its outline but lights no row.
+4. The pin survives a keyboard-only cut switch (same as serve zones).

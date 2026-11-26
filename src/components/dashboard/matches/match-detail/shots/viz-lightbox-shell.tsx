@@ -62,6 +62,7 @@ import {
   marksDrawn,
   pairContactPoint,
   type CourtOutline,
+  type CourtPinnedRow,
 } from "./lightbox-court";
 import {
   COUNT_NOUN,
@@ -428,6 +429,9 @@ export function VizLightboxShell({
     pick: StatPick;
   } | null>(null);
   const [statHover, setStatHover] = useState<StatPick | null>(null);
+  /** The Statistics row of a band or lane pinned on the court (plan §8):
+   *  lit as if hovered until the court lets the pin go. Never a filter. */
+  const [courtPin, setCourtPin] = useState<CourtPinnedRow | null>(null);
   const courtStamp = `${cut}:${player?.value ?? ""}`;
   // A pick whose stamp no longer matches is DROPPED, not just hidden, so
   // switching back never brings it back: the legend's on a cut change or a
@@ -1279,6 +1283,7 @@ export function VizLightboxShell({
                       unit={unit}
                       focusIds={statHover !== null ? hoverIds : null}
                       outline={outline}
+                      onPinRow={setCourtPin}
                       onReadoutEnter={holdReadout}
                       onReadoutLeave={releaseReadout}
                       editing={editing}
@@ -1544,6 +1549,7 @@ export function VizLightboxShell({
                             );
                           }}
                           onHover={setStatHover}
+                          highlight={courtPin}
                           hint={statHint}
                         />
                       </div>

@@ -719,3 +719,56 @@ test("the Points pane of a player with no approaches says what the stage says: n
   await expect(dialog).not.toContainText("recorded for");
   expect(errors).toEqual([]);
 });
+
+/* ── Plan 2026-11-25 §8: an approach lane pins on a click ─────────────── */
+
+for (const [lane, word, row] of [
+  ["middle", "Middle", "Middle"],
+  ["left", "Their FH", "Their forehand"],
+] as const) {
+  test(`a click on the ${lane} lane pins its outline and lights "${row}" under Approach to until the next press, and changes no filter`, async ({
+    page,
+  }) => {
+    const { dialog, errors } = await openApproaches(page, "&hand=known");
+    await showStats(dialog);
+    const court = stage(dialog);
+    const marks = court.locator("[data-viz-mark]");
+    const all = await marks.count();
+    expect(all).toBeGreaterThan(0);
+    const outline = court.locator("[data-viz-outline]");
+    const lit = dialog.locator("button[data-highlighted]");
+    await expect(outline).toHaveCount(0);
+    const before = page.url();
+
+    // The lane's wing word on the apron: the words are deaf to the pointer,
+    // so the press lands on the lane's own hit area beneath them.
+    const label = court.locator(`[data-approach-lane="${lane}"]`);
+    await expect(label).toHaveText(word);
+    const box = (await label.boundingBox())!;
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+
+    const hit = court.locator(`[data-approach-lane-hit="${lane}"]`);
+    await expect(hit).toHaveAttribute("data-pinned", "");
+    const stageBox = (await court.boundingBox())!;
+    await page.mouse.move(stageBox.x + stageBox.width / 2, stageBox.y - 40);
+    await expect(outline).toHaveCount(1);
+    await expect(outline).toHaveAttribute("data-viz-outline", "lane");
+    await page.screenshot({
+      path: test.info().outputPath(`lane-pinned-${lane}.png`),
+    });
+    // "Approach to"'s row for that wing, and no other row.
+    await expect(lit).toHaveCount(1);
+    await expect(lit).toHaveAttribute("aria-label", new RegExp(`^${row}:`));
+    await expect(lit).toHaveAttribute("aria-pressed", "false");
+    // Not a filter: the same URL and every mark still drawn.
+    expect(page.url()).toBe(before);
+    await expect(marks).toHaveCount(all);
+
+    // The next press anywhere lets it go.
+    await dialog.getByRole("heading").first().click();
+    await expect(outline).toHaveCount(0);
+    await expect(lit).toHaveCount(0);
+    expect(page.url()).toBe(before);
+    expect(errors).toEqual([]);
+  });
+}

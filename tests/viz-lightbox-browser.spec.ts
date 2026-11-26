@@ -1319,6 +1319,75 @@ test("the Bands menu beside the legend carries the depth rows a placement cut ha
   ).toHaveAttribute("aria-disabled", "true");
 });
 
+/* ── Plan 2026-11-25 §8: a band pins on a click ───────────────────────── */
+
+for (const [cut, kind, drawn] of [
+  ["rallyPlacement", "depth", "band"],
+  ["rallyPosition", "contact", "contact"],
+] as const) {
+  test(`a click on a ${kind} band pins its outline and lights its Statistics row until the next press, and changes no filter`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width: 1512, height: 982 });
+    await page.goto(`${origin}/?tab=shots&cut=${cut}`);
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Statistics" }).click();
+    const stage = dialog.locator("[data-court-stage]");
+    await expect(stage.locator(`[data-viz-bands="${kind}"]`)).toHaveCount(1);
+    const marks = stage.locator("[data-viz-mark]");
+    const all = await marks.count();
+    expect(all).toBeGreaterThan(0);
+    const outline = stage.locator("[data-viz-outline]");
+    const lit = dialog.locator("button[data-highlighted]");
+    await expect(outline).toHaveCount(0);
+    await expect(lit).toHaveCount(0);
+
+    const hit = stage.locator("[data-viz-band-hit]").first();
+    const key = (await hit.getAttribute("data-viz-band-hit"))!;
+    const name = (await stage
+      .locator(`[data-viz-band="${key}"] [data-viz-band-label]`)
+      .textContent())!;
+    const before = page.url();
+    // On the apron at the stage's left edge, mid-band: clear of every mark,
+    // and the band's own words there are deaf to the pointer.
+    const band = (await hit.boundingBox())!;
+    const box = (await stage.boundingBox())!;
+    const top = Math.max(band.y, box.y);
+    const bottom = Math.min(band.y + band.height, box.y + box.height);
+    await page.mouse.click(box.x + 24, (top + bottom) / 2);
+
+    // Pinned: the band's dashed outline, held once the pointer has left.
+    await expect(hit).toHaveAttribute("data-pinned", "");
+    await page.mouse.move(box.x + box.width / 2, box.y - 40);
+    await expect(outline).toHaveCount(1);
+    await expect(outline).toHaveAttribute("data-viz-outline", drawn);
+    await page.screenshot({
+      path: test.info().outputPath(`band-pinned-${kind}.png`),
+    });
+    // Its Statistics row wears its hover look, and only it.
+    await expect(lit).toHaveCount(1);
+    await expect(lit).toHaveAttribute(
+      "aria-label",
+      new RegExp(`^${name.trim()}:`, "i"),
+    );
+    await expect(lit).toHaveAttribute("aria-pressed", "false");
+    // Not a filter: the same URL, every mark still drawn, no strip.
+    expect(page.url()).toBe(before);
+    await expect(marks).toHaveCount(all);
+    await expect(dialog.locator("[data-viz-filter-strip]")).toHaveCount(0);
+
+    // The next press anywhere lets it go.
+    await dialog.getByRole("heading").first().click();
+    await expect(outline).toHaveCount(0);
+    await expect(lit).toHaveCount(0);
+    await expect(hit).not.toHaveAttribute("data-pinned", /.*/);
+    expect(page.url()).toBe(before);
+    expect(errors).toEqual([]);
+  });
+}
+
 /* ── Plan 2026-11-25 §6: Returns is one chart ─────────────────────────── */
 
 test("Returns is one chart: the old contact link and vends=contact both open Returns on the contact court, a bare link on the placement court", async ({

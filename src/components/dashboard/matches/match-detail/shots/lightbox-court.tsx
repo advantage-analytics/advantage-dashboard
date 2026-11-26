@@ -62,6 +62,7 @@ import type { DistanceUnit } from "@/lib/format/distance";
 import { nextMarkIndex } from "./viz-mark-roving";
 import { isPlacementCut } from "./cut-kinds";
 import type { Hand } from "../match-filters/shot-geometry";
+import type { ApproachLane, ApproachWing } from "../match-filters/approach";
 import {
   defaultCourtEnds,
   type Chart,
@@ -108,7 +109,8 @@ import {
  *   on the pan, which is what lets `MarkLayer` be `memo`'d away from both.
  */
 
-/** A Statistics row's place on the court: a serve zone, or a band. */
+/** A Statistics row's place on the court: a serve zone, a band, or one of
+ *  the Approaches cut's three lanes (the far court's thirds). */
 export type CourtOutline =
   | { kind: "zone"; key: ZoneKey }
   | {
@@ -116,7 +118,37 @@ export type CourtOutline =
       band: "depth" | "contact";
       dividersFt: number[];
       index: number;
-    };
+    }
+  | { kind: "lane"; lane: ApproachLane };
+
+/**
+ * A Statistics row the court has pinned (plan §8): a depth or contact band's
+ * row in the `depth` group, or an approach lane's in `approach-to`.
+ */
+export interface CourtPinnedRow {
+  group: string;
+  row: string;
+}
+
+/** What a click on the court pinned: a band (by its `BandRow.key`) or an
+ *  approach lane. Never a filter — it outlines, and nothing else. */
+type CourtPin =
+  { kind: "band"; key: string } | { kind: "lane"; lane: ApproachLane };
+
+/**
+ * The opponent's wing a lane faces, by which way the apron names its thirds
+ * (`approachLaneText`): `true` puts their forehand on the hitter's left. A
+ * court whose thirds read "Left · Right" (`null`, several hands) has no one
+ * wing for an outer lane — its "Approach to" rows each mix both thirds.
+ */
+function laneWing(
+  lane: ApproachLane,
+  leftIsForehand: boolean | null,
+): ApproachWing | null {
+  if (lane === "middle") return "middle";
+  if (leftIsForehand === null) return null;
+  return (lane === "left") === leftIsForehand ? "forehand" : "backhand";
+}
 
 /* ── Type inside the art ─────────────────────────────────────────────────── */
 // Every word on this court is set in one style — `COURT_LABEL_*`
@@ -435,6 +467,7 @@ export function LightboxCourt({
   focusIds = null,
   opponentHand,
   outline = null,
+  onPinRow,
   onReadoutEnter,
   onReadoutLeave,
   editing = false,
@@ -508,6 +541,14 @@ export function LightboxCourt({
   opponentHand?: Hand | null;
   /** The hovered or chosen Statistics row's zone or band, outlined dashed white. */
   outline?: CourtOutline | null;
+  /**
+   * Plan §8: a click on a depth/contact band or an approach lane pins it —
+   * the same dashed outline a Statistics row's hover draws, held until the
+   * next press anywhere, as a serve zone pins. Told the row it stands for
+   * (or `null` as it lets go) so the Statistics panel can light that row.
+   * Pass a stable function. Pinning never filters.
+   */
+  onPinRow?: (row: CourtPinnedRow | null) => void;
   onReadoutEnter?: () => void;
   onReadoutLeave?: () => void;
   /**
@@ -635,6 +676,55 @@ export function LightboxCourt({
     shownZone !== null && activeZoneStats
       ? buildZoneReadout(shownZone, activeZoneStats, { subject: subjectName })
       : null;
+
+  // Plan §8: a band or an approach lane pins on a click, as a zone does —
+  // its outline held until the next press anywhere, its Statistics row lit.
+  // It outlines and nothing more: no filter, no URL.
+  const leftIsForehand =
+    cut === "approaches"
+      ? opponentHand !== undefined
+        ? opponentHand !== "left"
+        : approachLeftLaneSide(dots)
+      : null;
+  const [pinned, setPinned] = useState<CourtPin | null>(null);
+  const unpin = useCallback(() => {
+    setPinned(null);
+    onPinRow?.(null);
+  }, [onPinRow]);
+  useDismissOnNextPress(pinned !== null, unpin);
+  const pinBand = (key: string) => {
+    setPinned({ kind: "band", key });
+    onPinRow?.({ group: "depth", row: key });
+  };
+  const pinLane = (lane: ApproachLane) => {
+    setPinned({ kind: "lane", lane });
+    const wing = laneWing(lane, leftIsForehand);
+    onPinRow?.(wing !== null ? { group: "approach-to", row: wing } : null);
+  };
+  // Read against the bands drawn NOW: a pin whose band has gone (the bands
+  // changed, or the editor's draft is up) outlines nothing.
+  const bandHits = bands !== null && !editing && !bands.editing;
+  const pinnedIndex =
+    pinned?.kind === "band" && bandHits
+      ? bands.rows.findIndex((r) => r.key === pinned.key)
+      : -1;
+  const pinnedOutline: CourtOutline | null =
+    pinned === null || editing
+      ? null
+      : pinned.kind === "lane"
+        ? cut === "approaches"
+          ? { kind: "lane", lane: pinned.lane }
+          : null
+        : pinnedIndex >= 0 && bands !== null
+          ? {
+              kind: "band",
+              band: bands.kind,
+              dividersFt: bands.dividersFt,
+              index: pinnedIndex,
+            }
+          : null;
+  // A hovered Statistics row outranks the pin while the pointer is on it.
+  const drawnOutline = outline ?? pinnedOutline;
 
   const shownReadout = markReadout ?? zoneReadout;
   let readoutStyle: React.CSSProperties | null = null;
@@ -810,7 +900,7 @@ export function LightboxCourt({
           )}
 
           <CourtLines />
-          {outline !== null && <OutlineRect outline={outline} />}
+          {drawnOutline !== null && <OutlineRect outline={drawnOutline} />}
           {chart === "zones" && cut !== "serve" && bands === null && (
             <text
               x={VIEWER_COURT.centreX}
@@ -829,11 +919,7 @@ export function LightboxCourt({
           {cut === "approaches" ? (
             <CourtEndLabels
               scale={labelScale}
-              lanes={approachLaneText(
-                opponentHand !== undefined
-                  ? opponentHand !== "left"
-                  : approachLeftLaneSide(dots),
-              )}
+              lanes={approachLaneText(leftIsForehand)}
             />
           ) : (
             // Every other chart names an end once it draws the contact
@@ -858,19 +944,46 @@ export function LightboxCourt({
             />
           )}
 
+          {/* Plan §8: the bands' and lanes' hit areas — over the court lines
+            and the words, UNDER the marks (as a serve zone's is), so a mark
+            keeps its hover and click. None while the band editor is open:
+            its handles own the pointer then. A lane is drawn after the bands
+            so, on an Approaches court that draws both, the singles thirds
+            pin their lane and the alleys and apron beside them their band. */}
+          {bandHits && (
+            <BandHitAreas
+              kind={bands.kind}
+              dividersFt={bands.dividersFt}
+              rows={bands.rows}
+              pinnedKey={pinned?.kind === "band" ? pinned.key : null}
+              onPin={pinBand}
+            />
+          )}
+          {cut === "approaches" && !editing && (
+            <LaneHitAreas
+              scale={labelScale}
+              pinned={pinned?.kind === "lane" ? pinned.lane : null}
+              onPin={pinLane}
+            />
+          )}
+
           <g
             opacity={editing ? EDITING_ART_OPACITY : undefined}
             style={editing ? { pointerEvents: "none" } : undefined}
             aria-hidden={editing || undefined}
           >
             {heat && (
-              <HeatLayer
-                cut={cut}
-                dots={dots}
-                project={heatProjectorFor(cut)}
-                radius={VIEWER_HEAT_DOT_RADIUS}
-                region={viewerHeatFilterRegion()}
-              />
+              // Deaf to the pointer: a blob over a band would otherwise
+              // swallow the click that pins it.
+              <g style={{ pointerEvents: "none" }}>
+                <HeatLayer
+                  cut={cut}
+                  dots={dots}
+                  project={heatProjectorFor(cut)}
+                  radius={VIEWER_HEAT_DOT_RADIUS}
+                  region={viewerHeatFilterRegion()}
+                />
+              </g>
             )}
 
             {showMarks && (
@@ -1023,6 +1136,102 @@ function CourtEndLabels({
   );
 }
 
+/**
+ * One transparent hit area per drawn band (plan §8): the band's full depth,
+ * as wide as its wash (`BAND_BLEED` past the art on both sides). A click
+ * pins the band. The overlay itself stays inert (`viz-bands-overlay.tsx`) —
+ * this layer sits above the court lines, under the marks.
+ */
+function BandHitAreas({
+  kind,
+  dividersFt,
+  rows,
+  pinnedKey,
+  onPin,
+}: {
+  kind: "depth" | "contact";
+  dividersFt: number[];
+  rows: VizBandsOverlayProps["rows"];
+  pinnedKey: string | null;
+  onPin: (key: string) => void;
+}) {
+  const edges = viewerBandEdges(kind, dividersFt);
+  if (rows.length !== edges.length - 1) return null;
+  const left = VIEWER_COURT.viewBox.minX - BAND_BLEED;
+  const width = VIEWER_COURT.viewBox.w + 2 * BAND_BLEED;
+  return (
+    <g data-viz-band-hits={kind} aria-hidden="true">
+      {rows.map((row, index) => {
+        const top = edges[index];
+        const height = edges[index + 1] - top;
+        if (height <= 0) return null;
+        return (
+          <rect
+            key={row.key}
+            data-viz-band-hit={row.key}
+            data-pinned={row.key === pinnedKey ? "" : undefined}
+            x={left}
+            y={top}
+            width={width}
+            height={height}
+            fill="transparent"
+            onClick={() => onPin(row.key)}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
+/**
+ * The Approaches court's three lanes as hit areas (plan §8): each third of
+ * the singles court's far half, from its wing name on the apron down to the
+ * net. A click pins the lane.
+ */
+function LaneHitAreas({
+  scale,
+  pinned,
+  onPin,
+}: {
+  scale: number;
+  pinned: ApproachLane | null;
+  onPin: (lane: ApproachLane) => void;
+}) {
+  const layout = approachApronLayout(scale);
+  const top =
+    layout.laneY -
+    APRON_FONT_ASCENT * layout.lane -
+    APPROACH_BASELINE_GAP * scale;
+  return (
+    <g data-approach-lane-hits="" aria-hidden="true">
+      {(["left", "middle", "right"] as const).map((lane) => {
+        const x = laneX(lane);
+        return (
+          <rect
+            key={lane}
+            data-approach-lane-hit={lane}
+            data-pinned={lane === pinned ? "" : undefined}
+            x={x.x1}
+            y={top}
+            width={x.x2 - x.x1}
+            height={VIEWER_COURT.netY - top}
+            fill="transparent"
+            onClick={() => onPin(lane)}
+          />
+        );
+      })}
+    </g>
+  );
+}
+
+/** A lane's third of the singles court, left to right (`laneOf`). */
+function laneX(lane: ApproachLane): { x1: number; x2: number } {
+  const third = (VIEWER_COURT.singlesRight - VIEWER_COURT.singlesLeft) / 3;
+  const i = lane === "left" ? 0 : lane === "middle" ? 1 : 2;
+  const x1 = VIEWER_COURT.singlesLeft + i * third;
+  return { x1, x2: x1 + third };
+}
+
 /** The outline's stroke: the court's line colour, dashed so it reads as a
  *  marker laid over the court and never as one of its painted lines. */
 const OUTLINE_STROKE = {
@@ -1078,6 +1287,13 @@ function OutlineRect({ outline }: { outline: CourtOutline }) {
     w = cell.x2 - cell.x1;
     y = VIEWER_COURT.farServiceY;
     h = VIEWER_COURT.netY - VIEWER_COURT.farServiceY;
+  } else if (outline.kind === "lane") {
+    // The third of the far court the lane's approaches land in.
+    const lane = laneX(outline.lane);
+    x = lane.x1;
+    w = lane.x2 - lane.x1;
+    y = VIEWER_COURT.farBaselineY;
+    h = VIEWER_COURT.netY - VIEWER_COURT.farBaselineY;
   } else {
     const edges = viewerBandEdges(outline.band, outline.dividersFt);
     x = VIEWER_COURT.singlesLeft;

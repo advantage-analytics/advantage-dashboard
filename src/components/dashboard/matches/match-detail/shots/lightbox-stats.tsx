@@ -145,6 +145,7 @@ export function LightboxStats({
   pick,
   onPick,
   onHover,
+  highlight = null,
   hint = null,
 }: {
   stats: VizStats;
@@ -156,6 +157,11 @@ export function LightboxStats({
   pick: StatPick | null;
   onPick: (pick: StatPick | null) => void;
   onHover: (pick: StatPick | null) => void;
+  /**
+   * The row of a band or approach lane pinned on the court (plan §8): drawn
+   * as if hovered — the same wash and ink — while the pin holds.
+   */
+  highlight?: { group: string; row: string } | null;
   /** Drawn under the top spacer, above the summary figures
    *  (`WatchHintNotice`): how to watch what a row picks. */
   hint?: ReactNode;
@@ -307,6 +313,10 @@ export function LightboxStats({
                       pressed={
                         pick?.group === group.key && pick.row === row.key
                       }
+                      highlighted={
+                        highlight?.group === group.key &&
+                        highlight.row === row.key
+                      }
                       onClick={() => {
                         const next = {
                           group: group.key,
@@ -389,6 +399,7 @@ function StatRowButton({
   cut,
   best,
   pressed,
+  highlighted = false,
   onClick,
   onHover,
 }: {
@@ -398,6 +409,8 @@ function StatRowButton({
   /** The group's best win rate: its % reads 13/500 ink-900, the rest grey. */
   best: boolean;
   pressed: boolean;
+  /** Pinned on the court: the row wears its hover look without the pointer. */
+  highlighted?: boolean;
   onClick: () => void;
   /** The row's element while hovered or focused, `null` as it lets go. */
   onHover: (el: HTMLElement | null) => void;
@@ -411,6 +424,7 @@ function StatRowButton({
     <button
       type="button"
       aria-pressed={pressed}
+      data-highlighted={highlighted && !pressed ? "" : undefined}
       aria-label={statRowAnnouncement(row, cut)}
       disabled={empty}
       onClick={onClick}
@@ -422,7 +436,9 @@ function StatRowButton({
         "group -mx-2 flex w-[calc(100%+16px)] cursor-pointer flex-col items-stretch gap-[5px] rounded-[8px] px-2 pt-1.5 pb-2 text-left transition-colors duration-200 focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-default",
         pressed
           ? "bg-[var(--surface-subtle)]"
-          : "hover:bg-[var(--surface-page)]",
+          : highlighted
+            ? "bg-[var(--surface-page)]"
+            : "hover:bg-[var(--surface-page)]",
       )}
     >
       <span
@@ -432,7 +448,7 @@ function StatRowButton({
         <span
           className={cn(
             "truncate text-[12px] transition-colors duration-200",
-            pressed
+            pressed || highlighted
               ? "text-[var(--ink-900)]"
               : "text-[var(--ink-600)] group-hover:text-[var(--ink-900)] group-focus-visible:text-[var(--ink-900)]",
           )}
