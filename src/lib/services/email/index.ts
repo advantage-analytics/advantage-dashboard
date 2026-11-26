@@ -49,6 +49,7 @@
  * | Feedback (internal)      | same route: a `product_feedback` insert (the first-match prompt's answer, `submit_product_feedback()`), with the note in full, to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("feedback_internal:<feedback_id>")` — WIRED once Vault holds `cron_secret` |
  * | Player message (internal) | same route: a `support_messages` insert with `author_role = 'player'` (the in-app "Message Advantage" thread, `send_support_message()`, or a feedback note opening one), with the message in full and a link to `/admin/messages?id=<thread_id>`, to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("support_message_internal:<message_id>")` — WIRED once the `support_messages` trigger is applied |
  * | Player reply (staff)     | `sendStaffMessage()` (`src/app/admin/messages/actions.ts`) — a staff reply in the in-app support thread with "email a copy" on (the default), to the player only, never a receipt for their own message, `claimSend("support_reply:<message_id>")`, `email_copy_sent_at` stamped only after a successful send — WIRED |
+ * | Plans 2027 notice (×2) | `scripts/send-plans-2027-notice.ts`, run by hand by Cj only (dry run unless `--send --confirm <count>`) — every account, and the pilot teams' owners + coaches in their own wording (blocked until `PILOT_NOTICE_APPROVED`), `notification_sends` keys `plans_2027_notice:<user_id>` / `plans_2027_pilot_notice:<program_id>:<user_id>` — ONE-OFF, NOT EVENT-WIRED |
  *
  * The claim and invite-request rows fire from
  * `services/programs/{admin-actions,claim-actions}.ts`. None of them can fail
@@ -180,6 +181,15 @@ export {
   memberLeftOwnerEmail,
   type MemberLeftOwnerInput,
 } from "./templates/member-left";
+
+export {
+  plans2027NoticeEmail,
+  plans2027PilotNoticeEmail,
+  PILOT_NOTICE_APPROVED,
+  PLANS_2027_FACTS,
+  type Plans2027NoticeInput,
+  type Plans2027PilotNoticeInput,
+} from "./templates/plans-2027-notice";
 
 export {
   usageAlertEmail,

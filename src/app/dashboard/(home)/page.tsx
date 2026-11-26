@@ -30,6 +30,8 @@ import {
   TopRow,
 } from "@/components/dashboard/home-feed/home-feed-pending";
 import { HomeListPending } from "@/components/dashboard/home-feed/home-shape-memory";
+import { PlansNoticeStrip } from "@/components/dashboard/home-feed/plans-notice-strip";
+import { plansNoticeShowing } from "@/lib/services/plans-2027/notice-window";
 import { loginRedirectPath } from "@/lib/auth/request-path";
 
 export const metadata = { title: "Home" };
@@ -81,6 +83,8 @@ export default async function Home() {
           action={action}
         />,
       )}
+      {/* December 2026 only: the beta hours end on the 31st. */}
+      {plansNoticeShowing() && <PlansNoticeStrip />}
       <TopRow pilot={pilot} lead={<StartCards cards={CARDS} />} />
       <BottomRow>
         {region(
