@@ -5,6 +5,8 @@ import type { Hand } from "@/components/dashboard/matches/match-detail/match-fil
 import {
   bandZonesFor,
   EMPTY_VIZ_FILTERS,
+  withCourtEnds,
+  type CourtEnds,
   type Cut,
   computeVizStats,
   type VizDot,
@@ -22,7 +24,9 @@ import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
  *
  * Query: `?hand=left|right|unknown` hands the shell the opponent's hand (the
  * apron's wing names); without it the shell gets none, as on the season's
- * court. `?cut=<cut>` opens the same dots on another cut instead.
+ * court. `?cut=<cut>` opens the same dots on another cut instead, and
+ * `?ends=placement|contact|both` sets that chart's view (`VizFilters.ends`);
+ * without it the cut draws its default.
  * `?bands=1` draws the cut's saved depth/contact bands (`DEFAULT_BANDS`,
  * through `bandZonesFor`, as `use-viz-view.ts` does); without it the court
  * has none.
@@ -38,6 +42,8 @@ const OPPONENT_HAND: Hand | null | undefined =
       : undefined;
 const CUT = (params.get("cut") ?? "approaches") as Cut;
 const BANDS = params.get("bands") === "1";
+const ENDS = params.get("ends") as CourtEnds | null;
+const FILTERS = withCourtEnds(EMPTY_VIZ_FILTERS, CUT, ENDS);
 
 function meta(extra: Partial<VizDotMeta>): VizDotMeta {
   return {
@@ -101,7 +107,7 @@ const APPROACH_DOTS: VizDot[] = [
 ];
 
 function Approaches() {
-  const [filters, setFilters] = useState<VizFilters>(EMPTY_VIZ_FILTERS);
+  const [filters, setFilters] = useState<VizFilters>(FILTERS);
   const result = useMemo<VizResult>(
     () => ({
       dots: APPROACH_DOTS,
@@ -138,7 +144,7 @@ function Approaches() {
       filterPhrases={[]}
       panelActive={false}
       onClose={() => {}}
-      onClearFilters={() => setFilters(EMPTY_VIZ_FILTERS)}
+      onClearFilters={() => setFilters(FILTERS)}
     />
   );
 }

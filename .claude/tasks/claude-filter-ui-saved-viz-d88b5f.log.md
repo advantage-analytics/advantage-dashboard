@@ -74,3 +74,16 @@ is the runner's. Newest entries at the bottom.
 3. T9: write `withCourtEnds(filters, state.cut, ends)` with the chart cut, not the drawn cut.
 4. Tidy `defaultCourtEnds("returnContact")` (still "placement"; unreachable after normalisation) and `parseFilters` re-reading `params.get("cut")`.
 5. The save-view dialog reads "Returns · Scatter · …" in both views — name the view once the switch exists.
+
+## T8 · Draw contact–landing pairs on every chart — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** Rally, Errors and Returns landings now carry `VizDot.pair` (viz-model.ts); the season payload already shipped it. `LightboxCourt` takes `ends`; `markEnds`/`marksDrawn` decide which ends each mark draws (Placement landings, Contact rings, Both both) and the Approaches pair path became the general one. Landing = solid dot; contact = ring with a white middle (CONTACT_RING_FILL 0.88, stroke in the outcome colour — red on Errors). Hover/select links a pair with PAIR_LINK_STROKE (dashed 4 3, 1.5px non-scaling) and fades others per end: UNSELECTED_OPACITY 0.4, UNSELECTED_CONTACT_OPACITY 0.6. Shots without contact draw their landing only (skipped in Contact, kept in Points list). `CourtEndLabels` (was ApproachApronLabels) prints PLACEMENT/CONTACT where contact marks are drawn. A placement chart showing contact opens on the whole-length frame. Specs: viz-approach-lightbox-browser (+harness `?ends=`), viz-errors, viz-model, viz-rally-placement. Widget-states: SVG marks only.
+**follow-ups:**
+
+1. Author to confirm: Approaches' contact marks are now rings and hover fades others; Returns-in-Contact and "Rally position" contact courts also draw rings; ring stroke follows outcome colour (green rings on won points outside Errors).
+2. Rally shots in Contact stays on the placement court (bands and Statistics stay landing-based); mapping it to `rallyPosition` like Returns is one line in `drawnCut` + its spec.
+3. T9: "Rally position" resolves to Placement by default though it's a contact court — hide the switch there or merge it into Rally shots; Heat and Zones ignore the view, so hide/disable the switch off Scatter; "Contact recorded for X of Y" = count of `dot.pair`; toggling re-seeds pan/zoom.
+4. T10: pairs still get the "Contact"/"Placement" first line and apron-side card; contact-only marks have no part line; `ReadoutGlyph` is solid even for a ring; "Contact not recorded" copy unwritten.
+5. Wall and saved-view cards still draw landings only.
+6. A `court-options.spec.ts:94` ESM import failure appeared in the implementer's partial run but not in the gate — watch for flake.

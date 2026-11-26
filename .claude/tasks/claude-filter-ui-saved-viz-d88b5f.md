@@ -112,7 +112,7 @@ ready).
 
 ## T8 · Draw contact–landing pairs on every chart
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T5, T6
 - **files:** (guess) src/components/dashboard/matches/match-detail/shots/lightbox-court.tsx (`pairContactPoint` ~:251, `MarkLayer` ~~:1259, `UNSELECTED_OPACITY` ~~:214), src/components/dashboard/matches/match-detail/shots/{viz-points.ts,viz-model.ts,viz-readout.ts}, src/lib/data/player-season-viz.ts, tests/viz-approach-lightbox-browser.spec.ts (~~:41, :83, :122), tests/viz-lightbox-browser.spec.ts (~~:130)

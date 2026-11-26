@@ -1771,7 +1771,7 @@ test.describe("Returns is one chart", () => {
     );
     expect(drawnCut("returnPlacement", {})).toBe("returnPlacement");
     expect(drawnCut("returnPlacement", { ends: null })).toBe("returnPlacement");
-    // Both draws the placement court until pairs are drawn on Returns.
+    // Both draws the placement court: its marks carry their contact.
     expect(drawnCut("returnPlacement", { ends: "both" })).toBe(
       "returnPlacement",
     );

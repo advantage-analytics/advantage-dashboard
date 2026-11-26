@@ -57,7 +57,9 @@ import { nextMarkIndex } from "./viz-mark-roving";
 import { isPlacementCut } from "./cut-kinds";
 import type { Hand } from "../match-filters/shot-geometry";
 import {
+  defaultCourtEnds,
   type Chart,
+  type CourtEnds,
   type Cut,
   type VizDot,
   type VizFilters,
@@ -203,8 +205,33 @@ const SELECTED_RING_W = 1.5;
  *  `scale(1.4)` as globals.css `[data-viz-mark][data-active]
  *  [data-viz-mark-glyph]`; change both together. */
 const ACTIVE_GLYPH_SCALE = 1.4;
-/** The siblings of a selected mark sit back at 40%. */
+/** The siblings of a selected mark sit back at 40% — and, on a court that
+ *  draws both ends of each shot, of a hovered one: every other landing. */
 const UNSELECTED_OPACITY = 0.4;
+/** The other contact marks sit back less, at 60%: a ring is mostly white
+ *  middle, and at 40% it reads as gone rather than as stepped back. */
+const UNSELECTED_CONTACT_OPACITY = 0.6;
+
+/* ── The two ends of a shot ──────────────────────────────────────────────
+ * A landing is a solid dot in its outcome's colour. A contact mark is the
+ * same shape as a ring: stroked in that colour (red on Errors) round a white
+ * middle, so the two ends of one shot are told apart at a glance and a ring
+ * lying over a landing never hides it. Boards Errors-both-2-zoom and
+ * Errors-contact-marks A. */
+/** A contact ring's middle. */
+const CONTACT_RING_FILL = "#fff";
+const CONTACT_RING_FILL_OPACITY = 0.88;
+/** A contact ring's stroke, in px (non-scaling). */
+const CONTACT_RING_STROKE_W = 1.5;
+/** The line joining a hovered or selected shot's two ends: dashed white,
+ *  1.5px however far the court is zoomed (non-scaling, dash included). */
+const PAIR_LINK_STROKE = {
+  fill: "none",
+  stroke: LINE_COLOR,
+  strokeWidth: 1.5,
+  strokeDasharray: "4 3",
+  vectorEffect: "non-scaling-stroke",
+} as const;
 /** The mark readout's narrowest width (canvas S04). */
 const MIN_READOUT_W = 168;
 /** The keyboard-only ring, outside the hover halo. */
@@ -233,24 +260,113 @@ const APRON_READOUT_TRANSFORM: Record<
 const ZONE_HIGHLIGHT_OPACITY = 0.09;
 
 /**
- * The contact mark of an Approaches pair (`VizDot.pair`) on this frame, or
- * `null` for every other dot. `VIEWER_COURT` is already the upright full
- * court with the subject at the bottom, so the contact goes where every
- * contact cut draws its marks — the near half, `nearBaselineY + depthM` —
- * and the placement (the dot's own position) where every landing cut does:
- * the same two halves, and the same lateral sense, `projectApproachPair`
- * gives `FULL_COURT_VERTICAL`.
+ * The ends `cut`'s court draws under the view `ends` (`courtEndsFor`): the
+ * view itself on a placement cut — Returns, Rally shots, Errors, Approaches —
+ * with the cut's default where none is passed. The contact courts
+ * (`returnContact`, which is Returns in Contact, and `rallyPosition`) draw
+ * contact marks whatever the view says, and Serves landings alone.
+ */
+export function courtEndsDrawn(
+  cut: Cut,
+  ends: CourtEnds | null | undefined,
+): CourtEnds {
+  if (cut === "serve") return "placement";
+  if (!isPlacementCut(cut)) return "contact";
+  return ends ?? defaultCourtEnds(cut) ?? "placement";
+}
+
+type CourtPoint = { x: number; y: number };
+
+/**
+ * Where a mark's two ends are drawn on this frame, `null` for an end the
+ * view leaves out or the shot never had measured.
+ *
+ * `VIEWER_COURT` is already the upright full court with the subject at the
+ * bottom, so a contact goes where every contact cut draws its marks — the
+ * near half, `nearBaselineY + depthM` — and the placement (the dot's own
+ * position) where every landing cut does: the same two halves, and the same
+ * lateral sense, `projectApproachPair` gives `FULL_COURT_VERTICAL`.
+ *
+ * A shot with no recorded contact (`VizDot.pair` absent) has a placement
+ * only: in Both it draws that landing alone, in Contact it draws nothing.
+ */
+export function markEnds(
+  cut: Cut,
+  ends: CourtEnds | null | undefined,
+  dot: VizDot,
+): { placement: CourtPoint | null; contact: CourtPoint | null } {
+  const drawn = courtEndsDrawn(cut, ends);
+  if (!isPlacementCut(cut)) {
+    const own = projectViewerDot(cut, dot);
+    return cut === "serve"
+      ? { placement: own, contact: null }
+      : { placement: null, contact: own };
+  }
+  return {
+    placement: drawn === "contact" ? null : projectViewerDot(cut, dot),
+    contact:
+      drawn === "placement" || !dot.pair
+        ? null
+        : projectViewerDot("returnContact", {
+            lateralM: dot.pair.lateralM,
+            depthM: dot.pair.depthM,
+            atNet: false,
+          }),
+  };
+}
+
+/**
+ * The one place a mark is AT — what the readout hangs from, a click's stack
+ * is measured at and a selection glides to: its landing where one is drawn,
+ * else its contact. `null` when the view draws neither (Contact, on a shot
+ * whose contact was never recorded).
+ */
+export function markAnchor(
+  cut: Cut,
+  ends: CourtEnds | null | undefined,
+  dot: VizDot,
+): CourtPoint | null {
+  const { placement, contact } = markEnds(cut, ends, dot);
+  return placement ?? contact;
+}
+
+/** `dots` without the marks `ends` draws nothing of — see `markAnchor`. The
+ *  same array when every mark is drawn. */
+export function marksDrawn(
+  cut: Cut,
+  ends: CourtEnds | null | undefined,
+  dots: VizDot[],
+): VizDot[] {
+  if (!isPlacementCut(cut) || courtEndsDrawn(cut, ends) !== "contact")
+    return dots;
+  return dots.filter((dot) => dot.pair !== undefined);
+}
+
+/**
+ * The contact mark of a PAIR — a shot drawn at both its ends — or `null`
+ * for a mark drawn in one place: a view of one end, a shot with no recorded
+ * contact, a cut with a single end. Approaches draws pairs by default; every
+ * other placement cut does in Both.
  */
 export function pairContactPoint(
   cut: Cut,
   dot: VizDot,
-): { x: number; y: number } | null {
-  if (cut !== "approaches" || !dot.pair) return null;
-  return projectViewerDot("returnContact", {
-    lateralM: dot.pair.lateralM,
-    depthM: dot.pair.depthM,
-    atNet: false,
-  });
+  ends?: CourtEnds | null,
+): CourtPoint | null {
+  const { placement, contact } = markEnds(cut, ends, dot);
+  return placement !== null ? contact : null;
+}
+
+/**
+ * The cut whose opening frame (`viewerInitialTransform`) a court is seen
+ * on. A placement cut drawing contact marks needs both halves, so it opens
+ * on the whole length — the Approaches frame — instead of the landing half,
+ * which would leave every contact below the stage.
+ */
+export function framingCut(cut: Cut, ends: CourtEnds | null | undefined): Cut {
+  return isPlacementCut(cut) && courtEndsDrawn(cut, ends) !== "placement"
+    ? "approaches"
+    : cut;
 }
 
 function fillFor(dot: VizDot): string {
@@ -289,6 +405,7 @@ function highlightedZoneKeys(filters: VizFilters): Set<ZoneKey> {
 export function LightboxCourt({
   cut,
   chart,
+  ends = null,
   dots,
   zoneStats,
   filters,
@@ -318,6 +435,13 @@ export function LightboxCourt({
 }: {
   cut: Cut;
   chart: Chart;
+  /**
+   * Which ends of each shot the court draws — the chart's Placement ·
+   * Contact · Both view (`courtEndsFor`). Omitted or `null`: the cut's
+   * default (Both on Approaches, landings elsewhere). Read through
+   * `courtEndsDrawn`; a contact court and Serves ignore it.
+   */
+  ends?: CourtEnds | null;
   dots: VizDot[];
   zoneStats: Record<ZoneKey, ZoneStats> | null;
   filters: VizFilters;
@@ -400,7 +524,11 @@ export function LightboxCourt({
   // art's type is in viewBox units — so the Approaches court's words are
   // drawn larger by the ratio of the two frames' fits on this stage. They
   // still scale with the zoom after that, as on every cut.
-  const labelScale = cut === "approaches" ? viewerApproachLabelScale(stage) : 1;
+  // The same holds for any placement cut drawing contact marks, which opens
+  // on that whole-length frame too (`framingCut`).
+  const wholeLength = framingCut(cut, ends) === "approaches";
+  const labelScale = wholeLength ? viewerApproachLabelScale(stage) : 1;
+  const endsDrawn = courtEndsDrawn(cut, ends);
 
   const highlighted = cut === "serve" ? highlightedZoneKeys(filters) : null;
   // The Zones chart IS its six cells — the same white wash, scaled to the
@@ -423,7 +551,7 @@ export function LightboxCourt({
       : (dots.find((d) => d.id === activeId) ?? null);
   const activeMeta = active?.meta ?? null;
 
-  // An Approaches pair is ONE mark with two places on court: the readout
+  // A pair is ONE mark with two places on court: the readout
   // names the one last pointed at ("Contact" / "Placement") and hangs from
   // it. Placement is the default — a keyboard focus, or a selection never
   // pointed at.
@@ -435,7 +563,8 @@ export function LightboxCourt({
     (id: string, part: PairPart) => setPairPart({ id, part }),
     [],
   );
-  const activeContact = active !== null ? pairContactPoint(cut, active) : null;
+  const activeContact =
+    active !== null ? pairContactPoint(cut, active, ends) : null;
   const activePart: PairPart | null =
     activeContact === null
       ? null
@@ -490,8 +619,8 @@ export function LightboxCourt({
       const p =
         activePart === "contact" && activeContact !== null
           ? activeContact
-          : projectViewerDot(cut, active);
-      art = viewerArtPoint(p.x, p.y);
+          : markAnchor(cut, ends, active);
+      if (p !== null) art = viewerArtPoint(p.x, p.y);
     } else if (shownZone !== null) {
       const cell = zoneCellX(ZONES.findIndex((z) => z.key === shownZone));
       art = viewerArtPoint((cell.x1 + cell.x2) / 2, VIEWER_COURT.netY);
@@ -659,15 +788,26 @@ export function LightboxCourt({
             </text>
           )}
 
-          {cut === "approaches" && (
-            <ApproachApronLabels
+          {cut === "approaches" ? (
+            <CourtEndLabels
               scale={labelScale}
-              leftIsForehand={
+              lanes={approachLaneText(
                 opponentHand !== undefined
                   ? opponentHand !== "left"
-                  : approachLeftLaneSide(dots)
-              }
+                  : approachLeftLaneSide(dots),
+              )}
             />
+          ) : (
+            // Every other chart names an end once it draws the contact
+            // marks: both words in Both, "Contact" alone in Contact. A
+            // court of landings alone is what it always was, unlabelled.
+            showMarks &&
+            wholeLength && (
+              <CourtEndLabels
+                scale={labelScale}
+                placement={endsDrawn === "both"}
+              />
+            )
           )}
 
           {cut === "serve" && (
@@ -698,6 +838,7 @@ export function LightboxCourt({
             {showMarks && (
               <MarkLayer
                 cut={cut}
+                ends={ends}
                 dots={dots}
                 subjectName={subjectName}
                 activeId={activeId}
@@ -804,25 +945,37 @@ export function LightboxCourt({
 }
 
 /**
- * The Approaches cut's apron words (`approach-map-v9.html`, the wall card's
- * `ApproachCourtArt` labels): "Placement" over the far half, the opponent's
- * wing over each third just past the far baseline (the hitter's "Left ·
- * Middle · Right" where no one hand sides it, `approachLaneText`), "Contact"
- * under the near half. Under the marks, and deaf to the pointer, so no word
+ * The apron words that name a court's two ends: "Placement" over the far
+ * half and "Contact" under the near one, in the court's one label type
+ * (`COURT_LABEL_*`). Under the marks, and deaf to the pointer, so no word
  * takes a hover.
+ *
+ * Approaches adds its lanes (`approach-map-v9.html`, the wall card's
+ * `ApproachCourtArt` labels): the opponent's wing over each third just past
+ * the far baseline (the hitter's "Left · Middle · Right" where no one hand
+ * sides it, `approachLaneText`), with "Placement" stacked above them. Every
+ * other chart passes none and keeps the same two baselines for its words:
+ * "Contact" has to sit out past the marks struck from behind the baseline
+ * either way, and "Placement" mirrors it.
  */
-function ApproachApronLabels({
-  leftIsForehand,
+function CourtEndLabels({
   scale,
+  lanes = null,
+  placement = true,
+  contact = true,
 }: {
-  leftIsForehand: boolean | null;
   scale: number;
+  /** Approaches' three lane names; `null` draws the two words alone. */
+  lanes?: ReturnType<typeof approachLaneText> | null;
+  placement?: boolean;
+  contact?: boolean;
 }) {
-  const laneText = approachLaneText(leftIsForehand);
+  const approach = lanes !== null;
   const layout = approachApronLayout(scale);
   return (
     <g
-      data-approach-labels=""
+      data-court-end-labels=""
+      data-approach-labels={approach ? "" : undefined}
       aria-hidden="true"
       fill={LINE_COLOR}
       fontFamily="var(--font-mono)"
@@ -830,36 +983,43 @@ function ApproachApronLabels({
       textAnchor="middle"
       style={{ textTransform: "uppercase", pointerEvents: "none" }}
     >
-      <text
-        data-approach-label="placement"
-        x={VIEWER_COURT.centreX}
-        y={layout.placementY}
-        fontSize={layout.side}
-        fillOpacity={COURT_SIDE_LABEL_OPACITY}
-      >
-        Placement
-      </text>
-      <text
-        data-approach-label="contact"
-        x={VIEWER_COURT.centreX}
-        y={layout.contactY}
-        fontSize={layout.side}
-        fillOpacity={COURT_SIDE_LABEL_OPACITY}
-      >
-        Contact
-      </text>
-      {(["left", "middle", "right"] as const).map((lane) => (
+      {placement && (
         <text
-          key={lane}
-          data-approach-lane={lane}
-          x={APPROACH_LANE_X[lane]}
-          y={layout.laneY}
-          fontSize={layout.lane}
-          fillOpacity={COURT_LABEL_OPACITY}
+          data-court-end-label="placement"
+          data-approach-label={approach ? "placement" : undefined}
+          x={VIEWER_COURT.centreX}
+          y={layout.placementY}
+          fontSize={layout.side}
+          fillOpacity={COURT_SIDE_LABEL_OPACITY}
         >
-          {laneText[lane]}
+          Placement
         </text>
-      ))}
+      )}
+      {contact && (
+        <text
+          data-court-end-label="contact"
+          data-approach-label={approach ? "contact" : undefined}
+          x={VIEWER_COURT.centreX}
+          y={layout.contactY}
+          fontSize={layout.side}
+          fillOpacity={COURT_SIDE_LABEL_OPACITY}
+        >
+          Contact
+        </text>
+      )}
+      {lanes !== null &&
+        (["left", "middle", "right"] as const).map((lane) => (
+          <text
+            key={lane}
+            data-approach-lane={lane}
+            x={APPROACH_LANE_X[lane]}
+            y={layout.laneY}
+            fontSize={layout.lane}
+            fillOpacity={COURT_LABEL_OPACITY}
+          >
+            {lanes[lane]}
+          </text>
+        ))}
     </g>
   );
 }
@@ -1077,6 +1237,7 @@ const CourtLines = memo(function CourtLines() {
  */
 const MarkLayer = memo(function MarkLayer({
   cut,
+  ends,
   dots,
   subjectName,
   activeId,
@@ -1092,6 +1253,7 @@ const MarkLayer = memo(function MarkLayer({
   onPointPart,
 }: {
   cut: Cut;
+  ends: CourtEnds | null;
   dots: VizDot[];
   focusIds: ReadonlySet<string> | null;
   subjectName: string;
@@ -1108,27 +1270,38 @@ const MarkLayer = memo(function MarkLayer({
   onDeactivate: (id: string) => void;
   onRove: (id: string) => void;
   onSelect: (id: string) => void;
-  /** Which of an Approaches pair's two marks the pointer is on (or the
+  /** Which of a pair's two marks the pointer is on (or the
    *  keyboard reached: the placement). Stable identity. */
   onPointPart: (id: string, part: PairPart) => void;
 }) {
   const placed = useMemo(
     () =>
-      dots.map((dot) => {
-        const { x, y } = projectViewerDot(cut, dot);
+      dots.flatMap((dot) => {
+        // The mark's ends under this view. One with neither — Contact, on
+        // a shot whose contact was never recorded — is not drawn at all.
+        const { placement, contact } = markEnds(cut, ends, dot);
+        const anchor = placement ?? contact;
+        if (anchor === null) return [];
+        const { x, y } = anchor;
         const label = dot.meta
           ? (() => {
               const r = buildReadout(dot.meta, { subject: subjectName }, cut);
               return [r.title, ...r.lines].join(" — ");
             })()
           : `${subjectName} — mark`;
-        // An Approaches pair: the same dot's contact, drawn in the near half
-        // as the second mark of ONE interactive group.
-        const contact = pairContactPoint(cut, dot);
-        return { dot, x, y, contact, fill: fillFor(dot), label };
+        // `pair`: both ends drawn — the same dot's contact, in the near
+        // half, is the second mark of ONE interactive group. Otherwise the
+        // mark is `end` alone, at `x`/`y`.
+        const pair = placement !== null && contact !== null ? contact : null;
+        const end: PairPart = placement !== null ? "placement" : "contact";
+        return [{ dot, x, y, pair, end, fill: fillFor(dot), label }];
       }),
-    [dots, cut, subjectName],
+    [dots, cut, ends, subjectName],
   );
+  // A court of pairs (Both): pointing at one shot sets every other back, so
+  // its two ends and the line between them are what is left to read.
+  const pairsCourt =
+    isPlacementCut(cut) && courtEndsDrawn(cut, ends) === "both";
 
   // The tab stop: whichever mark was last focused, else the first. A
   // `rovingId` left over from a previous dot set (a filter edit) no longer
@@ -1178,16 +1351,28 @@ const MarkLayer = memo(function MarkLayer({
 
   return (
     <>
-      {placed.map(({ dot, x, y, contact, fill, label }, index) => {
+      {placed.map(({ dot, x, y, pair, end, fill, label }, index) => {
         const isSelected = dot.id === selectedId;
         const isFocused = dot.id === focusedId;
+        const isActive = dot.id === activeId;
         // A pair rings BOTH its marks whenever it is the one being read —
-        // hovered, focused or selected — so the eye finds the other half.
-        const pairLit = contact !== null && (isSelected || dot.id === activeId);
+        // hovered, focused or selected — and a dashed line joins them, so
+        // the eye finds the other half.
+        const pairLit = pair !== null && (isSelected || isActive);
         const dimmed =
           selectedId !== null
-            ? !isSelected
-            : focusIds !== null && !focusIds.has(dot.id);
+            ? !isSelected && !(pairsCourt && isActive)
+            : pairsCourt && activeId !== null
+              ? !isActive
+              : focusIds !== null && !focusIds.has(dot.id);
+        // Each end steps back by its own amount; a pair's two ends carry
+        // theirs themselves, a single mark's is its group's.
+        const dimOf = (part: PairPart) =>
+          !dimmed
+            ? undefined
+            : part === "contact"
+              ? UNSELECTED_CONTACT_OPACITY
+              : UNSELECTED_OPACITY;
         return (
           <g
             key={dot.id}
@@ -1207,15 +1392,14 @@ const MarkLayer = memo(function MarkLayer({
             // 200 marks choreographed would be noise, and the counts and
             // bands are what say the numbers changed.
             className="animate-[fadeIn_var(--duration-hover)_var(--ease-chart)] cursor-pointer transition-opacity duration-[var(--duration-hover)] outline-none"
-            opacity={dimmed ? UNSELECTED_OPACITY : undefined}
+            opacity={pair === null ? dimOf(end) : undefined}
             onMouseEnter={() => onActivate(dot.id, false)}
             onMouseLeave={() => onDeactivate(dot.id)}
             onFocus={(e) => {
               const keyboard = e.currentTarget.matches(":focus-visible");
               // The keyboard reaches a pair as one stop: its card reads the
               // placement. A click's focus keeps the mark it landed on.
-              if (keyboard && contact !== null)
-                onPointPart(dot.id, "placement");
+              if (keyboard && pair !== null) onPointPart(dot.id, "placement");
               onActivate(dot.id, keyboard);
             }}
             onBlur={() => onDeactivate(dot.id)}
@@ -1250,40 +1434,57 @@ const MarkLayer = memo(function MarkLayer({
               onSelect(next);
             }}
           >
-            {contact === null ? (
+            {pair === null ? (
               <MarkBody
                 x={x}
                 y={y}
                 dot={dot}
                 fill={fill}
+                end={end}
                 focused={isFocused}
                 ringed={isSelected}
                 selected={isSelected}
               />
             ) : (
-              (
-                [
-                  ["contact", contact.x, contact.y],
-                  ["placement", x, y],
-                ] as const
-              ).map(([part, px, py]) => (
-                <g
-                  key={part}
-                  data-viz-mark-part={part}
-                  onMouseEnter={() => onPointPart(dot.id, part)}
-                >
-                  <MarkBody
-                    x={px}
-                    y={py}
-                    dot={dot}
-                    fill={fill}
-                    focused={isFocused}
-                    ringed={pairLit}
-                    selected={isSelected}
-                    pair
+              <>
+                {pairLit && (
+                  <line
+                    data-viz-pair-link=""
+                    x1={pair.x}
+                    y1={pair.y}
+                    x2={x}
+                    y2={y}
+                    pointerEvents="none"
+                    {...PAIR_LINK_STROKE}
                   />
-                </g>
-              ))
+                )}
+                {(
+                  [
+                    ["contact", pair.x, pair.y],
+                    ["placement", x, y],
+                  ] as const
+                ).map(([part, px, py]) => (
+                  <g
+                    key={part}
+                    data-viz-mark-part={part}
+                    className="transition-opacity duration-[var(--duration-hover)]"
+                    opacity={dimOf(part)}
+                    onMouseEnter={() => onPointPart(dot.id, part)}
+                  >
+                    <MarkBody
+                      x={px}
+                      y={py}
+                      dot={dot}
+                      fill={fill}
+                      end={part}
+                      focused={isFocused}
+                      ringed={pairLit}
+                      selected={isSelected}
+                      pair
+                    />
+                  </g>
+                ))}
+              </>
             )}
           </g>
         );
@@ -1292,19 +1493,26 @@ const MarkLayer = memo(function MarkLayer({
         // A selected pair is drawn LAST, so neither of its marks sits under
         // another point's. Its interactive group keeps its place in the DOM —
         // moving a focused node blurs it, and the roving order is the dots'
-        // own — so what rises is a copy of its rings and marks, which takes
-        // no pointer and says nothing to a screen reader.
+        // own — so what rises is a copy of its link, rings and marks, which
+        // takes no pointer and says nothing to a screen reader.
         const top = placed.find(
-          (item) => item.dot.id === selectedId && item.contact !== null,
+          (item) => item.dot.id === selectedId && item.pair !== null,
         );
-        if (!top || top.contact === null) return null;
+        if (!top || top.pair === null) return null;
         return (
           <g
             data-viz-raised={top.dot.id}
             aria-hidden="true"
             pointerEvents="none"
           >
-            {[top.contact, { x: top.x, y: top.y }].map((p, i) => (
+            <line
+              x1={top.pair.x}
+              y1={top.pair.y}
+              x2={top.x}
+              y2={top.y}
+              {...PAIR_LINK_STROKE}
+            />
+            {[top.pair, { x: top.x, y: top.y }].map((p, i) => (
               <g key={i}>
                 <circle
                   cx={p.x}
@@ -1327,7 +1535,13 @@ const MarkLayer = memo(function MarkLayer({
                       : undefined
                   }
                 >
-                  <Mark dot={top.dot} x={p.x} y={p.y} fill={top.fill} />
+                  <Mark
+                    dot={top.dot}
+                    x={p.x}
+                    y={p.y}
+                    fill={top.fill}
+                    ring={i === 0}
+                  />
                 </g>
               </g>
             ))}
@@ -1340,15 +1554,17 @@ const MarkLayer = memo(function MarkLayer({
 
 /**
  * One mark's drawing inside its interactive group: the keyboard ring, the
- * selection ring, the hit area and the glyph. A single-mark cut draws one; an
- * Approaches pair draws one at each of its two places, both under the same
- * group, so the pair is one tab stop, one hover and one selection.
+ * selection ring, the hit area and the glyph. A mark with one end draws one;
+ * a pair draws one at each of its two places, both under the same group, so
+ * the pair is one tab stop, one hover and one selection. `end` picks the
+ * glyph: a landing's solid mark, or a contact's ring.
  */
 function MarkBody({
   x,
   y,
   dot,
   fill,
+  end,
   focused,
   ringed,
   selected,
@@ -1358,6 +1574,7 @@ function MarkBody({
   y: number;
   dot: VizDot;
   fill: string;
+  end: PairPart;
   focused: boolean;
   /** Draw the white ring: the selection, or a pair being read. */
   ringed: boolean;
@@ -1412,8 +1629,8 @@ function MarkBody({
       {/* Grows a little while hovered or focused (`data-active`,
                 globals.css `[data-viz-mark-glyph]`): the point you are on
                 answers under the pointer as well as in the readout. */}
-      <g data-viz-mark-glyph="">
-        <Mark dot={dot} x={x} y={y} fill={fill} />
+      <g data-viz-mark-glyph="" data-viz-mark-end={end}>
+        <Mark dot={dot} x={x} y={y} fill={fill} ring={end === "contact"} />
       </g>
     </>
   );
@@ -1454,24 +1671,30 @@ function Mark({
   x,
   y,
   fill,
+  ring = false,
 }: {
   dot: VizDot;
   x: number;
   y: number;
+  /** The mark's colour: a landing's fill, a contact ring's stroke. */
   fill: string;
+  /** A contact mark: the same shape as a ring round a white middle. */
+  ring?: boolean;
 }) {
   // Drawn at its own size; the hover's slight growth is its wrapper's
   // (`data-viz-mark-glyph`), and a selected mark keeps its size inside the
   // ring.
-  const stroke = "#000";
-  const strokeWidth = VIEWER_COURT.markStroke;
+  const stroke = ring ? fill : "#000";
+  const strokeWidth = ring ? CONTACT_RING_STROKE_W : VIEWER_COURT.markStroke;
   const r = VIEWER_COURT.markRadius;
+  const paint = ring ? CONTACT_RING_FILL : fill;
+  const fillOpacity = ring ? CONTACT_RING_FILL_OPACITY : undefined;
 
   if (dot.shape === "star") {
     return (
       <polygon
         points={starPoints(x, y, r * ACE_STAR_RADIUS_RATIO)}
-        fill={fill}
+        fill={paint}
         stroke={stroke}
         strokeWidth={strokeWidth}
         vectorEffect="non-scaling-stroke"
@@ -1487,7 +1710,8 @@ function Mark({
         // "contact"/"placement" kinds pre-compensate for. Here the unrotated
         // "serve" kind IS apex-up; pinned by `tests/court-geometry.spec.ts`.
         points={trianglePointsFor("serve", x, y, r)}
-        fill={fill}
+        fill={paint}
+        fillOpacity={fillOpacity}
         stroke={stroke}
         strokeWidth={strokeWidth}
         vectorEffect="non-scaling-stroke"
@@ -1499,7 +1723,8 @@ function Mark({
       cx={x}
       cy={y}
       r={r}
-      fill={fill}
+      fill={paint}
+      fillOpacity={fillOpacity}
       stroke={stroke}
       strokeWidth={strokeWidth}
       vectorEffect="non-scaling-stroke"

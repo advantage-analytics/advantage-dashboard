@@ -153,13 +153,14 @@ export interface MarkReadout {
   /** The last line, under a hairline: what a click does here
    *  (`markClickHint`). `null` draws no hint. */
   hint: string | null;
-  /** Which mark of an Approaches pair the card is about — "Contact" (where
-   *  the approach was struck) or "Placement" (where it landed) — drawn as
-   *  the card's first line. Absent on every single-mark cut. */
+  /** Which mark of a pair the card is about — "Contact" (where the shot
+   *  was struck) or "Placement" (where it landed) — drawn as the card's
+   *  first line. Absent on a mark drawn in one place. */
   part?: "Contact" | "Placement";
 }
 
-/** The two marks of an Approaches pair (`VizDot.pair`). */
+/** The two marks of a pair (`VizDot.pair`): a shot drawn at both its ends —
+ *  Approaches by default, every other placement chart in Both. */
 export type PairPart = "contact" | "placement";
 
 /**
@@ -184,7 +185,7 @@ export function buildMarkReadout(
   extra: {
     match?: string | null;
     hint?: string | null;
-    /** The pair mark under the pointer, on the Approaches cut. */
+    /** The pair mark under the pointer, where both ends are drawn. */
     part?: PairPart | null;
   } = {},
 ): MarkReadout {

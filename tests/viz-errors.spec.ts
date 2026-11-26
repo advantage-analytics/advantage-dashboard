@@ -136,6 +136,33 @@ test("the errors cut plots the subject's own errors where they landed", () => {
   expect(wide.meta?.shotType).toBe("Second Serve");
 });
 
+test("an error's landing carries where it was struck, and none when the contact was not recorded", () => {
+  const result = computeViz(POINTS, "errors", EMPTY_VIZ_FILTERS, true);
+  // Player 1 strikes from the low end (`rallyShot`: contact 1, -0.2): 1 m to
+  // their right, 0.2 m behind their own baseline.
+  for (const dot of result.dots.slice(0, 2)) {
+    expect(dot.pair?.lateralM, dot.id).toBeCloseTo(1);
+    expect(dot.pair?.depthM, dot.id).toBeCloseTo(0.2);
+  }
+
+  // A shot with a landing and an end but no contact x still draws, alone.
+  const unmeasured: MatchPoint = {
+    ...FORCED_LONG,
+    shots: FORCED_LONG.shots!.map((s) =>
+      s.id === "fe-p1-miss" ? { ...s, contactX: null } : s,
+    ),
+  };
+  const [dot] = computeViz(
+    [unmeasured],
+    "errors",
+    EMPTY_VIZ_FILTERS,
+    true,
+  ).dots;
+  expect(dot.id).toBe("fe-p1");
+  expect(dot.depthM).toBeCloseTo(13);
+  expect(dot.pair).toBeUndefined();
+});
+
 test("attribution flips with the viewer: player 2's court shows only their errors", () => {
   const result = computeViz(POINTS, "errors", EMPTY_VIZ_FILTERS, false);
   expect(result.dots.map((d) => d.id)).toEqual(["ue-p2"]);

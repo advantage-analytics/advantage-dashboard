@@ -161,7 +161,9 @@ export function chartView(
  * The cut a chart's court is computed and drawn as: `cut` itself, except
  * Returns in Contact, which is the contact court (`returnContact` — the id
  * `computeViz`, the stats, the bands and the court art still read). Returns
- * in Both draws the placement court until pairs are drawn there.
+ * in Both stays the placement court, whose marks carry their contact as
+ * `VizDot.pair`; Rally shots, Errors and Approaches have no court switch at
+ * all — theirs draws either end, or both, off the same marks.
  */
 export function drawnCut(cut: Cut, filters: { ends?: CourtEnds | null }): Cut {
   return cut === "returnPlacement" && courtEndsFor(cut, filters) === "contact"
@@ -377,10 +379,11 @@ export interface VizDot {
   depthM: number;
   atNet: boolean;
   /**
-   * Approaches cut only: where the approach shot was struck, in
-   * `contactMetrics`' frame. The dot's own `lateralM`/`depthM` stay the
-   * placement, so code that reads one position per dot is unaffected. Absent
-   * when the contact is unmeasured.
+   * The placement cuts' landing marks (Returns, Rally shots, Errors,
+   * Approaches): where that shot was struck, in `contactMetrics`' frame. The
+   * dot's own `lateralM`/`depthM` stay the placement, so code that reads one
+   * position per dot is unaffected. Absent when the contact is unmeasured,
+   * and on Serves and the contact cuts, whose mark is one end alone.
    */
   pair?: { lateralM: number; depthM: number };
   /** Optional (every existing fixture that hand-builds a `VizDot`
@@ -1501,6 +1504,10 @@ function computeRallyViz(
       if (matchPass?.rallyShot && !matchPass.rallyShot(shot, p)) continue;
       count++;
 
+      // A landing mark carries where it was struck (`VizDot.pair`).
+      const contact = placement
+        ? contactMetrics(shot.contactX, shot.contactY)
+        : null;
       dots.push({
         id: shot.id,
         lateralM: metrics.lateralM,
@@ -1508,6 +1515,7 @@ function computeRallyViz(
         outcome: landing?.miss ? "miss" : subjectWon ? "won" : "lost",
         shape: shapeFromShotType(shot.shotType),
         atNet: landing?.atNet ?? false,
+        ...(contact ? { pair: contact } : {}),
         meta: pointDotMeta(p, subjectIsPlayer1, shot),
       });
     }
@@ -1581,6 +1589,7 @@ function computeErrorsViz(
     }
     count++;
 
+    const contact = contactMetrics(shot.contactX, shot.contactY);
     dots.push({
       id: p.id,
       lateralM: landing.lateralM,
@@ -1588,6 +1597,7 @@ function computeErrorsViz(
       outcome: "lost",
       shape: shapeFromShotType(shot.shotType),
       atNet: landing.atNet,
+      ...(contact ? { pair: contact } : {}),
       meta: {
         ...pointDotMeta(p, subjectIsPlayer1, shot),
         stroke: finalShotOf(p)?.kind ?? "Other",
@@ -1970,6 +1980,11 @@ export function computeViz(
         shotType: returnShot?.shotType ?? p.secondShotType ?? null,
         result: returnShot?.result ?? p.secondShotResult ?? null,
       };
+      // A landing mark carries where the return was struck (`VizDot.pair`).
+      const contact =
+        want === "landing"
+          ? contactMetrics(p.secondShotContactX, p.secondShotContactY)
+          : null;
       for (const d of mine) {
         dots.push({
           id: d.id,
@@ -1978,6 +1993,7 @@ export function computeViz(
           outcome: o === "outnet" ? "miss" : o,
           shape: d.shape,
           atNet: d.atNet,
+          ...(contact ? { pair: contact } : {}),
           meta: pointDotMeta(p, subjectIsPlayer1, returnMetaShot),
         });
       }

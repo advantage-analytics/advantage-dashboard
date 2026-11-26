@@ -41,7 +41,6 @@ import {
 } from "./band-editor-state";
 import { APRON_FILL, HEAT_APRON_FILL } from "./court-art";
 import {
-  projectViewerDot,
   viewerArtPoint,
   viewerFullCourtTransform,
   viewerInitialTransform,
@@ -58,6 +57,9 @@ import { LightboxAdvancedDrawer } from "./lightbox-advanced-drawer";
 import { LightboxMatchesSheet } from "./lightbox-matches-sheet";
 import {
   LightboxCourt,
+  framingCut,
+  markAnchor,
+  marksDrawn,
   pairContactPoint,
   type CourtOutline,
 } from "./lightbox-court";
@@ -110,6 +112,7 @@ import {
   type VizMark,
   type VizResult,
   type VizStats,
+  courtEndsFor,
 } from "./viz-model";
 
 /** What the Points column draws, handed to the host's `render`. */
@@ -452,6 +455,20 @@ export function VizLightboxShell({
       ),
     [result, legendPick, pickIds],
   );
+  // Which ends of each shot the court draws: the chart's Placement ·
+  // Contact · Both view, on Scatter — Heat and Zones draw no marks, and read
+  // each shot at its landing as they always have.
+  const ends = chart === "scatter" ? courtEndsFor(cut, filters) : null;
+  // The cut whose opening frame the court is seen on: the whole length once
+  // contact marks are drawn on a placement cut (`framingCut`).
+  const frameCut = framingCut(cut, ends);
+  // The marks the court draws: in Contact, a shot with no recorded contact
+  // has no mark. It still lists, counts and watches, as an Approaches entry
+  // with no landing does.
+  const courtDots = useMemo(
+    () => marksDrawn(cut, ends, dots),
+    [cut, ends, dots],
+  );
   // Every mark the Points list stands for: the drawn ones, then the
   // Approaches cut's counted approaches with no landing, narrowed by the
   // same picks. They list, count and watch like a mark; the court never
@@ -484,7 +501,7 @@ export function VizLightboxShell({
   // but there is no mark to ring, nor siblings to fade.
   const drawnSelectedMarkId =
     visibleSelectedMarkId !== null &&
-    dots.some((dot) => dot.id === visibleSelectedMarkId)
+    courtDots.some((dot) => dot.id === visibleSelectedMarkId)
       ? visibleSelectedMarkId
       : null;
   // A selection whose mark has left the court (a filter, a legend or
@@ -524,7 +541,7 @@ export function VizLightboxShell({
   );
   const exitEdit = useCallback(() => setEditor(null), []);
 
-  const pz = usePanZoom(cut, stageRef, dropActiveMark, editing);
+  const pz = usePanZoom(frameCut, stageRef, dropActiveMark, editing);
 
   /* ── Selecting a mark glides the court to it ──────────────────────────── */
 
@@ -532,7 +549,7 @@ export function VizLightboxShell({
   // the stage, easing in to 150% of the cut's 100% on the way when the court
   // is further out than that; deselecting leaves the court where it is.
   //
-  // An Approaches pair is one mark drawn in two places, so it glides to the
+  // A pair is one mark drawn in two places, so it glides to the
   // MIDPOINT of its contact and placement instead, and its zoom is capped at
   // the scale that keeps both inside the stage with `PAIR_GLIDE_MARGIN_PX` to
   // spare — zooming back out if the court was closer in than that. Centring
@@ -541,11 +558,12 @@ export function VizLightboxShell({
   const glideToMark = useCallback(
     (dot: VizDot) => {
       if (pzStage.w === 0 || pzStage.h === 0) return;
-      const placed = projectViewerDot(cut, dot);
+      const placed = markAnchor(cut, ends, dot);
+      if (placed === null) return;
       const p = viewerArtPoint(placed.x, placed.y);
-      const home = viewerInitialTransform(cut, pzStage);
+      const home = viewerInitialTransform(frameCut, pzStage);
       const minZ = home.z * GLIDE_MIN_RELATIVE_ZOOM;
-      const contact = pairContactPoint(cut, dot);
+      const contact = pairContactPoint(cut, dot, ends);
       if (contact === null) {
         glideTo(p, minZ);
         return;
@@ -563,7 +581,7 @@ export function VizLightboxShell({
         maxZ,
       );
     },
-    [cut, pzStage, glideTo],
+    [cut, ends, frameCut, pzStage, glideTo],
   );
   // The host's watch and the strip's sentence, read at click time through
   // refs so `select` keeps its identity across the host's renders (the mark
@@ -587,10 +605,10 @@ export function VizLightboxShell({
       }
       setSelectedMarkId(mark.id);
       // An undrawn approach has no place to glide to: the row lights alone.
-      const drawn = dots.find((d) => d.id === mark.id);
+      const drawn = courtDots.find((d) => d.id === mark.id);
       if (drawn) glideToMark(drawn);
     },
-    [visibleSelectedMarkId, glideToMark, dots],
+    [visibleSelectedMarkId, glideToMark, courtDots],
   );
   const selectMark = useCallback(
     (id: string) => {
@@ -909,7 +927,7 @@ export function VizLightboxShell({
   // a landing cut's half court is 100%, so "150%" is 1.5× that and the whole
   // court ("Full court") reads below 100%.
   const measured = pz.stage.w > 0 && pz.stage.h > 0;
-  const homeT = measured ? viewerInitialTransform(cut, pz.stage) : null;
+  const homeT = measured ? viewerInitialTransform(frameCut, pz.stage) : null;
   const fullT = measured ? viewerFullCourtTransform(pz.stage) : null;
   const zoomRelative = homeT ? pz.t.z / homeT.z : 1;
   const sameT = (a: { z: number; px: number; py: number } | null) =>
@@ -1213,7 +1231,8 @@ export function VizLightboxShell({
                     <LightboxCourt
                       cut={cut}
                       chart={chart}
-                      dots={isDraft ? [] : dots}
+                      ends={ends}
+                      dots={isDraft ? [] : courtDots}
                       zoneStats={isDraft ? null : result.zoneStats}
                       filters={filters}
                       subjectName={subjectName}

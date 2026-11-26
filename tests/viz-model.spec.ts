@@ -409,6 +409,30 @@ test.describe("computeViz — return cuts", () => {
     expect(place.noun).toBe("returns");
   });
 
+  test("a return's landing carries where it was struck; the contact court's mark is one end alone", () => {
+    const place = computeViz([ret], "returnPlacement", EMPTY_VIZ_FILTERS, true);
+    const contact = computeViz([ret], "returnContact", EMPTY_VIZ_FILTERS, true);
+    expect(place.dots[0].pair).toEqual({
+      lateralM: contact.dots[0].lateralM,
+      depthM: contact.dots[0].depthM,
+    });
+    expect(contact.dots[0].pair).toBeUndefined();
+
+    const noContact = {
+      ...ret,
+      secondShotContactX: null,
+      secondShotContactY: null,
+    } as MatchPoint;
+    const alone = computeViz(
+      [noContact],
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(alone.dots).toHaveLength(1);
+    expect(alone.dots[0].pair).toBeUndefined();
+  });
+
   test("return dots carry metres, not the legacy pixel frame", () => {
     const place = computeViz([ret], "returnPlacement", EMPTY_VIZ_FILTERS, true);
     // Task 2: end detection reads secondShotContactY (23.0, far half, so
