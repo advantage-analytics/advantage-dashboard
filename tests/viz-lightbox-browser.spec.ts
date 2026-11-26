@@ -1270,6 +1270,91 @@ test("every chart row in the chart menu carries its leading icon", async ({
   expect(new Set(labels.map(Math.round)).size).toBe(1);
 });
 
+/* ── Plan 2026-11-25 §4: bands split out of the chart menu ────────────── */
+
+test("the chart menu holds Scatter, Heat and Zones only — no return rows, no bands rows", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=returnPlacement`);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Scatter" }).click();
+  const menu = page.getByRole("menu", { name: "Chart" });
+  await expect(menu).toBeVisible();
+  const rows = menu.getByRole("menuitemradio");
+  await expect(rows).toHaveCount(3);
+  for (const [i, name] of ["Scatter", "Heat", "Zones"].entries())
+    await expect(rows.nth(i)).toContainText(name);
+  await expect(menu.getByRole("menuitem")).toHaveCount(0); // no "Edit bands…"
+  await expect(menu.getByText(/bands$/)).toHaveCount(0); // no bands heading
+});
+
+test("the Bands menu beside the legend carries the depth rows a placement cut had", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=returnPlacement`);
+  const dialog = page.getByRole("dialog");
+  const trigger = dialog.getByRole("button", { name: "Bands · Thirds" });
+  await expect(trigger).toBeVisible();
+  // Beside the legend: on the Scatter legend's row, under the court.
+  const legend = dialog.getByRole("group", { name: "Filter by outcome" });
+  const [t, l] = [
+    (await trigger.boundingBox())!,
+    (await legend.boundingBox())!,
+  ];
+  expect(Math.abs(t.y + t.height / 2 - (l.y + l.height / 2))).toBeLessThan(4);
+  await trigger.click();
+  const menu = page.getByRole("menu", { name: "Depth bands" });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("menuitemradio")).toHaveText([
+    /^No bands/,
+    /^Thirds/,
+    /^Deep · Mid · Short/,
+  ]);
+  await expect(
+    menu.getByRole("menuitemradio", { name: /^Thirds/ }),
+  ).toHaveAttribute("aria-checked", "true");
+  // The harness viewer cannot edit bands: the row is there, disabled.
+  await expect(
+    menu.getByRole("menuitem", { name: "Edit bands…" }),
+  ).toHaveAttribute("aria-disabled", "true");
+});
+
+test("choosing No bands from the Contact bands menu takes the shading off the court, and back", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=returnContact`);
+  const dialog = page.getByRole("dialog");
+  const overlay = dialog.locator('[data-viz-bands="contact"]');
+  await expect(overlay).toHaveCount(1);
+  await dialog.getByRole("button", { name: /^Bands · / }).click();
+  const menu = page.getByRole("menu", { name: "Contact bands" });
+  await expect(menu.getByRole("menuitem", { name: "Edit bands…" })).toHaveCount(
+    1,
+  );
+  await menu.getByRole("menuitemradio", { name: /^No bands/ }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(overlay).toHaveCount(0);
+  const off = dialog.getByRole("button", { name: "Bands · No bands" });
+  await expect(off).toBeVisible();
+  await off.click();
+  await page
+    .getByRole("menu", { name: "Contact bands" })
+    .getByRole("menuitemradio", { name: /^No bands/ })
+    .click();
+  await expect(overlay).toHaveCount(1);
+});
+
+test("a chart that never had bands rows shows no Bands trigger", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog", { name: "All serves" });
+  await expect(
+    dialog.getByRole("group", { name: "Filter by outcome" }),
+  ).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /^Bands/ })).toHaveCount(0);
+});
+
 /** Open the lightbox's Filters and pick its "Advanced filters" row. */
 async function openAdvancedDrawer(page: Page, dialog: Locator) {
   await dialog.getByRole("button", { name: "Filters", exact: true }).click();

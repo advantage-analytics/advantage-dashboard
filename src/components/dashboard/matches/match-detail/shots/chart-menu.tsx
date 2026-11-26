@@ -4,52 +4,26 @@ import { useState } from "react";
 import { Flame, Grid3x3, ScatterChart, type LucideIcon } from "lucide-react";
 import {
   FloatMenu,
-  FloatMenuDivider,
   FloatMenuItem,
-  FloatMenuLabel,
   FloatMenuNote,
   type FloatMenuTone,
 } from "@/components/ui/float-menu";
-import { chartAllowedOn, type Chart, type Cut } from "./viz-model";
+import { chartAllowedOn, type Chart } from "./viz-model";
 import { useVizState } from "./use-viz-state";
 import { CHART_LABEL, VizMenuTrigger } from "./viz-labels";
-import { carryFilters } from "./viz-url";
-import { VizBandsMenuRows } from "./viz-bands-menu";
-import { bandKindFor } from "./cut-kinds";
-
-/** The two halves of a return: where it landed, where it was struck. */
-const RETURN_CUTS: { cut: Cut; label: string; description: string }[] = [
-  {
-    cut: "returnPlacement",
-    label: "Placement",
-    description: "Where each return landed",
-  },
-  {
-    cut: "returnContact",
-    label: "Contact",
-    description: "Where each return was struck",
-  },
-];
 
 /**
- * The lightbox's chart menu. Chart type applies to every cut; Zones uses its
- * existing bands. On a return, Placement and Contact lead the menu (the wall
- * has one Returns card; contact is a chart of it). On a cut with bands, the
- * band rows (`VizBandsMenuRows`) close it, with "Edit bands…" opening the
- * editor through `onEditBands`.
+ * The lightbox's chart menu: Scatter, Heat and Zones, nothing else. Chart
+ * type applies to every cut; Zones uses the existing bands. The bands
+ * themselves have their own menu beside the legend (`VizBandsMenu`,
+ * `viz-bands-menu.tsx`; plan 2026-11-25 §4).
  */
 export function ChartMenu({
   tone = "light",
   side = "bottom",
-  onEditBands,
-  showBands = false,
 }: {
   tone?: FloatMenuTone;
   side?: "top" | "bottom";
-  /** Opens the band editor; without it "Edit bands…" is disabled. */
-  onEditBands?: () => void;
-  /** Draw the bands section (the lightbox; never on the wall). */
-  showBands?: boolean;
 } = {}) {
   const { state, setState } = useVizState();
   const [open, setOpen] = useState(false);
@@ -58,22 +32,6 @@ export function ChartMenu({
     setState((prev) => ({ ...prev, chart, viewId: null }));
     setOpen(false);
   }
-
-  function selectCut(cut: Cut) {
-    setState((prev) => ({
-      ...prev,
-      cut,
-      // A chart the new cut cannot draw falls back to Scatter
-      // (`chartAllowedOn`, the rule `parseVizState` also applies).
-      chart: chartAllowedOn(cut, prev.chart) ? prev.chart : "scatter",
-      filters: carryFilters(prev.filters, cut),
-      viewId: null,
-    }));
-    setOpen(false);
-  }
-
-  const isReturn =
-    state.cut === "returnPlacement" || state.cut === "returnContact";
 
   // One rule for the Zones item and its note, so they never disagree.
   const zonesAllowed = state.cut === null || chartAllowedOn(state.cut, "zones");
@@ -108,22 +66,6 @@ export function ChartMenu({
         />
       }
     >
-      {isReturn && (
-        <>
-          <FloatMenuLabel>Return</FloatMenuLabel>
-          {RETURN_CUTS.map((item) => (
-            <FloatMenuItem
-              key={item.cut}
-              label={item.label}
-              description={item.description}
-              chosen={state.cut === item.cut}
-              onSelect={() => selectCut(item.cut)}
-            />
-          ))}
-          <FloatMenuDivider />
-          <FloatMenuLabel>Chart</FloatMenuLabel>
-        </>
-      )}
       <FloatMenuItem
         label="Scatter"
         description="Every landing point, coloured by outcome"
@@ -158,14 +100,6 @@ export function ChartMenu({
           bands.
         </FloatMenuNote>
       )}
-
-      {showBands && state.cut !== null && (
-        <BandsSection
-          cut={state.cut}
-          onEdit={onEditBands}
-          close={() => setOpen(false)}
-        />
-      )}
     </FloatMenu>
   );
 }
@@ -182,24 +116,5 @@ function ChartRowIcon({ icon: Icon }: { icon: LucideIcon }) {
       strokeWidth={1.5}
       aria-hidden="true"
     />
-  );
-}
-
-/** The band rows under a hairline — only on a cut that has bands. */
-function BandsSection({
-  cut,
-  onEdit,
-  close,
-}: {
-  cut: Cut;
-  onEdit?: () => void;
-  close: () => void;
-}) {
-  if (bandKindFor(cut) === null) return null;
-  return (
-    <>
-      <FloatMenuDivider />
-      <VizBandsMenuRows cut={cut} onEdit={onEdit} close={close} />
-    </>
   );
 }

@@ -32,3 +32,12 @@ is the runner's. Newest entries at the bottom.
 1. Rally shots has no rally-length control at all since T2 (board Final-07 shows toolbar chips) — needs a task; reuse this chip-group pattern.
 2. Board Final-04 shows lead chips on other charts too (Serves 1st/2nd, Errors type, Approaches way to the net); only Returns has them.
 3. The chips hide while the lightbox is in draft state — check at /pr-check.
+
+## T4 · Split Bands out of the chart menu — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** chart-menu.tsx is Scatter · Heat · Zones only (`RETURN_CUTS`, return rows and bands section removed). New `VizBandsMenu` (viz-bands-menu.tsx) — trigger "Bands · <choice>" (No bands / preset / Custom / contact positions) in a new `bandsMenu` slot beside the legend (viz-lightbox-shell.tsx), menu "Depth bands" or "Contact bands" with the unchanged `VizBandsMenuRows`; hidden on cuts without bands and on drafts (viz-lightbox.tsx). Four new specs in viz-lightbox-browser. Widget-states: menu trigger only, no loader or Suspense region touched.
+**follow-ups:**
+
+1. Until T7, Return contact is reachable only from its wall card (agreed).
+2. The menu's label now repeats the heading row inside `VizBandsMenuRows`; drop the inner heading in a polish pass.

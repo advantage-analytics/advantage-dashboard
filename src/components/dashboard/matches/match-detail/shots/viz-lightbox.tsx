@@ -9,6 +9,7 @@ import { depthBandRows } from "@/lib/data/viz-bands";
 import { canManageSavedView } from "@/lib/data/saved-views-logic";
 
 import { ChartMenu } from "./chart-menu";
+import { VizBandsMenu } from "./viz-bands-menu";
 import { CutMenu } from "./cut-menu";
 import { defaultCutsFor } from "./default-cuts";
 import { isPlayable, pointsBehind, resultMarks } from "./lightbox-points";
@@ -613,7 +614,7 @@ export function VizLightbox({
           ).count,
         advanced,
       }}
-      controls={({ enterBandEdit }) => (
+      controls={() => (
         <>
           {isDraft && (
             <CutMenu
@@ -621,12 +622,17 @@ export function VizLightbox({
               triggerRef={cutMenuTriggerRef}
             />
           )}
-          <ChartMenu
-            showBands={!isDraft}
-            onEditBands={meta.readOnly ? undefined : enterBandEdit}
-          />
+          <ChartMenu />
         </>
       )}
+      bandsMenu={({ enterBandEdit }) =>
+        isDraft ? null : (
+          <VizBandsMenu
+            cut={cut}
+            onEditBands={meta.readOnly ? undefined : enterBandEdit}
+          />
+        )
+      }
       bandEditor={{ canEdit, bands, applyBands, receipt }}
       pointList={{
         all: points,

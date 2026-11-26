@@ -60,7 +60,7 @@ ready).
 
 ## T4 · Split Bands out of the chart menu
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/components/dashboard/matches/match-detail/shots/{chart-menu.tsx,viz-bands-menu.tsx,viz-lightbox-shell.tsx}, tests/viz-lightbox-browser.spec.ts, tests/viz-bands.spec.ts
 - **routes:** /dashboard/matches/[matchId]

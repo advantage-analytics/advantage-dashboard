@@ -223,6 +223,10 @@ export interface VizLightboxShellProps {
   /** The control row's menus (view, chart). `enterBandEdit` opens the band
    *  editor, when `bandEditor` allows it. */
   controls?: (ctx: { enterBandEdit: () => void }) => ReactNode;
+  /** The bands menu, drawn beside the legend under the court
+   *  (`VizBandsMenu`). `enterBandEdit` as for `controls`. Omitted, or
+   *  rendering nothing (a cut without bands), no trigger is drawn. */
+  bandsMenu?: (ctx: { enterBandEdit: () => void }) => ReactNode;
   /** The band editor: who may edit, the live bands, how to save, and the
    *  receipt. Omitted, there is no editing. */
   bandEditor?: {
@@ -320,6 +324,7 @@ export function VizLightboxShell({
   player,
   filterPanel,
   controls,
+  bandsMenu,
   bandEditor,
   pointList,
   statHint,
@@ -1333,38 +1338,48 @@ export function VizLightboxShell({
 
                   {!isDraft && (
                     <div className="flex items-center justify-between gap-3 [&>*:first-child]:min-w-0">
-                      {chart === "scatter" ? (
-                        <LegendFilter
-                          items={legend}
-                          counts={legendCounts(resultMarks(result))}
-                          pick={legendPick}
-                          onPick={(next) => {
-                            setLegendPick(next);
-                            setSelectedMarkId(null);
-                          }}
-                        />
-                      ) : (
-                        // `min-h-6`: the Scatter legend's row height (its
-                        // keys are 24px buttons), so a chart switch never
-                        // changes the stage's height — a resized stage re-fits
-                        // the court (`usePanZoom`) and would throw away the
-                        // reader's pan and zoom.
-                        <div
-                          role="group"
-                          aria-label="Legend"
-                          className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-0.5"
-                        >
-                          {legend.map((item) =>
-                            item.glyph === "ramp" ? (
-                              <HeatRampLegend key={item.key} />
-                            ) : (
-                              <span key={item.key} className="px-1">
-                                <LegendMark item={item} />
-                              </span>
-                            ),
-                          )}
-                        </div>
-                      )}
+                      {/* The legend, then the bands menu beside it (plan
+                          2026-11-25 §4: bands left the chart menu). */}
+                      <div className="flex items-center gap-2">
+                        {chart === "scatter" ? (
+                          <LegendFilter
+                            items={legend}
+                            counts={legendCounts(resultMarks(result))}
+                            pick={legendPick}
+                            onPick={(next) => {
+                              setLegendPick(next);
+                              setSelectedMarkId(null);
+                            }}
+                          />
+                        ) : (
+                          // `min-h-6`: the Scatter legend's row height (its
+                          // keys are 24px buttons), so a chart switch never
+                          // changes the stage's height — a resized stage re-fits
+                          // the court (`usePanZoom`) and would throw away the
+                          // reader's pan and zoom.
+                          <div
+                            role="group"
+                            aria-label="Legend"
+                            className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-0.5"
+                          >
+                            {legend.map((item) =>
+                              item.glyph === "ramp" ? (
+                                <HeatRampLegend key={item.key} />
+                              ) : (
+                                <span key={item.key} className="px-1">
+                                  <LegendMark item={item} />
+                                </span>
+                              ),
+                            )}
+                          </div>
+                        )}
+                        {bandsMenu && (
+                          <ControlsSlot
+                            render={bandsMenu}
+                            enterBandEdit={enterBandEdit}
+                          />
+                        )}
+                      </div>
                       {(showNotDrawn || sentenceNote) && (
                         <div className="flex shrink-0 items-center gap-3">
                           {/* Some approaches drawn, some not: the same
