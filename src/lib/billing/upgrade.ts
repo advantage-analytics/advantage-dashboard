@@ -74,6 +74,13 @@ export interface UpgradeQuote {
   creditCents: number;
   /** Which share was the smaller one, and so set the credit. */
   creditBasis: "days" | "hours";
+  /**
+   * What each share alone would credit, under the same cap as `creditCents`
+   * (which is the smaller of the two). The dialog prints both, so the rule
+   * is read off the two numbers rather than taken on trust.
+   */
+  daysCreditCents: number;
+  hoursCreditCents: number;
   /** Days of the current period left; a part day counts as one. */
   daysLeft: number;
   /** Plan seconds left in the current hours slice — what the meter shows. */
@@ -151,18 +158,25 @@ export function quoteUpgrade(input: UpgradeInput): UpgradeQuote {
     (timeD > BigInt(0) ? timeN * hoursD <= hoursN * timeD : true);
   const creditBasis = daysIsSmaller ? "days" : "hours";
 
-  const creditCents = clamp(
-    daysIsSmaller
-      ? shareOf(oldPeriodPriceCents, timeN, timeD)
-      : shareOf(oldPeriodPriceCents, hoursN, hoursD),
+  const creditCap = Math.min(oldPeriodPriceCents, newPeriodPriceCents);
+  const daysCreditCents = clamp(
+    shareOf(oldPeriodPriceCents, timeN, timeD),
     0,
-    Math.min(oldPeriodPriceCents, newPeriodPriceCents),
+    creditCap,
   );
+  const hoursCreditCents = clamp(
+    shareOf(oldPeriodPriceCents, hoursN, hoursD),
+    0,
+    creditCap,
+  );
+  const creditCents = daysIsSmaller ? daysCreditCents : hoursCreditCents;
 
   return {
     payTodayCents: Math.max(0, newPeriodPriceCents - creditCents),
     creditCents,
     creditBasis,
+    daysCreditCents,
+    hoursCreditCents,
     daysLeft: Math.ceil(leftMs / DAY_MS),
     hoursLeftSeconds,
     newPeriodPriceCents,

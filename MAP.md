@@ -106,6 +106,7 @@ markers is hand-written — edit it as things move.
 | `/design/ipad` | [`src/app/design/ipad/page.tsx`](src/app/design/ipad/page.tsx) |
 | `/design/labels` | [`src/app/design/labels/page.tsx`](src/app/design/labels/page.tsx) |
 | `/design` | [`src/app/design/page.tsx`](src/app/design/page.tsx) |
+| `/design/plans-2027` | [`src/app/design/plans-2027/page.tsx`](src/app/design/plans-2027/page.tsx) |
 | `/design/request-create-team/full` | [`src/app/design/request-create-team/full/page.tsx`](src/app/design/request-create-team/full/page.tsx) |
 | `/design/request-create-team` | [`src/app/design/request-create-team/page.tsx`](src/app/design/request-create-team/page.tsx) |
 | `/design/signed-in-auth` | [`src/app/design/signed-in-auth/page.tsx`](src/app/design/signed-in-auth/page.tsx) |

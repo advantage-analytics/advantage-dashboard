@@ -75,6 +75,22 @@ export function usd(n: number): string {
 }
 
 /**
+ * `$288.50`, `$225`, `$1,650` — an amount in US cents, with the cents shown
+ * only when there are any. The one money formatter for a figure that can
+ * carry cents (an upgrade's credit, what is due today); `usd()` is for the
+ * whole-dollar prices above.
+ */
+export function formatUsdCents(cents: number): string {
+  const safe = Number.isFinite(cents) ? Math.round(cents) : 0;
+  const sign = safe < 0 ? "-" : "";
+  const whole = safe % 100 === 0;
+  return `${sign}$${(Math.abs(safe) / 100).toLocaleString("en-US", {
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: whole ? 0 : 2,
+  })}`;
+}
+
+/**
  * A match estimate for an hour count that is not a plan's own — extra hours,
  * what is left of a balance. A plan's card shows its stored `matches`, which
  * are the rounded figures agreed with the plans and are not this arithmetic.

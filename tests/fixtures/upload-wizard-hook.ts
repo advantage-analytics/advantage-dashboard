@@ -17,6 +17,8 @@ import * as adminApproval from "@/lib/admin/uploads/approval";
 import * as quota from "@/lib/services/splitstep/quota";
 import * as draftTarget from "@/lib/wizard/draft-target";
 import { secondsLeft } from "@/lib/data/usage-format";
+import * as billingPlans from "@/lib/billing/plans";
+import * as userPlan from "@/lib/user/plan";
 import type {
   UseUploadMatchWizardProps,
   UseUploadMatchWizardReturn,
@@ -402,6 +404,10 @@ export function uploadWizardHarness(
     // so the real clamp — the meter's remaining figure is what several of
     // these specs assert on.
     "@/lib/data/usage-format": { formatResetDate: () => "Oct 1", secondsLeft },
+    // Pure, so the real ones: the plan a workspace is on, and whether plans
+    // are on sale (which decides the paywall the wizard opens).
+    "@/lib/billing/plans": billingPlans,
+    "@/lib/user/plan": userPlan,
     // Pure string constant shared with the admin upload file route's own 500
     // body; the hook string-matches it verbatim.
     "@/lib/admin/uploads/types": {

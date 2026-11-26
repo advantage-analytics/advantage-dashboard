@@ -19,7 +19,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isMissingTable } from "@/lib/data/season-points-cache";
 import { isMissingColumn } from "@/lib/supabase/missing-function";
-import { isCollegePlanId, isPlanTerm, type ProgramPlanRef } from "./plans";
+import {
+  isCollegePlanId,
+  isPlanTerm,
+  type PlanPeriod,
+  type ProgramPlanRef,
+} from "./plans";
 
 /** The `program_plans` columns a `ProgramPlanRef` is built from. */
 export const PROGRAM_PLAN_REF_COLUMNS =
@@ -76,6 +81,85 @@ export async function readProgramPlanRef(
       error: error instanceof Error ? error.message : String(error),
     });
     return null;
+  }
+}
+
+/** What Settings › Plan and the checkout dialog say about a subscription. */
+export interface PlanBilling {
+  /** `users.plan` as the row holds it. Read it through `planFor()`. */
+  plan: string | null;
+  /** `users.plan_period_start`, an ISO instant: the hours window's anchor. */
+  periodStart: string | null;
+  /** `users.plan_period`, when it is one this build knows. */
+  period: PlanPeriod | null;
+  /** `users.plan_status`: `active`, `past_due`, `canceled`, or null for never. */
+  status: string | null;
+  /** `users.plan_period_end`, an ISO instant: the day the plan renews. */
+  periodEnd: string | null;
+  /**
+   * Whether this account has ever held a subscription, by our own row. The
+   * first-month discount is for accounts that have not — and checkout, which
+   * also asks Stripe, has the last word (`customerHistory()`).
+   */
+  everSubscribed: boolean;
+}
+
+export const NO_PLAN_BILLING: PlanBilling = {
+  plan: null,
+  periodStart: null,
+  period: null,
+  status: null,
+  periodEnd: null,
+  everSubscribed: false,
+};
+
+/**
+ * One user's own subscription facts, read under RLS. Never throws, and a
+ * database the plan-model migration has not reached reads as "never
+ * subscribed", like `readPlanPeriodStart()` below. No Stripe id is selected:
+ * the browser calls this too, and has no use for one.
+ */
+export async function readPlanBilling(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<PlanBilling> {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select(
+        "plan, plan_period, plan_status, plan_period_start, plan_period_end",
+      )
+      .eq("id", userId)
+      .maybeSingle();
+    if (error) {
+      if (!isMissingColumn(error)) {
+        console.error("[plans] could not read the plan billing", {
+          error: error.message,
+        });
+      }
+      return NO_PLAN_BILLING;
+    }
+    const row = data as {
+      plan?: string | null;
+      plan_period_start?: string | null;
+      plan_period?: string | null;
+      plan_status?: string | null;
+      plan_period_end?: string | null;
+    } | null;
+    const period = row?.plan_period;
+    return {
+      plan: row?.plan ?? null,
+      periodStart: row?.plan_period_start ?? null,
+      period: period === "monthly" || period === "yearly" ? period : null,
+      status: row?.plan_status ?? null,
+      periodEnd: row?.plan_period_end ?? null,
+      everSubscribed: (row?.plan_status ?? null) !== null,
+    };
+  } catch (error) {
+    console.error("[plans] could not read the plan billing", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return NO_PLAN_BILLING;
   }
 }
 

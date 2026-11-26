@@ -61,6 +61,13 @@ import {
   sumUsedSeconds,
 } from "@/lib/services/splitstep/quota";
 import type { CreditsAdded } from "@/components/dashboard/credits/add-hours-dialog";
+import type { CheckoutResult } from "@/lib/billing/checkout-view";
+import {
+  planHoursSeconds,
+  plansOnSale,
+  type CoachPlanId,
+} from "@/lib/billing/plans";
+import { planFor } from "@/lib/user/plan";
 import { secondsLeft } from "@/lib/data/usage-format";
 import { SUBMISSION_RESPONSE_INTERRUPTED_MESSAGE } from "@/lib/admin/uploads/types";
 import { adminUploadApproval } from "@/lib/admin/uploads/approval";
@@ -639,7 +646,26 @@ export interface UseUploadMatchWizardReturn {
   openAddHours: (neededSeconds?: number) => void;
   closeAddHours: () => void;
   /** Checkout finished: count the new hours and carry on where it stopped. */
-  handleCreditsAdded: (added: CreditsAdded) => void;
+  handleCreditsAdded: (
+    added: Pick<CreditsAdded, "seconds"> & Partial<CreditsAdded>,
+  ) => void;
+  /**
+   * Plans are on sale (or this account already holds one) and this upload
+   * bills a personal workspace: the paywall is the plan checkout dialog and
+   * the file step carries the hours note. False keeps the beta's credit packs.
+   */
+  plansActive: boolean;
+  /** The plan the billed personal workspace is on, a purchase made here included. */
+  quotaPlanId: CoachPlanId;
+  /** `VideoAllowance.kind` for the billed workspace — which hours the meter is showing. */
+  quotaAllowanceKind: string;
+  /** The plan checkout dialog finished: count what was bought and carry on. */
+  handlePurchase: (result: CheckoutResult) => void;
+  /**
+   * What `users.plan` holds now, re-read after a payment that had not shown
+   * up: a plan that has landed since is counted without a reload.
+   */
+  syncPlan: (plan: string | null, periodStart: string | null) => void;
   /** Paid, but the hours have not been confirmed yet. */
   paymentPending: boolean;
   handlePaymentPending: () => void;
@@ -1300,7 +1326,28 @@ export function useUploadMatchWizard({
   // its usage is summed over. Cheap and pure, so it is asked on every render;
   // the reading below keys on its primitives, which change only when the
   // month or window does.
-  const quotaAllowance = allowanceFor(eligibilityWorkspace);
+  // A plan bought or upgraded in this wizard. The workspace context above was
+  // read when the page loaded and is not re-read mid-upload (that would mean
+  // a refresh under an in-memory video), so the purchase is laid over it here
+  // until the context agrees. The server reads `users.plan` itself at Send.
+  const [purchasedPlan, setPurchasedPlan] = useState<{
+    plan: CoachPlanId;
+    startedAt: string;
+  } | null>(null);
+  const billedWorkspace =
+    purchasedPlan &&
+    eligibilityWorkspace.kind === "personal" &&
+    planFor(eligibilityWorkspace.plan).id !== purchasedPlan.plan
+      ? {
+          ...eligibilityWorkspace,
+          plan: purchasedPlan.plan,
+          planPeriodStart: purchasedPlan.startedAt,
+        }
+      : eligibilityWorkspace;
+  const quotaPlanId = planFor(
+    billedWorkspace.kind === "personal" ? billedWorkspace.plan : null,
+  ).id;
+  const quotaAllowance = allowanceFor(billedWorkspace);
   const quotaCapSeconds =
     admin?.context.videoAllowance.capSeconds ?? quotaAllowance.capSeconds;
   // "Sep 1": the day that allowance turns over, or null when nothing comes
@@ -1501,6 +1548,8 @@ export function useUploadMatchWizard({
   );
   const paywallResumeRef = useRef<"match" | null>(null);
   const canBuyCredits = !admin && eligibilityWorkspace.kind === "personal";
+  const plansActive =
+    canBuyCredits && (plansOnSale() || quotaPlanId !== "free");
   const freeHoursReturn = freeHoursReturnOn();
 
   const openAddHours = useCallback(
@@ -2657,7 +2706,7 @@ export function useUploadMatchWizard({
   ]);
 
   const handleCreditsAdded = useCallback(
-    (added: CreditsAdded) => {
+    (added: Pick<CreditsAdded, "seconds"> & Partial<CreditsAdded>) => {
       // Counted at once so the step can move on; the re-read confirms it.
       setQuotaCreditSeconds((current) => current + added.seconds);
       setQuotaReadNonce((n) => n + 1);
@@ -2681,6 +2730,61 @@ export function useUploadMatchWizard({
       setQuotaCreditSeconds,
       setQuotaReadNonce,
     ],
+  );
+
+  /**
+   * The plan checkout dialog finished. Extra hours are credits, counted as
+   * they always were. A new plan or an upgrade starts a fresh month today
+   * with the plan's full hours, so the allowance is re-keyed to it here and
+   * the re-read confirms the figure.
+   */
+  const handlePurchase = useCallback(
+    (result: CheckoutResult) => {
+      if (result.kind === "hours") {
+        handleCreditsAdded({ seconds: result.seconds });
+        return;
+      }
+      const planSeconds = planHoursSeconds(result.plan);
+      setPurchasedPlan({
+        plan: result.plan,
+        startedAt: new Date().toISOString(),
+      });
+      setQuotaFreeSeconds(planSeconds);
+      setQuotaReadNonce((n) => n + 1);
+      setPaymentPending(false);
+      const needed = paywall?.neededSeconds;
+      const covered =
+        needed === undefined || planSeconds + quotaCreditSeconds >= needed;
+      setPaywall(null);
+      setError(null);
+      if (paywallResumeRef.current === "match" && covered) setStep("match");
+      paywallResumeRef.current = null;
+    },
+    [
+      handleCreditsAdded,
+      paywall,
+      quotaCreditSeconds,
+      setStep,
+      setPaymentPending,
+      setPurchasedPlan,
+      setQuotaFreeSeconds,
+      setQuotaReadNonce,
+    ],
+  );
+
+  const syncPlan = useCallback(
+    (plan: string | null, periodStart: string | null) => {
+      const seen = planFor(plan).id;
+      // Only a bigger plan than this wizard knows about. A row that still
+      // says the old plan right after a purchase is the write's lag, not news.
+      if (planHoursSeconds(seen) <= planHoursSeconds(quotaPlanId)) return;
+      setPurchasedPlan({
+        plan: seen,
+        startedAt: periodStart ?? new Date().toISOString(),
+      });
+      setPaymentPending(false);
+    },
+    [quotaPlanId, setPurchasedPlan, setPaymentPending],
   );
 
   /**
@@ -4368,9 +4472,14 @@ export function useUploadMatchWizard({
     freeHoursReturnOn: freeHoursReturn,
     paywall,
     canBuyCredits,
+    plansActive,
+    quotaPlanId,
+    quotaAllowanceKind: quotaAllowance.kind,
     openAddHours,
     closeAddHours,
     handleCreditsAdded,
+    handlePurchase,
+    syncPlan,
     paymentPending,
     handlePaymentPending,
     providerQuotaRefusal,
