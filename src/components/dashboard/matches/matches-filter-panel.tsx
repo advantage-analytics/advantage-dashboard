@@ -1,5 +1,6 @@
 "use client";
 import { FilterTrigger } from "@/components/dashboard/shared/list-toolbar-trigger";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 
 import { useRef, useState, type Ref } from "react";
 import { ChevronRight } from "lucide-react";
@@ -41,6 +42,9 @@ export interface FilterOption {
   /** `null` is the neutral option — selecting it clears this facet. */
   value: string | null;
   label: string;
+  /** What the short label stands for, on hover (the dark `ChromeTooltip`):
+   *  the lightbox's Rally length reads "Short", and "1–4 shots" here. */
+  tooltip?: string;
 }
 
 export interface SegmentedFacet<K extends string> {
@@ -61,6 +65,9 @@ export interface ChecklistFacet<K extends string> {
   /** A count beside each row (the Visualizations lightbox: how many this
    *  option alone would leave). Omitted, rows carry no count. */
   count?: (value: string) => number;
+  /** What an option's name leaves out, on hover (the dark `ChromeTooltip`):
+   *  the lightbox's "Pressure points" lists the scores it means. */
+  tooltip?: (value: string) => string | undefined;
 }
 
 export interface FilterPanelSection<K extends string> {
@@ -162,7 +169,7 @@ function Segmented<K extends string>({
     >
       {facet.options.map((opt) => {
         const active = opt.value === value;
-        return (
+        const button = (
           <button
             key={opt.label}
             type="button"
@@ -183,6 +190,13 @@ function Segmented<K extends string>({
           >
             {opt.label}
           </button>
+        );
+        return opt.tooltip ? (
+          <ChromeTooltip key={opt.label} label={opt.tooltip} side="top">
+            {button}
+          </ChromeTooltip>
+        ) : (
+          button
         );
       })}
     </div>
@@ -298,7 +312,8 @@ export function MatchesFilterPanel<K extends string>({
                       section.checklist!.key,
                       value,
                     );
-                    return (
+                    const tooltip = section.checklist!.tooltip?.(value);
+                    const row = (
                       <button
                         key={value}
                         type="button"
@@ -335,6 +350,18 @@ export function MatchesFilterPanel<K extends string>({
                           </span>
                         )}
                       </button>
+                    );
+                    return tooltip ? (
+                      <ChromeTooltip
+                        key={value}
+                        label={tooltip}
+                        side="top"
+                        wrap
+                      >
+                        {row}
+                      </ChromeTooltip>
+                    ) : (
+                      row
                     );
                   })}
                 </div>

@@ -231,9 +231,8 @@ test("a filter ticked inside the card keeps the court (optimistic); the card clo
   await serve.getByRole("button", { name: "Filters" }).click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
   await expect(panel).toBeVisible();
-  // Zone is a checklist: each option a checkbox named for the zone and its
-  // count ("T 8").
-  const zoneT = panel.getByRole("checkbox", { name: /^T\b/ });
+  // Zone is one lane at a time: a segmented row, Any · Wide · Body · T.
+  const zoneT = panel.getByRole("radio", { name: "T", exact: true });
   await expect(zoneT).toBeVisible();
   await zoneT.click();
   await expect(zoneT).toBeChecked();
@@ -265,40 +264,23 @@ test("a filter ticked inside the card keeps the court (optimistic); the card clo
   expect(errors).toEqual([]);
 });
 
-test("two options ticked against the option order still land: the store's click order and the server's sorted echo are the same court", async ({
+test("two options held against the option order still land: the store's order and the server's sorted echo are the same court", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1512, height: 982 });
-  await page.goto(`${origin}${PROFILE}?tab=visualizations&delay=600`);
-  const wall = page.getByRole("list", { name: "Default views" });
-  await wall.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
+  // Wide before T: the store holds [wide, t], the server echoes [t, wide].
+  // The Filters menu picks one lane at a time now, so two arrive the way a
+  // Statistics row or a shared link brings them: in the URL.
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&cut=serve&zone=wide&zone=t&delay=600`,
+  );
   const serve = page.getByRole("dialog", { name: "All serves" });
   await expect(serve).toBeVisible({ timeout: 8_000 });
-  const all = await marks(serve).count();
-  expect(all).toBeGreaterThan(0);
-
-  // Wide before T: the store holds [wide, t], the server echoes [t, wide].
-  await serve.getByRole("button", { name: "Filters" }).click();
-  const panel = page.getByRole("dialog", { name: "Filter the court" });
-  await expect(panel).toBeVisible();
-  const wide = panel.getByRole("checkbox", { name: /^Wide\b/ });
-  const zoneT = panel.getByRole("checkbox", { name: /^T\b/ });
-  await wide.click();
-  await expect(wide).toBeChecked();
-  await zoneT.click();
-  await expect(zoneT).toBeChecked();
-  await page.keyboard.press("Escape");
-  await expect(panel).toHaveCount(0);
 
   // The server's answer for both lands as this card's court: never stuck
-  // pending, the strip names both, and the URL carries them in option order.
-  await expect
-    .poll(() => new URL(page.url()).searchParams.getAll("zone").sort(), {
-      timeout: 8_000,
-    })
-    .toEqual(["t", "wide"]);
+  // pending, and the strip names both.
   await expect(serve.locator("[data-viz-filter-strip]")).toContainText("T", {
     timeout: 8_000,
   });
@@ -308,6 +290,19 @@ test("two options ticked against the option order still land: the store's click 
   await expect
     .poll(() => marks(serve).count(), { timeout: 8_000 })
     .toBeGreaterThan(0);
+  expect(new URL(page.url()).searchParams.getAll("zone").sort()).toEqual([
+    "t",
+    "wide",
+  ]);
+
+  // Two lanes are no one segment: Zone lights none of them, not even Any.
+  await serve.getByRole("button", { name: "Filters" }).click();
+  const panel = page.getByRole("dialog", { name: "Filter the court" });
+  const zone = panel.getByRole("radiogroup").first();
+  for (const name of ["Any", "Wide", "Body", "T"])
+    await expect(
+      zone.getByRole("radio", { name, exact: true }),
+    ).toHaveAttribute("aria-checked", "false");
 
   expect(errors).toEqual([]);
 });

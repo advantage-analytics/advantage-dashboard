@@ -102,6 +102,43 @@ test("the approaches cut's panel has three checklist groups; no other cut has th
   expect(errors).toEqual([]);
 });
 
+test("the approaches menu leads with its three groups, then Rally length, Pressure, Court, Set, with Advanced filters last", async ({
+  page,
+}) => {
+  const { errors } = await openApproaches(page);
+  const panel = await openPanel(page);
+  const labels = (
+    await panel
+      .locator("[data-filter-panel-sections] > div > p")
+      .allTextContents()
+  ).filter((l) => l !== "Set");
+  // Set shows for a match of two sets or more; Serve (1st · 2nd) stays after
+  // the shared run until the toolbar's serve chips replace it.
+  expect(labels).toEqual([
+    ...APPROACH_SECTIONS,
+    "Rally length",
+    "Pressure",
+    "Court",
+    "Serve",
+  ]);
+  const advancedLast = await panel.evaluate((root) => {
+    const sections = root.querySelector("[data-filter-panel-sections]")!;
+    const advanced = [...root.querySelectorAll("button")].find((b) =>
+      b.textContent?.startsWith("Advanced filters"),
+    );
+    return (
+      advanced !== undefined &&
+      !sections.contains(advanced) &&
+      Boolean(
+        sections.compareDocumentPosition(advanced) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      )
+    );
+  });
+  expect(advancedLast).toBe(true);
+  expect(errors).toEqual([]);
+});
+
 test("the card's baseline is not an applied filter; Serve and volley is, and Clear returns to approaches only", async ({
   page,
 }) => {

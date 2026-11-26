@@ -295,6 +295,150 @@ test("the Filters panel is the Matches panel over the cut's own keys, and Clear 
   await expect(page).not.toHaveURL(/deuce/);
 });
 
+/** The Filters panel's section labels, top to bottom, and whether the
+ *  Advanced filters row sits after every one of them. */
+async function filterSections(page: Page, cut: string) {
+  await page.goto(`${origin}/?tab=shots&cut=${cut}`);
+  const dialog = page.getByRole("dialog").first();
+  await dialog.getByRole("button", { name: "Filters", exact: true }).click();
+  const panel = page.getByRole("dialog", { name: "Filter the court" });
+  await expect(panel).toBeVisible();
+  const labels = await panel
+    .locator("[data-filter-panel-sections] > div > p")
+    .allTextContents();
+  const advancedLast = await panel.evaluate((root) => {
+    const sections = root.querySelector("[data-filter-panel-sections]")!;
+    const advanced = [...root.querySelectorAll("button")].find((b) =>
+      b.textContent?.startsWith("Advanced filters"),
+    );
+    return (
+      advanced !== undefined &&
+      Boolean(
+        sections.compareDocumentPosition(advanced) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ) &&
+      !sections.contains(advanced)
+    );
+  });
+  return { panel, labels, advancedLast };
+}
+
+/** Set shows only for a match of two or more sets; Serve (1st · 2nd) stays
+ *  after the shared run until the toolbar's serve chips replace it. */
+const withoutSet = (labels: string[]) => labels.filter((l) => l !== "Set");
+
+test("the Filters menu leads with the chart's own sections, then Rally length, Pressure, Court, Set, with Advanced filters last", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+
+  const serves = await filterSections(page, "serve");
+  expect(withoutSet(serves.labels)).toEqual([
+    "Zone",
+    "Rally length",
+    "Pressure",
+    "Court",
+    "Serve",
+  ]);
+  expect(serves.advancedLast).toBe(true);
+  // Zone is one lane at a time: Any · Wide · Body · T.
+  const zone = serves.panel.getByRole("radiogroup").first();
+  await expect(zone.getByRole("radio")).toHaveText([
+    "Any",
+    "Wide",
+    "Body",
+    "T",
+  ]);
+  await zone.getByRole("radio", { name: "Wide" }).click();
+  await expect(zone.getByRole("radio", { name: "Wide" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect(page).toHaveURL(/zone=wide/);
+  await zone.getByRole("radio", { name: "T" }).click();
+  await expect(page).toHaveURL(/zone=t\b/);
+  await expect(page).not.toHaveURL(/zone=wide/);
+  await page.keyboard.press("Escape");
+
+  const returns = await filterSections(page, "returnPlacement");
+  expect(withoutSet(returns.labels)).toEqual([
+    "Rally length",
+    "Pressure",
+    "Court",
+    "Serve",
+  ]);
+  expect(returns.advancedLast).toBe(true);
+  await page.keyboard.press("Escape");
+
+  const errorsCut = await filterSections(page, "errors");
+  expect(withoutSet(errorsCut.labels)).toEqual([
+    "Error type",
+    "Rally length",
+    "Pressure",
+    "Court",
+    "Serve",
+  ]);
+  expect(errorsCut.advancedLast).toBe(true);
+  await page.keyboard.press("Escape");
+
+  // Rally shots carry Rally length as toolbar chips, not a Filters section.
+  for (const cut of ["rallyPlacement", "rallyPosition"]) {
+    const rally = await filterSections(page, cut);
+    expect(withoutSet(rally.labels)).toEqual(["Pressure", "Court", "Serve"]);
+    expect(rally.advancedLast).toBe(true);
+    await page.keyboard.press("Escape");
+  }
+});
+
+test("Rally length is Any · Short · Medium · Long with no counts, writes the rally key, and names its shots on hover; Pressure points lists its scores", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  const { panel } = await filterSections(page, "serve");
+  const sections = panel.locator("[data-filter-panel-sections] > div");
+  const rally = sections.filter({
+    has: page.locator("p", { hasText: /^Rally length$/ }),
+  });
+  const radios = rally.getByRole("radio");
+  // Segmented buttons carry their label alone: no count.
+  await expect(radios).toHaveText(["Any", "Short", "Medium", "Long"]);
+  // No segmented button anywhere in the menu holds a count beside its label.
+  await expect(
+    panel.locator('[role="radiogroup"] [role="radio"] > *'),
+  ).toHaveCount(0);
+
+  const tooltip = page.getByRole("tooltip");
+  for (const [name, shots] of [
+    ["Short", "1–4 shots"],
+    ["Medium", "5–8 shots"],
+    ["Long", "9 or more shots"],
+  ] as const) {
+    await rally.getByRole("radio", { name }).hover();
+    await expect(tooltip).toHaveText(shots);
+    // Off the row, in steps: the tooltip's grace area lets go on a move.
+    await page.mouse.move(10, 10, { steps: 5 });
+    await expect(tooltip).toHaveCount(0);
+  }
+
+  await rally.getByRole("radio", { name: "Long" }).click();
+  await expect(page).toHaveURL(/rally=long/);
+  await expect(rally.getByRole("radio", { name: "Long" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await rally.getByRole("radio", { name: "Any" }).click();
+  await expect(page).not.toHaveURL(/rally=/);
+
+  const pressure = panel.getByRole("checkbox", { name: /^Pressure points\b/ });
+  await expect(pressure).toBeVisible();
+  await pressure.hover();
+  await expect(tooltip).toHaveText("30–30, 30–40, 40–30, deuce and ad points");
+  // Its siblings say what they are already: no tooltip trigger at all.
+  await expect(
+    panel.getByRole("checkbox", { name: /^Break points\b/ }),
+  ).not.toHaveAttribute("data-state", /.*/);
+});
+
 test("Statistics: rows over 4px bars, no average tick; hover outlines a zone, a click keeps only its marks", async ({
   page,
 }) => {
@@ -468,7 +612,8 @@ test("3 · narrowing the All serves card: the title stays the card's, the denomi
   expect(n1).toBe(m1);
   await dialog.getByRole("button", { name: "Filters" }).click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
-  const serve = panel.getByRole("radiogroup").first();
+  // Serve (1st · 2nd) is the last segmented row, after the shared run.
+  const serve = panel.getByRole("radiogroup").last();
   await serve.getByRole("radio", { name: "1st" }).click();
   await page.keyboard.press("Escape");
   await expect(page).toHaveURL(/ball=first/);
@@ -630,18 +775,15 @@ test("R3·1 · a selected point filtered off the court is let go: no ring when i
   await dialog.getByRole("button", { name: "Filters" }).click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
   let gone = false;
+  // Zone is one lane at a time: each pick replaces the last.
   for (const zone of ["T", "Body", "Wide"]) {
-    const box = panel.getByRole("checkbox", {
-      name: new RegExp(`^${zone}\\s*\\d*$`),
-    });
-    await box.click();
-    await expect(box).toHaveAttribute("aria-checked", "true");
+    const lane = panel.getByRole("radio", { name: zone, exact: true });
+    await lane.click();
+    await expect(lane).toHaveAttribute("aria-checked", "true");
     if ((await selected.count()) === 0) {
       gone = true;
       break;
     }
-    await box.click();
-    await expect(box).toHaveAttribute("aria-checked", "false");
   }
   expect(gone).toBe(true);
   await page.keyboard.press("Escape");
@@ -897,9 +1039,10 @@ test("R4·3 · loosening a view's own filter is named in the strip, and Clear pu
   await expect(strip).toHaveCount(0);
   await dialog.getByRole("button", { name: "Filters" }).click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
+  // Serve (1st · 2nd) is the last segmented row, after the shared run.
   await panel
     .getByRole("radiogroup")
-    .first()
+    .last()
     .getByRole("radio", { name: "Any" })
     .click();
   await page.keyboard.press("Escape");

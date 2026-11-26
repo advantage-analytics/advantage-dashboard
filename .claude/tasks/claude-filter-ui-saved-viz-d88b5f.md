@@ -32,7 +32,7 @@ ready).
 
 ## T2 · Reorder Filters menu sections per chart
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T1
 - **files:** (guess) src/components/dashboard/matches/match-detail/shots/lightbox-filters.tsx (`LightboxFilterPanel`), src/components/dashboard/matches/match-detail/shots/viz-model.ts (`filterKeysFor`, ~:1000), src/components/dashboard/matches/matches-filter-panel.tsx (`Segmented`), tests/viz-lightbox-browser.spec.ts, tests/viz-approach-filters-browser.spec.ts
