@@ -39,6 +39,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function enableMatchShare(
   matchId: string,
+  options: { includeVideo?: boolean } = {},
 ): Promise<ShareActionResult> {
   if (!UUID.test(matchId)) return { ok: false, error: "forbidden" };
   const ctx = await requireWorkspaceContext();
@@ -78,14 +79,26 @@ export async function enableMatchShare(
     return { ok: false, error: "forbidden" };
   }
 
+  // A new link carries the video too when the caller asks (the match has
+  // one and this viewer may share it). The insert policy refuses a row that
+  // starts with it, so it goes on through `set_match_share_video` — the one
+  // place "who may share video" is decided. A refusal there leaves the link
+  // on without the video rather than failing the toggle.
+  let includesVideo = false;
+  if (options.includeVideo === true) {
+    const { error: videoError } = await supabase.rpc("set_match_share_video", {
+      p_match_id: matchId,
+      p_include: true,
+    });
+    includesVideo = !videoError;
+  }
+
   revalidatePath(MATCH_REPORT_PATH_PATTERN, "page");
-  // A new link never starts with the video: the insert policy refuses one
-  // that does, and `setMatchShareVideo` is the only way to add it.
   return {
     ok: true,
     url: matchShareUrl(token),
     includesVisualizations: true,
-    includesVideo: false,
+    includesVideo,
   };
 }
 
