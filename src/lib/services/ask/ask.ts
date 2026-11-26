@@ -44,6 +44,7 @@ import {
   baselineIsWholeScope,
   compareMisfit,
   movesPreviousQuestion,
+  questionMeasures,
   compareColumn,
   compareKindOfSql,
   compareSql,
@@ -668,6 +669,57 @@ export function followUpShrank(
 }
 
 /**
+ * What a follow-up says when the planner, told once, still plans the query
+ * the previous answer ran: nothing new to show, said plainly, rather than the
+ * same answer again. The question is released like any other refusal.
+ */
+export const ASK_NOTHING_NEW_MESSAGE =
+  "That's everything these matches show on it. Ask about another part of the game, another player, or a different set of matches.";
+
+/** What the planner is told when a follow-up's plan is the previous query. */
+export const REPEATS_PREVIOUS_REASON =
+  "That is the previous question's query exactly: scope_sql and sql are unchanged, so the answer would be the previous answer again. The follow-up asks for something new. Change what it changes — the measure, the split, the period, the player or the matches — and keep the rest. If the follow-up only complains about the previous answer, plan the previous question again the way the complaint asks; if the views hold nothing more on it, reply with cannot_answer.";
+
+const sameText = (text: string) =>
+  text.toLowerCase().replace(/\s+/g, " ").trim();
+
+/**
+ * Whether `plan` runs the query the previous answer ran: the same scope and
+ * the same query, or the same one of the server's comparisons, or the
+ * review again. Whitespace and case are set aside.
+ */
+export function repeatsPreviousPlan(
+  previous: AskPreviousPlan | null,
+  plan: { scope_sql: string; sql: string },
+): boolean {
+  if (!previous) return false;
+  if (sameText(previous.scope_sql) !== sameText(plan.scope_sql)) return false;
+  if (previous.compare) return compareKindOfSql(plan.sql) === previous.compare;
+  if (previous.sql === null) return plan.sql === ASK_REVIEW_SQL;
+  return sameText(previous.sql) === sameText(plan.sql);
+}
+
+/**
+ * Whether `question` is the previous question asked again — the same words,
+ * punctuation and case aside. Asking again is allowed the same answer; a new
+ * question is not.
+ */
+export function asksPreviousQuestionAgain(
+  question: string,
+  conversation: readonly AskPromptTurn[],
+): boolean {
+  const last = [...conversation].reverse().find((turn) => turn.role === "user");
+  if (!last) return false;
+  const words = (text: string) =>
+    text
+      .replace(/\s*\(about: [^)]*\)\s*$/, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  return words(last.content) === words(question);
+}
+
+/**
  * Why a follow-up's scope reads as having dropped the previous turn's
  * player, or null: the previous scope filtered `player_name ilike`, the
  * question refers back with a pronoun, and the new scope names neither a
@@ -999,6 +1051,15 @@ export async function* askQuestion(
     let reviewText: string | null = null;
     let queried = false;
     let followUpRefusalRetried = false;
+    // A follow-up planned as the previous query: sent back once, and when the
+    // second plan is the same again, answered with ASK_NOTHING_NEW_MESSAGE.
+    let repeatSentBack = false;
+    let repeatedPlan: AskPlanQuery | null = null;
+    const questionNamesMeasures = questionMeasures(input.question).length > 0;
+    const askedAgain = asksPreviousQuestionAgain(
+      input.question,
+      input.conversation,
+    );
     // A shot pattern, read once by the reading step (`pattern.ts`). Never in
     // mock mode: its plan is fixed and there is no model to read with.
     const patternAsked =
@@ -1693,6 +1754,25 @@ export async function* askQuestion(
         step.compare !== null && !step.forced && !misfitSentBack
           ? compareMisfit(input.question)
           : null;
+      // A new question planned as the previous one's query: the answer
+      // would be the previous answer again. Told back once.
+      // One of the app's comparisons narrows its answer to the measures the
+      // question or the planner names ("and his return?"), so over the same
+      // scope it repeats only when neither names any.
+      const compareNarrowed =
+        step.compare !== null &&
+        (questionNamesMeasures ||
+          (Array.isArray(step.compare.measures) &&
+            step.compare.measures.length > 0));
+      // A plan the server chose itself (`forced`) is the server's decision,
+      // not the planner's to change: "as a table" keeps the breakdown.
+      const sameAsBefore =
+        !step.forced &&
+        !askedAgain &&
+        !compareNarrowed &&
+        repeatsPreviousPlan(input.previousPlan ?? null, step.plan);
+      repeatedPlan = sameAsBefore ? step.plan : null;
+      const repeated = sameAsBefore && !repeatSentBack;
       const check: typeof guard = !guard.ok
         ? guard
         : free && namesScopeCountColumn(step.plan.sql)
@@ -1701,15 +1781,18 @@ export async function* askQuestion(
             ? { ok: false, reason: foreignNameReason(foreign.core) }
             : misfit !== null
               ? { ok: false, reason: misfit }
-              : lostPlayer !== null
-                ? { ok: false, reason: lostPlayer }
-                : attempt === 0 &&
-                    free &&
-                    ignoresBigPoints(input.question, step.plan.sql)
-                  ? { ok: false, reason: BIG_POINTS_REASON }
-                  : guard;
+              : repeated
+                ? { ok: false, reason: REPEATS_PREVIOUS_REASON }
+                : lostPlayer !== null
+                  ? { ok: false, reason: lostPlayer }
+                  : attempt === 0 &&
+                      free &&
+                      ignoresBigPoints(input.question, step.plan.sql)
+                    ? { ok: false, reason: BIG_POINTS_REASON }
+                    : guard;
       if (guard.ok && foreign !== null) foreignSentBack = true;
       if (misfit !== null) misfitSentBack = true;
+      if (repeated) repeatSentBack = true;
       if (!check.ok) {
         if (fallback) {
           ({ plan, result } = fallback);
@@ -2089,6 +2172,12 @@ export async function* askQuestion(
 
     if (plan === null || result === null) {
       yield await fail("cannot_answer", cannotAnswer);
+      return;
+    }
+    // Told once, and the previous query came back again: there is nothing
+    // new to say, and the previous answer is already on the screen above.
+    if (repeatSentBack && plan === repeatedPlan) {
+      yield await fail("cannot_answer", ASK_NOTHING_NEW_MESSAGE);
       return;
     }
 
