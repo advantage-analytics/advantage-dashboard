@@ -85,7 +85,11 @@ export interface AskRunOptions {
   /** Called once, after the stream ended however it ended. Errors are logged, never thrown. */
   onRun: (run: AskRunRecord) => Promise<void> | void;
   preStreamMs?: number;
-  /** The model each stage runs on, as the adapter resolves it (`askStageModels()`); null in mock mode. */
+  /**
+   * The model each stage is configured to run on (`askStageModels()`); null
+   * in mock mode. A stage the model answered is recorded as what answered it
+   * (`AskModel.servedModel`), so a provider failover shows.
+   */
   planModel?: string | null;
   answerModel?: string | null;
   /** The clock, for tests. */
@@ -259,8 +263,9 @@ export async function* recordAskRun(
       rowCount,
       matchCount,
       asksForAdvice,
-      planModel: options.planModel ?? null,
-      answerModel: options.answerModel ?? null,
+      planModel: input.model.servedModel?.("plan") ?? options.planModel ?? null,
+      answerModel:
+        input.model.servedModel?.("answer") ?? options.answerModel ?? null,
       mock: !input.model.configured,
     };
     try {
