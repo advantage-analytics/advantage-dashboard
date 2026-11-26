@@ -13,6 +13,76 @@ import { askMatchPlayers } from "./ask-tag-menu";
 /** How many matches show before "All N" is pressed. */
 export const ASK_SOURCES_SHOWN = 2;
 
+/** Where a source opens: its Video view on the counted points, else its report. */
+function askSourceHref(match: AskSourceMatch): string {
+  return (
+    match.watch?.href ??
+    `/dashboard/matches/${encodeURIComponent(match.matchId)}`
+  );
+}
+
+/** "Sep 28 vs. Beau Perez", or a team's "Maya Chen vs Beau Perez, Sep 28". */
+export function askSourceNoteLabel(
+  match: AskSourceMatch,
+  thisYear: number,
+): string {
+  const date = askSourceDate(match.playedOn, thisYear);
+  if (match.playerName) {
+    const players = askMatchPlayers(match);
+    return date ? `${players}, ${date}` : players;
+  }
+  const opponent = match.opponentName ?? "Opponent";
+  return date ? `${date} vs. ${opponent}` : `vs. ${opponent}`;
+}
+
+const SOURCE_NOTE =
+  "cursor-pointer rounded-sm text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] outline-none hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)]";
+
+/**
+ * What the answer was computed from, inside its signature line rather than
+ * as a list of its own: one match is a link to it ("Sep 28 vs. Beau
+ * Perez"); several are "from 5 matches", which opens `AskSources` below the
+ * line (`listId`). Replaces the "Computed from 1 match" block and the
+ * separate "Open the match" action, which said the same thing twice.
+ */
+export function AskSourceNote({
+  matches,
+  open,
+  onToggle,
+  listId,
+}: {
+  matches: readonly AskSourceMatch[];
+  open: boolean;
+  onToggle: () => void;
+  listId: string;
+}) {
+  if (matches.length === 0) return null;
+  if (matches.length === 1) {
+    const match = matches[0];
+    return (
+      <Link
+        href={askSourceHref(match)}
+        data-ask-source-note=""
+        className={SOURCE_NOTE}
+      >
+        {askSourceNoteLabel(match, new Date().getFullYear())}
+      </Link>
+    );
+  }
+  return (
+    <button
+      type="button"
+      data-ask-source-note=""
+      aria-expanded={open}
+      aria-controls={listId}
+      onClick={onToggle}
+      className={SOURCE_NOTE}
+    >
+      from {matches.length} matches
+    </button>
+  );
+}
+
 const MONTHS = [
   "Jan",
   "Feb",
@@ -101,10 +171,7 @@ function SourceRow({
       <Link
         // A pattern answer's row opens the match's Video view on exactly the
         // points the answer counted there.
-        href={
-          match.watch?.href ??
-          `/dashboard/matches/${encodeURIComponent(match.matchId)}`
-        }
+        href={askSourceHref(match)}
         className="group col-span-full -mx-2 grid h-9 grid-cols-subgrid items-center rounded-[var(--radius-element)] px-2 transition-colors duration-[var(--duration-hover)] outline-none hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)]"
       >
         <SourceResult iWon={match.iWon} />
