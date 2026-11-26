@@ -5,6 +5,7 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { ArrowLeft, ArrowRight, Check, X } from "lucide-react";
+import { PendingBar } from "@/components/dashboard/loading/pending";
 import { ConfirmAside } from "@/components/ui/confirm-dialog";
 import { LiveDots } from "@/components/ui/live-dots";
 import { StatePill } from "@/components/ui/state-pill";
@@ -702,9 +703,6 @@ function RadioMark({ on }: { on: boolean }) {
   );
 }
 
-const barCls =
-  "inline-block rounded-[3px] bg-[var(--surface-skeleton)] motion-safe:animate-pulse";
-
 function CheckoutRow({
   row,
   radio,
@@ -729,14 +727,14 @@ function CheckoutRow({
           {row.pill && <StatePill>{row.pill}</StatePill>}
         </span>
         {row.pending ? (
-          <span className={cn(barCls, "mt-1 h-2.5 w-44")} aria-hidden />
+          <PendingBar className="mt-1 inline-block h-2.5 w-44" />
         ) : (
           <span className="text-[11px] text-[var(--ink-500)]">{row.line}</span>
         )}
       </span>
       <span className="flex w-[112px] shrink-0 flex-col items-end leading-tight">
         {row.pending ? (
-          <span className={cn(barCls, "my-1.5 h-3 w-14")} aria-hidden />
+          <PendingBar className="my-1.5 inline-block h-3 w-14" />
         ) : (
           <span className="flex items-baseline gap-1.5">
             {row.was && (
