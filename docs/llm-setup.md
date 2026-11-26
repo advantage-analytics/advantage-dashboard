@@ -153,11 +153,14 @@ What the adapter adds so the events can be read:
   `$ai_span_name`, `$ai_trace_id` and `$ai_session_id` (so it sits beside the
   call's `$ai_generation` events), and `error_status`, `error_type`,
   `error_code`, `error_name` (the HTTP status, the provider's error type and
-  code, the SDK's error class — short identifiers only). Never the prompt,
-  the reply or the error message, which can quote the request. An aborted
+  code, and the error's own name or else its SDK class — short identifiers
+  only). Never the prompt, the reply or the error message, which can quote
+  the request; the server log (`console.warn`) keeps the message. An aborted
   call, or one with no second key, is not retried and sends nothing.
 - **The model that answered.** `options.onServed` hears the provider and
-  model that answered each call, with `failover: true` after a retry. Ask
+  model each call ended on, with `failover: true` after a retry — reported
+  even when the retry fails too, so the run names the model the failover
+  event does. Ask
   (`askAdapterModel()`) keeps it per stage, and `ask_runs.plan_model` /
   `answer_model` and the `ask_run` event record that model rather than the
   configured one (`askStageModels()`, still the fallback for a stage no
