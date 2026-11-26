@@ -79,7 +79,12 @@ import {
   priceIdFor,
   type PaidPlanId,
 } from "@/lib/stripe/prices";
-import { SIGN_IN_REFUSAL, refuse, type BillingResult } from "./http";
+import {
+  SIGN_IN_REFUSAL,
+  errorMessage,
+  refuse,
+  type BillingResult,
+} from "./http";
 import type { CheckoutUser } from "./checkout";
 import {
   readBillingUser,
@@ -110,9 +115,6 @@ const IN_PROGRESS = (detail: string) =>
     "Your upgrade is already being made. Give it a moment.",
     detail,
   );
-
-const message = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
 
 type StripeErrorLike = { type?: string; code?: string; statusCode?: number };
 
@@ -189,7 +191,7 @@ async function periodPaidCents(
         userId,
         subscriptionId: subscription.id,
         reason,
-        ...(error === undefined ? {} : { error: message(error) }),
+        ...(error === undefined ? {} : { error: errorMessage(error) }),
       },
     );
     return null;
@@ -307,18 +309,11 @@ async function prepareUpgrade(params: {
     const period = subscriptionPeriod(subscription);
     if (!period.start || !period.end) return UNAVAILABLE("no_period");
 
-    const usedSeconds = await readSliceUsedSeconds(
-      admin,
-      user.id,
-      period.start,
-      now,
-    );
     // The same read feeds the preview and the charge, so they agree.
-    const paidForPeriodCents = await periodPaidCents(
-      stripe,
-      subscription,
-      user.id,
-    );
+    const [usedSeconds, paidForPeriodCents] = await Promise.all([
+      readSliceUsedSeconds(admin, user.id, period.start, now),
+      periodPaidCents(stripe, subscription, user.id),
+    ]);
     return {
       ok: true,
       value: {
@@ -342,7 +337,7 @@ async function prepareUpgrade(params: {
   } catch (error) {
     console.error("[billing] could not prepare the upgrade", {
       userId: user.id,
-      error: message(error),
+      error: errorMessage(error),
     });
     return UNAVAILABLE("prepare_failed");
   }
@@ -415,7 +410,7 @@ async function reverseCredit(params: {
         customerId,
         attempt,
         tries,
-        error: message(error),
+        error: errorMessage(error),
       });
     }
   }
@@ -447,7 +442,7 @@ async function markApplied(
     console.error("[billing] could not mark an upgrade credit applied", {
       customerId,
       transaction: transaction.id,
-      error: message(error),
+      error: errorMessage(error),
     });
   }
 }
@@ -574,7 +569,7 @@ export async function executeUpgrade(params: {
   } catch (error) {
     console.error("[billing] could not sweep upgrade credits", {
       ...log,
-      error: message(error),
+      error: errorMessage(error),
     });
     return UNAVAILABLE("sweep_failed");
   }
@@ -601,7 +596,7 @@ export async function executeUpgrade(params: {
     } catch (error) {
       console.error("[billing] could not create the upgrade credit", {
         ...log,
-        error: message(error),
+        error: errorMessage(error),
       });
       return isIdempotencyConflict(error)
         ? IN_PROGRESS("credit_in_flight")
@@ -632,7 +627,7 @@ export async function executeUpgrade(params: {
   if (!upgraded) {
     console.error("[billing] the upgrade call failed", {
       ...log,
-      error: message(failure),
+      error: errorMessage(failure),
     });
     // A twin request holds the same attempt and the same credit: leave both.
     if (isIdempotencyConflict(failure)) return IN_PROGRESS("update_in_flight");
@@ -643,7 +638,7 @@ export async function executeUpgrade(params: {
     } catch (error) {
       console.error("[billing] upgrade outcome unknown; left to the sweep", {
         ...log,
-        error: message(error),
+        error: errorMessage(error),
       });
       return UNAVAILABLE("outcome_unknown");
     }
@@ -683,7 +678,7 @@ export async function executeUpgrade(params: {
   } catch (error) {
     console.error("[billing] upgraded, but the row is waiting on the webhook", {
       ...log,
-      error: message(error),
+      error: errorMessage(error),
     });
   }
 

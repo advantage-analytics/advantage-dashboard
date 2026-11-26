@@ -55,6 +55,7 @@ import {
 } from "@/lib/stripe/prices";
 import {
   SIGN_IN_REFUSAL,
+  errorMessage,
   refuse,
   type BillingRefusal,
   type BillingResult,
@@ -297,7 +298,7 @@ export async function startCheckout(params: {
     const cause = (error as { cause?: { code?: string } }).cause;
     console.error("[billing] could not read the buyer", {
       userId: user.id,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
     // The plan-model migration is not on this database yet.
     return UNAVAILABLE(
@@ -390,7 +391,7 @@ export async function startCheckout(params: {
     console.error("[billing] could not create checkout session", {
       userId: user.id,
       kind: request.kind,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
     return UNAVAILABLE("stripe_error");
   }
@@ -628,7 +629,7 @@ export async function confirmCheckout(params: {
     console.error("[billing] confirm could not record the purchase", {
       userId: user.id,
       sessionId: session.id,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorMessage(error),
     });
     return refuse(
       "checkout_unavailable",

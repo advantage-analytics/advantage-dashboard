@@ -54,6 +54,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CoachPlanId, PlanPeriod } from "@/lib/billing/plans";
 import { expandableId } from "@/lib/services/credits/checkout";
 import { planForPriceId } from "@/lib/stripe/prices";
+import { errorMessage } from "./http";
 
 export type PlanStatus = "active" | "past_due" | "canceled";
 
@@ -180,9 +181,6 @@ function isMissingResource(error: unknown): boolean {
   const e = error as { code?: string; statusCode?: number } | null;
   return e?.code === "resource_missing" || e?.statusCode === 404;
 }
-
-const errorText = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
 
 /**
  * Subscription metadata key set on a duplicate, with the id of the subscription
@@ -331,7 +329,7 @@ async function settleDuplicate(params: {
       // Loud on purpose, and nothing else is attempted: a retry starts over.
       console.error("[billing] DUPLICATE SUBSCRIPTION NOT MARKED", {
         ...ids,
-        error: errorText(error),
+        error: errorMessage(error),
       });
       return outcome(false, false);
     }
@@ -351,7 +349,7 @@ async function settleDuplicate(params: {
         // retry, or a person, cancels the second.
         console.error("[billing] DUPLICATE SUBSCRIPTION NOT CANCELLED", {
           ...ids,
-          error: errorText(error),
+          error: errorMessage(error),
         });
         return outcome(false, false);
       }
@@ -365,7 +363,7 @@ async function settleDuplicate(params: {
     // Loud on purpose: the duplicate is cancelled but its money is still ours.
     console.error("[billing] DUPLICATE SUBSCRIPTION NOT REFUNDED", {
       ...ids,
-      error: errorText(error),
+      error: errorMessage(error),
     });
     return outcome(true, false);
   }
