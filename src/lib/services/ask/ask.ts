@@ -106,6 +106,7 @@ import {
   winningPlaysSql,
   rallyLengthOf,
   rallyLengthOfPlaysSql,
+  courtOfPlaysSql,
   winningPlaysSubject,
   losingPlaysSql,
   losingPlaysSubject,
@@ -115,7 +116,6 @@ import {
   asksForServePlusOne,
   buildServePlusOneAnswer,
   continuesServePlusOne,
-  namesASide,
   plusOneSides,
   plusOneWithSides,
   servePlusOneRequest,
@@ -1256,11 +1256,9 @@ export async function* askQuestion(
       if (
         !patternAsked &&
         asksForLosingPlays(input.question) &&
-        // A side named ("on the ad side") is the planner's to answer: the
-        // fixed plays answers count the whole match and would drop it.
-        !namesASide(input.question) &&
-        // So is a rally length: the losing plays count every point.
-        rallyLengthOf(input.question) === null &&
+        // One side ("on the ad side") and a rally length narrow the plays
+        // query; a split by side ("deuce and ad") is the planner's.
+        !plusOneSides(input.question).bySide &&
         (step.ok || refused)
       ) {
         const subject = losingPlaysSubject(
@@ -1273,7 +1271,11 @@ export async function* askQuestion(
             scope_sql: step.ok
               ? step.plan.scope_sql
               : (tagScope ?? previous?.scope_sql ?? ASK_ALL_MATCHES_SCOPE),
-            sql: losingPlaysSql(subject),
+            sql: losingPlaysSql(
+              subject,
+              rallyLengthOf(input.question),
+              plusOneSides(input.question).court ?? null,
+            ),
             asks_for_advice: step.ok ? step.plan.asks_for_advice : false,
           },
           false,
@@ -1286,9 +1288,8 @@ export async function* askQuestion(
       if (
         !patternAsked &&
         asksForWinningPlays(input.question) &&
-        // A side named ("on the ad side") is the planner's to answer: the
-        // fixed plays answers count the whole match and would drop it.
-        !namesASide(input.question) &&
+        // One side narrows the plays query; a split by side is the planner's.
+        !plusOneSides(input.question).bySide &&
         (step.ok || refused)
       ) {
         const subject = winningPlaysSubject(
@@ -1301,8 +1302,12 @@ export async function* askQuestion(
             scope_sql: step.ok
               ? step.plan.scope_sql
               : (tagScope ?? previous?.scope_sql ?? ASK_ALL_MATCHES_SCOPE),
-            // "Best plays in short rallies": only the points of that length.
-            sql: winningPlaysSql(subject, rallyLengthOf(input.question)),
+            // "Best plays in short rallies", "…on the ad side": only those points.
+            sql: winningPlaysSql(
+              subject,
+              rallyLengthOf(input.question),
+              plusOneSides(input.question).court ?? null,
+            ),
             asks_for_advice: step.ok ? step.plan.asks_for_advice : false,
           },
           false,
@@ -1997,8 +2002,15 @@ export async function* askQuestion(
               voice,
               ran.matches.length,
               rallyLengthOfPlaysSql(step.plan.sql),
+              courtOfPlaysSql(step.plan.sql),
             )
-          : buildLosingPlaysAnswer(rows, voice, ran.matches.length);
+          : buildLosingPlaysAnswer(
+              rows,
+              voice,
+              ran.matches.length,
+              rallyLengthOfPlaysSql(step.plan.sql),
+              courtOfPlaysSql(step.plan.sql),
+            );
         result = { matches: ran.matches, rows: written === null ? [] : rows };
         if (written === null) {
           emptyReason = ASK_NO_SHOTS_MESSAGE;
@@ -2997,6 +3009,7 @@ function subjectVoice(
             : null,
       ),
     ),
+    team,
   );
 }
 

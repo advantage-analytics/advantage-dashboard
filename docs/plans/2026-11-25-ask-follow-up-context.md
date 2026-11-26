@@ -114,6 +114,31 @@ step's gain counts when it holds over two runs.
 - Prompt and schema change in `prompts.ts` / `ask.ts`; measured on the eval
   before it ships. Gemini and the Claude path both.
 
+**Tried and not shipped (2026-11-25).** The rewrite went in as a
+`question` field inside the planner's `state` (saved, and shown to the next
+turn), with a prompt rule for corrections and reshapes. Three variants, two
+follow-up eval runs each, against step 2's 46 and 43 of 58:
+
+| Variant                                                        | Follow-ups passing |
+| -------------------------------------------------------------- | ------------------ |
+| `state` first in the schema, keyword routing reads the rewrite | 41, 38             |
+| `state` first, routing reads the question as asked             | 41, 41             |
+| `state` last as before, routing as asked (field and rule only) | 40, 39             |
+
+Every variant lost four or five. Routing by the rewrite sent corrections
+like "I meant patterns of play like placement and direction" to the fixed
+winning-plays answer, which cannot split by placement, so they came back as
+the same answer; without the routing, the field and the rule alone still
+cost as much on Gemini Flash Lite. It did fix the one turn it was aimed at
+("No I meant for only rallies that went up to 4 shots" reached the
+rally-length plays query). The code was not kept.
+
+Worth trying again on the Claude planner, where the extra instruction may
+not crowd out the rest, and after step 4 gives the plays answers the splits
+a rewritten correction would route to. The season list's one failure ("What
+are my strengths this season?" drawn as a tree, not a table) fails on step
+2's code too, in both runs: it is not from this step.
+
 ### 4. Let plays answers take filters
 
 - `plays.ts`'s query takes the follow-up's filters: rally length, first or
@@ -121,6 +146,39 @@ step's gain counts when it holds over two runs.
 - "In a table" returns the rows behind the headline as the answer's table.
 - Data change: the plays SQL runs through `ask_run_query` as today, so no
   new grants, but `rls-boundary-reviewer` and the Postgres skill run on it.
+
+**Built (2026-11-26), in part.** Both plays queries now take a rally length
+and one side (`p.rally_length`, `p.court` on `ask.point_plays`; the losing
+plays narrow their per-shot miss rates to the same points), read back from
+their sql (`rallyLengthOfPlaysSql`, `courtOfPlaysSql`) so the server still
+knows them as its own, and say the filter in the headline ("…on the ad
+side"). A question naming one side or a rally length now reaches the plays
+answer instead of the planner; a split by side ("deuce and ad") stays the
+planner's. A tree narrowed to a side draws no Video links — the Video filter
+has no side — and one narrowed to a rally length links only where a rally
+band holds exactly those rallies. A team's plays over several players speak
+of "the team", never "you".
+
+Not built: first or second serve (whose serve, the point's or the shot's,
+is its own question), winning and losing in one answer (two trees in one
+answer), and "in a table".
+
+Two runs each against step 2:
+
+|                     | Step 2 | Step 4 |
+| ------------------- | ------ | ------ |
+| Team (of 52)        | 42, 40 | 45, 45 |
+| Personal (of 24)    | 22, 21 | 14, 17 |
+| Season list (of 21) | 20, 20 | 20, 20 |
+
+The team gain is the voice: the four "Your best play" failures are gone in
+both runs. The personal drop is not this step's: no question in the three
+lists routes differently under it (checked against the routing predicates
+before and after), and the failing personal turns are planner-written
+queries that came out differently this time — the personal list has swung
+by as much before (see step 3's variant C). The eval's own turns do not
+name a side or a rally length for the losing plays, so the filters
+themselves are pinned by unit tests, not by it.
 
 ## Decisions for you
 

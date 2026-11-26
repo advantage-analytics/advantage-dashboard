@@ -66,6 +66,11 @@ import {
 } from "@/lib/services/ask/prompts";
 import { ASK_REVIEW_MEASURES, ASK_REVIEW_SQL } from "@/lib/services/ask/review";
 import { compareSql } from "@/lib/services/ask/compare";
+import {
+  losingPlaysSql,
+  rallyLengthOf,
+  winningPlaysSql,
+} from "@/lib/services/ask/plays";
 import { PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
 import { resolveAskTags, type AskResolvedTags } from "@/lib/services/ask/tags";
 
@@ -3183,6 +3188,36 @@ test.describe("a follow-up planned as the previous query", () => {
     );
     expect(last(events).type).toBe("done");
     expect(modelCalls).toHaveLength(2);
+  });
+});
+
+test.describe("plays questions narrowed to a side or a rally length", () => {
+  const routedSql = async (question: string) => {
+    const { db, calls } = fakeDb();
+    const { model } = fakeModel([JSON.stringify(PLAN), ANSWER]);
+    await collect(askQuestion(input({ db, model, question })));
+    return calls.find((call) => call.fn === "ask_run_query")?.args?.sql;
+  };
+
+  test("one side reaches the plays queries, narrowed to it", async () => {
+    expect(await routedSql("What are my losing plays on the ad side?")).toBe(
+      losingPlaysSql("mine", null, "Ad"),
+    );
+    expect(await routedSql("What are my best plays on the deuce side?")).toBe(
+      winningPlaysSql("mine", null, "Deuce"),
+    );
+  });
+
+  test("a rally length now narrows the losing plays too", async () => {
+    expect(await routedSql("What are my losing plays in short rallies?")).toBe(
+      losingPlaysSql("mine", rallyLengthOf("short rallies"), null),
+    );
+  });
+
+  test("a split by side stays the planner's", async () => {
+    expect(
+      await routedSql("What are my losing plays on the deuce and ad sides?"),
+    ).toBe(PLAN.sql);
   });
 });
 
