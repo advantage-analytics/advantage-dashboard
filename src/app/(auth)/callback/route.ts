@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/auth/safe-next";
 import { AUTH_NEXT_COOKIE } from "@/lib/auth/auth-next-cookie";
+import { rememberPlanIntent } from "@/lib/billing/plan-intent-server";
 import { toAuthError } from "@/lib/auth/error-messages";
 import { trackServer } from "@/lib/analytics-server";
 
@@ -58,6 +59,10 @@ export async function GET(request: NextRequest) {
 
   const user = data.user ?? data.session?.user ?? null;
   if (user) trackServer(user.id, "login_completed", { method: "google" });
+
+  // A plan picked on the landing site: onboarding drops `next`, so a new
+  // account's choice is remembered for it to take back when it finishes.
+  await rememberPlanIntent(next);
 
   // Behind a load balancer the request origin is the internal host, so the
   // forwarded host is the only one the browser can follow back.

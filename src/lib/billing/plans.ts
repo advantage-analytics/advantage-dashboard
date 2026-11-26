@@ -52,12 +52,42 @@ export function plansHaveBegun(now: Date = new Date()): boolean {
   return now.getTime() >= Date.parse(`${PLANS_BEGIN}T00:00:00Z`);
 }
 
+/**
+ * Whether plans and extra hours can be BOUGHT at `now`. From `PLANS_BEGIN`
+ * always. Before it, only once the owner sets `NEXT_PUBLIC_PLANS_ON_SALE=1`
+ * (decision 8: a subscription bought in December is billed that day and its
+ * hours start that day) — which waits on the Stripe products existing.
+ * Unset, checkout opens on January 1.
+ *
+ * Selling and enforcing are two switches: `plansHaveBegun()` is when the
+ * beta allowances end for everyone, this is when a card can be charged.
+ */
+export function plansOnSale(now: Date = new Date()): boolean {
+  return plansHaveBegun(now) || process.env.NEXT_PUBLIC_PLANS_ON_SALE === "1";
+}
+
 /** No pilot runs past this day, whatever its own end date says. */
 export const PILOT_LATEST_END = "2027-05-31";
 
 /** `$1,650` — whole US dollars, which every price here is. */
 export function usd(n: number): string {
   return `$${n.toLocaleString("en-US")}`;
+}
+
+/**
+ * `$288.50`, `$225`, `$1,650` — an amount in US cents, with the cents shown
+ * only when there are any. The one money formatter for a figure that can
+ * carry cents (an upgrade's credit, what is due today); `usd()` is for the
+ * whole-dollar prices above.
+ */
+export function formatUsdCents(cents: number): string {
+  const safe = Number.isFinite(cents) ? Math.round(cents) : 0;
+  const sign = safe < 0 ? "-" : "";
+  const whole = safe % 100 === 0;
+  return `${sign}$${(Math.abs(safe) / 100).toLocaleString("en-US", {
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: whole ? 0 : 2,
+  })}`;
 }
 
 /**

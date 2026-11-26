@@ -174,7 +174,8 @@ export function wizardContinueBlocked(input: {
 export function quotaRefusal(input: {
   remainingSeconds: number | undefined;
   neededSeconds: number;
-  resetsOn: string;
+  /** The day the allowance turns over, or null when nothing comes back. */
+  resetsOn: string | null;
   workspaceKind: WorkspaceKind;
 }): string | null {
   const { remainingSeconds, neededSeconds, resetsOn, workspaceKind } = input;
@@ -182,9 +183,11 @@ export function quotaRefusal(input: {
   if (remainingSeconds === undefined) return null;
 
   if (remainingSeconds <= 0) {
-    return workspaceKind === "team"
-      ? `Your team's analysis hours for this month are used up. They reset on ${resetsOn}.`
-      : `This month's analysis hours are used up. They reset on ${resetsOn}.`;
+    const used =
+      workspaceKind === "team"
+        ? "Your team's analysis hours for this month are used up."
+        : "This month's analysis hours are used up.";
+    return resetsOn ? `${used} They reset on ${resetsOn}.` : used;
   }
 
   const neededWhole = Math.ceil(neededSeconds);

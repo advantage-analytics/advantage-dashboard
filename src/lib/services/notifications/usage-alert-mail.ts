@@ -2,7 +2,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendEmail, usageAlertEmail } from "@/lib/services/email";
 import { programDisplayName } from "@/lib/data/programs-server";
 import { hoursSeverity, usageFraction } from "@/lib/data/usage-format";
-import { currentBillingMonth } from "@/lib/services/splitstep/config";
+import {
+  allowanceFor,
+  allowanceResetsOn,
+} from "@/lib/services/splitstep/allowance";
 import type { Workspace } from "@/lib/workspace/types";
 import { displayName } from "@/lib/services/programs/invite-acceptance";
 import { alreadySent, claimSend, getNotificationPrefs } from "./should-notify";
@@ -36,8 +39,17 @@ export async function notifyUsageThreshold(params: {
   if (severity === "ok") return;
 
   try {
-    const billingMonth = currentBillingMonth(now);
-    const dedupeKey = `usage_${severity}:${workspace.id}:${billingMonth}`;
+    // One mail per threshold per allowance period. That is the billing month
+    // until January 1, 2027 and for a pilot after it; a season is one pool,
+    // so its key is the day the season starts and the mail goes out once a
+    // season, not once a month.
+    const allowance = allowanceFor(workspace, now);
+    const billingMonth = allowance.billingMonth;
+    const period =
+      allowance.kind === "season"
+        ? allowance.windowStart.toISOString().slice(0, 10)
+        : billingMonth;
+    const dedupeKey = `usage_${severity}:${workspace.id}:${period}`;
     // Every upload past the line lands here; once the month is told, stop
     // before the staff and preference reads.
     if (await alreadySent(dedupeKey)) return;
@@ -98,6 +110,7 @@ export async function notifyUsageThreshold(params: {
           usedSeconds,
           capSeconds,
           billingMonth,
+          resetsOn: allowanceResetsOn(allowance) ?? undefined,
         }),
       );
       if (result.ok) sent += 1;

@@ -16,7 +16,8 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { MATCH_VIDEOS_FOOTNOTE } from "@/components/dashboard/settings/match-videos-usage-card";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 import { MATCH_VIDEO_ACTIVE_LIMIT } from "@/lib/match-video/limits";
-import { planFacts } from "@/lib/user/plan";
+import { plansOnSale } from "@/lib/billing/plans";
+import { isPaidPlan, planFacts, planFor } from "@/lib/user/plan";
 import { capitalize, cn } from "@/lib/utils";
 import { teamLabel, uploadPolicyLabel } from "@/lib/workspace/types";
 
@@ -505,6 +506,60 @@ export function SettingsConnectionsPending() {
 export function SettingsPlanPending() {
   const { active, viewer } = useWorkspace();
   const facts = planFacts(active, viewer);
+
+  // Plans on sale, or an account already on one: the two cards of
+  // `PlanSettings`, in every workspace. The plan is in the workspace context,
+  // so the Plan card draws the rows that plan gets before any request.
+  if (plansOnSale() || isPaidPlan(viewer.plan)) {
+    const paid = isPaidPlan(viewer.plan);
+    return (
+      <Column label="plan">
+        <SettingsCard className="gap-2">
+          <SettingsCardTitle
+            trailing={<Text className="text-[12px]">See usage ↗</Text>}
+          >
+            Video hours
+          </SettingsCardTitle>
+          <Text className="text-title-lg">4h 12m left this month</Text>
+          <Text className="text-[12px]">
+            {paid
+              ? "3h 12m of Coach this month · Resets Feb 14"
+              : "No plan hours or extra hours yet"}
+          </Text>
+        </SettingsCard>
+        <SettingsCard>
+          <SettingsCardTitle className="mb-3">Plan</SettingsCardTitle>
+          <CardRow
+            label={planFor(viewer.plan).name}
+            description={
+              paid
+                ? "5 hours of match video a month · Renews Feb 14 at $150"
+                : "20 Ask questions a month · Coach from $150, first month half off"
+            }
+            control={
+              planFor(viewer.plan).id === "coach-pro" ? null : (
+                <Button>
+                  {paid ? "Upgrade to Coach Pro" : "Choose a plan"}
+                </Button>
+              )
+            }
+          />
+          <CardRow
+            label="Extra hours"
+            description="$35 an hour · Last 12 months · No plan needed"
+            control={<Button>Buy hours</Button>}
+          />
+          {paid && (
+            <CardRow
+              label="Billing"
+              description="Card, receipts and cancelling."
+              control={<Button>Manage billing ↗</Button>}
+            />
+          )}
+        </SettingsCard>
+      </Column>
+    );
+  }
 
   if (active.kind !== "team") {
     return (

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { parseTypedName } from "@/lib/data/person-name-case";
 import { createClient } from "@/lib/supabase/server";
 import { safeNext } from "@/lib/auth/safe-next";
+import { takePlanIntentHref } from "@/lib/billing/plan-intent-server";
 import { joinTokenFromPath } from "@/lib/services/programs/join-links";
 import {
   ACQUISITION_DETAIL_MAX,
@@ -234,7 +235,12 @@ export async function finishOnboarding(input: {
   revalidatePath("/dashboard", "layout");
   // The validated answer just written to `users.recording_source`, never the
   // raw input — a solo player lands in the wizard or the sample tour by it.
-  redirect(resolveDestination(choice, intake.recording_source));
+  // A plan picked on the landing site before signing up lands on Settings ›
+  // Plan, where checkout opens on it, instead of the persona's own start.
+  redirect(
+    (await takePlanIntentHref()) ??
+      resolveDestination(choice, intake.recording_source),
+  );
 }
 
 /**
@@ -339,7 +345,7 @@ export async function finishGuardianOnboarding(input: {
   await insertLegalAcceptances(supabase, user.id, ["guardian"]);
 
   revalidatePath("/dashboard", "layout");
-  redirect("/dashboard");
+  redirect((await takePlanIntentHref()) ?? "/dashboard");
 }
 
 /**

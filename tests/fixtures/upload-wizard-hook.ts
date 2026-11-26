@@ -17,6 +17,8 @@ import * as adminApproval from "@/lib/admin/uploads/approval";
 import * as quota from "@/lib/services/splitstep/quota";
 import * as draftTarget from "@/lib/wizard/draft-target";
 import { secondsLeft } from "@/lib/data/usage-format";
+import * as billingPlans from "@/lib/billing/plans";
+import * as userPlan from "@/lib/user/plan";
 import type {
   UseUploadMatchWizardProps,
   UseUploadMatchWizardReturn,
@@ -371,9 +373,26 @@ export function uploadWizardHarness(
       currentBillingMonth: () => "2026-09",
       freeHoursReturnOn: () => "Oct 1",
     },
+    // The resolver the meter reads: the harness's cap, on a fixed calendar
+    // month, keyed the month way (before January 1, 2027).
+    "@/lib/services/splitstep/allowance": {
+      allowanceFor: () => ({
+        kind: "beta",
+        capSeconds: options.quotaCapSeconds ?? 7200,
+        windowStart: new Date("2026-09-01T00:00:00Z"),
+        windowEnd: new Date("2026-10-01T00:00:00Z"),
+        windowed: false,
+        billingMonth: "2026-09-01",
+      }),
+      allowanceResetsOn: () => "Oct 1",
+    },
     "@/lib/services/splitstep/quota": {
       accountTypeFor: () => "user",
       monthlyCapSecondsFor: () => options.quotaCapSeconds ?? 7200,
+      // Pure, so the real ones: the month filter and the team's total read
+      // go to the harness's own Supabase mock.
+      scopeToAllowance: quota.scopeToAllowance,
+      readProgramUsedSeconds: quota.readProgramUsedSeconds,
       // Pure, so the real one.
       sumUsedSeconds: quota.sumUsedSeconds,
       readCreditBalance: async () => ({
@@ -385,6 +404,10 @@ export function uploadWizardHarness(
     // so the real clamp — the meter's remaining figure is what several of
     // these specs assert on.
     "@/lib/data/usage-format": { formatResetDate: () => "Oct 1", secondsLeft },
+    // Pure, so the real ones: the plan a workspace is on, and whether plans
+    // are on sale (which decides the paywall the wizard opens).
+    "@/lib/billing/plans": billingPlans,
+    "@/lib/user/plan": userPlan,
     // Pure string constant shared with the admin upload file route's own 500
     // body; the hook string-matches it verbatim.
     "@/lib/admin/uploads/types": {

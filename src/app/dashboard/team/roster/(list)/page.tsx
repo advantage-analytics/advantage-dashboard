@@ -16,8 +16,10 @@ import {
   getRosterJoinLink,
 } from "@/lib/data/team-roster-server";
 import { getPendingJoinRequests } from "@/lib/data/join-requests-server";
-import { currentBillingMonth } from "@/lib/services/splitstep/config";
-import { formatResetDate } from "@/lib/data/usage-format";
+import {
+  allowanceFor,
+  allowanceResetsOn,
+} from "@/lib/services/splitstep/allowance";
 import { RosterView } from "@/components/dashboard/team/roster-view";
 import { RosterDayZeroPage } from "@/components/dashboard/team/roster-day-zero";
 import { PresenceReport } from "@/components/dashboard/presence-provider";
@@ -423,6 +425,9 @@ async function RosterContent({
      line is housekeeping. Right-aligning either would give prose a ragged left
      edge — the right edge is for short numeric readouts, which neither is.
      This is the shape Schedule's own footer already uses. */
+  // The day the team's allowance turns over (a pilot month, a season's end),
+  // or null when it has none to come back.
+  const resetsOn = allowanceResetsOn(allowanceFor(active));
   const footer = (
     <div key="footer" className="flex flex-col gap-2">
       {staff.length > 0 && (
@@ -451,8 +456,7 @@ async function RosterContent({
         className="text-[11px] leading-[1.6] text-[var(--ink-500)]"
       >
         {UPLOAD_COPY[roster.uploadPolicy]}
-        {" — analysis time resets "}
-        {formatResetDate(currentBillingMonth())}.
+        {resetsOn ? ` — analysis time resets ${resetsOn}` : ""}.
         {claimant &&
           " Matches uploaded before a player claimed their profile still credit whoever added them."}
       </p>

@@ -14,11 +14,7 @@ import { pipelineLog } from "@/lib/services/splitstep/pipeline-log";
 import { NextResponse } from "next/server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  monthlyCapSecondsFor,
-  peekQuota,
-  type HoursLeft,
-} from "@/lib/services/splitstep/quota";
+import { peekQuota, type HoursLeft } from "@/lib/services/splitstep/quota";
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
 
 export const runtime = "nodejs";
@@ -37,10 +33,13 @@ export async function GET() {
     const body: HoursLeft = {
       workspaceId: context.active.id,
       remainingSeconds: peek.freeRemainingSeconds,
-      capSeconds: monthlyCapSecondsFor(context.active),
+      // The peek's own cap: one `allowanceFor()` answer for the figure, the
+      // window it was read over and the date it turns over.
+      capSeconds: peek.capSeconds,
       creditSeconds: peek.creditSeconds,
       grantedSeconds: peek.grantedSeconds,
       nextCreditExpiresAt: peek.nextCreditExpiresAt,
+      resetsOn: peek.resetsOn,
     };
     return NextResponse.json(body, {
       headers: { "Cache-Control": "no-store" },

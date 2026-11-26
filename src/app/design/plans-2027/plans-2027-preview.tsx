@@ -1,0 +1,463 @@
+"use client";
+
+import Link from "next/link";
+import { PlanCheckoutDialog } from "@/components/dashboard/billing/plan-checkout-dialog";
+import { FileStepContent } from "@/components/dashboard/matches/new-match-wizard/FileStepContent";
+import {
+  FooterMeter,
+  PlainReadout,
+} from "@/components/dashboard/matches/new-match-wizard/FooterMeter";
+import { FileHoursNote } from "@/components/dashboard/matches/new-match-wizard/UploadWizardSteps";
+import { WizardShell } from "@/components/dashboard/matches/new-match-wizard/WizardShell";
+import {
+  CONTINUE_LABEL,
+  STEP_CONFIG_PROCESSING,
+  type FormData,
+  type VideoProbeSummary,
+} from "@/components/dashboard/matches/new-match-wizard/types";
+import { PlanSettings } from "@/components/dashboard/settings/plan-settings";
+import {
+  fileStepHoursNote,
+  meterSuffix,
+  type CheckoutAccount,
+  type CheckoutMode,
+  type PreviewState,
+} from "@/lib/billing/checkout-view";
+import type { PlanBilling } from "@/lib/billing/plan-fields";
+import type { PlanPageInput } from "@/lib/billing/plan-page-view";
+import { planHoursSeconds } from "@/lib/billing/plans";
+import { quoteUpgrade } from "@/lib/billing/upgrade";
+
+const noop = () => {};
+const H = 3600;
+const M = 60;
+
+/* ---------- Fixtures: a Coach month from Apr 14 to May 14, 2027 ---------- */
+
+const PERIOD_START = new Date("2027-04-14T00:00:00Z");
+const PERIOD_END = new Date("2027-05-14T00:00:00Z");
+const RESETS_ON = "May 14";
+
+const NEVER: PlanBilling = {
+  plan: "free",
+  periodStart: null,
+  period: null,
+  status: null,
+  periodEnd: null,
+  everSubscribed: false,
+};
+
+function subscribed(plan: "coach" | "coach-pro"): PlanBilling {
+  return {
+    plan,
+    periodStart: PERIOD_START.toISOString(),
+    period: "monthly",
+    status: "active",
+    periodEnd: PERIOD_END.toISOString(),
+    everSubscribed: true,
+  };
+}
+
+const PAGE_FREE: PlanPageInput = {
+  plan: "free",
+  billing: NEVER,
+  allowanceKind: "none",
+  capSeconds: 0,
+  planLeftSeconds: 0,
+  extraSeconds: 0,
+  nextExtraExpiresAt: null,
+  resetsOn: null,
+  freeEnds: "Dec 31, 2026",
+};
+
+const PAGE_COACH: PlanPageInput = {
+  plan: "coach",
+  billing: subscribed("coach"),
+  allowanceKind: "plan",
+  capSeconds: planHoursSeconds("coach"),
+  planLeftSeconds: 3 * H + 12 * M,
+  extraSeconds: 1 * H,
+  nextExtraExpiresAt: "2028-02-02T00:00:00Z",
+  resetsOn: RESETS_ON,
+  freeEnds: "Dec 31, 2026",
+};
+
+const PAGE_COACH_PRO: PlanPageInput = {
+  ...PAGE_COACH,
+  plan: "coach-pro",
+  billing: subscribed("coach-pro"),
+  capSeconds: planHoursSeconds("coach-pro"),
+  planLeftSeconds: 7 * H + 40 * M,
+  extraSeconds: 0,
+  nextExtraExpiresAt: null,
+};
+
+const ACCOUNT_FREE: CheckoutAccount = {
+  plan: "free",
+  period: null,
+  planLeftSeconds: 0,
+  extraSeconds: 0,
+  resetsOn: null,
+  firstMonthEligible: true,
+};
+
+const ACCOUNT_COACH: CheckoutAccount = {
+  plan: "coach",
+  period: "monthly",
+  planLeftSeconds: 3 * H + 12 * M,
+  extraSeconds: 1 * H,
+  resetsOn: RESETS_ON,
+  firstMonthEligible: false,
+};
+
+/** Out of hours mid-month: 23 minutes of Coach left, no extra hours. */
+const ACCOUNT_COACH_SPENT: CheckoutAccount = {
+  ...ACCOUNT_COACH,
+  planLeftSeconds: 23 * M,
+  extraSeconds: 0,
+};
+
+const ACCOUNT_COACH_PRO_SPENT: CheckoutAccount = {
+  ...ACCOUNT_COACH_SPENT,
+  plan: "coach-pro",
+};
+
+/** The real quote, on fixed dates: 15 days left, so the credit is by days. */
+const PREVIEW_DAYS: PreviewState = {
+  status: "ready",
+  preview: {
+    ...quoteUpgrade({
+      from: "coach",
+      to: "coach-pro",
+      period: "monthly",
+      periodStart: PERIOD_START,
+      periodEnd: PERIOD_END,
+      now: new Date("2027-04-29T00:00:00Z"),
+      usedSeconds: planHoursSeconds("coach") - (3 * H + 12 * M),
+    }),
+    period: "monthly",
+  },
+};
+
+/** Same day, 23 minutes of hours left: the smaller share is the hours. */
+const PREVIEW_HOURS: PreviewState = {
+  status: "ready",
+  preview: {
+    ...quoteUpgrade({
+      from: "coach",
+      to: "coach-pro",
+      period: "monthly",
+      periodStart: PERIOD_START,
+      periodEnd: PERIOD_END,
+      now: new Date("2027-04-29T00:00:00Z"),
+      usedSeconds: planHoursSeconds("coach") - 23 * M,
+    }),
+    period: "monthly",
+  },
+};
+
+const NEEDED = 1 * H + 52 * M;
+
+type DialogState = {
+  kind: "dialog";
+  label: string;
+  page: PlanPageInput;
+  mode: CheckoutMode;
+  account: CheckoutAccount;
+  preview?: PreviewState;
+  refusal?: string;
+  wizard?: boolean;
+  pending?: boolean;
+};
+type State =
+  | { kind: "page"; label: string; page: PlanPageInput }
+  | DialogState
+  | { kind: "file"; label: string; plan: "free" | "coach" };
+
+const STATES: Record<string, State> = {
+  "plan-free": {
+    kind: "page",
+    label: "Settings › Plan — Free",
+    page: PAGE_FREE,
+  },
+  "plan-coach": {
+    kind: "page",
+    label: "Settings › Plan — Coach, monthly",
+    page: PAGE_COACH,
+  },
+  "plan-coach-pro": {
+    kind: "page",
+    label: "Settings › Plan — Coach Pro",
+    page: PAGE_COACH_PRO,
+  },
+  choose: {
+    kind: "dialog",
+    label: "Dialog — Choose a plan (first month half off)",
+    page: PAGE_FREE,
+    mode: { kind: "choose" },
+    account: ACCOUNT_FREE,
+  },
+  "choose-yearly": {
+    kind: "dialog",
+    label:
+      "Dialog — Choose a plan, arriving with ?plan=coach-pro&period=yearly",
+    page: PAGE_FREE,
+    mode: { kind: "choose", plan: "coach-pro", period: "yearly" },
+    account: ACCOUNT_FREE,
+  },
+  "choose-returning": {
+    kind: "dialog",
+    label: "Dialog — Choose a plan, a returning subscriber (no discount)",
+    page: PAGE_FREE,
+    mode: { kind: "choose" },
+    account: { ...ACCOUNT_FREE, firstMonthEligible: false },
+  },
+  hours: {
+    kind: "dialog",
+    label: "Dialog — Buy hours, Free",
+    page: PAGE_FREE,
+    mode: { kind: "hours" },
+    account: ACCOUNT_FREE,
+  },
+  "hours-coach": {
+    kind: "dialog",
+    label: "Dialog — Buy hours, Coach",
+    page: PAGE_COACH,
+    mode: { kind: "hours" },
+    account: ACCOUNT_COACH,
+  },
+  "paywall-free": {
+    kind: "dialog",
+    label: "Dialog — Upload paywall, Free player",
+    page: PAGE_FREE,
+    mode: { kind: "paywall", neededSeconds: NEEDED },
+    account: ACCOUNT_FREE,
+    wizard: true,
+  },
+  "paywall-coach": {
+    kind: "dialog",
+    label: "Dialog — Upload paywall, Coach out of hours",
+    page: PAGE_COACH,
+    mode: { kind: "paywall", neededSeconds: NEEDED },
+    account: ACCOUNT_COACH_SPENT,
+    preview: PREVIEW_HOURS,
+    wizard: true,
+  },
+  "paywall-coach-pro": {
+    kind: "dialog",
+    label: "Dialog — Upload paywall, Coach Pro out of hours",
+    page: PAGE_COACH_PRO,
+    mode: { kind: "paywall", neededSeconds: NEEDED },
+    account: ACCOUNT_COACH_PRO_SPENT,
+    wizard: true,
+  },
+  upgrade: {
+    kind: "dialog",
+    label: "Dialog — Upgrade (credit by days)",
+    page: PAGE_COACH,
+    mode: { kind: "upgrade" },
+    account: ACCOUNT_COACH,
+    preview: PREVIEW_DAYS,
+  },
+  "upgrade-hours": {
+    kind: "dialog",
+    label: "Dialog — Upgrade (credit by hours)",
+    page: PAGE_COACH,
+    mode: { kind: "upgrade" },
+    account: ACCOUNT_COACH_SPENT,
+    preview: PREVIEW_HOURS,
+  },
+  "upgrade-loading": {
+    kind: "dialog",
+    label: "Dialog — Upgrade, the price still loading",
+    page: PAGE_COACH,
+    mode: { kind: "upgrade" },
+    account: ACCOUNT_COACH,
+    preview: { status: "loading" },
+  },
+  "upgrade-refused": {
+    kind: "dialog",
+    label: "Dialog — Upgrade, refused (card needs updating, quote kept)",
+    page: PAGE_COACH,
+    mode: { kind: "upgrade" },
+    account: ACCOUNT_COACH,
+    // The quote stays on screen; only the sentence is added.
+    preview: PREVIEW_DAYS,
+    refusal: "Update your card before upgrading.",
+  },
+  pending: {
+    kind: "dialog",
+    label: "Dialog — paid, not shown on the account yet",
+    page: PAGE_FREE,
+    mode: { kind: "choose" },
+    account: ACCOUNT_FREE,
+    pending: true,
+  },
+  "file-free": {
+    kind: "file",
+    label: "Upload wizard — file step, Free with no hours",
+    plan: "free",
+  },
+  "file-coach": {
+    kind: "file",
+    label:
+      "Upload wizard — file step, Coach with a video longer than what's left",
+    plan: "coach",
+  },
+};
+
+export function Plans2027Preview({ state }: { state: string | null }) {
+  const chosen = state ? STATES[state] : undefined;
+  if (!chosen) return <Index unknown={state} />;
+
+  if (chosen.kind === "file") return <FileStepState plan={chosen.plan} />;
+
+  return (
+    <main className="min-h-dvh bg-[var(--surface-card)] px-10 py-10">
+      <p className="eyebrow">{chosen.label}</p>
+      <div className="mt-6">
+        <PlanSettings
+          {...chosen.page}
+          preview={chosen.page.plan === "coach" ? PREVIEW_DAYS : undefined}
+        />
+      </div>
+      {chosen.kind === "dialog" && (
+        <PlanCheckoutDialog
+          open
+          onOpenChange={noop}
+          mode={chosen.mode}
+          account={chosen.account}
+          preview={chosen.preview}
+          refusal={chosen.refusal}
+          onDone={noop}
+          paymentPending={chosen.pending}
+          sendsAfterPay={chosen.wizard}
+          onShortenTrim={chosen.wizard ? noop : undefined}
+        />
+      )}
+    </main>
+  );
+}
+
+function Index({ unknown }: { unknown: string | null }) {
+  return (
+    <main className="min-h-dvh bg-[var(--surface-card)] px-10 py-10">
+      <p className="eyebrow">Design preview</p>
+      <h1 className="text-display mt-3">Plans 2027</h1>
+      <p className="text-body-sm mt-3 max-w-[520px]">
+        Each surface on fixtures. Nothing here charges a card: checkout is not
+        opened, and the upgrade&rsquo;s figures are fixed.
+        {unknown ? ` No state called "${unknown}".` : ""}
+      </p>
+      <ul className="mt-8 flex max-w-[640px] flex-col">
+        {Object.entries(STATES).map(([id, entry]) => (
+          <li
+            key={id}
+            className="border-t border-[var(--border-hairline)] py-2.5"
+          >
+            <Link
+              href={`/design/plans-2027?state=${id}`}
+              className="text-[13px] text-[var(--blue)] hover:text-[var(--blue-hover)]"
+            >
+              {entry.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+
+const PROBE = {
+  width: 1920,
+  height: 1080,
+  durationSeconds: 6720,
+  fps: 30,
+  averageFps: 29.97,
+  mimeType: "video/mp4",
+  sizeBytes: 3_900_000_000,
+} as VideoProbeSummary;
+
+/** The real shell, file step and footer meter, with the note the wizard draws. */
+function FileStepState({ plan }: { plan: "free" | "coach" }) {
+  const withFile = plan === "coach";
+  const remaining = plan === "coach" ? 23 * M : 0;
+  const note = fileStepHoursNote({
+    enabled: true,
+    plan,
+    remainingSeconds: remaining,
+    videoSeconds: withFile ? PROBE.durationSeconds : null,
+  });
+  const suffix =
+    meterSuffix({
+      allowanceKind: plan === "coach" ? "plan" : "none",
+      resetsOn: RESETS_ON,
+    }) ?? "";
+
+  return (
+    <WizardShell
+      stepIndex={1}
+      stepCount={4}
+      title={STEP_CONFIG_PROCESSING.file?.title}
+      description={STEP_CONFIG_PROCESSING.file?.description}
+      back={noop}
+      meter={
+        plan === "coach" ? (
+          <FooterMeter
+            remainingSeconds={remaining}
+            capSeconds={planHoursSeconds("coach")}
+            suffix={suffix}
+            freeWord="plan"
+            creditWord="extra"
+            pilotNote={false}
+          />
+        ) : (
+          <PlainReadout>{`0h · ${suffix}`}</PlainReadout>
+        )
+      }
+      contentClassName="mt-[52px]"
+      continueLabel={CONTINUE_LABEL.file}
+      onContinue={noop}
+      continueDisabled={!withFile}
+    >
+      <div className="flex flex-col gap-6">
+        <FileHoursNote note={note} onSeePlans={noop} />
+        <FileStepContent
+          kind="processing"
+          selectedProvider="splitstep"
+          subjectFirstName={null}
+          uploadedFile={
+            withFile
+              ? {
+                  name: "court-3-saturday.mp4",
+                  size: "3.9 GB",
+                  status: "ready",
+                }
+              : null
+          }
+          probe={withFile ? PROBE : null}
+          warnings={[]}
+          notes={[]}
+          notices={[]}
+          hideIdleNote={note.kind !== "none"}
+          busy={false}
+          error={null}
+          parsingState={{
+            isParsing: false,
+            parseError: null,
+            parseWarnings: [],
+            parseSuccess: false,
+          }}
+          formData={{} as FormData}
+          acceptString=".mp4,.mov,.m4v,.avi,.mkv,.webm"
+          isOver={false}
+          onDragOver={noop}
+          onDragLeave={noop}
+          onDrop={noop}
+          onFileChange={noop}
+          onRemove={noop}
+        />
+      </div>
+    </WizardShell>
+  );
+}

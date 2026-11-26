@@ -123,12 +123,23 @@ export function daysUntilReset(
 ): number {
   const reset = new Date(`${billingMonth}T00:00:00Z`);
   reset.setUTCMonth(reset.getUTCMonth() + 1);
+  return daysUntil(reset.toISOString(), now);
+}
+
+/** Whole UTC days from `now`'s day to the day of an ISO instant, never negative. */
+export function daysUntil(instant: string, now: Date = new Date()): number {
+  const end = new Date(instant);
+  const endDay = Date.UTC(
+    end.getUTCFullYear(),
+    end.getUTCMonth(),
+    end.getUTCDate(),
+  );
   const today = Date.UTC(
     now.getUTCFullYear(),
     now.getUTCMonth(),
     now.getUTCDate(),
   );
-  return Math.max(0, Math.round((reset.getTime() - today) / 86_400_000));
+  return Math.max(0, Math.round((endDay - today) / 86_400_000));
 }
 
 /**

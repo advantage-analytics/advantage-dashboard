@@ -2,9 +2,10 @@
 
 import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
+import { hoursLeftLabel, meterSuffix } from "@/lib/billing/checkout-view";
 import { extraHoursWord } from "@/lib/data/usage-format";
 import { cn } from "@/lib/utils";
-import { FooterMeter, SplitReadout } from "./FooterMeter";
+import { FooterMeter, PlainReadout, SplitReadout } from "./FooterMeter";
 import { MissingFieldsPill } from "./MissingFieldsPill";
 import { useUploadWizard } from "./UploadWizardProvider";
 import { focusRingCls } from "./styles";
@@ -32,6 +33,9 @@ export function WizardQuotaMeter() {
       quotaCapSeconds,
       uploadedFile,
       freeHoursReturnOn,
+      plansActive,
+      quotaAllowanceKind,
+      quotaResetsOn,
     },
     view: { trimSelected },
     meta: { workspaceKind },
@@ -42,6 +46,33 @@ export function WizardQuotaMeter() {
   const selectedSeconds =
     uploadedFile?.file && trimSelected > 0 ? trimSelected : undefined;
   const freeSeconds = quotaFreeSeconds ?? 0;
+
+  // Once plans are on sale the suffix says what is true of THIS allowance: a
+  // plan's reset day, or "Free plan" where there are no plan hours. Null
+  // keeps the beta's wording, for an account still drawing the beta's hours.
+  const planSuffix = plansActive
+    ? meterSuffix({
+        allowanceKind: quotaAllowanceKind,
+        resetsOn: quotaResetsOn,
+      })
+    : null;
+  const onPlan = planSuffix !== null && quotaAllowanceKind === "plan";
+
+  // A Free player with no plan hours and no video priced yet: there is no
+  // allowance to draw a bar for, so the readout is the balance and the plan.
+  if (
+    planSuffix !== null &&
+    quotaAllowanceKind === "none" &&
+    selectedSeconds === undefined
+  ) {
+    return (
+      <PlainReadout>
+        {quotaCreditSeconds > 0
+          ? `${hoursLeftLabel(quotaCreditSeconds)} extra · ${planSuffix}`
+          : `0h · ${planSuffix}`}
+      </PlainReadout>
+    );
+  }
 
   // B2: a video that spills past the free hours into credits — and fits —
   // says the split instead of drawing an "over" bar it is not.
@@ -55,6 +86,8 @@ export function WizardQuotaMeter() {
       <SplitReadout
         freeSeconds={freeSeconds}
         creditSeconds={selectedSeconds - freeSeconds}
+        freeWord={onPlan ? "plan" : "free"}
+        creditWord={planSuffix !== null ? "extra" : "credits"}
       />
     );
   }
@@ -75,13 +108,22 @@ export function WizardQuotaMeter() {
       capSeconds={quotaCapSeconds}
       /* Idle only: once a video is priced the readout is the video's cost. */
       creditSeconds={selectedSeconds === undefined ? quotaCreditSeconds : 0}
-      creditWord={extraHoursWord(quotaCreditSeconds, quotaGrantedSeconds)}
+      creditWord={
+        planSuffix !== null
+          ? "extra"
+          : extraHoursWord(quotaCreditSeconds, quotaGrantedSeconds)
+      }
+      freeWord={onPlan ? "plan" : "free"}
+      // The beta's end date closes the readout only while the beta's hours
+      // are what it measures.
+      pilotNote={planSuffix === null}
       suffix={
-        workspaceKind === "team"
+        planSuffix ??
+        (workspaceKind === "team"
           ? "team hours"
           : freeHoursReturnOn
             ? "resets on the 1st"
-            : "free hours end this month"
+            : "free hours end this month")
       }
       /* Only once there is a video to price. A resumed draft keeps its trim
          window in localStorage but cannot keep the File, so the handles alone

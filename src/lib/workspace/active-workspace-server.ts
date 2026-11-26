@@ -15,6 +15,7 @@ import {
   type ProgramPlanRef,
 } from "@/lib/billing/plans";
 import { isMissingTable } from "@/lib/data/season-points-cache";
+import { readPlanPeriodStart } from "@/lib/billing/plan-fields";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import type { ProgramStatus } from "@/lib/services/programs/claim-state";
 import type {
@@ -57,6 +58,7 @@ function personalWorkspace(
   individualPilot: boolean,
   unlimitedVideo: boolean,
   videoHoursOverride: number | null,
+  planPeriodStart: string | null,
 ): Workspace {
   return {
     // Not an invention: `processing_usage` already keys an individual's
@@ -83,6 +85,9 @@ function personalWorkspace(
     unlimitedVideo,
     // `users.video_hours_override` — see `Workspace.videoHoursOverride`.
     videoHoursOverride,
+    // The owner's plan and its period — see `Workspace.plan`.
+    plan: viewer.plan,
+    planPeriodStart,
     // No program row, so no status to carry — see `Workspace.programStatus`.
     programStatus: null,
     // A program-wide policy about *other* people, in a workspace whose only
@@ -213,7 +218,7 @@ async function listProgramWorkspaces(
     supabase
       .from("program_members")
       .select(
-        "role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, pilot_eligible, time_zone, crest_path, division)",
+        "role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, pilot_eligible, pilot_ends_on, pilot_ended_at, time_zone, crest_path, division)",
       )
       .eq("user_id", userId)
       .order("joined_at"),
@@ -244,6 +249,8 @@ async function listProgramWorkspaces(
           events_policy: string;
           org_type: string;
           pilot_eligible: boolean;
+          pilot_ends_on: string | null;
+          pilot_ended_at: string | null;
           time_zone: string;
           crest_path: string | null;
           division: string | null;
@@ -269,6 +276,9 @@ async function listProgramWorkspaces(
         // NOT NULL with default false. The admin-granted half of the quota
         // tier: a custom org on the program pool — see `quotaTierFor()`.
         pilotEligible: program.pilot_eligible === true,
+        // Whether that pilot is still running — see `Workspace.pilotEndsOn`.
+        pilotEndsOn: program.pilot_ends_on,
+        pilotEndedAt: program.pilot_ended_at,
         // The season plan an admin assigned, or null — see
         // `Workspace.programPlan`.
         programPlan: programPlans.get(program.id) ?? null,
@@ -428,7 +438,7 @@ export const getWorkspaceContext = cache(
     // why other members' names need a SECURITY DEFINER lookup rather than a
     // select from here.
     // Memberships depend only on the authenticated id, not the profile row.
-    const [{ data: row }, programs] = await Promise.all([
+    const [{ data: row }, programs, planPeriodStart] = await Promise.all([
       supabase
         .from("users")
         .select(
@@ -437,6 +447,8 @@ export const getWorkspaceContext = cache(
         .eq("id", user.id)
         .single(),
       listProgramWorkspaces(supabase, user.id),
+      // Its own tolerant read — see `readPlanPeriodStart`.
+      readPlanPeriodStart(supabase, user.id),
     ]);
 
     const avatarPath = row?.avatar_path ?? null;
@@ -465,6 +477,7 @@ export const getWorkspaceContext = cache(
         row?.video_hours_override == null
           ? null
           : Number(row.video_hours_override),
+        planPeriodStart,
       ),
       ...programs,
     ];

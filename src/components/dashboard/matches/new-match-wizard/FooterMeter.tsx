@@ -34,6 +34,8 @@ export function FooterMeter({
   suffix,
   creditSeconds = 0,
   creditWord = "credits",
+  freeWord = "free",
+  pilotNote = true,
 }: {
   remainingSeconds: number;
   capSeconds: number;
@@ -48,9 +50,18 @@ export function FooterMeter({
    * readouts (`SplitReadout` for the spill into credits).
    */
   creditSeconds?: number;
-  /** "added" when every credit lot was granted, else "credits". */
-  creditWord?: "added" | "credits";
+  /** "added" when every credit lot was granted, else "credits"; "extra" on a plan. */
+  creditWord?: "added" | "credits" | "extra";
+  /** What the allowance's own hours are called in the split: "free", or "plan". */
+  freeWord?: string;
+  /**
+   * Close the idle readout with the beta's end date. True while the beta's
+   * free hours are what the bar measures; false for a plan's hours, where
+   * `suffix` (the reset day) closes it instead.
+   */
+  pilotNote?: boolean;
 }) {
+  const tail = pilotNote ? ` · Pilot ends ${formatPilotEnd()}` : "";
   const priced = selectedSeconds !== undefined && selectedSeconds > 0;
   // An admin's personal workspace: no cap, so no bar — just what it spends.
   if (isUnlimitedCap(capSeconds)) {
@@ -119,8 +130,8 @@ export function FooterMeter({
                 Math.max(0, remainingSeconds - selectedSeconds),
               )} of ${cap} h left after`
             : creditSeconds > 0
-              ? `${formatHoursTenths(remainingSeconds + creditSeconds)} h left · ${formatHoursTenths(remainingSeconds)} free + ${formatHoursTenths(creditSeconds)} ${creditWord} · Pilot ends ${formatPilotEnd()}`
-              : `${formatHoursTenths(remainingSeconds)} of ${cap} h left · ${suffix} · Pilot ends ${formatPilotEnd()}`}
+              ? `${formatHoursTenths(remainingSeconds + creditSeconds)} h left · ${formatHoursTenths(remainingSeconds)} ${freeWord} + ${formatHoursTenths(creditSeconds)} ${creditWord}${pilotNote ? tail : ` · ${suffix}`}`
+              : `${formatHoursTenths(remainingSeconds)} of ${cap} h left · ${suffix}${tail}`}
       </span>
     </span>
   );
@@ -134,9 +145,15 @@ export function FooterMeter({
 export function SplitReadout({
   freeSeconds,
   creditSeconds,
+  freeWord = "free",
+  creditWord = "credits",
 }: {
   freeSeconds: number;
   creditSeconds: number;
+  /** "free" for the beta's hours, "plan" for a plan's. */
+  freeWord?: string;
+  /** "credits" for the beta's packs, "extra" for extra hours. */
+  creditWord?: string;
 }) {
   const total = freeSeconds + creditSeconds;
   const freeShare = total > 0 ? (freeSeconds / total) * 100 : 0;
@@ -144,7 +161,7 @@ export function SplitReadout({
     <span className="ml-3 inline-flex items-center gap-2.5 border-l border-[var(--border-medium)] pl-4">
       <span
         role="img"
-        aria-label={`Spends ${formatHoursLong(total)}: ${formatHoursLong(freeSeconds)} of free hours and ${formatHoursLong(creditSeconds)} of credits`}
+        aria-label={`Spends ${formatHoursLong(total)}: ${formatHoursLong(freeSeconds)} of ${freeWord} hours and ${formatHoursLong(creditSeconds)} of ${creditWord === "extra" ? "extra hours" : creditWord}`}
         className="inline-flex h-[3px] w-14 shrink-0 overflow-hidden rounded-[2px] bg-[var(--ink-100)]"
       >
         <span
@@ -157,8 +174,23 @@ export function SplitReadout({
         />
       </span>
       <span className="mono tabular text-[11px] whitespace-nowrap text-[var(--ink-500)]">
-        Spends {formatHoursLong(total)} · {formatHoursLong(freeSeconds)} free +{" "}
-        {formatHoursLong(creditSeconds)} credits
+        Spends {formatHoursLong(total)} · {formatHoursLong(freeSeconds)}{" "}
+        {freeWord} + {formatHoursLong(creditSeconds)} {creditWord}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * The footer with no bar to draw — a Free player with no plan hours, where
+ * the readout is the balance and the plan ("0h · Free plan"). Same divider
+ * and mono line as the meter, so the footer keeps its shape.
+ */
+export function PlainReadout({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="ml-3 inline-flex items-center gap-2.5 border-l border-[var(--border-medium)] pl-4">
+      <span className="mono tabular text-[11px] whitespace-nowrap text-[var(--ink-500)]">
+        {children}
       </span>
     </span>
   );

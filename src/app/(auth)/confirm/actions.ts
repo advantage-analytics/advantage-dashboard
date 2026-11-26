@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { rememberPlanIntent } from "@/lib/billing/plan-intent-server";
 import { toAuthError } from "@/lib/auth/error-messages";
 import {
   MISSING_TOKEN_ERROR,
@@ -54,7 +55,10 @@ export async function confirmLinkForm(formData: FormData): Promise<void> {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (user) redirect(link.next);
+      if (user) {
+        await rememberPlanIntent(link.next);
+        redirect(link.next);
+      }
     }
 
     // Translated here — the error page renders whatever it is handed, and raw
@@ -62,6 +66,9 @@ export async function confirmLinkForm(formData: FormData): Promise<void> {
     redirect(errorHref(toAuthError(error).message));
   }
 
+  // A plan picked on the landing site rides `next` this far; a new account is
+  // about to be sent through onboarding, which drops it, so leave it a note.
+  await rememberPlanIntent(link.next);
   redirect(link.next);
 }
 
