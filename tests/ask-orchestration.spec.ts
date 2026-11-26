@@ -27,8 +27,12 @@ import {
   SCOPE_COUNT_COLUMN_REASON,
   askQuestion,
   conversationTurnsFromMessages,
+  ASK_NOTHING_NEW_MESSAGE,
+  REPEATS_PREVIOUS_REASON,
+  asksPreviousQuestionAgain,
   droppedPlayerFilter,
   followUpShrank,
+  repeatsPreviousPlan,
   equalBaselineDetail,
   parsePlanReply,
   namesScopeCountColumn,
@@ -61,6 +65,7 @@ import {
   type AskPlanQuery,
 } from "@/lib/services/ask/prompts";
 import { ASK_REVIEW_MEASURES, ASK_REVIEW_SQL } from "@/lib/services/ask/review";
+import { compareSql } from "@/lib/services/ask/compare";
 import { PERSONAL_ASK_SCOPE } from "@/lib/services/ask/scope";
 import { resolveAskTags, type AskResolvedTags } from "@/lib/services/ask/tags";
 
@@ -3019,6 +3024,168 @@ test.describe("a follow-up that changes only the filter", () => {
 
 // ── A percentage nobody documented ──────────────────────────────────────────
 
+test.describe("a follow-up planned as the previous query", () => {
+  const PREVIOUS = { scope_sql: PLAN.scope_sql, sql: PLAN.sql };
+  const OTHER: AskPlanQuery = {
+    ...PLAN,
+    scope_sql: "select match_id from ask.matches where opponent_hand = 'left'",
+  };
+  const EARLIER = [
+    { role: "user" as const, content: "How is my second serve?" },
+    { role: "assistant" as const, content: "Your second serve held up." },
+  ];
+
+  test("repeatsPreviousPlan: the same scope and query, spacing and case aside", () => {
+    expect(repeatsPreviousPlan(PREVIOUS, PLAN)).toBe(true);
+    expect(
+      repeatsPreviousPlan(PREVIOUS, {
+        scope_sql: `  ${PLAN.scope_sql.toUpperCase()} `,
+        sql: PLAN.sql.replace(/ /g, "  "),
+      }),
+    ).toBe(true);
+    expect(repeatsPreviousPlan(PREVIOUS, OTHER)).toBe(false);
+    expect(
+      repeatsPreviousPlan(PREVIOUS, { ...PLAN, sql: "select 1 as aces" }),
+    ).toBe(false);
+    expect(repeatsPreviousPlan(null, PLAN)).toBe(false);
+    // A review before and a review again; a comparison before and the same one again.
+    expect(
+      repeatsPreviousPlan(
+        { scope_sql: PLAN.scope_sql, sql: null },
+        { scope_sql: PLAN.scope_sql, sql: ASK_REVIEW_SQL },
+      ),
+    ).toBe(true);
+    expect(
+      repeatsPreviousPlan(
+        { scope_sql: PLAN.scope_sql, sql: null, compare: "opponent" },
+        { scope_sql: PLAN.scope_sql, sql: compareSql("opponent", false) },
+      ),
+    ).toBe(true);
+  });
+
+  test("asksPreviousQuestionAgain: the same words, punctuation, case and tags aside", () => {
+    expect(asksPreviousQuestionAgain("how is my second serve", EARLIER)).toBe(
+      true,
+    );
+    expect(
+      asksPreviousQuestionAgain("How is my second serve?", [
+        {
+          role: "user",
+          content: "How is my second serve? (about: opponent Marek)",
+        },
+      ]),
+    ).toBe(true);
+    expect(asksPreviousQuestionAgain("bad answer", EARLIER)).toBe(false);
+    expect(asksPreviousQuestionAgain("How is my second serve?", [])).toBe(
+      false,
+    );
+  });
+
+  test("sent back once; a different second plan is answered", async () => {
+    const { db, calls } = fakeDb();
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      JSON.stringify(OTHER),
+      ANSWER,
+    ]);
+    const events = await collect(
+      askQuestion(
+        input({
+          db,
+          model,
+          question: "And against lefties?",
+          conversation: EARLIER,
+          previousPlan: PREVIOUS,
+        }),
+      ),
+    );
+    expect(last(events).type).toBe("done");
+    expect(modelCalls[1].messages.at(-1)?.content).toContain(
+      REPEATS_PREVIOUS_REASON,
+    );
+    // The repeated plan never ran.
+    const runs = calls.filter((call) => call.fn === "ask_run_query");
+    expect(runs).toHaveLength(1);
+    expect(runs[0].args?.scope_sql).toBe(OTHER.scope_sql);
+  });
+
+  test("the same plan a second time says there is nothing new, runs nothing and spends nothing", async () => {
+    const { db, calls, releases } = fakeDb();
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      JSON.stringify(PLAN),
+    ]);
+    const events = await collect(
+      askQuestion(
+        input({
+          db,
+          model,
+          question: "bad answer",
+          conversation: EARLIER,
+          previousPlan: PREVIOUS,
+        }),
+      ),
+    );
+    expect(last(events)).toMatchObject({
+      type: "error",
+      code: "cannot_answer",
+      error: ASK_NOTHING_NEW_MESSAGE,
+    });
+    expect(modelCalls).toHaveLength(2);
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(0);
+    expect(releases()).toHaveLength(1);
+  });
+
+  test("a repeat first planned on the last attempt says there is nothing new, not the generic refusal", async () => {
+    const { db, calls } = fakeDb({ run: [RUN_FAILED, RUN_FAILED] });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(OTHER),
+      JSON.stringify(OTHER),
+      JSON.stringify(PLAN),
+    ]);
+    const events = await collect(
+      askQuestion(
+        input({
+          db,
+          model,
+          question: "And against lefties?",
+          conversation: EARLIER,
+          previousPlan: PREVIOUS,
+        }),
+      ),
+    );
+    expect(last(events)).toMatchObject({
+      type: "error",
+      code: "cannot_answer",
+      error: ASK_NOTHING_NEW_MESSAGE,
+    });
+    expect(modelCalls).toHaveLength(3);
+    // The two refused queries ran; the repeat did not.
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(2);
+  });
+
+  test("the previous question asked again may have the previous answer", async () => {
+    const { db } = fakeDb();
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(PLAN),
+      ANSWER,
+    ]);
+    const events = await collect(
+      askQuestion(
+        input({
+          db,
+          model,
+          question: "How is my second serve?",
+          conversation: EARLIER,
+          previousPlan: PREVIOUS,
+        }),
+      ),
+    );
+    expect(last(events).type).toBe("done");
+    expect(modelCalls).toHaveLength(2);
+  });
+});
+
 test.describe("a percentage with no documented definition and nothing beside it", () => {
   const BARE: AskRpcResult = {
     data: { matches: MATCH_ROWS, rows: [{ unforced_errors_pct: 25.9 }] },
@@ -3487,9 +3654,10 @@ test.describe("thread memory as a state object", () => {
               content: "Your serve held up.\n\nYou won most points.",
             },
           ],
+          // A different query from this turn's, so the turn is not a repeat.
           previousPlan: {
             scope_sql: PLAN.scope_sql,
-            sql: PLAN.sql,
+            sql: "select count(*) as matches from scope",
             state: STATE,
           },
         }),
