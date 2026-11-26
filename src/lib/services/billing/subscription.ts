@@ -185,18 +185,23 @@ const errorText = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
 /**
- * Left on a duplicate as its cancellation comment, with the id of the
- * subscription that was kept — set BY the cancel call, so a subscription
- * carries it exactly when we cancelled it as a duplicate. It is how a later
+ * Subscription metadata key set on a duplicate, with the id of the subscription
+ * that was kept, BEFORE it is cancelled. Metadata is only ever written with our
+ * secret key, so it is the one thing a customer cannot forge: it is how a later
  * event for the cancelled duplicate knows to make sure the refund was made.
+ */
+export const DUPLICATE_METADATA_KEY = "duplicate_of";
+
+/**
+ * The cancellation comment, for people reading the Dashboard. NEVER evidence:
+ * Stripe's Customer Portal stores the customer's own free text in that same
+ * field, so a subscriber could write this prefix themselves.
  */
 export const DUPLICATE_MARK = "duplicate_of:";
 
-function isMarkedDuplicate(subscription: Stripe.Subscription): boolean {
-  return (
-    subscription.cancellation_details?.comment?.startsWith(DUPLICATE_MARK) ??
-    false
-  );
+/** The kept subscription id we marked this one a duplicate of, if we did. */
+function markedDuplicateOf(subscription: Stripe.Subscription): string | null {
+  return subscription.metadata?.[DUPLICATE_METADATA_KEY] || null;
 }
 
 /** Whether the subscription the row holds is still live in Stripe, asked now. */
@@ -275,9 +280,12 @@ async function refundLatestInvoice(
  * Undo a duplicate: cancel it now, then refund what it charged. The row is
  * not touched by this, whatever happens.
  *
+ *   mark     `subscriptions.update` sets metadata `duplicate_of: <kept>`
+ *            (idempotency key of its own). Fails → logged loudly; nothing is
+ *            cancelled or refunded and the caller asks for a retry.
  *   cancel   `subscriptions.cancel` with no final invoice and no proration,
- *            marked `duplicate_of:<kept>`, idempotency key on the duplicate's
- *            id. Stripe saying it no longer exists reads as cancelled.
+ *            comment `duplicate_of:<kept>` (for humans only), idempotency key
+ *            on the duplicate's id. Stripe saying it no longer exists reads as cancelled.
  *            Fails → logged loudly; the refund is NOT attempted (the
  *            subscription is still live and still paid, which is the state a
  *            retry starts from) and the caller asks for a retry.
@@ -309,6 +317,24 @@ async function settleDuplicate(params: {
   });
 
   if (!params.alreadyCancelled) {
+    // The marker goes on first, so a duplicate is never cancelled without it
+    // (a cancelled one that lacks it would never be refunded by a later event).
+    try {
+      await stripe.subscriptions.update(
+        duplicate.id,
+        { metadata: { [DUPLICATE_METADATA_KEY]: kept } },
+        {
+          idempotencyKey: `duplicate-subscription-mark:${duplicate.id}:${kept}`,
+        },
+      );
+    } catch (error) {
+      // Loud on purpose, and nothing else is attempted: a retry starts over.
+      console.error("[billing] DUPLICATE SUBSCRIPTION NOT MARKED", {
+        ...ids,
+        error: errorText(error),
+      });
+      return outcome(false, false);
+    }
     try {
       await stripe.subscriptions.cancel(
         duplicate.id,
@@ -449,6 +475,37 @@ export async function syncSubscription(params: {
     return (data?.length ?? 0) > 0;
   };
 
+  /**
+   * The marker names a different subscription of this same customer. Anything
+   * else is not ours to act on: no refund. Throws on an unreadable Stripe so
+   * the event is retried.
+   */
+  const keptIsOtherSubscriptionOfCustomer = async (): Promise<boolean> => {
+    const keptId = markedDuplicateOf(subscription);
+    if (!keptId || keptId === subscription.id) return false;
+    try {
+      const kept = await stripe.subscriptions.retrieve(keptId);
+      if (
+        customerId &&
+        expandableId(kept.customer as string | { id: string } | null) ===
+          customerId
+      ) {
+        return true;
+      }
+    } catch (error) {
+      if (!isMissingResource(error)) throw error;
+    }
+    console.error(
+      "[billing] duplicate marker names no subscription of the customer",
+      {
+        subscriptionId: subscription.id,
+        customerId,
+        keptSubscriptionId: keptId,
+      },
+    );
+    return false;
+  };
+
   if (subscription.status === "incomplete") {
     return { outcome: "pending", userId: user.id };
   }
@@ -461,19 +518,15 @@ export async function syncSubscription(params: {
     if (user.stripe_subscription_id !== subscription.id) {
       // A duplicate we cancelled: make sure its refund was made (a no-op once
       // it has been). The row is not this subscription's either way.
-      if (
-        subscription.status === "canceled" &&
-        isMarkedDuplicate(subscription)
-      ) {
-        const kept =
-          subscription.cancellation_details!.comment!.slice(
-            DUPLICATE_MARK.length,
-          ) ||
-          (user.stripe_subscription_id ?? "");
+      const markedKept =
+        subscription.status === "canceled"
+          ? markedDuplicateOf(subscription)
+          : null;
+      if (markedKept && (await keptIsOtherSubscriptionOfCustomer())) {
         const settled = await settleDuplicate({
           stripe,
           userId: user.id,
-          kept,
+          kept: markedKept,
           duplicate: subscription,
           alreadyCancelled: true,
         });

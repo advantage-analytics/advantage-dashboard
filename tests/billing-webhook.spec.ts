@@ -826,6 +826,14 @@ test.describe("one subscription per user", () => {
     expect(row()).toEqual(onCoach());
     expect(db.writes).toEqual([]);
 
+    expect(api.argsOf("subscriptions.update")).toEqual([
+      "sub_2",
+      { metadata: { duplicate_of: "sub_1" } },
+      { idempotencyKey: "duplicate-subscription-mark:sub_2:sub_1" },
+    ]);
+    expect(api.names().indexOf("subscriptions.update")).toBeLessThan(
+      api.names().indexOf("subscriptions.cancel"),
+    );
     expect(api.argsOf("subscriptions.cancel")).toEqual([
       "sub_2",
       {
@@ -862,6 +870,78 @@ test.describe("one subscription per user", () => {
       keptSubscriptionId: "sub_1",
       duplicateSubscriptionId: "sub_2",
     });
+  });
+
+  test("a customer's own cancellation comment is not a marker: never refunded", async () => {
+    const { api, send, row, db } = twice();
+    // Cancelled in the portal, with the comment a customer can type.
+    api.subscriptions.set("sub_2", {
+      ...api.subscriptions.get("sub_2")!,
+      status: "canceled",
+      cancellation_details: {
+        comment: `${DUPLICATE_MARK}sub_1`,
+        feedback: null,
+        reason: "cancellation_requested",
+      },
+    } as never);
+    for (const type of [
+      "customer.subscription.deleted",
+      "customer.subscription.deleted",
+      "customer.subscription.updated",
+    ]) {
+      const answer = await send(type, api.subscriptions.get("sub_2"));
+      expect(answer.body).toEqual({ received: true, outcome: "superseded" });
+    }
+    expect(api.refunds).toEqual([]);
+    expect(api.names()).not.toContain("refunds.create");
+    expect(row()).toEqual(onCoach());
+    expect(db.writes).toEqual([]);
+  });
+
+  test("a marker naming a subscription of another customer, or itself, refunds nothing", async () => {
+    for (const keptId of ["sub_other", "sub_2", "sub_gone"]) {
+      const { api, send } = twice();
+      api.subscriptions.set(
+        "sub_other",
+        fakeSubscription({ id: "sub_other", customer: "cus_other" }),
+      );
+      api.subscriptions.set("sub_2", {
+        ...api.subscriptions.get("sub_2")!,
+        status: "canceled",
+        metadata: { user_id: "u1", duplicate_of: keptId },
+      } as never);
+      const answer = await send(
+        "customer.subscription.deleted",
+        api.subscriptions.get("sub_2"),
+      );
+      expect(answer.body).toEqual({ received: true, outcome: "superseded" });
+      expect(api.refunds).toEqual([]);
+    }
+  });
+
+  test("the marker cannot be set: no cancel, no refund, and Stripe retries", async () => {
+    const { db, api, send, row, count } = twice();
+    api.fail["subscriptions.update"] = () => connectionLost();
+
+    const failed = await send("checkout.session.completed", secondSession());
+    expect(failed).toEqual({
+      status: 500,
+      body: { error: "Duplicate subscription not settled" },
+    });
+    expect(api.names()).not.toContain("subscriptions.cancel");
+    expect(api.refunds).toEqual([]);
+    expect(api.subscriptions.get("sub_2")?.status).toBe("active");
+    expect(logged.map((line) => line[0])).toEqual([
+      "[billing] DUPLICATE SUBSCRIPTION NOT MARKED",
+    ]);
+    expect(row()).toEqual(onCoach());
+    expect(db.writes).toEqual([]);
+
+    api.fail["subscriptions.update"] = undefined;
+    const retried = await send("checkout.session.completed", secondSession());
+    expect(retried.body).toEqual({ received: true, outcome: "duplicate" });
+    expect(count("subscriptions.cancel")).toBe(1);
+    expect(api.refunds).toHaveLength(1);
   });
 
   test("the first one being behind on payment or on a trial still counts as live", async () => {

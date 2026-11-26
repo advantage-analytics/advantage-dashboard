@@ -613,6 +613,15 @@ export function fakeStripe(seed: {
   ): Stripe.Subscription {
     const before = subscriptions.get(id);
     if (!before) throw missing("subscription");
+    if (!params.items) {
+      // A metadata-only update: merged, and nothing is billed.
+      const merged = {
+        ...before,
+        metadata: { ...before.metadata, ...params.metadata },
+      } as unknown as Stripe.Subscription;
+      subscriptions.set(id, merged);
+      return merged;
+    }
     const price = params.items?.[0]?.price ?? before.items.data[0].price.id;
     const start = now();
     const end = new Date(start.getTime());
