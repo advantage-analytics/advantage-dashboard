@@ -370,7 +370,7 @@ be. Doubles teams and existing users depend on it.
 >
 > A hand-labelled publish (`labels/apply.ts`) writes each let serve as a `shots`
 > row at `shot_number` 0 with `result = 'Let'` and no zone, so the report can show
-> it. Migration `20261126100000_let_serves_count_as_nothing` adds
+> it. Migration `20261126110611_let_serves_count_as_nothing` adds
 > `AND s.result IS DISTINCT FROM 'Let'` to the four serve counts that carry no
 > result filter (`first_serves` and `second_serves`, each player) and nothing
 > else: the `= 'In'` counts and the zone counts already leave a let out. The
