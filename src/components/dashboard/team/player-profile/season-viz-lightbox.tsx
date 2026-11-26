@@ -38,7 +38,10 @@ import {
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import { ChartMenu } from "@/components/dashboard/matches/match-detail/shots/chart-menu";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
-import { canManageSavedView } from "@/lib/data/saved-views-logic";
+import {
+  canManageSavedView,
+  sharedViewTag,
+} from "@/lib/data/saved-views-logic";
 import type { ProgramRole } from "@/lib/workspace/types";
 import type { SeasonSavedViewActions } from "./use-season-saved-views";
 import type { LightboxSeasonFilters } from "@/components/dashboard/matches/match-detail/shots/lightbox-filters";
@@ -427,6 +430,9 @@ export function SeasonVizLightbox({
           errorSplitJudged,
           state.season,
         );
+  // The open view's Rename popover, held here so the share clash's "Rename"
+  // under the title can open it too.
+  const [renameOpen, setRenameOpen] = useState(false);
   const [opening, setOpening] = useState(() => ({
     // Which opening this is — the shell's `key`, so a chart or return-half
     // switch inside the card keeps the one dialog.
@@ -492,6 +498,13 @@ export function SeasonVizLightbox({
             v.id === state.viewId &&
             canManageSavedView(v, saveView.workspaceRole),
         ) ?? null)
+      : null;
+
+  // The saved view the court IS, whoever may manage it: its "Shared with
+  // team" / "Shared by …" tag shows to every reader.
+  const shownView =
+    state.viewId !== null
+      ? (saveView?.savedViews.find((v) => v.id === state.viewId) ?? null)
       : null;
 
   const countWith = (patch: Partial<VizFilters>): number =>
@@ -615,6 +628,8 @@ export function SeasonVizLightbox({
                       if (action.kind === "delete") close();
                       manage.run(action, openView);
                     }}
+                    renameOpen={renameOpen}
+                    onRenameOpenChange={setRenameOpen}
                   />
                 </Suspense>
               )
@@ -622,9 +637,23 @@ export function SeasonVizLightbox({
         }
         // A change to the open view the server refused: the wall's own line
         // is behind the scrim, so it is said here.
+        titleTag={
+          shownView !== null
+            ? (sharedViewTag(shownView) ?? undefined)
+            : undefined
+        }
         notice={
           openView !== null && manage?.status?.failed
             ? manage.status.text
+            : undefined
+        }
+        // Sharing met a shared view with the same name: Rename opens the
+        // popover under the title, as the ⋯ menu's row does.
+        noticeAction={
+          openView !== null &&
+          manage?.status?.failed &&
+          manage.status.renameFirst
+            ? { label: "Rename", onClick: () => setRenameOpen(true) }
             : undefined
         }
         subtitle={court.subtitle}

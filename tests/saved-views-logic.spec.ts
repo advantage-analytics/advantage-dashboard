@@ -22,6 +22,8 @@ import {
   rowToSavedViewRow,
   savedViewScopeLine,
   savedViewsCountFact,
+  sharedNameClashMessage,
+  sharedViewTag,
   tileDataKey,
   validateVizInput,
   type SavedViewDbRow,
@@ -974,4 +976,50 @@ test("saveViewKeeps names Returns' Contact or Both, and the cut's noun when no f
   expect(rows({ ...EMPTY_VIZ_FILTERS, ends: "both" }, "heat")[0].value).toBe(
     "Returns · Both · Heat",
   );
+});
+
+/* ── sharedViewTag / sharedNameClashMessage ─────────────────────────────── */
+
+test("sharedViewTag: a private view has no tag", () => {
+  expect(sharedViewTag({ mine: true, shared: false })).toBeNull();
+  expect(sharedViewTag({ mine: false, shared: false })).toBeNull();
+});
+
+test("sharedViewTag: the owner of a shared view reads Shared with team", () => {
+  expect(
+    sharedViewTag({ mine: true, shared: true, creatorName: "Maya Chen" }),
+  ).toBe("Shared with team");
+});
+
+test("sharedViewTag: a teammate reads who shared it", () => {
+  expect(
+    sharedViewTag({ mine: false, shared: true, creatorName: " Maya Chen " }),
+  ).toBe("Shared by Maya Chen");
+});
+
+test("sharedViewTag: an unnamed creator reads as a teammate", () => {
+  expect(sharedViewTag({ mine: false, shared: true })).toBe(
+    "Shared by a teammate",
+  );
+  expect(sharedViewTag({ mine: false, shared: true, creatorName: "" })).toBe(
+    "Shared by a teammate",
+  );
+});
+
+test("sharedNameClashMessage quotes the name with curly quotes", () => {
+  expect(sharedNameClashMessage("Break points")).toBe(
+    "A shared view is already called “Break points”. Rename yours first.",
+  );
+});
+
+test("the menu offers Share on a private view, Make private on a shared one, Delete last", () => {
+  for (const shared of [false, true]) {
+    const rows = manageMenuRows(
+      { mine: true, shared },
+      { workspaceKind: "team", role: "player" },
+    );
+    expect(rows).toContain(shared ? "unshare" : "share");
+    expect(rows).not.toContain(shared ? "share" : "unshare");
+    expect(rows.at(-1)).toBe("delete");
+  }
 });

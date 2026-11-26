@@ -156,3 +156,14 @@ is the runner's. Newest entries at the bottom.
 2. Team-workspace and player-page versions not checked on screen (the season harness doesn't draw "Save as view").
 3. `savedViewScopeLine()` in saved-views-logic.ts is now dead (only its spec calls it).
 4. The Share toggle no longer changes any popover copy (the old scope line is gone).
+
+## T15 · Polish rename, share and name-clash states — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** rename-view-dialog.tsx: popover under the name with a "Name" label, the note `RENAME_NOTE` ("Changes the name on every match and player profile."), which turns red and reads "You already have a view called “X”." on a clash (field aria-invalid + red border, Rename aria-disabled), Cancel + Rename under a hairline; a shared view's clash keeps "The team already has a view called “X”.". New `sharedViewTag()` (saved-views-logic.ts) → Users-icon tag "Shared with team" (owner) / "Shared by <name>" (teammate, fallback "a teammate") beside the lightbox title (viz-lightbox-shell.tsx, viz-lightbox.tsx, season-viz-lightbox.tsx); ⋯ stays gated on `canManageSavedView`. `SavedViewRow.creatorName` filled by `getSavedViews` (saved-views-server.ts) via the existing `program_roster` SECURITY DEFINER function, only when a teammate's shared view exists. One `sharedNameClashMessage()` (curly quotes) used by saved-views-band.tsx and use-season-saved-views.ts; a failed share carries `renameFirst` (`SavedViewActionFailure`, shots-tab.tsx) and shows a 12px role="alert" under the title with a Rename button that opens the same popover (controlled `renameOpen` on SavedViewTitleMenu). Menu order pinned by a new spec. lifecycle-chip.tsx untouched. No server action, RLS or migration change.
+**follow-ups:**
+
+1. /pr-check: rls-boundary-reviewer to check the `program_roster` read in saved-views-server.ts (membership gating; it returns emails to the server loader, though only names are used).
+2. No browser spec drives the new popover note, tag or clash alert; eyes-on should check a teammate's shared view and a share clash on both routes.
+3. The clash alert's Rename button only appears for a view you can manage — untested.
+4. Decide whether the plain one-line error under the title (11px) should match the clash alert's 12px.

@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Maximize, Minus, Plus, RotateCcw, X } from "lucide-react";
+import { Maximize, Minus, Plus, RotateCcw, Users, X } from "lucide-react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
@@ -190,8 +190,15 @@ export interface VizLightboxShellProps {
    *  and zoom tooltips get it: an open tooltip is the topmost layer and
    *  would otherwise take the Esc meant for the lightbox. */
   headerAction?: (ctx: { onTooltipEscape: () => void }) => ReactNode;
+  /** Beside the title: an open shared view's "Shared with team" /
+   *  "Shared by <name>". */
+  titleTag?: string;
   /** One line under the subtitle: a change to the view the server refused. */
   notice?: string;
+  /** A text action at the notice's end — the share clash's "Rename", which
+   *  opens the rename popover. With it, the notice is the 12px inline alert
+   *  (board Final-18). */
+  noticeAction?: { label: string; onClick: () => void };
   subtitle: string;
   /** The strip's sentence for the filters (the shell adds the legend's and a
    *  Statistics row's pick). Empty: no strip unless a pick is on. */
@@ -329,7 +336,9 @@ export function VizLightboxShell({
   watch,
   title,
   headerAction,
+  titleTag,
   notice,
+  noticeAction,
   subtitle,
   filterPhrases,
   sentenceNote,
@@ -1089,6 +1098,19 @@ export function VizLightboxShell({
                   >
                     {pending ? <LightboxTitlePending label={title} /> : title}
                   </DialogPrimitive.Title>
+                  {titleTag && !pending && (
+                    <span
+                      data-lightbox-title-tag=""
+                      className="inline-flex shrink-0 items-center gap-1 text-[12px] text-[var(--ink-500)]"
+                    >
+                      <Users
+                        className="size-3"
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      />
+                      {titleTag}
+                    </span>
+                  )}
                 </div>
                 <p
                   id="viz-lightbox-subtitle"
@@ -1099,9 +1121,24 @@ export function VizLightboxShell({
                 {notice && !pending && (
                   <p
                     role="alert"
-                    className="m-0 text-[11px] text-[var(--error)]"
+                    className={cn(
+                      "m-0 text-[var(--error)]",
+                      noticeAction ? "text-[12px]" : "text-[11px]",
+                    )}
                   >
                     {notice}
+                    {noticeAction && (
+                      <>
+                        {" "}
+                        <button
+                          type="button"
+                          onClick={noticeAction.onClick}
+                          className="cursor-pointer font-medium text-[var(--blue)] hover:underline focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                        >
+                          {noticeAction.label}
+                        </button>
+                      </>
+                    )}
                   </p>
                 )}
               </div>

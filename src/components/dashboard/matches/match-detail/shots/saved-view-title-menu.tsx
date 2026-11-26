@@ -14,6 +14,15 @@ export type SavedViewAction =
   | { kind: "rename"; id: string; name: string }
   | { kind: "duplicate" | "share" | "unshare" | "delete"; id: string };
 
+/** A `SavedViewAction` the server refused, numbered per ask. `renameFirst`:
+ *  sharing met a shared view with the same name, so the open view offers
+ *  Rename beside the sentence (`sharedNameClashMessage`). */
+export type SavedViewActionFailure = {
+  n: number;
+  message: string;
+  renameFirst?: boolean;
+};
+
 /**
  * An open saved view's ⋯, in the lightbox header beside the close
  * (`viz-lightbox.tsx`'s `headerAction`): the wall card's own menu without
@@ -34,6 +43,8 @@ export function SavedViewTitleMenu({
   workspaceRole,
   onAction,
   onTooltipEscape,
+  renameOpen: renameOpenProp,
+  onRenameOpenChange,
 }: {
   view: SavedViewRow;
   /** The name on screen — the view's, or one just typed and still saving. */
@@ -44,9 +55,19 @@ export function SavedViewTitleMenu({
   onAction: (action: SavedViewAction) => void;
   /** The lightbox's Esc step, for when this ⋯'s tooltip holds Esc. */
   onTooltipEscape?: () => void;
+  /** The Rename popover's open state, when the lightbox also opens it — the
+   *  share clash's "Rename" action under the title. Left out, it is this
+   *  menu's own. */
+  renameOpen?: boolean;
+  onRenameOpenChange?: (open: boolean) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [renameOpen, setRenameOpen] = useState(false);
+  const [ownRenameOpen, setOwnRenameOpen] = useState(false);
+  const renameOpen = renameOpenProp ?? ownRenameOpen;
+  const setRenameOpen = (open: boolean) => {
+    setOwnRenameOpen(open);
+    onRenameOpenChange?.(open);
+  };
   // The lightbox's title (`data-lightbox-title`): the Rename popover hangs
   // from its left edge, under the name.
   const rowRef = useRef<HTMLElement | null>(null);

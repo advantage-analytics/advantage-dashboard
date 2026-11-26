@@ -6,7 +6,10 @@ import { useMatchReport } from "@/components/dashboard/matches/match-detail/matc
 import { advButton } from "@/lib/ui/adv-button";
 import { MAX_POINT_SET } from "@/lib/match-video/point-set";
 import { depthBandRows } from "@/lib/data/viz-bands";
-import { canManageSavedView } from "@/lib/data/saved-views-logic";
+import {
+  canManageSavedView,
+  sharedViewTag,
+} from "@/lib/data/saved-views-logic";
 
 import { ChartMenu } from "./chart-menu";
 import { VizBandsMenu } from "./viz-bands-menu";
@@ -18,6 +21,7 @@ import { SaveAsViewButton } from "./save-as-view-button";
 import {
   SavedViewTitleMenu,
   type SavedViewAction,
+  type SavedViewActionFailure,
 } from "./saved-view-title-menu";
 import { shotsWriteAccess } from "./shots-write-access";
 import { serveRowDotIds, statPickDotIds, type StatPick } from "./stat-cut";
@@ -90,7 +94,7 @@ export function VizLightbox({
    *  Saved wall's band. Omitted, there is no ⋯ beside the name. */
   onViewAction?: (action: SavedViewAction) => void;
   /** The last `onViewAction` the server refused (numbered per ask). */
-  viewActionFailure?: { n: number; message: string } | null;
+  viewActionFailure?: SavedViewActionFailure | null;
 }) {
   const { state, setState } = useVizState();
   const { meta } = useMatchReport();
@@ -125,12 +129,21 @@ export function VizLightbox({
   // said under the title (the wall's own line is behind the scrim), and a
   // rename it refused is taken back. Render-phase, as the wall's player is.
   const [failureSeen, setFailureSeen] = useState(viewActionFailure?.n ?? 0);
-  const [failureShown, setFailureShown] = useState<string | null>(null);
+  const [failureShown, setFailureShown] = useState<{
+    message: string;
+    renameFirst: boolean;
+  } | null>(null);
   if (viewActionFailure && viewActionFailure.n !== failureSeen) {
     setFailureSeen(viewActionFailure.n);
-    setFailureShown(viewActionFailure.message);
+    setFailureShown({
+      message: viewActionFailure.message,
+      renameFirst: viewActionFailure.renameFirst === true,
+    });
     setRenamed(null);
   }
+  // The open view's Rename popover, held here so the share clash's "Rename"
+  // under the title can open it as the ⋯ menu's row does.
+  const [renameOpen, setRenameOpen] = useState(false);
 
   const errorSplitJudged = useErrorSplitJudged();
   // The court's filters as the URL would read them: a store pick (a saved
@@ -606,7 +619,15 @@ export function VizLightbox({
         },
       }}
       title={title}
-      notice={failureShown ?? undefined}
+      titleTag={
+        savedView !== null ? (sharedViewTag(savedView) ?? undefined) : undefined
+      }
+      notice={failureShown?.message}
+      noticeAction={
+        failureShown?.renameFirst && canManageOpenView
+          ? { label: "Rename", onClick: () => setRenameOpen(true) }
+          : undefined
+      }
       headerAction={
         canManageOpenView && savedView !== null
           ? ({ onTooltipEscape }) => (
@@ -618,6 +639,8 @@ export function VizLightbox({
                 workspaceKind={meta.workspaceKind}
                 workspaceRole={meta.workspaceRole}
                 onAction={handleViewAction}
+                renameOpen={renameOpen}
+                onRenameOpenChange={setRenameOpen}
               />
             )
           : undefined

@@ -211,7 +211,7 @@ ready).
 
 ## T15 · Polish rename, share and name-clash states
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/components/dashboard/matches/match-detail/shots/{rename-view-dialog.tsx,saved-view-title-menu.tsx,manage-tile-menu.tsx,saved-views-band.tsx (`handleShare` ~:512),viz-lightbox.tsx}, src/components/dashboard/team/player-profile/use-season-saved-views.ts, src/lib/data/saved-views-logic.ts (`manageMenuRows` ~:506), tests/saved-views-logic.spec.ts
 - **routes:** /dashboard/matches/[matchId], /dashboard/team/roster/[playerId]

@@ -28,6 +28,7 @@ import {
   moveItem,
   nextFocusId,
   savedViewNamePool,
+  sharedNameClashMessage,
   tileDataKey,
 } from "@/lib/data/saved-views-logic";
 import type { ProgramRole, WorkspaceKind } from "@/lib/workspace/types";
@@ -48,7 +49,10 @@ import {
 import { SavedViewsStatusLine } from "./saved-views-status-line";
 import { WallCard } from "./wall-card";
 import { wallSummaryFor } from "./wall-summary";
-import type { SavedViewAction } from "./saved-view-title-menu";
+import type {
+  SavedViewAction,
+  SavedViewActionFailure,
+} from "./saved-view-title-menu";
 import { useVizState } from "./use-viz-state";
 import { usePrefersReducedMotion } from "@/components/dashboard/shared/use-reduced-motion";
 import type { VizState } from "./viz-url";
@@ -127,7 +131,7 @@ export function SavedViewsBand({
    * own status line sits under the lightbox's scrim, so whoever asked (the
    * open view) says it where the reader is looking.
    */
-  onRequestFailed?: (failure: { n: number; message: string }) => void;
+  onRequestFailed?: (failure: SavedViewActionFailure) => void;
 }) {
   const router = useRouter();
   const points = useVizPoints(useMatchData());
@@ -513,7 +517,10 @@ export function SavedViewsBand({
 
   /* ── Share / un-share ──────────────────────────────────────────────── */
 
-  function handleShare(view: SavedViewRow, onFail?: (message: string) => void) {
+  function handleShare(
+    view: SavedViewRow,
+    onFail?: (message: string, renameFirst?: boolean) => void,
+  ) {
     setOptimisticViews((prev) =>
       prev.map((v) => (v.id === view.id ? { ...v, shared: true } : v)),
     );
@@ -523,12 +530,12 @@ export function SavedViewsBand({
         setOptimisticViews((prev) =>
           prev.map((v) => (v.id === view.id ? { ...v, shared: false } : v)),
         );
-        const message =
-          result.error === "duplicate_name"
-            ? `A shared view is already called "${view.name}". Rename yours first.`
-            : "Couldn't save that change";
+        const clash = result.error === "duplicate_name";
+        const message = clash
+          ? sharedNameClashMessage(view.name)
+          : "Couldn't save that change";
         setStatusMessage(message);
-        onFail?.(message);
+        onFail?.(message, clash);
         return;
       }
       router.refresh();
@@ -803,7 +810,8 @@ export function SavedViewsBand({
     const view = optimisticViews.find((v) => v.id === request.id);
     if (!view || !canManage(view)) return;
     const n = request.n;
-    const failed = (message: string) => onRequestFailed?.({ n, message });
+    const failed = (message: string, renameFirst?: boolean) =>
+      onRequestFailed?.({ n, message, renameFirst });
     // eslint-disable-next-line react-hooks/set-state-in-effect -- external ask (the open view's ⋯ menu), not a render-derivable value
     if (request.kind === "rename") commitRename(view, request.name, failed);
     else if (request.kind === "duplicate") handleDuplicate(view, failed);
