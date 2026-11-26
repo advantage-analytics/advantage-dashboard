@@ -55,6 +55,7 @@ import type { VizState } from "./viz-url";
 import {
   computeViz,
   computeVizStats,
+  drawnCut,
   subjectFor,
   EMPTY_VIZ_FILTERS,
   type PlayerFilter,
@@ -223,9 +224,12 @@ export function SavedViewsBand({
 
   function tileDataFor(view: SavedViewRow): SavedViewCardData {
     const subjectIsPlayer1 = subjectFor(view.filters, you.isPlayer1);
+    // The court the view draws: a Returns view in Contact is the contact
+    // court (`drawnCut`); what it opens stays the view's own chart.
+    const cut = drawnCut(view.cut, view.filters);
     const result = computeViz(
       points,
-      view.cut,
+      cut,
       view.filters,
       subjectIsPlayer1,
       view.chart,
@@ -241,16 +245,16 @@ export function SavedViewsBand({
     return {
       subjectName: mine ? you.name : opp.name,
       possessive: mine ? "your" : "their",
-      cut: view.cut,
+      cut,
       dots: result.dots,
       // The Default wall's own footer (`default-tiles.ts`), over this view's
       // filters — the same stats the open view's Statistics column reads.
       summary: wallSummaryFor(
-        view.cut,
+        cut,
         result,
         computeVizStats(
           points,
-          view.cut,
+          cut,
           view.filters,
           subjectIsPlayer1,
           result,

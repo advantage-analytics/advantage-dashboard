@@ -17,6 +17,7 @@ import { useVizState } from "@/components/dashboard/matches/match-detail/shots/u
 import { CUT_LABEL } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
 import {
   EMPTY_VIZ_FILTERS,
+  drawnCut,
   type Chart,
   type Cut,
   type PlayerFilter,
@@ -464,7 +465,13 @@ export function SeasonVizLightbox({
       ),
     )
       ? data
-      : emptyCourt(cut, state.chart, state.filters, data);
+      : // The court the chart draws, as the server will answer (`drawnCut`).
+        emptyCourt(
+          drawnCut(cut, state.filters),
+          state.chart,
+          state.filters,
+          data,
+        );
   const pending = court !== data;
 
   // The saved view the court IS (not one it was edited from), when the
@@ -618,7 +625,9 @@ export function SeasonVizLightbox({
                 end: (
                   <Suspense fallback={<SaveAsViewPending />}>
                     <LazySaveAsViewButton
-                      cut={court.cut}
+                      // The chart, not the court drawn: Returns in
+                      // Contact saves as Returns with its ends.
+                      cut={cut}
                       chart={court.chart}
                       filters={state.filters}
                       savedViews={saveView.savedViews}

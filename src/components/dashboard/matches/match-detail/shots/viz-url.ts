@@ -791,7 +791,9 @@ export function parseVizState(
     cutParam === "errors" ||
     cutParam === "approaches"
   ) {
-    cut = cutParam;
+    // Returns is one chart: the old contact id reads as Returns, and
+    // `parseFilters` sets its ends to Contact (`chartView`).
+    cut = cutParam === "returnContact" ? "returnPlacement" : cutParam;
   }
 
   // Stays "scatter" — the default — when the requested chart is unknown, the
@@ -1287,6 +1289,9 @@ function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
   if (cut !== null && COURT_ENDS.includes(endsParam as CourtEnds)) {
     filters.ends = storedCourtEnds(cut, endsParam as CourtEnds);
   }
+  // `cut=returnContact` is Returns in Contact, whatever else the link says:
+  // the id never carried a choice of ends, it was the choice.
+  if (params.get("cut") === "returnContact") filters.ends = "contact";
 
   return filters;
 }

@@ -62,3 +62,15 @@ is the runner's. Newest entries at the bottom.
 3. T9: the lightbox "Clear filter" paths (viz-lightbox.tsx ~:321, season-viz-lightbox.tsx:242) rebuild from EMPTY_VIZ_FILTERS and reset ends, unlike `clearedFilters`.
 4. T7: map old `cut=returnContact` links and saved rows to Returns with `ends: "contact"`.
 5. MCP `open_visualization` has no ends parameter yet.
+
+## T7 · Merge the two Returns charts into one — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** Returns is one chart. Both cut ids stay internal: `chartView(cut, filters)` (viz-model.ts) rewrites `returnContact` to `returnPlacement` + `ends: "contact"`, and `drawnCut(cut, filters)` picks the court to compute and draw (Both on Returns draws placement until T8). `parseVizState` normalises old links; the match and season lightboxes draw via `drawnCut` (use-viz-view.ts, viz-lightbox.tsx, season-viz-lightbox.tsx, player-season-viz.ts). cut-menu.tsx has one "Returns" row; labels read "Returns". The wall's Return contact card opens Returns in Contact (`vends=contact`) and the Returns card in Placement (default-tiles.ts, seasonCard). Old saved rows with `returnContact` validate to Returns in Contact (saved-views-logic.ts, saved-views-band.tsx); new saves write `returnPlacement` + ends. MCP and Ask links untouched. Specs: wall-summary, viz-url, saved-views-logic, player-season-viz, viz-all-zones(+browser), viz-rally-placement (+harness), viz-lightbox-browser.
+**follow-ups:**
+
+1. Nothing on screen says Contact yet (title and subtitle read "Returns" in both views); T9's switch is the only way in besides cards and links.
+2. T8: compute with `drawnCut`, read the view with `courtEndsFor(state.cut, filters)`; `useVizView().cut` and `SeasonLightboxData.cut` are now the drawn cut. Extend `drawnCut`/the court for Both on Returns.
+3. T9: write `withCourtEnds(filters, state.cut, ends)` with the chart cut, not the drawn cut.
+4. Tidy `defaultCourtEnds("returnContact")` (still "placement"; unreachable after normalisation) and `parseFilters` re-reading `params.get("cut")`.
+5. The save-view dialog reads "Returns · Scatter · …" in both views — name the view once the switch exists.

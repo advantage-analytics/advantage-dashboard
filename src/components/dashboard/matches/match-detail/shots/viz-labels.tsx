@@ -17,7 +17,8 @@ import { cn } from "@/lib/utils";
 
 export const CUT_LABEL: Record<Cut, string> = {
   serve: "Serve placement",
-  returnPlacement: "Return placement",
+  // One Returns chart; Placement / Contact is its view (`VizFilters.ends`).
+  returnPlacement: "Returns",
   returnContact: "Return contact",
   rallyPosition: "Rally position",
   rallyPlacement: "Rally placement",

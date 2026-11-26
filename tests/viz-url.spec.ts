@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
 import {
+  chartView,
   courtEndsFor,
   defaultCourtEnds,
+  drawnCut,
   EMPTY_VIZ_FILTERS,
   withCourtEnds,
   type Cut,
@@ -1426,7 +1428,6 @@ test.describe("court ends URL state", () => {
   const PLACEMENT_CUTS: Cut[] = [
     "errors",
     "returnPlacement",
-    "returnContact",
     "rallyPosition",
     "rallyPlacement",
   ];
@@ -1463,7 +1464,7 @@ test.describe("court ends URL state", () => {
       ["errors", "contact"],
       ["errors", "both"],
       ["returnPlacement", "contact"],
-      ["returnContact", "both"],
+      ["returnPlacement", "both"],
       ["rallyPosition", "contact"],
       ["rallyPlacement", "both"],
       ["approaches", "placement"],
@@ -1673,5 +1674,128 @@ test.describe("court ends URL state", () => {
         filters: { ...EMPTY_VIZ_FILTERS, ends: "contact" },
       }),
     ).toEqual([]);
+  });
+});
+
+/* ── Returns is one chart ────────────────────────────────────────────────
+ * `returnPlacement` is the chart; Placement / Contact is its view
+ * (`VizFilters.ends`). `returnContact` stays a loadable id — old links,
+ * saved views, MCP links and Ask actions carry it — and opens Returns in
+ * Contact. */
+
+test.describe("Returns is one chart", () => {
+  const CONTACT = {
+    cut: "returnPlacement",
+    chart: "scatter",
+    viewId: null,
+    filters: { ...EMPTY_VIZ_FILTERS, ends: "contact" },
+  } as const;
+
+  test("cut=returnContact opens Returns with the view set to Contact", () => {
+    const parsed = parseVizState(new URLSearchParams("cut=returnContact"));
+    expect(parsed).toEqual(CONTACT);
+    expect(courtEndsFor(parsed.cut!, parsed.filters)).toBe("contact");
+    // One court, one query string: it is written back as Returns.
+    expect(vizStateQuery(new URLSearchParams(), parsed)).toBe(
+      "cut=returnPlacement&vends=contact",
+    );
+    expect(
+      parseVizState(new URLSearchParams("cut=returnPlacement&vends=contact")),
+    ).toEqual(CONTACT);
+  });
+
+  test("the old id keeps its chart type, player and filters", () => {
+    expect(
+      parseVizState(
+        new URLSearchParams(
+          "cut=returnContact&chart=heat&player=opponent&ball=second",
+        ),
+      ),
+    ).toEqual({
+      cut: "returnPlacement",
+      chart: "heat",
+      viewId: null,
+      filters: {
+        ...EMPTY_VIZ_FILTERS,
+        player: "opponent",
+        ball: ["second"],
+        ends: "contact",
+      },
+    });
+  });
+
+  test("the old id is Contact whatever vends says beside it", () => {
+    for (const vends of ["placement", "both", "nonsense"]) {
+      expect(
+        parseVizState(new URLSearchParams(`cut=returnContact&vends=${vends}`)),
+        vends,
+      ).toEqual(CONTACT);
+    }
+  });
+
+  test("a bare Returns link is Placement, its default", () => {
+    const parsed = parseVizState(new URLSearchParams("cut=returnPlacement"));
+    expect(parsed.cut).toBe("returnPlacement");
+    expect(parsed.filters.ends).toBeNull();
+    expect(courtEndsFor("returnPlacement", parsed.filters)).toBe("placement");
+  });
+
+  test("the season reads the old id the same way", () => {
+    const parsed = parseSeasonVizState({ cut: "returnContact" }, true);
+    expect(parsed.cut).toBe("returnPlacement");
+    expect(parsed.filters.ends).toBe("contact");
+  });
+
+  test("chartView rewrites the old id and nothing else", () => {
+    expect(chartView("returnContact", EMPTY_VIZ_FILTERS)).toEqual({
+      cut: "returnPlacement",
+      filters: { ...EMPTY_VIZ_FILTERS, ends: "contact" },
+    });
+    for (const cut of [
+      "serve",
+      "returnPlacement",
+      "rallyPlacement",
+      "rallyPosition",
+      "errors",
+      "approaches",
+    ] as const) {
+      const view = chartView(cut, EMPTY_VIZ_FILTERS);
+      expect(view.cut).toBe(cut);
+      expect(view.filters).toBe(EMPTY_VIZ_FILTERS);
+    }
+  });
+
+  test("drawnCut: Returns in Contact draws the contact court, every other view its own", () => {
+    expect(drawnCut("returnPlacement", { ends: "contact" })).toBe(
+      "returnContact",
+    );
+    expect(drawnCut("returnPlacement", {})).toBe("returnPlacement");
+    expect(drawnCut("returnPlacement", { ends: null })).toBe("returnPlacement");
+    // Both draws the placement court until pairs are drawn on Returns.
+    expect(drawnCut("returnPlacement", { ends: "both" })).toBe(
+      "returnPlacement",
+    );
+    // A state still holding the old id draws what it always drew.
+    expect(drawnCut("returnContact", {})).toBe("returnContact");
+    for (const cut of ["errors", "rallyPlacement", "approaches"] as const) {
+      expect(drawnCut(cut, { ends: "contact" })).toBe(cut);
+    }
+    expect(drawnCut("serve", {})).toBe("serve");
+  });
+
+  test("Returns in Contact and in Placement are two views and two courts", () => {
+    const placement = parseVizState(new URLSearchParams("cut=returnPlacement"));
+    const contact = parseVizState(new URLSearchParams("cut=returnContact"));
+    expect(sameView(contact, { ...placement, cut: "returnPlacement" })).toBe(
+      false,
+    );
+    expect(sameView(contact, CONTACT)).toBe(true);
+    expect(viewIdentityKey(contact)).not.toBe(viewIdentityKey(placement));
+    // An old link and the new one name the same court.
+    expect(viewIdentityKey(contact)).toBe(
+      viewIdentityKey(
+        parseVizState(new URLSearchParams("cut=returnPlacement&vends=contact")),
+      ),
+    );
   });
 });

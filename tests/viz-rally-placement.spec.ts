@@ -189,7 +189,10 @@ for (const chart of ["scatter", "heat"] as const) {
       "returnContact",
       "rallyPosition",
     ])
-      expect(rowToSavedView({ ...row, cut })?.cut).toBe(cut);
+      // The old contact id is stored still, and reads as Returns.
+      expect(rowToSavedView({ ...row, cut })?.cut).toBe(
+        cut === "returnContact" ? "returnPlacement" : cut,
+      );
   });
 }
 

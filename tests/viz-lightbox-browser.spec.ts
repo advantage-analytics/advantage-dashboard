@@ -1319,6 +1319,30 @@ test("the Bands menu beside the legend carries the depth rows a placement cut ha
   ).toHaveAttribute("aria-disabled", "true");
 });
 
+/* ── Plan 2026-11-25 §6: Returns is one chart ─────────────────────────── */
+
+test("Returns is one chart: the old contact link and vends=contact both open Returns on the contact court, a bare link on the placement court", async ({
+  page,
+}) => {
+  for (const query of [
+    "cut=returnContact",
+    "cut=returnPlacement&vends=contact",
+  ]) {
+    await page.goto(`${origin}/?tab=shots&${query}`);
+    const dialog = page.getByRole("dialog", { name: "Returns" });
+    await expect(
+      dialog.getByRole("heading", { name: "Returns" }),
+    ).toBeVisible();
+    await expect(dialog.locator('[data-viz-bands="contact"]')).toHaveCount(1);
+    await expect(dialog.locator('[data-viz-bands="depth"]')).toHaveCount(0);
+  }
+  await page.goto(`${origin}/?tab=shots&cut=returnPlacement`);
+  const dialog = page.getByRole("dialog", { name: "Returns" });
+  await expect(dialog.getByRole("heading", { name: "Returns" })).toBeVisible();
+  await expect(dialog.locator('[data-viz-bands="depth"]')).toHaveCount(1);
+  await expect(dialog.locator('[data-viz-bands="contact"]')).toHaveCount(0);
+});
+
 test("choosing No bands from the Contact bands menu takes the shading off the court, and back", async ({
   page,
 }) => {

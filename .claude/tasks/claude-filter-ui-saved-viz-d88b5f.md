@@ -99,7 +99,7 @@ ready).
 
 ## T7 · Merge the two Returns charts into one
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **needs:** T4, T6
 - **files:** (guess) src/components/dashboard/matches/match-detail/shots/{default-cuts.ts,cut-menu.tsx,cut-kinds.ts,default-tiles.ts,viz-wall.tsx,wall-card.tsx,viz-url.ts}, tests/viz-url.spec.ts, tests/viz-gallery-browser.spec.ts

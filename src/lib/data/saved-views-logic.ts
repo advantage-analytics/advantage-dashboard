@@ -162,7 +162,10 @@ export function validateVizInput(input: {
 
   const parsed = parseVizState(params);
 
-  if (parsed.cut === null || parsed.cut !== input.cut) return null;
+  // `returnContact` is still a storable id: it reads as Returns in Contact
+  // (`chartView`), which is what comes back.
+  const asked = input.cut === "returnContact" ? "returnPlacement" : input.cut;
+  if (parsed.cut === null || parsed.cut !== asked) return null;
   // Stored chart types must survive URL normalization unchanged.
   if (input.chart !== parsed.chart) return null;
 

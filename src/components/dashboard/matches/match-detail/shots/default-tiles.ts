@@ -17,6 +17,7 @@ import { defaultCutsFor } from "./default-cuts";
 import { wallSummaryFor, type WallSummary } from "./wall-summary";
 import {
   EMPTY_VIZ_FILTERS,
+  chartView,
   computeViz,
   computeVizStats,
   errorsJudgedIn,
@@ -102,10 +103,12 @@ export function buildDefaultTiles(
         cut.chart,
         matchCtx,
       );
+      // What the card opens: the chart, which for "Return contact" is
+      // Returns with its view set to Contact (`chartView`). The card itself
+      // (`cut`, `dots`, `summary`) stays the contact court.
       const state: VizState = {
-        cut: cut.cut,
+        ...chartView(cut.cut, filters),
         chart: cut.chart,
-        filters,
         viewId: null,
       };
       tiles.push({

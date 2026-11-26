@@ -207,13 +207,19 @@ test("Zones stays selected when switching every visualization cut", async ({
 }) => {
   await page.goto(`${origin}/?tab=shots&cut=serve&chart=zones`);
   for (const [from, next, cut] of [
-    ["Serve placement", "Return placement", "returnPlacement"],
-    ["Return placement", "Return contact", "returnContact"],
-    ["Return contact", "Rally placement", "rallyPlacement"],
+    // One Returns chart: Placement / Contact is its view, not a second row.
+    ["Serve placement", "Returns", "returnPlacement"],
+    ["Returns", "Rally placement", "rallyPlacement"],
     ["Rally placement", "Rally position", "rallyPosition"],
     ["Rally position", "Serve placement", "serve"],
   ]) {
     await page.getByRole("button", { name: from, exact: true }).click();
+    await expect(
+      page.getByRole("menuitemradio", { name: /^Returns/ }),
+    ).toHaveCount(1);
+    await expect(
+      page.getByRole("menuitemradio", { name: /^Return (placement|contact)/ }),
+    ).toHaveCount(0);
     await page
       .getByRole("menuitemradio", { name: new RegExp(`^${next}`) })
       .click();

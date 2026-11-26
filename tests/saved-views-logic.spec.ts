@@ -157,7 +157,6 @@ test("validateVizInput preserves Zones on every cut", () => {
   for (const cut of [
     "serve",
     "returnPlacement",
-    "returnContact",
     "rallyPlacement",
     "rallyPosition",
   ]) {
@@ -165,6 +164,40 @@ test("validateVizInput preserves Zones on every cut", () => {
       validateVizInput({ cut, chart: "zones", filters: {} }),
     ).toMatchObject({ cut, chart: "zones" });
   }
+});
+
+test("a stored returnContact is still a view: Returns in Contact, chart kept", () => {
+  // Rows saved before Returns became one chart carry the old id and no
+  // `ends`. They load, as Returns with its view set to Contact.
+  for (const chart of ["scatter", "heat", "zones"]) {
+    expect(
+      validateVizInput({ cut: "returnContact", chart, filters: {} }),
+    ).toEqual({
+      cut: "returnPlacement",
+      chart,
+      filters: { ...EMPTY_VIZ_FILTERS, ends: "contact" },
+    });
+  }
+  expect(
+    rowToSavedView(
+      dbRow({ cut: "returnContact", filters: { player: "opponent" } }),
+    ),
+  ).toMatchObject({
+    cut: "returnPlacement",
+    filters: { player: "opponent", ends: "contact" },
+  });
+  // What a save writes today round-trips to the same view.
+  expect(
+    validateVizInput({
+      cut: "returnPlacement",
+      chart: "scatter",
+      filters: { ends: "contact" },
+    }),
+  ).toEqual({
+    cut: "returnPlacement",
+    chart: "scatter",
+    filters: { ...EMPTY_VIZ_FILTERS, ends: "contact" },
+  });
 });
 
 /* ── G3a: rallyPosition + heat ────────────────────────────────────────── */
@@ -183,12 +216,7 @@ test("validateVizInput accepts cut=rallyPosition with chart=scatter", () => {
 });
 
 test("validateVizInput accepts chart=heat on every cut, including rallyPosition", () => {
-  for (const cut of [
-    "serve",
-    "returnPlacement",
-    "returnContact",
-    "rallyPosition",
-  ]) {
+  for (const cut of ["serve", "returnPlacement", "rallyPosition"]) {
     const result = validateVizInput({ cut, chart: "heat", filters: {} });
     expect(result?.chart).toBe("heat");
     expect(result?.cut).toBe(cut);

@@ -37,6 +37,8 @@ import {
   type StatKpi,
   type StatRow,
   type VizBandZones,
+  chartView,
+  drawnCut,
   type VizDot,
   type VizFilters,
   type VizResult,
@@ -588,32 +590,36 @@ function seasonCard(
   },
   bands: SeasonVizBands,
 ): SeasonCard {
+  // What the card opens is the chart (`chartView`: "Return contact" opens
+  // Returns in Contact); what it draws is that chart's court (`drawnCut`).
+  const view = chartView(card.cut, card.filters);
+  const cut = drawnCut(view.cut, view.filters);
   const parts = perMatch.map((m) =>
-    seasonPart(m, card.cut, card.filters, card.chart, bands),
+    seasonPart(m, cut, view.filters, card.chart, bands),
   );
   const { result, stats } = foldSeasonParts(
-    card.cut,
-    card.filters,
+    cut,
+    view.filters,
     parts,
     perMatch.length,
   );
   return {
     key: card.key,
-    cut: card.cut,
+    cut,
     chart: card.chart,
     name: card.name,
     subject: card.filters.player,
     dots: result.dots.map(wallDot),
     summary: wallSummaryFor(
-      card.cut,
+      cut,
       result,
       stats,
       depthBandRows(bands.bands, bands.unit),
     ),
     state: {
-      cut: card.cut,
+      cut: view.cut,
       chart: card.chart,
-      filters: card.filters,
+      filters: view.filters,
       viewId: card.viewId,
     },
     total: result.total,
@@ -702,7 +708,7 @@ export function buildSeasonViewCards(
  */
 export const SEASON_CUT_LABEL: Record<Cut, string> = {
   serve: "Serve placement",
-  returnPlacement: "Return placement",
+  returnPlacement: "Returns",
   returnContact: "Return contact",
   rallyPosition: "Rally position",
   rallyPlacement: "Rally placement",
@@ -855,6 +861,8 @@ export type SeasonDotPoint = [number, number, number, number, number];
 /** Everything the season's lightbox container hands `VizLightboxShell`,
  *  computed on the server. Plain data — no points, no functions, no Sets. */
 export interface SeasonLightboxData {
+  /** The court drawn (`drawnCut`): `returnContact` for Returns in Contact,
+   *  whose chart — what the URL and a saved view name — is Returns. */
   cut: Cut;
   chart: Chart;
   /** The URL's filters, as the server read them (`parseVizState` with the
@@ -1146,8 +1154,12 @@ export function buildSeasonLightbox(
    */
   subjectWords: SeasonVizNames = names,
 ): SeasonLightboxData | null {
-  const cut = state.cut;
-  if (cut === null || perMatch.length === 0) return null;
+  // The chart the URL names, and the court it draws (`drawnCut`): Returns
+  // in Contact is computed, banded and sent as the contact court. The card
+  // and saved-view baselines below go by the chart.
+  const chartCut = state.cut;
+  if (chartCut === null || perMatch.length === 0) return null;
+  const cut = drawnCut(chartCut, state.filters);
   const judged = seasonErrorSplitJudged(perMatch);
   const filters = state.filters;
 
@@ -1245,13 +1257,13 @@ export function buildSeasonLightbox(
     baseViewId !== null
       ? (views.find((v) => v.id === baseViewId) ?? null)
       : null;
-  const defaultCut = defaultCutsFor(judged).find((c) => c.cut === cut);
+  const defaultCut = defaultCutsFor(judged).find((c) => c.cut === chartCut);
   let baseline: {
     name: string;
     filters: VizFilters;
     keys: (keyof VizFilters)[];
   } | null = null;
-  if (baseView !== null && baseView.cut === cut) {
+  if (baseView !== null && baseView.cut === chartCut) {
     const viewFilters: VizFilters = {
       ...seasonViewFilters(baseView, judged),
       player: filters.player,
@@ -1373,8 +1385,9 @@ export function buildSeasonLightbox(
       activeFilterEntries(state).some(
         (entry) => entry.key !== "player" && !floorHeld(entry.key),
       ),
-    title: baseline !== null && onCard ? baseline.name : SEASON_CUT_LABEL[cut],
-    subtitle: `${SEASON_CUT_LABEL[cut]} · ${subjectWord} · ${matches} ${matches === 1 ? "match" : "matches"} · ${lightboxCountLine(
+    title:
+      baseline !== null && onCard ? baseline.name : SEASON_CUT_LABEL[chartCut],
+    subtitle: `${SEASON_CUT_LABEL[chartCut]} · ${subjectWord} · ${matches} ${matches === 1 ? "match" : "matches"} · ${lightboxCountLine(
       cut,
       result,
       stats,

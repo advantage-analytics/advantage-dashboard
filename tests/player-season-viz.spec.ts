@@ -44,6 +44,7 @@ import {
   EMPTY_VIZ_FILTERS,
   computeViz,
   computeVizStats,
+  drawnCut,
   subjectFor,
   type Cut,
   type StatRow,
@@ -333,10 +334,17 @@ test.describe("buildSeasonCards", () => {
           );
           // What opening the card asks the URL for: the default cut, this side.
           const cut = defaultCutsFor(judged).find((c) => c.cut === card.cut)!;
+          // Return contact opens the one Returns chart, its view Contact.
+          const contact = card.cut === "returnContact";
           expect(card.state).toEqual({
-            cut: card.cut,
+            cut: contact ? "returnPlacement" : card.cut,
             chart: cut.chart,
-            filters: { ...EMPTY_VIZ_FILTERS, ...cut.filters, player: side },
+            filters: {
+              ...EMPTY_VIZ_FILTERS,
+              ...cut.filters,
+              player: side,
+              ...(contact ? { ends: "contact" } : {}),
+            },
             viewId: null,
           });
           expect(card.key).toBe(`${side}:${card.cut}`);
@@ -469,7 +477,8 @@ test.describe("buildSeasonLightbox", () => {
       });
       const data = buildSeasonLightbox(JUDGED, state, BANDS, NAMES)!;
       expect(data).not.toBeNull();
-      const cut = state.cut!;
+      // The court drawn: a return-contact link is Returns in Contact.
+      const cut = drawnCut(state.cut!, state.filters);
       const parts = JUDGED.map((m) => partFor(m, cut, state.filters));
 
       // The court.
@@ -2044,7 +2053,7 @@ test.describe("the chart menu over the season (?chart=heat|zones)", () => {
     test(`${label}: the chart is the URL's and the court the sum of the per-match parts`, () => {
       const state = seasonState(query);
       const data = buildSeasonLightbox(JUDGED, state, BANDS, NAMES)!;
-      const cut = state.cut!;
+      const cut = drawnCut(state.cut!, state.filters);
       const parts = JUDGED.map((m) => partFor(m, cut, state.filters));
       expect(data.chart).toBe(state.chart);
       expect(data.chart).not.toBe("scatter");

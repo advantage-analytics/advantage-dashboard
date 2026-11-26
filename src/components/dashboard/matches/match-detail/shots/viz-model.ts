@@ -137,6 +137,38 @@ export function courtEndsFor(
   return storedCourtEnds(cut, filters.ends) ?? defaultCourtEnds(cut);
 }
 
+/**
+ * Returns is ONE chart. Its id is `returnPlacement`, and which end it draws
+ * is `ends`: Placement (its default) is where the return landed, Contact
+ * where it was struck. `returnContact` stays a loadable id — an old link, a
+ * saved view stored before the merge, an MCP link or an Ask action — and
+ * means Returns in Contact: this is the one rewrite, run wherever a cut and
+ * its filters come in from outside (`parseVizState`, the wall's cards).
+ * Every other cut is returned as given.
+ */
+export function chartView(
+  cut: Cut,
+  filters: VizFilters,
+): { cut: Cut; filters: VizFilters } {
+  if (cut !== "returnContact") return { cut, filters };
+  return {
+    cut: "returnPlacement",
+    filters: withCourtEnds(filters, "returnPlacement", "contact"),
+  };
+}
+
+/**
+ * The cut a chart's court is computed and drawn as: `cut` itself, except
+ * Returns in Contact, which is the contact court (`returnContact` — the id
+ * `computeViz`, the stats, the bands and the court art still read). Returns
+ * in Both draws the placement court until pairs are drawn there.
+ */
+export function drawnCut(cut: Cut, filters: { ends?: CourtEnds | null }): Cut {
+  return cut === "returnPlacement" && courtEndsFor(cut, filters) === "contact"
+    ? "returnContact"
+    : cut;
+}
+
 /** `filters` drawing `ends` on `cut`, kept in stored form (`storedCourtEnds`). */
 export function withCourtEnds(
   filters: VizFilters,

@@ -439,12 +439,12 @@ export function VizLightbox({
         : baseline.name
       : savedView !== null
         ? nameOf(savedView)
-        : CUT_LABEL[cut];
+        : CUT_LABEL[state.cut ?? cut];
   const subjectWord =
     state.filters.player === "you" ? chipLabels.you : chipLabels.opponent;
   const subtitle = isDraft
     ? "Pick a chart and filters, then save it to reuse on any match."
-    : `${CUT_LABEL[cut]} · ${subjectWord} · ${lightboxCountLine(
+    : `${CUT_LABEL[state.cut ?? cut]} · ${subjectWord} · ${lightboxCountLine(
         cut,
         result,
         stats,
@@ -659,7 +659,9 @@ export function VizLightbox({
             <>
               {canSaveViews && (
                 <SaveAsViewButton
-                  cut={cut}
+                  // The chart, not the court drawn: Returns in Contact
+                  // saves as Returns with its ends.
+                  cut={state.cut ?? cut}
                   chart={state.chart}
                   filters={state.filters}
                   savedViews={meta.savedViews}
