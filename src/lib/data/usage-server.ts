@@ -1,10 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
 import { plansHaveBegun } from "@/lib/billing/plans";
 import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
-import { isMissingFunction } from "@/lib/supabase/missing-function";
+import { withMonthFallback } from "@/lib/supabase/missing-function";
 import {
   allowanceFor,
   allowanceResetsOn,
+  type AllowanceScope,
   type AllowanceWorkspace,
   type VideoAllowance,
 } from "@/lib/services/splitstep/allowance";
@@ -54,10 +55,7 @@ function periodFor(
   allowance: VideoAllowance,
   billingMonth: string,
 ): {
-  scope: Pick<
-    VideoAllowance,
-    "windowed" | "billingMonth" | "windowStart" | "windowEnd"
-  >;
+  scope: AllowanceScope;
   period: Required<UsagePeriod>;
 } {
   if (billingMonth === allowance.billingMonth) {
@@ -240,18 +238,15 @@ export async function getProgramUsage(
   const [totalResult, linesResult] = await Promise.all([
     readProgramUsedSeconds(supabase, programId, scope),
     scope.windowed
-      ? supabase
-          .rpc("program_usage_by_member_between", {
-            p_program_id: programId,
-            ...windowArgs(scope),
-          })
-          // The month's lines if the window read is not on this database
-          // yet — the same degradation `readProgramUsedSeconds()` makes.
-          .then((result) =>
-            result.error && isMissingFunction(result.error)
-              ? linesByMonth()
-              : result,
-          )
+      ? // The month's lines if the window read is not on this database yet.
+        withMonthFallback(
+          () =>
+            supabase.rpc("program_usage_by_member_between", {
+              p_program_id: programId,
+              ...windowArgs(scope),
+            }),
+          linesByMonth,
+        )
       : linesByMonth(),
   ]);
 

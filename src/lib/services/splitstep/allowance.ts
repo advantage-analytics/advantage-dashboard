@@ -65,6 +65,12 @@ export interface VideoAllowance {
   billingMonth: string;
 }
 
+/** The part of an allowance a ledger read or a window-keyed RPC is scoped by. */
+export type AllowanceScope = Pick<
+  VideoAllowance,
+  "windowed" | "billingMonth" | "windowStart" | "windowEnd"
+>;
+
 /** The workspace fields the answer depends on. All but `kind` may be absent. */
 export type AllowanceWorkspace = Pick<
   Workspace,
@@ -244,9 +250,7 @@ export function allowanceFor(
     // else — Free, an override on a Free account, an admin — keeps the
     // calendar month, and so does a paid plan whose period start is missing.
     const slice =
-      planSeconds > 0
-        ? hoursWindow(workspace.planPeriodStart, now)
-        : { start: month.start, end: month.end };
+      planSeconds > 0 ? hoursWindow(workspace.planPeriodStart, now) : month;
     const window = { windowStart: slice.start, windowEnd: slice.end };
 
     const override = overrideSeconds(workspace);

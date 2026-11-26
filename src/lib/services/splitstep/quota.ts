@@ -34,10 +34,11 @@ import {
   pendingReviewRefusal,
   type Workspace,
 } from "@/lib/workspace/types";
-import { isMissingFunction } from "@/lib/supabase/missing-function";
+import { withMonthFallback } from "@/lib/supabase/missing-function";
 import {
   allowanceFor,
   allowanceResetsOn,
+  type AllowanceScope,
   type AllowanceWorkspace,
   type VideoAllowance,
 } from "./allowance";
@@ -107,13 +108,7 @@ interface WindowFilterable {
  * were called on, and asking TypeScript to prove that generically sends it
  * through the builder's whole recursive type.
  */
-export function scopeToAllowance<Q>(
-  query: Q,
-  allowance: Pick<
-    VideoAllowance,
-    "windowed" | "billingMonth" | "windowStart" | "windowEnd"
-  >,
-): Q {
+export function scopeToAllowance<Q>(query: Q, allowance: AllowanceScope): Q {
   const filterable = query as unknown as WindowFilterable;
   return (allowance.windowed
     ? filterable
@@ -142,25 +137,23 @@ export function windowArgs(
 export async function readProgramUsedSeconds(
   supabase: SupabaseClient,
   programId: string,
-  allowance: Pick<
-    VideoAllowance,
-    "windowed" | "billingMonth" | "windowStart" | "windowEnd"
-  >,
+  allowance: AllowanceScope,
 ): Promise<{ usedSeconds: number; error: { message: string } | null }> {
   const byMonth = () =>
     supabase.rpc("program_usage_total", {
       p_program_id: programId,
       p_billing_month: allowance.billingMonth,
     });
-  let result = allowance.windowed
-    ? await supabase.rpc("program_usage_total_between", {
-        p_program_id: programId,
-        ...windowArgs(allowance),
-      })
+  const result = allowance.windowed
+    ? await withMonthFallback(
+        () =>
+          supabase.rpc("program_usage_total_between", {
+            p_program_id: programId,
+            ...windowArgs(allowance),
+          }),
+        byMonth,
+      )
     : await byMonth();
-  if (allowance.windowed && result.error && isMissingFunction(result.error)) {
-    result = await byMonth();
-  }
   return {
     usedSeconds: Number(result.data ?? 0),
     error: result.error,

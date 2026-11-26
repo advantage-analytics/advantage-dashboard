@@ -4,7 +4,7 @@ import {
   type AllowanceWorkspace,
 } from "@/lib/services/splitstep/allowance";
 import { windowArgs } from "@/lib/services/splitstep/quota";
-import { isMissingFunction } from "@/lib/supabase/missing-function";
+import { withMonthFallback } from "@/lib/supabase/missing-function";
 import type { ProgramRole, Workspace } from "@/lib/workspace/types";
 
 /**
@@ -86,18 +86,18 @@ export async function getProgramUsagePending(
       p_program_id: programId,
       p_billing_month: billingMonth,
     });
-  let result =
+  const { data, error } =
     allowance?.windowed && allowance.billingMonth === billingMonth
-      ? await supabase.rpc("program_usage_pending_between", {
-          p_program_id: programId,
-          ...windowArgs(allowance),
-        })
-      : null;
-  // The month's figure if the window read is not on this database yet.
-  if (!result || (result.error && isMissingFunction(result.error))) {
-    result = await byMonth();
-  }
-  const { data, error } = result;
+      ? // The month's figure if the window read is not on this database yet.
+        await withMonthFallback(
+          () =>
+            supabase.rpc("program_usage_pending_between", {
+              p_program_id: programId,
+              ...windowArgs(allowance),
+            }),
+          byMonth,
+        )
+      : await byMonth();
 
   if (error) {
     console.error("[teams] could not read pending usage", {

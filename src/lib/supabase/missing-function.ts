@@ -17,3 +17,15 @@ export function isMissingFunction(error: { code?: string }): boolean {
 export function isMissingColumn(error: { code?: string }): boolean {
   return error.code === "42703";
 }
+
+/**
+ * Run a window-keyed RPC and, if this database does not have it yet, the
+ * month-keyed one instead — a meter then shows the month's figure rather than
+ * an error. Any other error is the primary's, returned as is.
+ */
+export async function withMonthFallback<
+  T extends { error: { code?: string } | null },
+>(windowed: () => PromiseLike<T>, byMonth: () => PromiseLike<T>): Promise<T> {
+  const result = await windowed();
+  return result.error && isMissingFunction(result.error) ? byMonth() : result;
+}
