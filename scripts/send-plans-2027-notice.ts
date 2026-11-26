@@ -38,6 +38,7 @@ import {
   sendEmail,
   type EmailMessage,
 } from "../src/lib/services/email";
+import { readAllPages } from "../src/lib/data/admin-range-read";
 import { programDisplayName } from "../src/lib/data/programs-server";
 import {
   noticeDedupeKey,
@@ -105,22 +106,6 @@ async function listAccounts(db: SupabaseClient): Promise<NoticeAccount[]> {
   }
 }
 
-async function readAll<T>(
-  label: string,
-  page: (
-    from: number,
-    to: number,
-  ) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
-): Promise<T[]> {
-  const out: T[] = [];
-  for (let from = 0; ; from += 1000) {
-    const { data, error } = await page(from, from + 999);
-    if (error) fail(`${label}: ${error.message}`);
-    out.push(...(data ?? []));
-    if ((data?.length ?? 0) < 1000) return out;
-  }
-}
-
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
@@ -145,30 +130,28 @@ async function main() {
   // page both reads anyway.
   const [accounts, members, programs] = await Promise.all([
     listAccounts(db),
-    readAll<{ program_id: string; user_id: string; role: string }>(
+    readAllPages<{ program_id: string; user_id: string; role: string }>(
+      db
+        .from("program_members")
+        .select("program_id, user_id, role")
+        .order("id"),
       "program_members",
-      (from, to) =>
-        db
-          .from("program_members")
-          .select("program_id, user_id, role")
-          .order("id")
-          .range(from, to),
     ),
-    readAll<{
+    readAllPages<{
       id: string;
       school_name: string;
       team: string | null;
       owner_user_id: string | null;
       pilot_ends_on: string | null;
-    }>("programs", (from, to) =>
+    }>(
       db
         .from("programs")
         .select("id, school_name, team, owner_user_id, pilot_ends_on")
         .or(
           `owner_user_id.not.is.null,id.in.(${PILOT_2027_PROGRAM_IDS.join(",")})`,
         )
-        .order("id")
-        .range(from, to),
+        .order("id"),
+      "programs",
     ),
   ]);
 
@@ -299,4 +282,9 @@ async function main() {
   if (failed.length) process.exit(1);
 }
 
-main().catch((e) => fail(e instanceof Error ? e.message : String(e)));
+main().catch((e) => {
+  const cause = (e as { cause?: { message?: string } } | null)?.cause?.message;
+  fail(
+    e instanceof Error ? `${e.message}${cause ? `: ${cause}` : ""}` : String(e),
+  );
+});

@@ -145,7 +145,8 @@ export function selectNoticeRecipients(input: {
 
   const ready = (p: PilotRecipient) =>
     input.pilotNoticeReady && p.pilotEndsOn !== null;
-  const pilotUsers = new Set(pilot.filter(ready).map((p) => p.userId));
+  const pilotReady = pilot.filter(ready);
+  const pilotUsers = new Set(pilotReady.map((p) => p.userId));
   const general = [...sendable.values()].filter(
     (r) => !pilotUsers.has(r.userId),
   );
@@ -159,7 +160,7 @@ export function selectNoticeRecipients(input: {
 
   return {
     general,
-    pilot: pilot.filter(ready),
+    pilot: pilotReady,
     pilotHeld: pilot.filter((p) => !ready(p)),
     teamOwners,
     missingPilotPrograms: [...pilotIds].filter((id) => !programs.has(id)),
