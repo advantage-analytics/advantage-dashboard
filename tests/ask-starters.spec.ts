@@ -321,5 +321,10 @@ test.describe("askFollowUps", () => {
     const team = askFollowUps("How is the team serving?", TEAM);
     expect(team.map((f) => f.text)).toContain("And on second serves?");
     expect(JSON.stringify(team)).not.toMatch(/\bmy\b/);
+    const record = askFollowUps("What is the team's record?", TEAM);
+    expect(record.map((f) => f.text)).toContain(
+      "Is the team better on hard courts or clay?",
+    );
+    expect(JSON.stringify(record)).not.toMatch(/\bAm we\b/);
   });
 });
