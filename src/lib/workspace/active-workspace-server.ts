@@ -9,6 +9,11 @@ import { getAuthUser } from "@/lib/supabase/auth-user-server";
 import { getInitials } from "@/lib/data/match-utils";
 import { isRecordingSource } from "@/app/onboarding/answers";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
+import {
+  isCollegePlanId,
+  isPlanTerm,
+  type ProgramPlanRef,
+} from "@/lib/billing/plans";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import type { ProgramStatus } from "@/lib/services/programs/claim-state";
 import type {
@@ -149,11 +154,69 @@ async function claimedProfilesByProgram(
  * back. `programStatusFor()` maps a claim to `claim_pending`, which is exactly
  * the state that withholds it.
  */
+/**
+ * What a read of a table that is not there comes back as. PostgREST answers
+ * from its schema cache (`PGRST205`) before the query reaches PostgreSQL;
+ * `42P01` is PostgreSQL's own `undefined_table`, which is what arrives when
+ * the cache is ahead of the database.
+ */
+const MISSING_TABLE_CODES = new Set(["PGRST205", "42P01"]);
+
+/**
+ * The season plan of every team the viewer can see one for —
+ * `program_plans`, keyed by `program_id`.
+ *
+ * Not filtered here: the table's own policy returns a member their teams'
+ * rows and nothing else, so this can run beside the membership read instead
+ * of after it. An admin gets every team's row, one per paying program, and
+ * the caller only looks up the ids it has a membership for.
+ *
+ * `note` and `set_by` are not asked for and could not be: no client holds a
+ * grant on them (`admin_get_program_plan` is the admin page's read).
+ *
+ * Never fatal, like `claimedProfilesByProgram`. `program_plans` arrives with
+ * `20261126060000_plans_2027_plan_model`, a migration applied by hand, and
+ * this code can be deployed before it: a missing table then reads as "no team
+ * has a plan", which is true until an admin can assign one, and is not worth
+ * a log line on every request. Any other failure is logged and degrades the
+ * same way. The missing-table branch can go once the migration is live.
+ */
+async function programPlansByProgram(
+  supabase: SupabaseClient,
+): Promise<Map<string, ProgramPlanRef>> {
+  const { data, error } = await supabase
+    .from("program_plans")
+    .select("program_id, plan_id, plan_term, starts_on, ends_on");
+
+  if (error) {
+    if (!MISSING_TABLE_CODES.has(error.code)) {
+      console.error("[workspace] could not load program plans", {
+        error: error.message,
+      });
+    }
+    return new Map();
+  }
+
+  const byProgram = new Map<string, ProgramPlanRef>();
+  for (const row of data ?? []) {
+    // The CHECKs pin both value sets; a value this build does not know is a
+    // plan newer than this code, and reads as no plan rather than a guess.
+    if (!isCollegePlanId(row.plan_id) || !isPlanTerm(row.plan_term)) continue;
+    byProgram.set(row.program_id, {
+      id: row.plan_id,
+      term: row.plan_term,
+      startsOn: row.starts_on,
+      endsOn: row.ends_on,
+    });
+  }
+  return byProgram;
+}
+
 async function listProgramWorkspaces(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<Workspace[]> {
-  const [{ data, error }, claimedProfiles] = await Promise.all([
+  const [{ data, error }, claimedProfiles, programPlans] = await Promise.all([
     supabase
       .from("program_members")
       .select(
@@ -162,6 +225,7 @@ async function listProgramWorkspaces(
       .eq("user_id", userId)
       .order("joined_at"),
     claimedProfilesByProgram(supabase, userId),
+    programPlansByProgram(supabase),
   ]);
 
   if (error) {
@@ -212,6 +276,9 @@ async function listProgramWorkspaces(
         // NOT NULL with default false. The admin-granted half of the quota
         // tier: a custom org on the program pool — see `quotaTierFor()`.
         pilotEligible: program.pilot_eligible === true,
+        // The season plan an admin assigned, or null — see
+        // `Workspace.programPlan`.
+        programPlan: programPlans.get(program.id) ?? null,
         // NOT NULL with default 'UTC', so a program that never set one still
         // reads as a real zone. Rides on the workspace for the reason the
         // fields around it do: "what day is it for this program" has to be

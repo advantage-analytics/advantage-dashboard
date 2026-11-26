@@ -19,9 +19,40 @@
  * service role lives in `roles.ts`, which a client file must never import.
  */
 
+import {
+  coachPlan,
+  isCoachPlanId,
+  type CoachPlan,
+  type CoachPlanId,
+} from "@/lib/billing/plans";
 import { teamLabel, type Viewer, type Workspace } from "@/lib/workspace/types";
 
-/** `users.plan` value for a paid account. Constrained to 'free' | 'pro' in SQL. */
+/** A personal plan's id: what `users.plan` holds from 2027. */
+export type PlanId = CoachPlanId;
+
+/**
+ * The plan a `users.plan` value stands for, with its price and hours from
+ * `lib/billing/plans.ts`.
+ *
+ * Anything that is not a plan on sale reads as Free: null, an unknown value,
+ * and the legacy `pro` (the one Lifetime account, which moves to Free by
+ * decision 4 of docs/plans/2027-pricing.md). The column still admits `pro`
+ * until that row is moved; `isProPlan` below still names it for the beta
+ * screens, which stage F replaces.
+ */
+export function planFor(plan: string | null | undefined): CoachPlan {
+  return coachPlan(isCoachPlanId(plan) ? plan : "free");
+}
+
+/** Whether a `users.plan` value is a paid plan (Coach or Coach Pro). */
+export function isPaidPlan(plan: string | null | undefined): boolean {
+  return planFor(plan).id !== "free";
+}
+
+/**
+ * The legacy `users.plan` value for the early one-time Pro purchase
+ * ("Lifetime"). Not a 2027 plan: `planFor()` reads it as Free.
+ */
 export const PRO_PLAN = "pro";
 
 /** Whether a `users.plan` value entitles the account to Pro features. */
