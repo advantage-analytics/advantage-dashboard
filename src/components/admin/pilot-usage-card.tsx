@@ -233,7 +233,7 @@ export function PilotUsageCard({
 }
 
 /** One fact line — label left at ink-500, value right at ink-900. */
-function Kv({ label, value }: { label: string; value: string }) {
+export function Kv({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex min-h-9 items-center justify-between gap-4 py-1.5">
       <dt className="text-[12px] text-[var(--ink-500)]">{label}</dt>
