@@ -33,14 +33,18 @@ import {
   EMPTY_VIZ_FILTERS,
   collapseErrorFilter,
   computeViz,
+  courtEndsFor,
   errorsJudgedIn,
   filterKeysFor,
   HAND_ASSUMED_NOTE,
   LOOSENED_LABEL,
+  withCourtEnds,
+  type CourtEnds,
   type PlayerFilter,
   type VizMark,
   type VizFilters,
 } from "./viz-model";
+import { isPlacementCut } from "./cut-kinds";
 import { activeFilterEntries, courtFor, sameFilterValue } from "./viz-url";
 import {
   useErrorSplitJudged,
@@ -463,14 +467,24 @@ export function VizLightbox({
   // goes back to the view; the card's while the title still names the card;
   // otherwise nothing but the player and the card's floor (Approaches is
   // approach shots again). Exactly the filters the strip names are removed.
-  const clearTarget: VizFilters =
-    baseline !== null && (onCard || baseline.view !== null)
+  // Which ends the court draws is not a filter: Clear keeps the reader's
+  // Placement · Contact · Both, as `clearedFilters` does.
+  const clearTarget: VizFilters = {
+    ...(baseline !== null && (onCard || baseline.view !== null)
       ? baseline.filters
-      : floorFilters;
+      : floorFilters),
+    ends: state.filters.ends ?? null,
+  };
   // Back on the view's filters for the view's own player, the court IS the
-  // view again: keep its id, so its title, Saved highlight and link return.
+  // view again: keep its id, so its title, Saved highlight and link return —
+  // but only when it also draws the view's own ends; otherwise it is still
+  // an edit of the view.
   const clearViewId =
-    baseline?.view != null && baseline.view.player === state.filters.player
+    baseline?.view != null &&
+    baseline.view.player === state.filters.player &&
+    state.cut !== null &&
+    courtEndsFor(state.cut, state.filters) ===
+      courtEndsFor(state.cut, baseline.filters)
       ? baseline.view.id
       : null;
 
@@ -493,6 +507,24 @@ export function VizLightbox({
   function setFilters(next: VizFilters) {
     setState((prev) => ({ ...prev, filters: next, viewId: null }));
   }
+
+  // The court's Placement · Contact · Both, on a chart with both ends. Set
+  // against the CHART cut (`state.cut`: Returns, never the contact court it
+  // may be drawn as). It is saved with a view, so a change edits an open
+  // view exactly as a filter does (`viewId` dropped, `editedFrom` kept).
+  const chartCut = state.cut ?? cut;
+  const courtEnds = isPlacementCut(chartCut)
+    ? {
+        value: courtEndsFor(chartCut, state.filters) ?? "placement",
+        onChange: (ends: CourtEnds) =>
+          setState((prev) => {
+            const filters = withCourtEnds(prev.filters, chartCut, ends);
+            return filters === prev.filters
+              ? prev
+              : { ...prev, filters, viewId: null };
+          }),
+      }
+    : undefined;
 
   // Any filter the court is under beyond what "Clear filter" leaves —
   // including the advanced (`match`), Result, Rally and Game groups a saved
@@ -695,6 +727,7 @@ export function VizLightbox({
           ),
         };
       }}
+      courtEnds={isDraft ? undefined : courtEnds}
       draft={
         isDraft
           ? {

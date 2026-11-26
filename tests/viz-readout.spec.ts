@@ -324,6 +324,20 @@ test("a pair's readout names the mark it is about; a single mark's has no such l
   );
 });
 
+test("a shot with no contact says 'Contact not recorded' while the view draws contact; otherwise no such line", () => {
+  const m = meta({ shotType: "Forehand", pointScore: "30-15" });
+  expect(
+    buildMarkReadout(m, "lost", "errors", null, { contactMissing: true })
+      .contact,
+  ).toBe("Contact not recorded");
+  expect(
+    buildMarkReadout(m, "lost", "errors", null, { contactMissing: false }),
+  ).not.toHaveProperty("contact");
+  expect(buildMarkReadout(m, "lost", "errors", null)).not.toHaveProperty(
+    "contact",
+  );
+});
+
 test("a mark panned out of view pins the readout to the nearest edge", () => {
   const stage = { w: 1000, h: 800 };
   expect(placeReadout({ x: -50, y: -200 }, stage)).toEqual({

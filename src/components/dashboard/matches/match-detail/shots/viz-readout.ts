@@ -157,6 +157,9 @@ export interface MarkReadout {
    *  was struck) or "Placement" (where it landed) — drawn as the card's
    *  first line. Absent on a mark drawn in one place. */
   part?: "Contact" | "Placement";
+  /** "Contact not recorded": the view draws contact (Contact or Both) and
+   *  this shot has none, so its landing stands alone. Absent otherwise. */
+  contact?: "Contact not recorded";
 }
 
 /** The two marks of a pair (`VizDot.pair`): a shot drawn at both its ends —
@@ -187,6 +190,8 @@ export function buildMarkReadout(
     hint?: string | null;
     /** The pair mark under the pointer, where both ends are drawn. */
     part?: PairPart | null;
+    /** The view draws contact and this shot has no recorded contact. */
+    contactMissing?: boolean;
   } = {},
 ): MarkReadout {
   const title = meta.isAce
@@ -217,6 +222,7 @@ export function buildMarkReadout(
     ...(extra.part
       ? { part: extra.part === "contact" ? "Contact" : "Placement" }
       : {}),
+    ...(extra.contactMissing ? { contact: "Contact not recorded" } : {}),
   };
 }
 

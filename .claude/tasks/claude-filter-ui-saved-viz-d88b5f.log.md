@@ -87,3 +87,15 @@ is the runner's. Newest entries at the bottom.
 4. T10: pairs still get the "Contact"/"Placement" first line and apron-side card; contact-only marks have no part line; `ReadoutGlyph` is solid even for a ring; "Contact not recorded" copy unwritten.
 5. Wall and saved-view cards still draw landings only.
 6. A `court-options.spec.ts:94` ESM import failure appeared in the implementer's partial run but not in the gate — watch for flake.
+
+## T9 · Add the view switch and missing-contact copy — done
+
+**gate:** mechanical GATE FAIL (design-drift: lower-case middot segment in the three tooltip strings) → fixed in the same run → GATE PASS · completion VERDICT: pass (re-judged after the fix)
+**changed:** `CourtEndsSwitch` in viz-lightbox-shell.tsx: a "Court view" radio group of three 28px court-glyph buttons (Placement, Contact, Both) in the zoom card, before the zoom group behind a hairline; arrow keys move the choice; presses call `withCourtEnds` on the chart cut (viz-lightbox.tsx, season-viz-lightbox.tsx) in place, keeping focus. Shown only on Scatter for Errors, Returns, Rally shots and Approaches. A press on an open saved view edits it like a filter (`view` → `vfrom`); lightbox Clear keeps the current ends. "Contact recorded for X of Y" (11px ink-500, in the legend row's notes group) only when a contact-drawing view has marks without contact. `buildMarkReadout` adds "Contact not recorded". Harness `?fixture=nocontact`. DEVIATION (recorded): the tooltips are the DS two-part tooltip — "Placement" / "Where it landed", "Contact" / "Where it was hit", "Both" / "Where it was hit and where it landed" — instead of the criterion's literal middot strings, which the design-drift rule rejects; content and the approved board's drawing match.
+**follow-ups:**
+
+1. T10: fold "Contact not recorded" (`data-viz-readout-contact`) into the "Hit from …" row; keep `MarkReadout.contact`.
+2. Returns in Contact draws the separate contact cut, so a return without contact is absent there and the X-of-Y note can't count it.
+3. Arrow keys on the season page fetch a new court per press — debounce if it feels laggy.
+4. The harness has no error fixture, so the Errors switch spec runs on an empty court.
+5. Season spec title typo "writes vends in place".

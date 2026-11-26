@@ -127,7 +127,7 @@ ready).
 
 ## T9 · Add the view switch and missing-contact copy
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8
 - **files:** (guess) src/components/dashboard/matches/match-detail/shots/viz-lightbox-shell.tsx (`ZoomControls` ~~:1549, mounted ~~:1305), src/components/dashboard/matches/match-detail/shots/{viz-readout.ts,lightbox-court.tsx}, tests/viz-lightbox-browser.spec.ts (~~:161), tests/season-viz-browser.spec.ts (~~:984), tests/viz-readout.spec.ts

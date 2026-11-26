@@ -1343,6 +1343,172 @@ test("Returns is one chart: the old contact link and vends=contact both open Ret
   await expect(dialog.locator('[data-viz-bands="contact"]')).toHaveCount(0);
 });
 
+test("Placement · Contact · Both: one radio group beside the zoom; a press writes vends in place, checks it and keeps focus", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=errors`);
+  const dialog = page.getByRole("dialog", { name: "Errors" });
+  await expect(dialog).toBeVisible();
+  const view = dialog.getByRole("radiogroup", { name: "Court view" });
+  const radios = view.getByRole("radio");
+  await expect(radios).toHaveCount(3);
+  await expect(radios.nth(0)).toHaveAccessibleName("Placement");
+  await expect(radios.nth(1)).toHaveAccessibleName("Contact");
+  await expect(radios.nth(2)).toHaveAccessibleName("Both");
+  await expect(radios.nth(0)).toHaveAttribute("aria-checked", "true");
+  // The zoom control's own card: the switch, a hairline, then the zoom.
+  const zoom = dialog.getByRole("group", { name: "Zoom" });
+  const card = view.locator("xpath=..");
+  await expect(card.getByRole("group", { name: "Zoom" })).toHaveCount(1);
+  for (const radio of await radios.all())
+    expect((await radio.boundingBox())!.height).toBe(28);
+  expect((await view.boundingBox())!.x).toBeLessThan(
+    (await zoom.boundingBox())!.x,
+  );
+
+  // The tooltips, each on hover: the DS dark tooltip's 12/500 title over
+  // its 11px detail line.
+  for (const [i, [title, detail]] of [
+    ["Placement", "Where it landed"],
+    ["Contact", "Where it was hit"],
+    ["Both", "Where it was hit and where it landed"],
+  ].entries()) {
+    await radios.nth(i).hover();
+    await expectTwoLineTooltip(page, title, detail);
+    // Off the button, in steps: the tooltip's grace area lets go on a move.
+    await page.mouse.move(10, 10, { steps: 5 });
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+  }
+
+  const contact = view.getByRole("radio", { name: "Contact" });
+  await contact.click();
+  await expect(page).toHaveURL(/vends=contact/);
+  await expect(contact).toHaveAttribute("aria-checked", "true");
+  await expect(radios.nth(0)).toHaveAttribute("aria-checked", "false");
+  await expect(contact).toBeFocused();
+  await expect(dialog).toBeVisible();
+
+  await view.getByRole("radio", { name: "Both" }).click();
+  await expect(page).toHaveURL(/vends=both/);
+  await expect(view.getByRole("radio", { name: "Both" })).toBeFocused();
+  await page.waitForTimeout(300);
+  await page.screenshot({
+    path: test.info().outputPath("court-view-switch.png"),
+  });
+  // Placement is Errors' default: it leaves the URL.
+  await view.getByRole("radio", { name: "Placement" }).click();
+  await expect(page).not.toHaveURL(/vends=/);
+  await expect(view.getByRole("radio", { name: "Placement" })).toBeFocused();
+});
+
+test("Serves, Rally position and a Heat chart show no Placement · Contact · Both switch", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const serve = page.getByRole("dialog");
+  await expect(serve.getByRole("group", { name: "Zoom" })).toBeVisible();
+  await expect(
+    serve.getByRole("radiogroup", { name: "Court view" }),
+  ).toHaveCount(0);
+  await page.goto(`${origin}/?tab=shots&cut=rallyPosition`);
+  const position = page.getByRole("dialog");
+  await expect(position.getByRole("group", { name: "Zoom" })).toBeVisible();
+  await expect(
+    position.getByRole("radiogroup", { name: "Court view" }),
+  ).toHaveCount(0);
+  await page.goto(`${origin}/?tab=shots&cut=errors&chart=heat`);
+  const heat = page.getByRole("dialog");
+  await expect(heat.getByRole("group", { name: "Zoom" })).toBeVisible();
+  await expect(
+    heat.getByRole("radiogroup", { name: "Court view" }),
+  ).toHaveCount(0);
+});
+
+test("Contact recorded for X of Y shows only while contact is drawn and some shown shots have none; their readout says so", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  // Rally shots: one of the player's shots per point has no contact.
+  await page.goto(`${origin}/?tab=shots&fixture=nocontact&cut=rallyPlacement`);
+  const dialog = page.getByRole("dialog");
+  const line = dialog.locator("[data-viz-contact-recorded]");
+  const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
+  await expect(marks.first()).toBeVisible();
+  // Placement draws no contact: nothing to say.
+  await expect(line).toHaveCount(0);
+  const view = dialog.getByRole("radiogroup", { name: "Court view" });
+  await view.getByRole("radio", { name: "Both" }).click();
+  await expect(line).toHaveText(/^Contact recorded for \d+ of \d+$/);
+  const [x, y] = (await line.textContent())!.match(/\d+/g)!.map(Number);
+  expect(x).toBeLessThan(y);
+  await expect(line).toHaveCSS("font-size", "11px");
+  // The shot with no contact draws its landing alone; its readout says why.
+  const missing = dialog.locator('[data-viz-mark$="-p1-deep"]').first();
+  await missing.hover({ force: true });
+  const readout = page.locator("[data-viz-readout]");
+  await expect(readout.locator("[data-viz-readout-contact]")).toHaveText(
+    "Contact not recorded",
+  );
+  await view.getByRole("radio", { name: "Contact" }).click();
+  await expect(line).toHaveText(`Contact recorded for ${x} of ${y}`);
+
+  // Returns, where every shown return has its contact: no line in Both.
+  await page.goto(
+    `${origin}/?tab=shots&fixture=returns&cut=returnPlacement&vends=both`,
+  );
+  const returns = page.getByRole("dialog", { name: "Returns" });
+  await expect(
+    returns.locator("[data-court-stage] [data-viz-mark]").first(),
+  ).toBeVisible();
+  await expect(returns.getByRole("radio", { name: "Both" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect(returns.locator("[data-viz-contact-recorded]")).toHaveCount(0);
+});
+
+test("a view change edits an open saved view as a filter does, and Clear keeps the view chosen", async ({
+  page,
+}) => {
+  await page.goto(
+    `${origin}/?tab=shots&fixture=returns&cut=returnPlacement&view=sv2`,
+  );
+  const dialog = page.getByRole("dialog", { name: "Saved returns" });
+  await expect(dialog).toBeVisible();
+  const view = dialog.getByRole("radiogroup", { name: "Court view" });
+  await view.getByRole("radio", { name: "Both" }).click();
+  await expect(page).toHaveURL(/vends=both/);
+  // Edited: the view id gives way to the view it came from.
+  await expect(page).not.toHaveURL(/[?&]view=sv2/);
+  await expect(page).toHaveURL(/vfrom=sv2/);
+  // A filter on top, then Clear: the filter goes, the chosen view stays —
+  // and so the court is still an edit of the saved view, not the view.
+  await dialog
+    .getByRole("group", { name: "Filter by outcome" })
+    .getByRole("button")
+    .first()
+    .click();
+  const strip = dialog.locator("[data-viz-filter-strip]");
+  await strip.getByRole("button", { name: "Clear filter" }).click();
+  await expect(strip).toHaveCount(0);
+  await expect(page).toHaveURL(/vends=both/);
+  await expect(view.getByRole("radio", { name: "Both" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect(page).not.toHaveURL(/[?&]view=sv2/);
+  // Back to the view's own Placement, Clear lands on the view itself.
+  await view.getByRole("radio", { name: "Placement" }).click();
+  await dialog
+    .getByRole("group", { name: "Filter by outcome" })
+    .getByRole("button")
+    .first()
+    .click();
+  await strip.getByRole("button", { name: "Clear filter" }).click();
+  await expect(page).toHaveURL(/[?&]view=sv2/);
+});
+
 test("choosing No bands from the Contact bands menu takes the shading off the court, and back", async ({
   page,
 }) => {
@@ -2135,3 +2301,14 @@ test("Reset view puts a zoomed, dragged court back as it opened, and is spent th
   const back = await courtTransform(page);
   expect(back.z).toBeCloseTo(home.z, 4);
 });
+
+/** The open dark tooltip reads `title` (12px, 500) over `detail` (11px). */
+async function expectTwoLineTooltip(page: Page, title: string, detail: string) {
+  const lines = page.locator(
+    '[data-slot="tooltip-content"] > span:not([role])',
+  );
+  await expect(lines).toHaveText([title, detail]);
+  await expect(lines.nth(0)).toHaveCSS("font-size", "12px");
+  await expect(lines.nth(0)).toHaveCSS("font-weight", "500");
+  await expect(lines.nth(1)).toHaveCSS("font-size", "11px");
+}

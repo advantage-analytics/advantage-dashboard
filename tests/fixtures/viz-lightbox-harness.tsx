@@ -64,12 +64,26 @@ const withReturn = (point: (typeof ASYMMETRIC_SERVES)[number]) => {
     secondShotLandingY: highEnd ? 11.885 + 7 : 11.885 - 7,
   };
 };
-const points = [...ASYMMETRIC_SERVES, ...RALLY_POINTS].map((point, i) => {
-  const p = withReturn(point);
-  return watchAll || (watch && p.id === "p1-high-0-0")
-    ? { ...p, videoTime: 42 + i }
-    : p;
-});
+// `?fixture=nocontact`: each point's deep rally shot has its landing but no
+// recorded contact (its contact x is missing), as some vendor rows do.
+const noContact = window.location.search.includes("fixture=nocontact");
+const withoutContact = (point: (typeof RALLY_POINTS)[number]) =>
+  noContact
+    ? {
+        ...point,
+        shots: point.shots.map((s) =>
+          s.id.endsWith("-p1-deep") ? { ...s, contactX: null } : s,
+        ),
+      }
+    : point;
+const points = [...ASYMMETRIC_SERVES, ...RALLY_POINTS.map(withoutContact)].map(
+  (point, i) => {
+    const p = withReturn(point);
+    return watchAll || (watch && p.id === "p1-high-0-0")
+      ? { ...p, videoTime: 42 + i }
+      : p;
+  },
+);
 
 /** Saved views: a Saved collection to open from, a second view to go
  *  Back/Forward to, and one with a filter of its own. */

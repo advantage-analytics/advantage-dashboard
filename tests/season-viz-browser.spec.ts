@@ -1143,3 +1143,61 @@ test("the season's opened Approaches court names the approaches it cannot draw: 
   await expect(rally.locator("[data-viz-not-drawn]")).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test("a season's Placement · Contact · Both switch writes vends in place and keeps focus; Clear keeps it; Serves has none", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&cut=rallyPlacement&delay=50`,
+  );
+  const dialog = page.getByRole("dialog").first();
+  await expect(marks(dialog).first()).toBeVisible({ timeout: 8_000 });
+  const view = dialog.getByRole("radiogroup", { name: "Court view" });
+  await expect(view.getByRole("radio")).toHaveCount(3);
+  await expect(view.getByRole("radio", { name: "Placement" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  // Its tooltip: the DS dark tooltip's 12/500 title over an 11px detail.
+  const contact = view.getByRole("radio", { name: "Contact" });
+  await contact.hover();
+  const tipLines = page.locator(
+    '[data-slot="tooltip-content"] > span:not([role])',
+  );
+  await expect(tipLines).toHaveText(["Contact", "Where it was hit"]);
+  await expect(tipLines.nth(0)).toHaveCSS("font-size", "12px");
+  await expect(tipLines.nth(0)).toHaveCSS("font-weight", "500");
+  await expect(tipLines.nth(1)).toHaveCSS("font-size", "11px");
+  await contact.click();
+  await expect(page).toHaveURL(/vends=contact/);
+  await expect(contact).toHaveAttribute("aria-checked", "true");
+  await expect(contact).toBeFocused();
+  // The same dialog, through the server's answer for the new court.
+  await expect(marks(dialog).first()).toBeVisible({ timeout: 8_000 });
+  await expect(contact).toBeFocused();
+
+  // A legend pick, then Clear: the view chosen stays.
+  await dialog
+    .getByRole("group", { name: "Filter by outcome" })
+    .getByRole("button")
+    .first()
+    .click();
+  await dialog
+    .locator("[data-viz-filter-strip]")
+    .getByRole("button", { name: "Clear filter" })
+    .click();
+  await expect(page).toHaveURL(/vends=contact/);
+  await expect(contact).toHaveAttribute("aria-checked", "true");
+
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&cut=serve&delay=50`);
+  const serve = page.getByRole("dialog").first();
+  await expect(marks(serve).first()).toBeVisible({ timeout: 8_000 });
+  await expect(serve.getByRole("group", { name: "Zoom" })).toBeVisible();
+  await expect(
+    serve.getByRole("radiogroup", { name: "Court view" }),
+  ).toHaveCount(0);
+  expect(errors).toEqual([]);
+});

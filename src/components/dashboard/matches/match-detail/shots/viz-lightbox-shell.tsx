@@ -45,7 +45,7 @@ import {
   viewerFullCourtTransform,
   viewerInitialTransform,
 } from "./court-geometry";
-import { bandKindFor } from "./cut-kinds";
+import { bandKindFor, isPlacementCut } from "./cut-kinds";
 import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
 import type { PlayerChipLabels } from "./player-chip-labels";
@@ -105,6 +105,7 @@ import {
   approachNoun,
   bandStatRowsForDots,
   type Chart,
+  type CourtEnds,
   type Cut,
   type PlayerFilter,
   type VizDot,
@@ -257,6 +258,15 @@ export interface VizLightboxShellProps {
   /** "Create view": the blank court with its prompt. */
   draft?: { readOnly: boolean; onChooseView: () => void };
   /**
+   * The court's Placement · Contact · Both switch (plan 2026-11-25 §6),
+   * drawn beside the zoom control on Scatter. The host passes it only for a
+   * chart with both ends — Errors, Returns, Rally shots, Approaches
+   * (`isPlacementCut` of the CHART cut, never the drawn one) — and
+   * `onChange` writes `withCourtEnds` against that chart cut. Omitted (Serves,
+   * Rally position, a draft), no switch.
+   */
+  courtEnds?: { value: CourtEnds; onChange: (ends: CourtEnds) => void };
+  /**
    * The frame alone, while the host's data is on its way: the header's
    * words and the two columns are drawn as a loading status named for
    * `title` (`loading/lightbox-pending.tsx`) — the season page's opened card
@@ -333,6 +343,7 @@ export function VizLightboxShell({
   statHint,
   footer,
   draft,
+  courtEnds,
   pending = false,
 }: VizLightboxShellProps) {
   const isDraft = draft !== undefined;
@@ -469,6 +480,18 @@ export function VizLightboxShell({
     () => marksDrawn(cut, ends, dots),
     [cut, ends, dots],
   );
+  // "Contact recorded for X of Y": while the view draws contact (Contact or
+  // Both) on a placement court, of the shown marks (Y), those with a
+  // recorded contact (X, `VizDot.pair`). Only said when some have none — in
+  // Contact those are not drawn, in Both they draw their landing alone.
+  const contactLine = useMemo(() => {
+    if (!isPlacementCut(cut) || (ends !== "contact" && ends !== "both"))
+      return null;
+    const withContact = dots.filter((d) => d.pair !== undefined).length;
+    return withContact < dots.length
+      ? `Contact recorded for ${withContact} of ${dots.length}`
+      : null;
+  }, [cut, ends, dots]);
   // Every mark the Points list stands for: the drawn ones, then the
   // Approaches cut's counted approaches with no landing, narrowed by the
   // same picks. They list, count and watch like a mark; the court never
@@ -1342,6 +1365,9 @@ export function VizLightboxShell({
                     ) : (
                       !isDraft && (
                         <ZoomControls
+                          courtEnds={
+                            chart === "scatter" ? courtEnds : undefined
+                          }
                           relative={zoomRelative}
                           atHome={atHome}
                           atFullCourt={atFullCourt}
@@ -1399,7 +1425,7 @@ export function VizLightboxShell({
                           />
                         )}
                       </div>
-                      {(showNotDrawn || sentenceNote) && (
+                      {(showNotDrawn || sentenceNote || contactLine) && (
                         <div className="flex shrink-0 items-center gap-3">
                           {/* Some approaches drawn, some not: the same
                               sentence as a quiet line at the legend's end, so
@@ -1422,6 +1448,17 @@ export function VizLightboxShell({
                               className="text-micro m-0 leading-6 text-[var(--ink-600)]"
                             >
                               {sentenceNote}
+                            </p>
+                          )}
+                          {/* Some shown shots have no recorded contact:
+                              said once, quietly, so a court drawing contact
+                              never reads as every shot's. */}
+                          {contactLine !== null && (
+                            <p
+                              data-viz-contact-recorded=""
+                              className="m-0 text-[11px] leading-6 text-[var(--ink-500)] tabular-nums"
+                            >
+                              {contactLine}
                             </p>
                           )}
                         </div>
@@ -1608,6 +1645,7 @@ function StageCard({ children }: { children: ReactNode }) {
  * already there.
  */
 function ZoomControls({
+  courtEnds,
   relative,
   atHome,
   atFullCourt,
@@ -1617,6 +1655,9 @@ function ZoomControls({
   onReset,
   onEscape,
 }: {
+  /** The Placement · Contact · Both switch, drawn first in the same card
+   *  (board Errors-both-2-zoom, variant B). Omitted, the zoom alone. */
+  courtEnds?: { value: CourtEnds; onChange: (ends: CourtEnds) => void };
   relative: number;
   atHome: boolean;
   atFullCourt: boolean;
@@ -1633,71 +1674,92 @@ function ZoomControls({
     <>
       <div
         data-chrome=""
-        role="group"
-        aria-label="Zoom"
         className="absolute right-3 bottom-3 flex items-center gap-0.5 rounded-[10px] bg-[var(--surface-card)] p-[3px] shadow-[var(--shadow-dropdown)]"
       >
-        <ChromeTooltip
-          label="Zoom in"
-          shortcut="+"
-          side="top"
-          onEscapeKeyDown={onEscape}
+        {courtEnds && (
+          <>
+            <CourtEndsSwitch
+              value={courtEnds.value}
+              onChange={courtEnds.onChange}
+              onEscape={onEscape}
+            />
+            <span
+              aria-hidden="true"
+              className="mx-0.5 h-4 w-px bg-[var(--border-medium)]"
+            />
+          </>
+        )}
+        <div
+          role="group"
+          aria-label="Zoom"
+          className="flex items-center gap-0.5"
         >
-          <button
-            type="button"
-            aria-label="Zoom in"
-            onClick={onZoomIn}
-            className={button}
+          <ChromeTooltip
+            label="Zoom in"
+            shortcut="+"
+            side="top"
+            onEscapeKeyDown={onEscape}
           >
-            <Plus className="size-3.5" strokeWidth={1.5} aria-hidden />
-          </button>
-        </ChromeTooltip>
-        <ChromeTooltip
-          label="Zoom out"
-          shortcut="−"
-          side="top"
-          onEscapeKeyDown={onEscape}
-        >
-          <button
-            type="button"
-            aria-label="Zoom out"
-            onClick={onZoomOut}
-            className={button}
+            <button
+              type="button"
+              aria-label="Zoom in"
+              onClick={onZoomIn}
+              className={button}
+            >
+              <Plus className="size-3.5" strokeWidth={1.5} aria-hidden />
+            </button>
+          </ChromeTooltip>
+          <ChromeTooltip
+            label="Zoom out"
+            shortcut="−"
+            side="top"
+            onEscapeKeyDown={onEscape}
           >
-            <Minus className="size-3.5" strokeWidth={1.5} aria-hidden />
-          </button>
-        </ChromeTooltip>
-        <span
-          aria-hidden="true"
-          className="mx-0.5 h-4 w-px bg-[var(--border-medium)]"
-        />
-        <ChromeTooltip
-          label="Reset view"
-          shortcut="0"
-          side="top"
-          onEscapeKeyDown={onEscape}
-        >
-          <button
-            type="button"
-            aria-label="Reset view"
-            onClick={onReset}
-            disabled={atHome}
-            className={button}
+            <button
+              type="button"
+              aria-label="Zoom out"
+              onClick={onZoomOut}
+              className={button}
+            >
+              <Minus className="size-3.5" strokeWidth={1.5} aria-hidden />
+            </button>
+          </ChromeTooltip>
+          <span
+            aria-hidden="true"
+            className="mx-0.5 h-4 w-px bg-[var(--border-medium)]"
+          />
+          <ChromeTooltip
+            label="Reset view"
+            shortcut="0"
+            side="top"
+            onEscapeKeyDown={onEscape}
           >
-            <RotateCcw className="size-3.5" strokeWidth={1.5} aria-hidden />
-          </button>
-        </ChromeTooltip>
-        <ChromeTooltip label="Full court" side="top" onEscapeKeyDown={onEscape}>
-          <button
-            type="button"
-            aria-label="Full court"
-            onClick={onFullCourt}
-            disabled={atFullCourt}
-            className={button}
+            <button
+              type="button"
+              aria-label="Reset view"
+              onClick={onReset}
+              disabled={atHome}
+              className={button}
+            >
+              <RotateCcw className="size-3.5" strokeWidth={1.5} aria-hidden />
+            </button>
+          </ChromeTooltip>
+          <ChromeTooltip
+            label="Full court"
+            side="top"
+            onEscapeKeyDown={onEscape}
           >
-            <Maximize className="size-3.5" strokeWidth={1.5} aria-hidden />
-          </button>
-        </ChromeTooltip>
+            <button
+              type="button"
+              aria-label="Full court"
+              onClick={onFullCourt}
+              disabled={atFullCourt}
+              className={button}
+            >
+              <Maximize className="size-3.5" strokeWidth={1.5} aria-hidden />
+            </button>
+          </ChromeTooltip>
+        </div>
       </div>
       {!atHome && (
         <span
@@ -1708,5 +1770,136 @@ function ZoomControls({
         </span>
       )}
     </>
+  );
+}
+
+/** The switch's three options: its name (the button's accessible name and
+ *  the tooltip's 12/500 title), the tooltip's 11px detail line, and which
+ *  half of the court glyph is shaded. */
+const COURT_ENDS_OPTIONS: readonly {
+  ends: CourtEnds;
+  label: string;
+  detail: string;
+}[] = [
+  { ends: "placement", label: "Placement", detail: "Where it landed" },
+  { ends: "contact", label: "Contact", detail: "Where it was hit" },
+  {
+    ends: "both",
+    label: "Both",
+    detail: "Where it was hit and where it landed",
+  },
+];
+
+/**
+ * Placement · Contact · Both (plan 2026-11-25 §6): three 28px court-glyph
+ * buttons, one radio group. The checked one takes the subtle surface and
+ * ink-900, the others ink-700 on nothing. A press writes the view in place —
+ * the lightbox stays mounted and focus stays on the pressed button. Arrows
+ * move the choice, as a radio group's do, and are kept from the court's own
+ * arrow-key pan.
+ */
+function CourtEndsSwitch({
+  value,
+  onChange,
+  onEscape,
+}: {
+  value: CourtEnds;
+  onChange: (ends: CourtEnds) => void;
+  onEscape: () => void;
+}) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  function onKeyDown(e: React.KeyboardEvent, index: number) {
+    const step =
+      e.key === "ArrowRight" || e.key === "ArrowDown"
+        ? 1
+        : e.key === "ArrowLeft" || e.key === "ArrowUp"
+          ? -1
+          : 0;
+    if (step === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const n = COURT_ENDS_OPTIONS.length;
+    const next = (index + step + n) % n;
+    refs.current[next]?.focus();
+    onChange(COURT_ENDS_OPTIONS[next].ends);
+  }
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Court view"
+      className="flex items-center gap-0.5"
+    >
+      {COURT_ENDS_OPTIONS.map((option, index) => {
+        const checked = option.ends === value;
+        return (
+          <ChromeTooltip
+            key={option.ends}
+            label={option.label}
+            detail={option.detail}
+            side="top"
+            onEscapeKeyDown={onEscape}
+          >
+            <button
+              ref={(el) => {
+                refs.current[index] = el;
+              }}
+              type="button"
+              role="radio"
+              aria-checked={checked}
+              aria-label={option.label}
+              tabIndex={checked ? 0 : -1}
+              onClick={() => {
+                if (!checked) onChange(option.ends);
+              }}
+              onKeyDown={(e) => onKeyDown(e, index)}
+              className={cn(
+                "flex size-7 cursor-pointer items-center justify-center rounded-[8px] transition-colors duration-200 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area",
+                checked
+                  ? "bg-[var(--surface-subtle)] text-[var(--ink-900)]"
+                  : "text-[var(--ink-700)]",
+              )}
+            >
+              <CourtEndsGlyph ends={option.ends} />
+            </button>
+          </ChromeTooltip>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * A 14px court seen from above, net across its middle: the far half shaded
+ * for Placement (where shots land), the near half for Contact (where they
+ * are hit from), the whole court for Both.
+ */
+function CourtEndsGlyph({ ends }: { ends: CourtEnds }) {
+  const shade =
+    ends === "placement"
+      ? { y: 1.75, height: 5.25 }
+      : ends === "contact"
+        ? { y: 7, height: 5.25 }
+        : { y: 1.75, height: 10.5 };
+  return (
+    <svg
+      viewBox="0 0 14 14"
+      className="size-3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.25}
+      aria-hidden="true"
+    >
+      <rect
+        x={3.75}
+        y={shade.y}
+        width={6.5}
+        height={shade.height}
+        fill="currentColor"
+        stroke="none"
+        opacity={0.35}
+      />
+      <rect x={3.625} y={1.625} width={6.75} height={10.75} rx={1} />
+      <line x1={3.625} y1={7} x2={10.375} y2={7} />
+    </svg>
   );
 }

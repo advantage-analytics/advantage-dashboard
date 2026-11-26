@@ -15,10 +15,14 @@ import { useRouter } from "next/navigation";
 import { LightboxChunkPending } from "@/components/dashboard/loading/lightbox-pending";
 import { useVizState } from "@/components/dashboard/matches/match-detail/shots/use-viz-state";
 import { CUT_LABEL } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
+import { isPlacementCut } from "@/components/dashboard/matches/match-detail/shots/cut-kinds";
 import {
   EMPTY_VIZ_FILTERS,
+  courtEndsFor,
   drawnCut,
+  withCourtEnds,
   type Chart,
+  type CourtEnds,
   type Cut,
   type PlayerFilter,
   type VizDot,
@@ -491,7 +495,9 @@ export function SeasonVizLightbox({
   function clearFilters() {
     setState((prev) => ({
       ...withoutSeasonFilters(prev),
-      filters: court.clearFilters,
+      // Which ends the court draws is not a filter: Clear keeps the
+      // reader's Placement · Contact · Both, as `clearedFilters` does.
+      filters: { ...court.clearFilters, ends: prev.filters.ends ?? null },
       viewId: null,
     }));
   }
@@ -515,6 +521,22 @@ export function SeasonVizLightbox({
     setState((prev) => ({ ...prev, filters: next, viewId: null }));
   }
 
+  // The court's Placement · Contact · Both, on a chart with both ends: set
+  // against the chart cut, saved with a view, so a change edits an open view
+  // as a filter does.
+  const courtEnds = isPlacementCut(cut)
+    ? {
+        value: courtEndsFor(cut, state.filters) ?? "placement",
+        onChange: (ends: CourtEnds) =>
+          setState((prev) => {
+            const filters = withCourtEnds(prev.filters, cut, ends);
+            return filters === prev.filters
+              ? prev
+              : { ...prev, filters, viewId: null };
+          }),
+      }
+    : undefined;
+
   function choosePlayer(player: PlayerFilter) {
     setState((prev) => ({
       ...prev,
@@ -534,6 +556,7 @@ export function SeasonVizLightbox({
         pending={pending}
         cut={court.cut}
         chart={court.chart}
+        courtEnds={courtEnds}
         filters={state.filters}
         result={court.result}
         stats={court.stats}

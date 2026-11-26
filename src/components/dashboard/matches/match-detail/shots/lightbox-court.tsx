@@ -586,6 +586,11 @@ export function LightboxCourt({
               canWatchMark?.(active) ?? false,
             ),
             part: activePart,
+            // The view draws contact, and this shot never had one recorded.
+            contactMissing:
+              isPlacementCut(cut) &&
+              courtEndsDrawn(cut, ends) !== "placement" &&
+              active.pair === undefined,
           },
         )
       : null;
@@ -891,6 +896,14 @@ export function LightboxCourt({
           {markReadout.shot !== null && (
             <span className="text-[11px] leading-[1.45] text-white/[0.64]">
               {markReadout.shot}
+            </span>
+          )}
+          {markReadout.contact !== undefined && (
+            <span
+              data-viz-readout-contact=""
+              className="text-[11px] leading-[1.45] text-white/[0.64]"
+            >
+              {markReadout.contact}
             </span>
           )}
           {markReadout.where !== null && (
