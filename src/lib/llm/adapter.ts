@@ -160,7 +160,7 @@ export function closedJsonSchema(schema: unknown): unknown {
 }
 
 function modelFor(
-  provider: "anthropic" | "openai",
+  provider: LLMProvider,
   requested: string | undefined,
 ): string {
   const fallback =
@@ -779,7 +779,7 @@ export type LLMToolMessage =
       role: "assistant";
       content: string;
       toolCalls: LLMToolCall[];
-      raw?: { provider: "anthropic" | "openai"; message: unknown };
+      raw?: { provider: LLMProvider; message: unknown };
     }
   | {
       role: "tool";
@@ -795,7 +795,7 @@ export type LLMToolMessage =
 export interface LLMToolTurn {
   text: string;
   toolCalls: LLMToolCall[];
-  raw: { provider: "anthropic" | "openai"; message: unknown };
+  raw: { provider: LLMProvider; message: unknown };
 }
 
 export interface LLMToolCallOptions extends Omit<LLMCallOptions, "jsonSchema"> {
