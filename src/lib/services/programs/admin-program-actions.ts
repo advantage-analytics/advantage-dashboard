@@ -15,6 +15,9 @@ import {
   sendEmail,
 } from "@/lib/services/email";
 import { programDisplayName } from "@/lib/data/programs-server";
+import { claimInviteOpening } from "@/lib/billing/claim-copy";
+import { plansHaveBegun } from "@/lib/billing/plans";
+import { pilotIsRunning } from "@/lib/services/splitstep/allowance";
 import { getConferenceOptions } from "@/lib/data/team-settings-server";
 
 /**
@@ -475,12 +478,36 @@ async function inviteToClaim(args: {
     if (error) pilot = false;
   }
 
+  // What the email may promise. Before January 1, 2027 an approved claim IS
+  // the pilot. From it, "the pilot" means this program's pilot is running
+  // (`pilotIsRunning`, the columns Admin › Teams sets); an approved claim
+  // without one still opens on finish, with no hours until a plan.
+  const now = new Date();
+  let pilotRunning = false;
+  if (pilot && plansHaveBegun(now)) {
+    const { data: row } = await args.db
+      .from("programs")
+      .select("pilot_eligible, pilot_ends_on, pilot_ended_at")
+      .eq("id", args.programId)
+      .maybeSingle();
+    pilotRunning = row
+      ? pilotIsRunning(
+          {
+            pilotEligible: row.pilot_eligible === true,
+            pilotEndsOn: (row.pilot_ends_on as string | null) ?? null,
+            pilotEndedAt: (row.pilot_ended_at as string | null) ?? null,
+          },
+          now,
+        )
+      : false;
+  }
+
   const sent = await sendEmail(
     programClaimInviteEmail({
       to: args.email,
       programName: args.programName,
       programKey,
-      pilot,
+      opening: claimInviteOpening({ approved: pilot, pilotRunning, now }),
     }),
   );
 

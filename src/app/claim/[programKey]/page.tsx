@@ -21,6 +21,8 @@ import {
 import { ProgramMark } from "@/components/claim/program-mark";
 import { ContactOwnerForm } from "@/components/claim/contact-owner-form";
 import { claimPreview } from "@/lib/data/program-claim-preview";
+import { claimOnPlans, claimStatusCopy } from "@/lib/billing/claim-copy";
+import { programPilotIsRunning } from "@/lib/services/programs/pilot-terms-server";
 
 /**
  * The link a coach is sent to set a program up unfurls into this title and
@@ -34,10 +36,8 @@ export async function generateMetadata({
   params: Promise<{ programKey: string }>;
 }): Promise<Metadata> {
   const { programKey } = await params;
-  const program = await getProgramPublicStatus(
-    await createClient(),
-    programKey,
-  );
+  const supabase = await createClient();
+  const program = await getProgramPublicStatus(supabase, programKey);
   if (!program) {
     return { title: "Program status", robots: { index: false, follow: false } };
   }
@@ -45,6 +45,9 @@ export async function generateMetadata({
     schoolName: program.schoolName,
     teamLabel: teamLabel(program.team),
     status: program.status,
+    onPlans: claimOnPlans({
+      pilotRunning: await programPilotIsRunning(supabase, { programKey }),
+    }),
   });
   const socialTitle = `${title} · Advantage`;
   return {
@@ -195,22 +198,21 @@ export default async function ProgramStatusPage({
     .filter(Boolean)
     .join(" · ");
 
+  // What setting up costs: the pilot's wording before January 1, 2027 and for
+  // a program whose pilot is running, the plans' wording otherwise. Read on
+  // the server, here, so both sides of the date are the same markup.
+  const copy = claimStatusCopy(
+    claimOnPlans({
+      pilotRunning: await programPilotIsRunning(supabase, { programKey }),
+    }),
+  );
+
   return (
     <ClaimShell
       width={840}
       gap={16}
       back="/claim/program"
-      aside={
-        <AsidePanel
-          title="What you take on"
-          items={[
-            "Staff and roster access",
-            "Who may send video",
-            "75 hours a month, shared",
-            "Transferable to another coach later",
-          ]}
-        />
-      }
+      aside={<AsidePanel title="What you take on" items={[...copy.takesOn]} />}
     >
       <ProgramMark name={program.schoolName} crestUrl={program.crestUrl} />
       <ClaimHeading
@@ -222,8 +224,8 @@ export default async function ProgramStatusPage({
       <p className="text-body max-w-[56ch]">
         Whoever sets up {program.schoolName}{" "}
         {teamLabel(program.team).toLowerCase()} tennis manages access for the
-        rest of the staff and the roster — invites, upload permissions, the
-        monthly budget.
+        rest of the staff and the roster — invites, upload permissions,{" "}
+        {copy.bodyEnd}
       </p>
       <div className="pt-1">
         <ClaimActions>
@@ -238,10 +240,7 @@ export default async function ProgramStatusPage({
           </Link>
         </ClaimActions>
       </div>
-      <span className={CLAIM_MICRO}>
-        Free through December 31, 2026. No hardware to buy, no contract, no
-        cost.
-      </span>
+      <span className={CLAIM_MICRO}>{copy.micro}</span>
     </ClaimShell>
   );
 }

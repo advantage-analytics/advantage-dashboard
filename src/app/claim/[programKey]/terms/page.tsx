@@ -7,15 +7,25 @@ import {
 } from "@/lib/data/programs-server";
 import { ClaimShell } from "@/components/claim/claim-shell";
 import { PilotTermsForm } from "@/components/claim/pilot-terms-form";
+import { termsCopyFor, verifyHref } from "@/lib/services/programs/pilot-terms";
 import {
-  PILOT_TERMS_VERSION,
-  pilotTermsCopy,
-  verifyHref,
-} from "@/lib/services/programs/pilot-terms";
-import { hasAcceptedCurrentPilotTermsForUser } from "@/lib/services/programs/pilot-terms-actions";
+  claimTermsVersion,
+  hasAcceptedTermsForUser,
+  pendingClaimProgramKey,
+} from "@/lib/services/programs/pilot-terms-server";
 import { quotaTierFor } from "@/lib/services/splitstep/quota";
+import { termsNamingCopy } from "@/lib/billing/claim-copy";
+import { plansHaveBegun } from "@/lib/billing/plans";
 
-export const metadata = { title: "Pilot terms" };
+/**
+ * "Pilot terms" before January 1, 2027 and "Team terms" from it. The date
+ * alone: the tab title is drawn before the session and the pending claim are
+ * read, and "Team terms" is still a true name for what a program on a
+ * running pilot is shown (its heading says which).
+ */
+export function generateMetadata() {
+  return { title: termsNamingCopy(plansHaveBegun()).pageTitle };
+}
 
 /**
  * Pilot terms, college flow (design frames A, A.1, C), between the emailed
@@ -31,6 +41,12 @@ export const metadata = { title: "Pilot terms" };
  * finishes is still decided in `/claim/verify` by the session and the token,
  * exactly as before, and the acceptance names no program, so a swapped key
  * changes a label and cannot move a claim.
+ *
+ * Which terms are shown (the pilot's or the team terms, `claimTermsVersion`)
+ * follows the program the pending claim is FOR, found from the session and
+ * the token as verify finds it, and only falls back to the path's key when
+ * there is no live claim. The accept action resolves the version the same
+ * way, so the two always agree and a swapped key cannot swap the terms.
  *
  * Every exit that is not "show the terms" goes back through verify, which
  * already owns the wording for each ending: no session (it reports
@@ -59,7 +75,9 @@ export default async function ClaimPilotTermsPage({
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect(verify);
-  if (!refused && (await hasAcceptedCurrentPilotTermsForUser(user.id)))
+  const claimKey = (await pendingClaimProgramKey(user, token)) ?? programKey;
+  const version = await claimTermsVersion(supabase, claimKey);
+  if (!refused && (await hasAcceptedTermsForUser(user.id, version)))
     redirect(verify);
 
   const program = await getProgramPublicStatus(supabase, programKey);
@@ -73,7 +91,7 @@ export default async function ClaimPilotTermsPage({
     .filter(Boolean)
     .join(" · ");
 
-  const copy = pilotTermsCopy({
+  const copy = termsCopyFor(version, {
     flow: "college",
     accountType: quotaTierFor({ kind: "team", orgType: "college" }),
   });
@@ -84,7 +102,7 @@ export default async function ClaimPilotTermsPage({
         flow="college"
         eyebrow={eyebrow}
         copy={copy}
-        version={PILOT_TERMS_VERSION}
+        version={version}
         token={token}
         refused={refused}
       />

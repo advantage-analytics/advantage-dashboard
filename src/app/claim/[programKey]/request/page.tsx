@@ -13,6 +13,8 @@ import { ReferralRequestForm } from "@/components/claim/referral-request-form";
 import { JoinSharingRows } from "@/components/claim/sharing-rows";
 import { advButton } from "@/lib/ui/adv-button";
 import { requestOrigin } from "@/lib/request-origin";
+import { claimOnPlans, referralBody } from "@/lib/billing/claim-copy";
+import { programPilotIsRunning } from "@/lib/services/programs/pilot-terms-server";
 
 export const metadata = { title: "Request an invite" };
 
@@ -105,6 +107,14 @@ export default async function RequestInvitePage({
     // it — a dev worktree on :3002, a preview deployment, production. Read
     // only in this branch: the other two outcomes below never build a link.
     const origin = await requestOrigin();
+    // "Free through the 2026 pilot" until January 1, 2027 and for a program
+    // whose pilot is running; "free to set up" otherwise.
+    const body = referralBody(
+      "request",
+      claimOnPlans({
+        pilotRunning: await programPilotIsRunning(supabase, { programKey }),
+      }),
+    );
 
     return (
       <ClaimShell width={720} gap={20} back={`/claim/${programKey}`}>
@@ -116,7 +126,7 @@ export default async function RequestInvitePage({
           eyebrow={qualifiers}
           title={`${program.schoolName} isn't on Advantage yet`}
           titlePadTop={8}
-          body="Team workspaces are free for collegiate programs through the 2026 pilot, and a coach has to set one up. Send them the link — and leave your name so they can add you the day it goes live."
+          body={body}
           bodyMax="58ch"
         />
         <ReferralRequestForm

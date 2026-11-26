@@ -20,10 +20,11 @@ import {
   type CustomOrgType,
 } from "@/lib/services/programs/create-actions";
 import {
-  hasAcceptedCurrentPilotTerms,
-  recordPilotTermsAcceptance,
+  hasAcceptedTermsForUser,
+  recordTermsAcceptance,
+  resolveTermsVersion,
   type AcceptPilotTermsResult,
-} from "@/lib/services/programs/pilot-terms-actions";
+} from "@/lib/services/programs/pilot-terms-server";
 import {
   PENDING_TEAM_COOKIE,
   PENDING_TEAM_COOKIE_OPTIONS,
@@ -83,7 +84,7 @@ export async function continueToPilotTerms(input: {
   });
   if (!pending) return { ok: false, reason: "invalid-org-type" };
 
-  if (await hasAcceptedCurrentPilotTerms()) {
+  if (await hasAcceptedNewTeamTerms()) {
     const result = await createCustomTeam(pending);
     if (result.ok) redirect("/claim/team/about");
     // The database disagrees that the acceptance is current (enforcement
@@ -115,7 +116,11 @@ export async function acceptPilotTermsAndCreateTeam(input: {
   const pending = await readPendingTeam();
   if (!pending) redirect("/claim/team/type");
 
-  const accepted = await recordPilotTermsAcceptance(input?.version ?? "");
+  // A team that does not exist yet is on no pilot: the version is the date's.
+  const accepted = await recordTermsAcceptance(
+    input?.version,
+    await resolveTermsVersion(await createClient()),
+  );
   if (!accepted.ok) return accepted;
 
   const result = await createCustomTeam(pending);
@@ -126,6 +131,20 @@ export async function acceptPilotTermsAndCreateTeam(input: {
     path: PENDING_TEAM_COOKIE_OPTIONS.path,
   });
   redirect("/claim/team/about");
+}
+
+/**
+ * Whether the signed-in coach already holds an acceptance at the version a
+ * NEW team is created under today (the pilot terms before January 1, 2027,
+ * the team terms from it).
+ */
+async function hasAcceptedNewTeamTerms(): Promise<boolean> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return false;
+  return hasAcceptedTermsForUser(user.id, await resolveTermsVersion(supabase));
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   CLAIM_LINK,
   CLAIM_MICRO,
 } from "@/components/claim/claim-shell";
+import { claimOnPlans, termsNamingCopy } from "@/lib/billing/claim-copy";
 
 export const metadata = { title: "Verification failed" };
 
@@ -71,11 +72,9 @@ const COPY: Record<
   // terms screen, not here; this entry is only the fallback for a claim it
   // could not find again in between. The pending claim is left intact, so
   // opening the link again leads through the terms and finishes it.
-  "terms-not-accepted": {
-    heading: "Accept the pilot terms first",
-    sub: "Setting up this program waits on the pilot terms. Nothing was created. Open the link from your email again and the terms come up before setup finishes.",
-    action: "exit",
-  },
+  // The words are `termsNamingCopy()`'s, filled in per request below: "the
+  // pilot terms" before January 1, 2027, "the terms" from it.
+  "terms-not-accepted": { heading: "", sub: "", action: "exit" },
   // The two endings only the signed-in link can reach. That link finishes a
   // setup started from an existing account, so it works solely in a session
   // belonging to that account — the email says so, and these two screens are
@@ -98,7 +97,15 @@ export default async function ClaimFailedPage({
   searchParams: Promise<{ reason?: string }>;
 }) {
   const { reason } = await searchParams;
-  const copy = COPY[reason as ClaimFailure] ?? COPY.failed;
+  const naming = termsNamingCopy(claimOnPlans());
+  const copy =
+    reason === "terms-not-accepted"
+      ? {
+          ...COPY["terms-not-accepted"],
+          heading: naming.failedHeading,
+          sub: naming.failedSub,
+        }
+      : (COPY[reason as ClaimFailure] ?? COPY.failed);
 
   // The wrong-account ending is reached signed in, so say which account this
   // browser is — the one fact that explains why the link did nothing. Only the

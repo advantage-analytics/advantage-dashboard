@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { teamLabel } from "@/lib/data/programs-server";
+import { claimOnPlans, claimReadyItems } from "@/lib/billing/claim-copy";
+import { programPilotIsRunning } from "@/lib/services/programs/pilot-terms-server";
+import { createClient } from "@/lib/supabase/server";
 import {
   ClaimShell,
   ClaimHeading,
@@ -24,13 +27,34 @@ export const metadata = { title: "Your program is set up" };
  * The workspace cookie is already set by the time this renders, so "Go to your
  * program" (and ✕) lead to the coach intake (5.2, `/claim/team/about`), which
  * reads that cookie to find the program and then opens the team dashboard.
+ *
+ * "What you have" is the pilot's list before January 1, 2027 and, from it,
+ * for a program whose pilot is running; otherwise it is what a team with no
+ * plan has. The program is the `?program=` id verify put in the URL, read
+ * with the visitor's own session, so an id that is not theirs to read (or
+ * none at all) simply reads as a program on no pilot.
  */
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export default async function ClaimReadyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ school?: string; team?: string; email?: string }>;
+  searchParams: Promise<{
+    school?: string;
+    team?: string;
+    email?: string;
+    program?: string;
+  }>;
 }) {
-  const { school, team, email } = await searchParams;
+  const { school, team, email, program } = await searchParams;
+  const pilotRunning =
+    typeof program === "string" && UUID.test(program)
+      ? await programPilotIsRunning(await createClient(), {
+          programId: program,
+        })
+      : false;
+  const items = claimReadyItems(claimOnPlans({ pilotRunning }));
   const schoolName = school?.trim() || "Your program";
   const eyebrow = [school?.trim(), team ? teamLabel(team) : null]
     .filter(Boolean)
@@ -42,17 +66,7 @@ export default async function ClaimReadyPage({
       gap={16}
       exitHref="/claim/team/about"
       exitLabel="Go to the program"
-      aside={
-        <AsidePanel
-          title="What you have"
-          items={[
-            "75 hours of processed video per program per month",
-            "Free through December 31, 2026",
-            "No hardware to buy, no contract, no cost",
-            "Paid plans begin in January 2027",
-          ]}
-        />
-      }
+      aside={<AsidePanel title="What you have" items={[...items]} />}
     >
       <ClaimHeading
         gap={2}
