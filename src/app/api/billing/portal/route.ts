@@ -10,8 +10,7 @@
 
 import { stripe } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { errorResponse, jsonResponse } from "@/lib/services/match-video/http";
-import { asHttpError } from "@/lib/services/billing/http";
+import { billingResponse } from "@/lib/services/billing/http";
 import { openPortal } from "@/lib/services/billing/portal";
 import { billingRouteContext } from "@/lib/services/billing/route-context";
 import { requestOrigin } from "@/lib/request-origin";
@@ -29,7 +28,5 @@ export async function POST(request: Request): Promise<Response> {
     user: context.user,
     origin: await requestOrigin(),
   });
-  return result.ok
-    ? jsonResponse(result.value)
-    : errorResponse(asHttpError(result.error));
+  return billingResponse(result);
 }

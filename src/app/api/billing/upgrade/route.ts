@@ -19,12 +19,8 @@
 
 import { stripe } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
-import {
-  errorResponse,
-  jsonResponse,
-  transportError,
-} from "@/lib/services/match-video/http";
-import { asHttpError } from "@/lib/services/billing/http";
+import { errorResponse, transportError } from "@/lib/services/match-video/http";
+import { billingResponse } from "@/lib/services/billing/http";
 import { billingRouteContext } from "@/lib/services/billing/route-context";
 import { executeUpgrade } from "@/lib/services/billing/upgrade";
 
@@ -53,7 +49,5 @@ export async function POST(request: Request): Promise<Response> {
     user: context.user,
     expectedPayTodayCents: expected,
   });
-  return result.ok
-    ? jsonResponse(result.value)
-    : errorResponse(asHttpError(result.error));
+  return billingResponse(result);
 }

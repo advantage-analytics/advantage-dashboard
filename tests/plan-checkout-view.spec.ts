@@ -466,6 +466,32 @@ test.describe("Upgrade", () => {
     expect(v.primary).toBe("Continue to pay $288.50");
   });
 
+  test("the aside names what was paid only when a discount cut it", () => {
+    const ready = preview(23 * M);
+    if (ready.status !== "ready") throw new Error("preview not ready");
+    const quote = ready.preview;
+    const list = view({ kind: "upgrade" }, COACH_SPENT, { preview: ready });
+    expect(list.aside).not.toContain("you paid");
+
+    const discounted = view({ kind: "upgrade" }, COACH_SPENT, {
+      preview: {
+        status: "ready",
+        preview: { ...quote, creditBaseCents: 7500 },
+      },
+    });
+    expect(discounted.aside).toContain(
+      "15 days ($75) or 23m of hours ($11.50), of the $75 you paid this month. From today",
+    );
+
+    const atList = view({ kind: "upgrade" }, COACH_SPENT, {
+      preview: {
+        status: "ready",
+        preview: { ...quote, creditBaseCents: quote.oldPeriodPriceCents },
+      },
+    });
+    expect(atList.aside).toBe(list.aside);
+  });
+
   test("there is nothing to press until the price is known", () => {
     const loading = view({ kind: "upgrade" }, COACH, {
       preview: { status: "loading" },

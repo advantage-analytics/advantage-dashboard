@@ -15,9 +15,8 @@
 
 import { stripe } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { errorResponse, jsonResponse } from "@/lib/services/match-video/http";
 import { startCheckout } from "@/lib/services/billing/checkout";
-import { asHttpError } from "@/lib/services/billing/http";
+import { billingResponse } from "@/lib/services/billing/http";
 import { billingRouteContext } from "@/lib/services/billing/route-context";
 
 export const runtime = "nodejs";
@@ -33,7 +32,5 @@ export async function POST(request: Request): Promise<Response> {
     user: context.user,
     body: context.body,
   });
-  return result.ok
-    ? jsonResponse(result.value)
-    : errorResponse(asHttpError(result.error));
+  return billingResponse(result);
 }

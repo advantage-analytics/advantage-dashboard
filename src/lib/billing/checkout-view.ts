@@ -689,10 +689,15 @@ export function buildCheckoutView(input: {
       account.extraSeconds > 0
         ? `, and your ${formatHoursLong(account.extraSeconds)} of extra hours stays`
         : "";
+    // A discount cut what was paid: say what the two shares are of.
+    const paidNote =
+      quote.creditBaseCents < quote.oldPeriodPriceCents
+        ? `, of the ${formatUsdCents(quote.creditBaseCents)} you paid this ${yearly ? "year" : "month"}`
+        : "";
     aside =
       `Your credit is the smaller of what's left of your ${coach.name} ${yearly ? "year" : "month"}: ` +
       `${plural(quote.daysLeft, "day", "days")} (${formatUsdCents(quote.daysCreditCents)}) or ` +
-      `${hoursLeftLabel(quote.periodHoursLeftSeconds)} of hours (${formatUsdCents(quote.hoursCreditCents)}). ` +
+      `${hoursLeftLabel(quote.periodHoursLeftSeconds)} of hours (${formatUsdCents(quote.hoursCreditCents)})${paidNote}. ` +
       `${billedFrom(quote)}${extra}.`;
     action = { kind: "upgrade", payTodayCents: quote.payTodayCents };
     primary = payLabel(quote.payTodayCents, false);

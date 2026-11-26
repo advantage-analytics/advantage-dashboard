@@ -94,8 +94,9 @@ export function firstMonthCouponId(env: Env = process.env): string | null {
 
 /**
  * The Customer Portal configuration (card, invoices, cancel at period end; no
- * plan switching). Optional: unset uses the account's default configuration,
- * which must then have plan switching turned off in the Dashboard.
+ * plan switching). Required to open the portal: `openPortal` refuses without
+ * it rather than fall back to the account's default configuration, which may
+ * allow plan switching.
  */
 export function portalConfigurationId(env: Env = process.env): string | null {
   return read(env, PORTAL_CONFIGURATION_ENV, "bpc_");

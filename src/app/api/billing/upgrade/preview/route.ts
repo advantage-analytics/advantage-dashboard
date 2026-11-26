@@ -10,8 +10,7 @@
 
 import { stripe } from "@/lib/stripe/client";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { errorResponse, jsonResponse } from "@/lib/services/match-video/http";
-import { asHttpError } from "@/lib/services/billing/http";
+import { billingResponse } from "@/lib/services/billing/http";
 import { billingRouteContext } from "@/lib/services/billing/route-context";
 import { previewUpgrade } from "@/lib/services/billing/upgrade";
 
@@ -27,7 +26,5 @@ export async function POST(request: Request): Promise<Response> {
     admin: createAdminClient(),
     user: context.user,
   });
-  return result.ok
-    ? jsonResponse(result.value)
-    : errorResponse(asHttpError(result.error));
+  return billingResponse(result);
 }

@@ -5,7 +5,11 @@
  * tests and is dropped in production.
  */
 
-import type { MatchVideoHttpError } from "@/lib/services/match-video/http";
+import {
+  errorResponse,
+  jsonResponse,
+  type MatchVideoHttpError,
+} from "@/lib/services/match-video/http";
 
 export type BillingRefusalCode =
   | "unauthenticated"
@@ -59,6 +63,13 @@ export function asHttpError(refusal: BillingRefusal): MatchVideoHttpError {
 
 export type BillingResult<T> =
   { ok: true; value: T } | { ok: false; error: BillingRefusal };
+
+/** The route's answer for a service result: the value, or the refusal. */
+export function billingResponse<T>(result: BillingResult<T>): Response {
+  return result.ok
+    ? jsonResponse(result.value)
+    : errorResponse(asHttpError(result.error));
+}
 
 export function refuse(
   code: BillingRefusalCode,
