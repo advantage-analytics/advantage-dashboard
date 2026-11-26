@@ -22,6 +22,7 @@ import {
   losingPlaysSql,
   losingPlaysSubject,
   losingPlaysVoice,
+  playsCourtOf,
   playsFilterPhrase,
   ASK_SHORT_RALLY,
 } from "@/lib/services/ask/plays";
@@ -953,6 +954,26 @@ test.describe("plays narrowed to a rally length or a side", () => {
     expect(buildLosingPlaysAnswer(ROWS, voice, 1) ?? "").toContain(
       ASK_VISUAL_WATCH_PREFIX,
     );
+  });
+
+  test("a side is read only when named as a side or a court", () => {
+    expect(playsCourtOf("on the ad side")).toBe("Ad");
+    expect(playsCourtOf("from the advantage court")).toBe("Ad");
+    expect(playsCourtOf("on the deuce side")).toBe("Deuce");
+    expect(playsCourtOf("at deuce")).toBeNull();
+    expect(playsCourtOf("deuce side and ad side")).toBeNull();
+  });
+
+  test("the body's counts say the filter too, and a match left out is not called shotless", () => {
+    const voice = losingPlaysVoice("mine", null);
+    const narrowed = buildLosingPlaysAnswer(ROWS, voice, 3, null, "Ad") ?? "";
+    expect(narrowed).toMatch(
+      /points you lost on the ad side|lost \{\{r\d+\.shots\}\} points on the ad side/,
+    );
+    expect(narrowed).toContain("no recorded shot on the ad side");
+    expect(narrowed).not.toContain("no shot-by-shot data");
+    const whole = buildLosingPlaysAnswer(ROWS, voice, 3) ?? "";
+    expect(whole).toContain("no shot-by-shot data");
   });
 
   test("a team's plays over several players speak of the team, never 'you'", () => {

@@ -3214,6 +3214,15 @@ test.describe("plays questions narrowed to a side or a rally length", () => {
     );
   });
 
+  test("'at deuce' is the score, not the side: the planner's, as before", async () => {
+    expect(await routedSql("What are my losing plays at deuce?")).toBe(
+      PLAN.sql,
+    );
+    expect(
+      await routedSql("What are my losing plays on the deuce court?"),
+    ).toBe(losingPlaysSql("mine", null, "Deuce"));
+  });
+
   test("a split by side stays the planner's", async () => {
     expect(
       await routedSql("What are my losing plays on the deuce and ad sides?"),

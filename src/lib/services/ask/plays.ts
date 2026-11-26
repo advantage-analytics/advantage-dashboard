@@ -398,7 +398,7 @@ export function buildLosingPlaysAnswer(
   const points = cell(total.ref, "shots");
   if (errors.length > 0) {
     ended.push(
-      `Of the ${points} points ${voice.name} lost, the most common finish was ${voice.second ? "your" : "their"} own miss: ${joined(
+      `Of the ${points} points ${voice.name} lost${within}, the most common finish was ${voice.second ? "your" : "their"} own miss: ${joined(
         errors
           .slice(0, 3)
           .map(
@@ -407,7 +407,7 @@ export function buildLosingPlaysAnswer(
       )}.`,
     );
   } else {
-    ended.push(`${sentenceCase(voice.name)} lost ${points} points.`);
+    ended.push(`${sentenceCase(voice.name)} lost ${points} points${within}.`);
   }
   if (winners.length > 0) {
     ended.push(
@@ -447,14 +447,16 @@ export function buildLosingPlaysAnswer(
         )}`,
       );
     }
-    paragraphs.push(`On serve, ${voice.possessive} ${parts.join("; ")}.`);
+    paragraphs.push(
+      `On serve${within}, ${voice.possessive} ${parts.join("; ")}.`,
+    );
   }
 
   // ── What it was counted from ──
   const withShots = count(total.row.missed);
   paragraphs.push(
     withShots < matchCount
-      ? `Counted from the shots of ${cell(total.ref, "missed")} of the ${cell(total.ref, "matches_in_scope")} matches here; the others have no shot-by-shot data. A shot type with fewer than eight balls in one direction is left out.`
+      ? `Counted from the shots of ${cell(total.ref, "missed")} of the ${cell(total.ref, "matches_in_scope")} matches here; the others have ${within === "" ? "no shot-by-shot data" : `no recorded shot${within}`}. A shot type with fewer than eight balls in one direction is left out.`
       : withShots === 1
         ? "Counted from the shots of this one match. A shot type with fewer than eight balls in one direction is left out."
         : `Counted from the shots of ${cell(total.ref, "missed")} matches. A shot type with fewer than eight balls in one direction is left out.`,
@@ -721,6 +723,19 @@ function pointFilter(
     .join("");
 }
 
+/**
+ * The side a plays question names, only when it names it AS a side or a
+ * court ("on the ad side", "deuce court"); null otherwise. A bare "at
+ * deuce" is the score, which the plays queries cannot narrow to — that
+ * question stays the planner's.
+ */
+export function playsCourtOf(question: string): AskPlaysCourt | null {
+  const deuce = /\bdeuce\s+(?:side|court)s?\b/i.test(question);
+  const ad = /\b(?:ad|advantage)\s+(?:side|court)s?\b/i.test(question);
+  if (deuce === ad) return null;
+  return deuce ? "Deuce" : "Ad";
+}
+
 /** The side a plays query was narrowed to, read back from its sql. */
 export function courtOfPlaysSql(sql: string): AskPlaysCourt | null {
   const court = /\n {4}and p\.court = '(Deuce|Ad)'\n/.exec(sql);
@@ -845,7 +860,7 @@ export function buildWinningPlaysAnswer(
   const withShots = count(total.row.errors_drawn);
   paragraphs.push(
     withShots < matchCount
-      ? `Counted from the shots of ${cell(total.ref, "errors_drawn")} of the ${cell(total.ref, "matches_in_scope")} matches here; the others have no shot-by-shot data.`
+      ? `Counted from the shots of ${cell(total.ref, "errors_drawn")} of the ${cell(total.ref, "matches_in_scope")} matches here; the others have ${within === "" ? "no shot-by-shot data" : `no recorded shot${within}`}.`
       : withShots === 1
         ? "Counted from the shots of this one match."
         : `Counted from the shots of ${cell(total.ref, "errors_drawn")} matches.`,

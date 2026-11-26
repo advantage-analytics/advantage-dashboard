@@ -107,6 +107,7 @@ import {
   rallyLengthOf,
   rallyLengthOfPlaysSql,
   courtOfPlaysSql,
+  playsCourtOf,
   winningPlaysSubject,
   losingPlaysSql,
   losingPlaysSubject,
@@ -1250,6 +1251,14 @@ export async function* askQuestion(
           plusOne,
         );
       }
+      const questionSides = plusOneSides(input.question);
+      // The side a plays answer can narrow to: named as a side or a court.
+      // Any other mention of one ("at deuce", the score; "deuce and ad", a
+      // split) is the planner's, as it was before the plays took a side.
+      const playsCourt = playsCourtOf(input.question);
+      const playsTakeSide =
+        !questionSides.bySide &&
+        (questionSides.court === undefined || playsCourt !== null);
       // "What are Eli's losing plays?": strokes and directions, from the
       // shots. Only the planner's scope is kept — the fixed comparisons read
       // match totals and cannot say which shot a point was lost on.
@@ -1258,7 +1267,7 @@ export async function* askQuestion(
         asksForLosingPlays(input.question) &&
         // One side ("on the ad side") and a rally length narrow the plays
         // query; a split by side ("deuce and ad") is the planner's.
-        !plusOneSides(input.question).bySide &&
+        playsTakeSide &&
         (step.ok || refused)
       ) {
         const subject = losingPlaysSubject(
@@ -1274,7 +1283,7 @@ export async function* askQuestion(
             sql: losingPlaysSql(
               subject,
               rallyLengthOf(input.question),
-              plusOneSides(input.question).court ?? null,
+              playsCourt,
             ),
             asks_for_advice: step.ok ? step.plan.asks_for_advice : false,
           },
@@ -1289,7 +1298,7 @@ export async function* askQuestion(
         !patternAsked &&
         asksForWinningPlays(input.question) &&
         // One side narrows the plays query; a split by side is the planner's.
-        !plusOneSides(input.question).bySide &&
+        playsTakeSide &&
         (step.ok || refused)
       ) {
         const subject = winningPlaysSubject(
@@ -1306,7 +1315,7 @@ export async function* askQuestion(
             sql: winningPlaysSql(
               subject,
               rallyLengthOf(input.question),
-              plusOneSides(input.question).court ?? null,
+              playsCourt,
             ),
             asks_for_advice: step.ok ? step.plan.asks_for_advice : false,
           },
@@ -1996,20 +2005,22 @@ export async function* askQuestion(
         plan = step.plan;
         const rows = withScopeCount(ran.rows, ran.matches.length);
         const voice = subjectVoice(step.plays, ran.matches, team);
+        const rally = rallyLengthOfPlaysSql(step.plan.sql);
+        const court = courtOfPlaysSql(step.plan.sql);
         const written = step.winning
           ? buildWinningPlaysAnswer(
               rows,
               voice,
               ran.matches.length,
-              rallyLengthOfPlaysSql(step.plan.sql),
-              courtOfPlaysSql(step.plan.sql),
+              rally,
+              court,
             )
           : buildLosingPlaysAnswer(
               rows,
               voice,
               ran.matches.length,
-              rallyLengthOfPlaysSql(step.plan.sql),
-              courtOfPlaysSql(step.plan.sql),
+              rally,
+              court,
             );
         result = { matches: ran.matches, rows: written === null ? [] : rows };
         if (written === null) {
