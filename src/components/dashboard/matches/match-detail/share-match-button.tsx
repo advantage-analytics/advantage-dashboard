@@ -275,8 +275,9 @@ export function ShareRailTrigger({
  *   - what the link shows, one menu row per view with the rail switcher's own
  *     glyph: Statistics ("Always"), then Visualizations and Video with a box
  *     at the right edge. Both are edited in place — the URL already handed
- *     out keeps working. Visualizations starts ticked. Video starts clear and
- *     is drawn only for a match that has one; on a team match it is the
+ *     out keeps working. Visualizations starts ticked, and so does Video
+ *     where this viewer may share it. Video is drawn only for a match that
+ *     has one; on a team match it is the
  *     staff's to tick unless the program lets its players
  *     (`share.canShareVideo`), and a viewer who may not sees the row
  *     unavailable with "Team staff only" where the box would be. Anyone who
@@ -401,7 +402,9 @@ export function SharePopoverPanel({
     startTransition(async () => {
       setOptimisticOn(next);
       const result = next
-        ? await enableMatchShare(match.id)
+        ? await enableMatchShare(match.id, {
+            includeVideo: hasVideo && canShareVideo,
+          })
         : await disableMatchShare(match.id);
       setConfirmingOff(false);
       if (!result.ok) {
@@ -678,11 +681,13 @@ export function SharePopoverPanel({
   } else if (team?.teamUrl && !isPublic) {
     note = "Teammates sign in to open this link.";
   } else {
-    // Only a match with a video has anything to say about it; the sentence
-    // read as a riddle on one without ("added" to what?).
-    note = hasVideo
-      ? "The video is not on a link unless you add it."
-      : "A link shows the match report only.";
+    // Only a match with a video has anything to say about it.
+    note =
+      hasVideo && canShareVideo
+        ? "A link shows the match report, visualizations and video."
+        : hasVideo
+          ? "A link shows the match report and visualizations."
+          : "A link shows the match report only.";
   }
 
   return (
