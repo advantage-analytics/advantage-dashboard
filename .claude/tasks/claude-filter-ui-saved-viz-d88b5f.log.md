@@ -122,3 +122,15 @@ is the runner's. Newest entries at the bottom.
 2. Hovering an "Approach to" row doesn't outline its lane yet; only serve and band rows outline on hover.
 3. On a court mixing opponent hands, an outer lane pins its outline but lights no row.
 4. The pin survives a keyboard-only cut switch (same as serve zones).
+
+## T12 · Scope the player page to chosen matches — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** The player page reads a match scope from page-level params `sres` / `sopp` / `ssurf` / `sm` (the SeasonFilters shape; not the lightbox's `v*` keys, which the viz store drops on every write), via `parseSeasonMatchScope` and the writer `matchScopeQuery(params, scope)` in viz-url.ts. Loaders still read the whole season; `scopePlayerSeason` (player-season-server.ts) refolds Statistics over the kept matches, and `buildSeasonCards` / `buildSeasonViewCards` (player-season-viz.ts) fold only kept matches and stamp the scope on each card's `state.season`, so an opened card's Matches row starts at the page scope. Unknown `sm` ids are ignored. profile-body-deferred.tsx keys the cached body on the scope. No scope = identical output. No migration, RLS or service-role change. Specs: player-season, player-season-viz, viz-url, season-viz-browser (+harness). Widget-states: no loading fallback changed; an empty scope reuses the existing empty states.
+**follow-ups:**
+
+1. Decision pending: the insight card stays whole-season under a scope (its claim is written from the whole season), so its figures can differ from the scoped table — scope the route or hide the card.
+2. Title "N matches · N analyzed · N verified", rail counts and the Visualizations `analyzed` prop stay whole-season.
+3. A scope that keeps zero matches shows the generic empty copy; scope-specific copy would be new.
+4. The lightbox "Clear filter" clears to all matches, not back to the page scope; deep links with `cut=` + `s*` but no `v*` open on the whole season.
+5. T13 needs the season's match list on the Statistics request (build from `season.perMatch`); write the scope with router.replace/push.

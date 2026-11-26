@@ -49,6 +49,7 @@ import {
   activeFilterEntries,
   errorOptionsFor,
   normalizeSeasonFilters,
+  parseMatchScope,
   parseVizState,
   sameFilterValue,
   seasonMatchKept,
@@ -589,6 +590,9 @@ function seasonCard(
     viewId: string | null;
   },
   bands: SeasonVizBands,
+  /** The page's match scope `perMatch` was already narrowed to: what the
+   *  opened card's Matches row starts at (`VizState.season`). */
+  season?: SeasonFilters,
 ): SeasonCard {
   // What the card opens is the chart (`chartView`: "Return contact" opens
   // Returns in Contact); what it draws is that chart's court (`drawnCut`).
@@ -621,6 +625,7 @@ function seasonCard(
       chart: card.chart,
       filters: view.filters,
       viewId: card.viewId,
+      ...(season ? { season } : {}),
     },
     total: result.total,
   };
@@ -630,16 +635,26 @@ function seasonCard(
  * The wall's five cards for `side` over `perMatch` — the redesign's default
  * cuts (`defaultCutsFor` by the season's judged rule), each match computed
  * with its own seat and context, then merged. In wall order.
+ *
+ * `scope` is the page's match scope (`parseSeasonMatchScope`): the cards are
+ * folded over the matches it keeps, and each card's `state` carries it as
+ * `season`, so the card it opens starts its Matches row there. The judged
+ * rule stays the WHOLE season's — the one the page parses the URL with and
+ * the opened card is built under — so a card and the court it opens are the
+ * same cut. Omitted, the whole season, exactly as before.
  */
 export function buildSeasonCards(
   perMatch: readonly SeasonVizMatch[],
   side: PlayerFilter,
   bands: SeasonVizBands,
+  scope?: SeasonFilters,
 ): SeasonCard[] {
   const judged = seasonErrorSplitJudged(perMatch);
+  const scoped = scopeSeasonMatches(perMatch, scope);
+  const season = seasonScopeFilters(perMatch, scope);
   return defaultCutsFor(judged).map((cut) =>
     seasonCard(
-      perMatch,
+      scoped,
       {
         key: `${side}:${cut.cut}`,
         cut: cut.cut,
@@ -649,6 +664,7 @@ export function buildSeasonCards(
         viewId: null,
       },
       bands,
+      season,
     ),
   );
 }
@@ -682,11 +698,15 @@ export function buildSeasonViewCards(
   perMatch: readonly SeasonVizMatch[],
   views: readonly SavedView[],
   bands: SeasonVizBands,
+  /** The page's match scope, as `buildSeasonCards` takes it. */
+  scope?: SeasonFilters,
 ): SeasonCard[] {
   const judged = seasonErrorSplitJudged(perMatch);
+  const scoped = scopeSeasonMatches(perMatch, scope);
+  const season = seasonScopeFilters(perMatch, scope);
   return views.map((view) =>
     seasonCard(
-      perMatch,
+      scoped,
       {
         key: `view:${view.id}`,
         cut: view.cut,
@@ -696,6 +716,7 @@ export function buildSeasonViewCards(
         viewId: view.id,
       },
       bands,
+      season,
     ),
   );
 }
@@ -1004,7 +1025,7 @@ export function appliedSeasonFilters(
 /** Whether one match is drawn under `applied`: its hand (`hand: true`) and
  *  its tick (`ticks: true`), each tested only when asked. */
 function seasonMatchPasses(
-  m: SeasonVizMatch,
+  m: SeasonScopeMatch,
   applied: SeasonFilters,
   { hand = true, ticks = true }: { hand?: boolean; ticks?: boolean } = {},
 ): boolean {
@@ -1022,6 +1043,43 @@ function seasonMatchPasses(
   if (ticks && applied.matches.length > 0)
     return applied.matches.includes(m.matchId);
   return true;
+}
+
+/** What the match filters read off a match — the season's courts and the
+ *  Statistics fold (`SeasonMatch`) both carry it. */
+export type SeasonScopeMatch = Pick<
+  SeasonVizMatch,
+  "matchId" | "opponentHand" | "won" | "courtType"
+>;
+
+/**
+ * The page's match scope narrowed to this season, canonical — what the
+ * scoped bodies were computed under and what an opened card's Matches row
+ * starts at. `undefined` when it keeps every match by saying nothing: no
+ * scope in the URL, or one whose only content is ids that are not matches of
+ * this season (untrusted, ignored — `appliedSeasonFilters`).
+ */
+export function seasonScopeFilters(
+  perMatch: readonly SeasonScopeMatch[],
+  scope: SeasonFilters | undefined,
+): SeasonFilters | undefined {
+  if (!scope) return undefined;
+  return normalizeSeasonFilters(appliedSeasonFilters(perMatch, scope));
+}
+
+/**
+ * The matches of `perMatch` the page's match scope keeps, in their order —
+ * the lightbox's own rule (`seasonMatchPasses`), so a scope and the Matches
+ * row it seeds keep the same matches. No scope returns `perMatch` itself:
+ * the whole season, untouched.
+ */
+export function scopeSeasonMatches<T extends SeasonScopeMatch>(
+  perMatch: readonly T[],
+  scope: SeasonFilters | undefined,
+): readonly T[] {
+  const applied = seasonScopeFilters(perMatch, scope);
+  if (!applied) return perMatch;
+  return perMatch.filter((m) => seasonMatchPasses(m, applied));
 }
 
 const mm = (metres: number) => Math.round(metres * 1000) / 1000;
@@ -1120,13 +1178,34 @@ export function parseSeasonVizState(
   searchParams: Record<string, string | string[] | undefined>,
   errorSplitJudged: boolean,
 ): VizState {
+  return parseVizState(searchParamsOf(searchParams), {
+    errorSplitJudged,
+    season: true,
+  });
+}
+
+/**
+ * The player page's match scope (`?sres=`, `?sopp=`, `?ssurf=`, `?sm=` —
+ * `parseMatchScope`) from a page's `searchParams` record, or `undefined`
+ * when the URL names none.
+ */
+export function parseSeasonMatchScope(
+  searchParams: Record<string, string | string[] | undefined>,
+): SeasonFilters | undefined {
+  return parseMatchScope(searchParamsOf(searchParams));
+}
+
+/** A page's `searchParams` record as `URLSearchParams`, repeats kept. */
+function searchParamsOf(
+  searchParams: Record<string, string | string[] | undefined>,
+): URLSearchParams {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(searchParams)) {
     if (value === undefined) continue;
     for (const v of Array.isArray(value) ? value : [value])
       params.append(key, v);
   }
-  return parseVizState(params, { errorSplitJudged, season: true });
+  return params;
 }
 
 /**

@@ -19,6 +19,7 @@ import {
   mergeVizResults,
   mergeVizStats,
   optionCountKey,
+  parseSeasonMatchScope,
   parseSeasonVizState,
   seasonMatchContext,
   statPickKey,
@@ -2333,6 +2334,91 @@ test.describe("Opponent plays and Matches (the season's own filters)", () => {
     );
     // A card opens with no season filter.
     expect(serve.state).not.toHaveProperty("season");
+  });
+
+  test("the page's match scope: the wall's cards, the saved cards and the other side are folded over the scoped matches, and each card opens with the scope as its Matches row", () => {
+    const serveTotal = (matches: SeasonVizMatch[]) =>
+      sum(
+        matches.map(
+          (m) => partFor(m, "serve", { ...EMPTY_VIZ_FILTERS }).result.total,
+        ),
+      );
+    // `?sm=` names two of the three matches (in any order).
+    const scope = parseSeasonMatchScope({ sm: ["d", "a"] });
+    expect(scope).toEqual({
+      opponentHand: null,
+      result: null,
+      surface: null,
+      matches: ["a", "d"],
+    });
+    const whole = buildSeasonCards(HANDS, "you", BANDS);
+    const cards = buildSeasonCards(HANDS, "you", BANDS, scope);
+    const serve = cards.find((c) => c.cut === "serve")!;
+    expect(serve.total).toBe(serveTotal([HANDS[0], HANDS[2]]));
+    expect(serve.total).toBeLessThan(
+      whole.find((c) => c.cut === "serve")!.total,
+    );
+    // Every card of the wall is the same matches' — the card over the
+    // scoped season alone — and carries the scope into the card it opens.
+    expect(cards.map((c) => ({ ...c, state: undefined }))).toEqual(
+      buildSeasonCards([HANDS[0], HANDS[2]], "you", BANDS).map((c) => ({
+        ...c,
+        state: undefined,
+      })),
+    );
+    for (const card of cards) expect(card.state.season).toEqual(scope);
+    for (const card of buildSeasonCards(HANDS, "opponent", BANDS, scope))
+      expect(card.state.season).toEqual(scope);
+
+    // The opened card: its Matches row is the scope, and its court is the
+    // wall card's count.
+    const opened = buildSeasonLightbox(HANDS, serve.state, BANDS, NAMES)!;
+    expect(opened.season).toEqual(scope);
+    expect(opened.result.total).toBe(serve.total);
+    expect(
+      opened.seasonOptions.matches.map((m) => m.id).sort(),
+      "the sheet still lists every match of the season",
+    ).toEqual(["a", "b", "d"]);
+
+    // A hand, a result or a surface scopes the same way.
+    const lefties = parseSeasonMatchScope({ sopp: "left" });
+    const leftCards = buildSeasonCards(HANDS, "you", BANDS, lefties);
+    expect(leftCards.find((c) => c.cut === "serve")!.total).toBe(
+      serveTotal([HANDS[1]]),
+    );
+    expect(leftCards[0].state.season).toEqual({
+      opponentHand: "left",
+      result: null,
+      surface: null,
+      matches: [],
+    });
+
+    // Saved views too.
+    const views = [
+      {
+        id: "v1",
+        name: "Second serves",
+        cut: "serve" as const,
+        chart: "scatter" as const,
+        filters: { ...EMPTY_VIZ_FILTERS, ball: ["second" as const] },
+        order: 0,
+      },
+    ];
+    const [saved] = buildSeasonViewCards(HANDS, views, BANDS, scope);
+    expect(saved.total).toBe(
+      buildSeasonViewCards([HANDS[0], HANDS[2]], views, BANDS)[0].total,
+    );
+    expect(saved.state).toMatchObject({ viewId: "v1", season: scope });
+  });
+
+  test("no match scope, or one naming no match of the season: the wall is the whole season and a card opens with no season filter", () => {
+    const whole = buildSeasonCards(HANDS, "you", BANDS);
+    expect(parseSeasonMatchScope({ tab: "visualizations" })).toBeUndefined();
+    expect(buildSeasonCards(HANDS, "you", BANDS, undefined)).toEqual(whole);
+    // The lightbox's own `?vm=` is not the page's scope.
+    expect(parseSeasonMatchScope({ vm: "a", vopp: "left" })).toBeUndefined();
+    const stranger = parseSeasonMatchScope({ sm: "nobody" });
+    expect(buildSeasonCards(HANDS, "you", BANDS, stranger)).toEqual(whole);
   });
 
   test("a court signature carries the season filters, canonical: tick order does not matter, a tick does", () => {

@@ -367,18 +367,102 @@ export function withoutSeasonFilters(state: VizState): VizState {
   return next;
 }
 
+/** The four URL params one set of match filters travels as. */
+interface SeasonFilterParams {
+  hand: string;
+  result: string;
+  surface: string;
+  match: string;
+}
+
+const LIGHTBOX_SEASON_PARAMS: SeasonFilterParams = {
+  hand: SEASON_HAND_PARAM,
+  result: SEASON_RESULT_PARAM,
+  surface: SEASON_SURFACE_PARAM,
+  match: SEASON_MATCH_PARAM,
+};
+
 function parseSeasonFilters(
   params: URLSearchParams,
+  names: SeasonFilterParams = LIGHTBOX_SEASON_PARAMS,
 ): SeasonFilters | undefined {
-  const hand = params.get(SEASON_HAND_PARAM);
+  const hand = params.get(names.hand);
   return normalizeSeasonFilters({
     opponentHand: OPPONENT_HAND_FILTERS.includes(hand as OpponentHandFilter)
       ? (hand as OpponentHandFilter)
       : null,
-    result: params.get(SEASON_RESULT_PARAM) as SeasonResultFilter | null,
-    surface: params.get(SEASON_SURFACE_PARAM) as SeasonSurface | null,
-    matches: params.getAll(SEASON_MATCH_PARAM),
+    result: params.get(names.result) as SeasonResultFilter | null,
+    surface: params.get(names.surface) as SeasonSurface | null,
+    matches: params.getAll(names.match),
   });
+}
+
+/* ── The player page's match scope ──────────────────────────────────────── */
+
+/**
+ * The player page's own match scope (plan §9, decision C4): which matches of
+ * the season BOTH of its bodies — Statistics and the Visualizations wall —
+ * are computed from. The same shape as the lightbox's `SeasonFilters`, under
+ * its own names, for two reasons:
+ *
+ * - `?vopp=` / `?vres=` / `?vsurf=` / `?vm=` are viz keys (`VIZ_KEYS`): the
+ *   store deletes them on every write and never writes them on the wall, so a
+ *   scope under those names would be gone the moment a card closed or the
+ *   wall's You | Opponent was pressed. These four are NOT viz keys, so
+ *   `vizStateQuery` carries them through like `tab`, and the tab switch
+ *   (`profileViewQuery`) carries every parameter.
+ * - An opened card keeps its own Matches row. It STARTS at the page's scope
+ *   (the wall's cards carry it into `VizState.season` —
+ *   `buildSeasonCards`), and a reader may then widen or narrow that one card
+ *   without rewriting the page's scope under it.
+ */
+export const SCOPE_HAND_PARAM = "sopp";
+export const SCOPE_RESULT_PARAM = "sres";
+export const SCOPE_SURFACE_PARAM = "ssurf";
+export const SCOPE_MATCH_PARAM = "sm";
+
+const MATCH_SCOPE_PARAMS: SeasonFilterParams = {
+  hand: SCOPE_HAND_PARAM,
+  result: SCOPE_RESULT_PARAM,
+  surface: SCOPE_SURFACE_PARAM,
+  match: SCOPE_MATCH_PARAM,
+};
+
+/** Every param the page's match scope travels as. */
+export const MATCH_SCOPE_KEYS: readonly string[] =
+  Object.values(MATCH_SCOPE_PARAMS);
+
+/** The URL's match scope, canonical (`normalizeSeasonFilters`), or
+ *  `undefined` when the URL names none — the whole season. Garbage reads as
+ *  none; an id is shape-checked only, and the server keeps the ones that are
+ *  matches of this season (`scopeSeasonMatches`). */
+export function parseMatchScope(
+  params: URLSearchParams,
+): SeasonFilters | undefined {
+  return parseSeasonFilters(params, MATCH_SCOPE_PARAMS);
+}
+
+/**
+ * `params` with the match scope set to `scope` — every other parameter kept,
+ * ids sorted so one scope is one query string. `undefined` (or a scope with
+ * nothing on) clears it: the bare URL is the whole season. Returns a new
+ * string; `params` is never mutated.
+ */
+export function matchScopeQuery(
+  params: URLSearchParams,
+  scope: SeasonFilters | null | undefined,
+): string {
+  const next = new URLSearchParams(params.toString());
+  for (const key of MATCH_SCOPE_KEYS) next.delete(key);
+  const canonical = normalizeSeasonFilters(scope);
+  if (canonical) {
+    if (canonical.opponentHand !== null)
+      next.set(SCOPE_HAND_PARAM, canonical.opponentHand);
+    if (canonical.result) next.set(SCOPE_RESULT_PARAM, canonical.result);
+    if (canonical.surface) next.set(SCOPE_SURFACE_PARAM, canonical.surface);
+    for (const id of canonical.matches) next.append(SCOPE_MATCH_PARAM, id);
+  }
+  return next.toString();
 }
 
 /* ── Parse & serialize helper ──────────────────────────────────────────── */

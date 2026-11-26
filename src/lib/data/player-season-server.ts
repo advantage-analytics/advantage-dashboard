@@ -47,7 +47,11 @@ import {
   type SeasonMatch,
   type SeasonTallies,
 } from "@/lib/data/player-season";
-import type { SeasonVizMatch } from "@/lib/data/player-season-viz";
+import {
+  scopeSeasonMatches,
+  type SeasonVizMatch,
+} from "@/lib/data/player-season-viz";
+import type { SeasonFilters } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import { isPracticeMatch } from "@/lib/matches/match-type";
 import {
   normalizePlayerHand,
@@ -510,6 +514,35 @@ export async function loadPlayerSeason(
     groups: foldSeasonRows(perMatch),
     tallies: foldSeasonTallies(perMatch),
     perMatch,
+  };
+}
+
+/**
+ * `season` under the player page's match scope (`parseSeasonMatchScope`):
+ * the Statistics body's figures — `analyzed`, `verified`, the Head to head
+ * rows, the cards — folded again over the matches the scope keeps, on the
+ * server, from the points the loader already read. Nothing is read again and
+ * no point is filtered in the browser.
+ *
+ * `matchesPlayed` and `opponentsCount` stay the whole season's: they are the
+ * rail's counts of what the program recorded, not of what is being looked
+ * at. No scope — or one that names nothing of this season — returns `season`
+ * itself, so an unscoped page is the page it was.
+ */
+export function scopePlayerSeason(
+  season: PlayerSeason,
+  scope: SeasonFilters | undefined,
+): PlayerSeason {
+  const perMatch = scopeSeasonMatches(season.perMatch, scope);
+  if (perMatch === season.perMatch) return season;
+  const kept = [...perMatch];
+  return {
+    ...season,
+    analyzed: kept.length,
+    verified: kept.filter((m) => m.verified).length,
+    groups: foldSeasonRows(kept),
+    tallies: foldSeasonTallies(kept),
+    perMatch: kept,
   };
 }
 

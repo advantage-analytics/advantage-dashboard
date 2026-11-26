@@ -15,6 +15,7 @@ import {
 import {
   getPlayerSeason,
   getPlayerSeasonCourts,
+  scopePlayerSeason,
   seasonOpponentCount,
 } from "@/lib/data/player-season-server";
 import {
@@ -59,6 +60,7 @@ import {
   buildSeasonCards,
   buildSeasonLightbox,
   buildSeasonViewCards,
+  parseSeasonMatchScope,
   parseSeasonVizState,
   type SeasonCard,
 } from "@/lib/data/player-season-viz";
@@ -70,6 +72,7 @@ import { askEntryHref } from "@/lib/services/ask/entry";
 import { otherPlayer } from "@/components/dashboard/matches/match-detail/match-filters/panel-draft";
 import { VerifiedMark } from "@/components/dashboard/matches/verified-mark";
 import { loginRedirectPath } from "@/lib/auth/request-path";
+import type { SeasonFilters } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 
 /** `getPreferences` once per request, so the early start above and the
  *  Visualizations body share one read. */
@@ -118,6 +121,22 @@ const requestPreferences = cache(getPreferences);
  * the card's while one is open; the wall's own player is kept in the
  * browser meanwhile (`profile-visualizations-view.tsx`), and closing writes
  * it back, so the cards are recomputed for it then.
+ *
+ * ── The match scope ─────────────────────────────────────────────────────────
+ * `?sres=` / `?sopp=` / `?ssurf=` / `?sm=` (`parseSeasonMatchScope`,
+ * `viz-url.ts`) name which matches of the season the page is about: a
+ * result, an opponent hand, a surface, picked matches — the lightbox's
+ * `SeasonFilters` shape under the page's own names. ONE scope, read here,
+ * drives both bodies: Statistics is folded again over the kept matches
+ * (`scopePlayerSeason`) and the wall's cards — default, saved and the
+ * streamed other side — are built over the same ones (`buildSeasonCards`),
+ * always on the server. The loaders still read the whole season, so the
+ * scope costs no read and "N analyzed" stays the season's. The params are
+ * not viz keys, so the tab switch and every viz write carry them through.
+ * A card opened from the wall starts its own Matches row there (its
+ * `state.season`); from then on that row is the card's (`?vm=` …), and
+ * closing the card leaves the page's scope as it was. No scope in the URL
+ * is the whole season.
  *
  * ── One body per request ────────────────────────────────────────────────────
  * `?tab=` is read client-side for the switch (`ProfileViewWhen`, native
@@ -254,6 +273,10 @@ export default async function PlayerProfilePage({
   const matchesPlayed = profile.matchesPlayed;
   const opponentsCount = sides ? seasonOpponentCount(sides.own) : 0;
 
+  // Which matches both bodies are about (see "The match scope"); undefined
+  // is the whole season.
+  const matchScope = parseSeasonMatchScope(query);
+
   // Which body this request is for (see "One body per request"): the courts
   // on `?tab=visualizations`, the Statistics otherwise.
   const courtsOnly =
@@ -359,6 +382,7 @@ export default async function PlayerProfilePage({
                       rosterPlayerId={profile.playerId}
                       playerName={profile.name}
                       firstName={profile.firstName}
+                      matchScope={matchScope}
                     />
                   </Suspense>
                 )
@@ -387,6 +411,7 @@ export default async function PlayerProfilePage({
                       workspaceName={active.name}
                       workspaceRole={active.role}
                       query={query}
+                      matchScope={matchScope}
                     />
                   </Suspense>
                 ) : null
@@ -445,6 +470,12 @@ async function AnalyzedCount({
  * card shows under the streamed claim are the same objects the Head to head
  * table draws, never the model's. `rosterPlayerId` is the roster's own id,
  * which is what `/api/player-insight` resolves.
+ *
+ * Under a match scope the cards are the scoped fold (`scopePlayerSeason`).
+ * The insight card stays the WHOLE season's — its evidence line and its
+ * signature both: `/api/player-insight` writes its claim from the whole
+ * season, and a scoped evidence line under it would put two seasons on one
+ * card (and spend a model call per scope).
  */
 async function ProfileStatisticsBody({
   programId,
@@ -452,15 +483,19 @@ async function ProfileStatisticsBody({
   rosterPlayerId,
   playerName,
   firstName,
+  matchScope,
 }: {
   programId: string;
   playerId: string;
   rosterPlayerId: string;
   playerName: string;
   firstName: string;
+  /** The page's match scope; undefined is the whole season. */
+  matchScope: SeasonFilters | undefined;
 }) {
-  const season = await getPlayerSeason(programId, playerId);
-  if (!season) return null;
+  const whole = await getPlayerSeason(programId, playerId);
+  if (!whole) return null;
+  const season = scopePlayerSeason(whole, matchScope);
   return (
     <ProfileViewWhen view="statistics">
       <ProfileStatisticsView
@@ -470,8 +505,8 @@ async function ProfileStatisticsBody({
         analyzed={season.analyzed}
         groups={season.groups}
         tallies={season.tallies}
-        evidence={buildSeasonEvidence(season)}
-        insightSignature={seasonInsightSignature(season)}
+        evidence={buildSeasonEvidence(whole)}
+        insightSignature={seasonInsightSignature(whole)}
       />
     </ProfileViewWhen>
   );
@@ -499,6 +534,7 @@ async function ProfileVisualizationsBody({
   workspaceName,
   workspaceRole,
   query,
+  matchScope,
 }: {
   programId: string;
   playerId: string;
@@ -511,6 +547,8 @@ async function ProfileVisualizationsBody({
   /** The viewer's role in the program: who may rename or delete a view. */
   workspaceRole: ProgramRole;
   query: Record<string, string | string[] | undefined>;
+  /** The page's match scope; undefined is the whole season. */
+  matchScope: SeasonFilters | undefined;
 }) {
   const [season, bandSettings, preferences, savedViews] = await Promise.all([
     getPlayerSeasonCourts(programId, playerId),
@@ -547,7 +585,12 @@ async function ProfileVisualizationsBody({
           setTimeout(() => {
             try {
               resolve(
-                buildSeasonCards(season.perMatch, otherPlayer(side), bands),
+                buildSeasonCards(
+                  season.perMatch,
+                  otherPlayer(side),
+                  bands,
+                  matchScope,
+                ),
               );
             } catch (error) {
               reject(error);
@@ -563,8 +606,13 @@ async function ProfileVisualizationsBody({
         chipLabels={chipLabels}
         analyzed={season.analyzed}
         side={side}
-        cards={buildSeasonCards(season.perMatch, side, bands)}
-        savedCards={buildSeasonViewCards(season.perMatch, savedViews, bands)}
+        cards={buildSeasonCards(season.perMatch, side, bands, matchScope)}
+        savedCards={buildSeasonViewCards(
+          season.perMatch,
+          savedViews,
+          bands,
+          matchScope,
+        )}
         lightbox={buildSeasonLightbox(
           season.perMatch,
           state,

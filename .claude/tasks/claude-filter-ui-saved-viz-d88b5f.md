@@ -171,7 +171,7 @@ ready).
 
 ## T12 · Scope the player page to chosen matches
 
-- **status:** todo
+- **status:** done
 - **model:** fable
 - **files:** (guess) src/app/dashboard/team/roster/[playerId]/page.tsx, src/lib/data/player-season-viz.ts, src/lib/data/player-season-server.ts, src/components/dashboard/team/player-profile/{profile-statistics-view.tsx,profile-visualizations-view.tsx,season-viz-lightbox.tsx}, src/components/dashboard/matches/match-detail/shots/viz-url.ts (`SeasonFilters` ~:245), tests/{player-season,profile-statistics-view,player-season-viz,season-viz-browser}.spec.ts
 - **routes:** /dashboard/team/roster/[playerId]

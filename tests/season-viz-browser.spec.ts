@@ -959,6 +959,70 @@ test("the Matches sheet throws its draft away on Esc, and its search only finds 
   expect(new URL(page.url()).searchParams.getAll("vm")).toEqual([]);
 });
 
+test("the page's match scope (?sm=): the wall is drawn over the scoped matches, a card opens with its Matches row at that scope, and closing it leaves the scope in the URL", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  const wall = page.getByRole("list", { name: "Default views" });
+  const serveCard = wall.getByRole("link", { name: /^All serves, Avery Kim/ });
+  const serve = page.getByRole("dialog", { name: "All serves" });
+
+  // The whole season first: what the card and the court count unscoped.
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&hands=1&delay=100`);
+  const wholeCard = await serveCard.innerText();
+  await serveCard.click();
+  await expect(marks(serve).first()).toBeVisible({ timeout: 8_000 });
+  const all = await marks(serve).count();
+
+  // Two of the three matches picked on the page.
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&hands=1&delay=100&sm=m-1&sm=m-3`,
+  );
+  await expect(serveCard).toBeVisible({ timeout: 8_000 });
+  expect(await serveCard.innerText()).not.toBe(wholeCard);
+  // The card's link carries the scope as the opened card's own Matches row.
+  const href = new URL((await serveCard.getAttribute("href"))!, origin);
+  expect(href.searchParams.getAll("vm")).toEqual(["m-1", "m-3"]);
+  expect(href.searchParams.getAll("sm")).toEqual(["m-1", "m-3"]);
+
+  await serveCard.click();
+  await expect(marks(serve).first()).toBeVisible({ timeout: 8_000 });
+  await expect
+    .poll(() => {
+      const q = new URL(page.url()).searchParams;
+      return [q.getAll("vm").join(","), q.getAll("sm").join(",")];
+    })
+    .toEqual(["m-1,m-3", "m-1,m-3"]);
+  const scoped = await marks(serve).count();
+  expect(scoped).toBeLessThan(all);
+  await expect(serve.locator("[data-viz-filter-strip]")).toContainText(
+    "2 matches",
+  );
+  await serve.getByRole("button", { name: "Filters" }).click();
+  await expect(
+    page
+      .getByRole("dialog", { name: "Filter the court" })
+      .getByRole("button", { name: /^Matches/ }),
+  ).toContainText("2 of 3");
+  await page.keyboard.press("Escape");
+
+  // Closing: the card's own row leaves the URL, the page's scope stays, and
+  // the wall is still the scoped one.
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect
+    .poll(() => {
+      const q = new URL(page.url()).searchParams;
+      return [q.has("cut"), q.has("vm"), q.getAll("sm").join(",")];
+    })
+    .toEqual([false, false, "m-1,m-3"]);
+  const scopedHref = new URL((await serveCard.getAttribute("href"))!, origin);
+  expect(scopedHref.searchParams.getAll("vm")).toEqual(["m-1", "m-3"]);
+  expect(errors).toEqual([]);
+});
+
 test("a ?vm= naming no match of the season is ignored: the card opens on the whole season, not stuck loading", async ({
   page,
 }) => {

@@ -8,6 +8,7 @@ import {
   buildSeasonCards,
   buildSeasonLightbox,
   buildSeasonViewCards,
+  parseSeasonMatchScope,
   parseSeasonVizState,
   type SeasonVizMatch,
 } from "@/lib/data/player-season-viz";
@@ -217,10 +218,12 @@ function serverRender(query: string) {
   const errorSplitJudged = seasonErrorSplitJudged(SEASON);
   const state = parseSeasonVizState(record, errorSplitJudged);
   const side = state.filters.player;
+  // The page's match scope (`?sm=` …), as `page.tsx` reads it.
+  const matchScope = parseSeasonMatchScope(record);
   return {
     side,
-    cards: buildSeasonCards(SEASON, side, BANDS),
-    savedCards: buildSeasonViewCards(SEASON, SAVED_VIEWS, BANDS),
+    cards: buildSeasonCards(SEASON, side, BANDS, matchScope),
+    savedCards: buildSeasonViewCards(SEASON, SAVED_VIEWS, BANDS, matchScope),
     lightbox: buildSeasonLightbox(SEASON, state, BANDS, NAMES, SAVED_VIEWS),
     errorSplitJudged,
     // `?otherside=1`: the page's streamed other-side wall, landing a moment
@@ -237,6 +240,7 @@ function serverRender(query: string) {
                       SEASON,
                       side === "you" ? "opponent" : "you",
                       BANDS,
+                      matchScope,
                     ),
                   ),
                 50,

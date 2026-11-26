@@ -20,7 +20,9 @@ import {
   errorOptionsFor,
   filtersForCut,
   focusTargetAfterViewChange,
+  matchScopeQuery,
   OPTIONS,
+  parseMatchScope,
   parseVizState,
   reconcileVizState,
   sameView,
@@ -28,6 +30,7 @@ import {
   viewIdentityKey,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import { parseSeasonVizState } from "@/lib/data/player-season-viz";
+import { profileViewQuery } from "@/components/dashboard/team/player-profile/profile-view";
 import { validateVizInput } from "@/lib/data/saved-views-logic";
 
 test("no cut param is the wall", () => {
@@ -929,6 +932,77 @@ test.describe("season filters", () => {
     expect(
       parseVizState(new URLSearchParams("vopp=left&vm=aa22"), SEASON_PARSE),
     ).not.toHaveProperty("season");
+  });
+
+  test("the player page's match scope (?sres= ?sopp= ?ssurf= ?sm=) is its own keys: parsed canonical, written canonical, and carried through every viz write and the tab switch", () => {
+    const scope = {
+      opponentHand: "left" as const,
+      result: "won" as const,
+      surface: "clay" as const,
+      matches: ["aa22", "bb11"],
+    };
+    const url = new URLSearchParams(
+      "sres=won&sopp=left&ssurf=clay&sm=bb11&sm=aa22&sm=bb11",
+    );
+    expect(parseMatchScope(url)).toEqual(scope);
+    // Nothing on, garbage, or the lightbox's own keys: no scope.
+    expect(parseMatchScope(new URLSearchParams(""))).toBeUndefined();
+    expect(
+      parseMatchScope(new URLSearchParams("sres=drew&sopp=both&sm=a/b")),
+    ).toBeUndefined();
+    expect(
+      parseMatchScope(new URLSearchParams("vres=won&vopp=left&vm=aa22")),
+    ).toBeUndefined();
+    // The scope is not the opened card's Matches row, and the reverse.
+    expect(parseVizState(url, SEASON_PARSE)).not.toHaveProperty("season");
+
+    // Written canonical, every other key kept; clearing leaves none.
+    expect(
+      matchScopeQuery(new URLSearchParams("tab=visualizations&sm=old"), scope),
+    ).toBe("tab=visualizations&sopp=left&sres=won&ssurf=clay&sm=aa22&sm=bb11");
+    expect(matchScopeQuery(url, undefined)).toBe("");
+    expect(
+      matchScopeQuery(new URLSearchParams("sm=bb11&sm=aa22"), {
+        opponentHand: null,
+        matches: ["bb11", "aa22"],
+      }),
+    ).toBe("sm=aa22&sm=bb11");
+
+    // A card opened, edited and closed: the store rewrites its own keys and
+    // leaves the page's scope alone.
+    const scoped = new URLSearchParams("tab=visualizations&sres=won&sm=aa22");
+    const opened = vizStateQuery(
+      scoped,
+      parseVizState(
+        new URLSearchParams("cut=serve&vres=won&vm=aa22"),
+        SEASON_PARSE,
+      ),
+    );
+    expect(parseMatchScope(new URLSearchParams(opened))).toEqual(
+      parseMatchScope(scoped),
+    );
+    expect(new URLSearchParams(opened).getAll("vm")).toEqual(["aa22"]);
+    const closed = vizStateQuery(
+      new URLSearchParams(opened),
+      parseVizState(new URLSearchParams("player=opponent"), SEASON_PARSE),
+    );
+    expect(closed).toBe("tab=visualizations&sres=won&sm=aa22&player=opponent");
+
+    // Statistics ⇄ Visualizations: the switch carries the scope both ways.
+    const toStatistics = profileViewQuery(
+      new URLSearchParams(closed),
+      "statistics",
+    );
+    expect(parseMatchScope(new URLSearchParams(toStatistics))).toEqual(
+      parseMatchScope(scoped),
+    );
+    expect(
+      parseMatchScope(
+        new URLSearchParams(
+          profileViewQuery(new URLSearchParams(toStatistics), "visualizations"),
+        ),
+      ),
+    ).toEqual(parseMatchScope(scoped));
   });
 
   test("untrusted values: an unknown hand reads as Any, a malformed id is dropped, nothing on is no season", async () => {
