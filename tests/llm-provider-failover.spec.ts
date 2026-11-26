@@ -1,4 +1,8 @@
 import { expect, test } from "@playwright/test";
+// The real SDK error classes, from their own modules: the package roots are
+// shimmed as `any` (`src/lib/llm/optional-deps.d.ts`).
+import { APIConnectionError, APIError } from "@anthropic-ai/sdk/core/error";
+import { AuthenticationError as OpenAIAuthenticationError } from "openai/core/error";
 
 import {
   createLLMObservabilityContext,
@@ -19,14 +23,27 @@ const PROMPT = "How did Maya serve in the second set?";
 const REPLY = "Maya won 71% of first-serve points.";
 const LEAKY_MESSAGE = `400 {"type":"error","error":{"type":"invalid_request_error","message":"bad request near: ${PROMPT}"}}`;
 
-/** An Anthropic SDK `APIError`'s shape: status, body type, class name, and a message that quotes the request. */
+/**
+ * An Anthropic SDK `APIError`'s shape: status, body type, and a message that
+ * quotes the request. Like the SDK's own classes it leaves `.name` as
+ * "Error", so the class name has to come from the constructor.
+ */
 class BadRequestError extends Error {
   status = 400;
   type = "invalid_request_error";
   constructor() {
     super(LEAKY_MESSAGE);
-    this.name = "BadRequestError";
   }
+}
+
+/** Collects `console.warn` calls for the length of one test. */
+function captureWarnings(): { calls: unknown[][]; restore: () => void } {
+  const original = console.warn;
+  const calls: unknown[][] = [];
+  console.warn = (...args: unknown[]) => {
+    calls.push(args);
+  };
+  return { calls, restore: () => (console.warn = original) };
 }
 
 function stubPostHog() {
@@ -51,6 +68,7 @@ test("a failed primary call is one failover event, and the secondary answers", a
   const context = createLLMObservabilityContext("user-1");
   const served: LLMServed[] = [];
   const calls: string[] = [];
+  const warnings = captureWarnings();
 
   const result = await runWithProviderFailover(
     {
@@ -81,7 +99,11 @@ test("a failed primary call is one failover event, and the secondary answers", a
     posthog.client as never,
   );
 
+  warnings.restore();
   expect(result).toBe(REPLY);
+  // The server log keeps the message, so the cause can be read there.
+  expect(warnings.calls).toHaveLength(1);
+  expect(JSON.stringify(warnings.calls[0])).toContain("bad request near");
   expect(calls).toEqual(["anthropic", "openai"]);
   expect(served).toEqual([
     { provider: "openai", model: "gemini-3.5-flash-lite", failover: true },
@@ -245,4 +267,44 @@ test("failure fields drop anything that is not a short identifier", () => {
     error_code: null,
     error_name: null,
   });
+});
+
+test("error_name is the SDK class, which the SDKs' own `.name` does not give", () => {
+  // `generate()` is how the SDK builds the error from a real response.
+  const anthropic400 = APIError.generate(
+    400,
+    {
+      type: "error",
+      error: { type: "invalid_request_error", message: PROMPT },
+    },
+    undefined,
+    new Headers(),
+  );
+  expect(anthropic400.name).toBe("Error");
+  expect(llmFailureFields(anthropic400)).toMatchObject({
+    error_status: 400,
+    error_type: "invalid_request_error",
+    error_name: "BadRequestError",
+  });
+  expect(llmFailureFields(new APIConnectionError({}))).toEqual({
+    error_status: null,
+    error_type: null,
+    error_code: null,
+    error_name: "APIConnectionError",
+  });
+  expect(
+    llmFailureFields(
+      new OpenAIAuthenticationError(
+        401,
+        { code: "invalid_api_key", type: "invalid_request_error" },
+        "Incorrect API key provided",
+        new Headers(),
+      ),
+    ),
+  ).toMatchObject({
+    error_status: 401,
+    error_code: "invalid_api_key",
+    error_name: "AuthenticationError",
+  });
+  expect(llmFailureFields(new Error("plain")).error_name).toBe("Error");
 });

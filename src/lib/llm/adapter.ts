@@ -347,7 +347,8 @@ type FailoverCapture = Pick<PostHog, "capture" | "flush">;
  * What a failed provider call says about itself, reduced to fields that
  * cannot carry user data: the HTTP status, the provider's error type and
  * code (`invalid_request_error`, `invalid_api_key`), and the SDK's error
- * class. Never the message — a 400 can quote the request back.
+ * class. Never the message — a 400 can quote the request back; the
+ * failover's server log keeps it.
  */
 export function llmFailureFields(error: unknown): {
   error_status: number | null;
@@ -371,7 +372,17 @@ export function llmFailureFields(error: unknown): {
         : null,
     error_type: slug(record.type),
     error_code: slug(record.code),
-    error_name: error instanceof Error ? slug(error.name) : null,
+    // The SDKs' error classes all leave `.name` as "Error"; the class name
+    // (`BadRequestError`, `APIConnectionError`) is what tells them apart.
+    // Not minified: both SDKs are `serverExternalPackages`.
+    error_name:
+      error instanceof Error
+        ? slug(
+            error.constructor.name !== "Error"
+              ? error.constructor.name
+              : error.name,
+          )
+        : null,
   };
 }
 
@@ -404,6 +415,7 @@ export async function runWithProviderFailover<T>(
   posthog: FailoverCapture | null = getPostHogClient(),
 ): Promise<T> {
   const { primary, secondary } = attempts;
+  let answered = primary;
   let result: T;
   try {
     result = await primary.run();
@@ -414,6 +426,10 @@ export async function runWithProviderFailover<T>(
       provider: primary.provider,
       span: options.span,
       ...failure,
+      // Server logs only — never in the PostHog event below. It names the
+      // cause (a key without workspace scope, a refused parameter), and a 400
+      // can quote the request back, which is why it stays out of analytics.
+      error: error instanceof Error ? error.message : String(error),
     });
     if (posthog) {
       posthog.capture({
@@ -434,18 +450,13 @@ export async function runWithProviderFailover<T>(
       });
       flushAfterResponse(posthog);
     }
-    const served = await secondary.run();
-    options.onServed?.({
-      provider: secondary.provider,
-      model: secondary.model,
-      failover: true,
-    });
-    return served;
+    answered = secondary;
+    result = await secondary.run();
   }
   options.onServed?.({
-    provider: primary.provider,
-    model: primary.model,
-    failover: false,
+    provider: answered.provider,
+    model: answered.model,
+    failover: answered !== primary,
   });
   return result;
 }
