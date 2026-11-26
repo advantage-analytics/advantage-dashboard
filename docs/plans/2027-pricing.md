@@ -1,6 +1,6 @@
 # 2027 pricing: build plan
 
-Written 2026-11-25. Replaces stage 2 of
+Written 2026-11-25, design-review decisions added 2026-11-26. Replaces stage 2 of
 [`2027-player-pricing.md`](2027-player-pricing.md), whose "Player $29 / Player
 Pro $49" draft is superseded. Stage 1 of that doc (credit packs, PR #468) is
 shipped and stays the record of how credits work.
@@ -89,9 +89,11 @@ These override anything else in this doc or in `2027-player-pricing.md`.
    effect at renewal.
 8. A subscription bought in December is billed that day and its hours start
    that day.
-9. **Ask on paid plans** has a fair-use limit we don't advertise: Coach 150,
-   Coach Pro 300, college 300 per person, a month. An agent-mode question
-   counts as 3. At the limit the message is "Contact us", not a paywall.
+9. **Ask on paid plans** has a fair-use limit we don't advertise. The figures
+   are set in the Ask session (working numbers: Coach 150, Coach Pro 300,
+   college 300 per person, a month; an agent-mode question counts as 3) and
+   live in the plan module, never in the gate. At the limit the message is
+   "Contact us", not a paywall.
 
 **Colleges**
 
@@ -133,11 +135,11 @@ the canvas shows and override anything above that disagrees.
   balance (figure, split, reset, "See usage ↗", no meter) and a Plan card whose
   rows hold every action (choose/upgrade, pay yearly, extra hours, billing).
   The comparison lives only in the dialog.
-- **Settings › Usage** owns the meter and the history: the personal card with
-  a "This month" list of matches in the team card's row form, the team card,
-  and storage.
-- **Season view:** a team on a season plan sees its season in place of the
-  month stepper ("Spring 2027 · Jan 1 – May 31"). A Full-year plan reads
+- **Settings › Usage** owns your meter and history: the personal card with a
+  "This month" list of matches (name, date, time; no bars) and storage. Team
+  hours are not here (see the Settings bullet below).
+- **Season view:** on its team page, a team on a season plan sees its season,
+  not a month ("Spring 2027 · Jan 1 – May 31"). A Full-year plan reads
   "2026–27 season · Aug 1 – Jul 31", never "Spring".
 - **File step:** a one-line grey hours notice above the drop zone (Free: "No
   video hours yet."; out-of-hours: "This video is longer than your 23m
@@ -221,7 +223,9 @@ Copy only, so it can go first.
 - **Migration:** on `programs`, add `plan_id` (`starter | program | elite`),
   `plan_term` (`spring | full_year`), `plan_starts_on`, `plan_ends_on`,
   `plan_rush_included`, `plan_set_by`, `plan_set_at`, `plan_note` (invoice or
-  PO reference). Change the `players_can_upload` default to `false`.
+  PO reference). New teams default to coaches-only uploads: set the default
+  `upload_policy` to `owner_coaches` (`players_can_upload` is derived from
+  it; check the live schema for how before writing the migration).
 - **`src/lib/billing/plans.ts`:** every figure above, typed like the landing
   site's (`COACH_PLANS`, `COLLEGE_PLANS`, `EXTRA_HOUR_PRICE`,
   `HOURS_PER_MATCH`, Ask limits, `FIRST_MONTH_DISCOUNT_PERCENT`,
@@ -240,7 +244,11 @@ Copy only, so it can go first.
 ### B. Allowances
 
 - `quotaTierFor()` / `monthlyCapSecondsFor()` read the plan from January 1:
-  - personal: Free 0, Coach 5 h, Coach Pro 10 h a billing month; the admin
+  - personal: Free 0, Coach 5 h, Coach Pro 10 h a **billing month**, which
+    is the subscription's own period (`plan_period_start`–`plan_period_end`),
+    not the calendar month the beta used. Reservations and the meter key on
+    that period, so an upgrade's new period starts with fresh hours and
+    usage logged under the old period doesn't count against it. The admin
     override and the admin's unlimited workspace stay as they are.
   - team: the program plan's hours over **its own window**
     (`plan_starts_on`–`plan_ends_on`), not a month. A team on pilot keeps 75 h
@@ -257,7 +265,9 @@ Copy only, so it can go first.
   for them (they are colleges, which today get 75 h without the switch).
 - **Tests (`tests/database`, plus unit tests for the cap math):** monthly
   plan; season window, including a reservation on the last day; Free has 0;
-  plan hours then purchased hours; expiry order; no rollover; pilot end date;
+  plan hours then purchased hours; expiry order; no rollover; a subscription
+  period that straddles two calendar months; an upgrade mid-period; pilot end
+  date;
   the January 1 switch on both sides of midnight UTC.
 
 ### C. Stripe subscriptions and extra hours
@@ -273,13 +283,10 @@ Copy only, so it can go first.
   write `video_credits` rows (12 months), so one spend path covers old credits
   and new hours. Remove the $14 / $60 packs from the paywall and Settings ›
   Plan.
-- **One checkout dialog, three doors.** The same dialog (the paywall's mesh
-  band, plan rows, Monthly/Yearly, then Embedded Checkout) opens from
-  Settings › Plan's "Choose Coach" / "Choose Coach Pro", from the landing site,
-  and as the wizard paywall with the match on top. There is no separate
-  checkout page. The landing link signs the player up or in (onboarding first
-  for a new account), then lands on Settings › Plan with
-  `?plan=&period=` opening the dialog on that plan; `plan=free` lands on Home.
+- **Landing link:** signs the player up or in (onboarding first for a new
+  account), then lands on Settings › Plan with `?plan=&period=` opening the
+  checkout dialog (see the design review) on that plan; `plan=free` lands on
+  Home.
 - **Webhook:** `checkout.session.completed`, `customer.subscription.created`,
   `.updated`, `.deleted`, `invoice.paid`, `invoice.payment_failed`. It writes
   `users.plan`, the period dates and status. Upgrades run with
@@ -289,8 +296,8 @@ Copy only, so it can go first.
   until Stripe's retries end, then drops to Free.
 - **Customer Portal** for card, invoices and cancelling; plan changes go
   through our own Upgrade button.
-- Move the Lifetime account to Coach with no subscription, then drop `pro`
-  from the check.
+- Move the Lifetime account to Free (decision 4), then drop `pro` from the
+  check.
 - Tests: webhook handling with Stripe fixture events (create, upgrade,
   downgrade, cancel, failed payment), the discount only on monthly, sign-up
   parameters.
@@ -298,13 +305,17 @@ Copy only, so it can go first.
 ### D. Gating
 
 - Server-side checks, never only hidden buttons:
-  - Human review: a Free user's match doesn't go to the review queue.
-  - Ask: `ask_reserve_question()` reads the plan's limit (Free 20, Coach 150,
-    Coach Pro 300, team member 300) and the connector's `ask` tool goes
-    through the same reservation. The connector's call-rate limit stays.
+  - Human review: a match goes to the review queue when it was paid for,
+    with plan hours or purchased extra hours (decision 5). A Free player's
+    SwingVision import does not.
+  - Ask: `ask_reserve_question()` reads the plan's limit from the plan
+    module (Free 20; paid figures per decision 9) and the connector's `ask`
+    tool goes through the same reservation. The connector's call-rate limit
+    stays.
 - Upgrade prompt for Free users at each gate, with the plan module's figures.
-- Tests: a Free user's match skips review; Ask refuses at each limit; the MCP
-  `ask` tool spends from the same allowance.
+- Tests: a match paid with extra hours on a Free account is reviewed and an
+  unpaid import is not; Ask refuses at each limit; the MCP `ask` tool spends
+  from the same allowance.
 
 ### F. Copy and emails
 
@@ -344,17 +355,8 @@ Figures are the Coach example; templates fill them from the plan module.
 
 ## Landing site changes for Cj
 
-Now a ready-to-paste prompt: [`2027-landing-handoff.md`](2027-landing-handoff.md).
-
-This repo doesn't change `advantage-landing`. It needs:
-
-1. `FREE_MATCH_OFFER = false` (no free match), and the Free plan's line.
-2. Free's Ask: "20 questions a month" instead of No; paid plans "Unlimited"
-   with a fair-use note.
-3. Rush and Priority marked "coming soon", or kept off the plans, until they
-   are built.
-4. The first-month offer (50% off monthly), if it should be advertised.
-5. Schedule isn't live; leave it out of the college feature list.
+A ready-to-paste prompt: [`2027-landing-handoff.md`](2027-landing-handoff.md).
+This repo doesn't change `advantage-landing`; the handoff lists what it needs.
 
 ## Check
 
@@ -362,11 +364,9 @@ For each stage: `npm run typecheck`, `npm run lint`, `npm run format:check`,
 the Playwright tests and `tests/database`. The last PR ends with a table of
 every figure in `src/lib/billing/plans.ts` against
 `advantage-landing/src/lib/plans.ts`; every row must match or be one of the
-landing changes above.
+landing changes in the handoff.
 
 ## Still open
 
-- Confirm with SplitStep that UCLA, Babson and TCU count as pilots and that
-  their 3 months start January 1.
 - 8 more labelled matches are due to SplitStep by May 2027 (not dashboard
   work).
