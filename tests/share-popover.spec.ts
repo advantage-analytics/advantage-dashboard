@@ -161,7 +161,7 @@ test("personal, private: Only you is chosen and no link of any kind is offered",
     { label: "Only you", checked: true },
     { label: "Anyone with the link", checked: false },
   ]);
-  expect(html).toContain("A link shows the match report only.");
+  expect(html).toContain("A link shows the match report and visualizations.");
   // The video is only mentioned for a match that has one.
   expect(render(null, { hasVideo: true })).toContain(
     "A link shows the match report, visualizations and video.",

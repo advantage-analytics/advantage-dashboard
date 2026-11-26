@@ -330,6 +330,8 @@ export function SharePopoverPanel({
   const [error, setError] = useState<string | null>(null);
   const [confirmingOff, setConfirmingOff] = useState(false);
   const [pending, startTransition] = useTransition();
+  // A new link carries the video when the match has one and this viewer may share it.
+  const videoOnByDefault = hasVideo && canShareVideo;
   const [optimisticOn, setOptimisticOn] = useOptimistic(link !== null);
   // The cut the Video tab had applied when this opened (`?tab=film` with
   // `?f=` and/or `?pn=`), offered as a row under "On the link". Ticked, the
@@ -403,7 +405,7 @@ export function SharePopoverPanel({
       setOptimisticOn(next);
       const result = next
         ? await enableMatchShare(match.id, {
-            includeVideo: hasVideo && canShareVideo,
+            includeVideo: videoOnByDefault,
           })
         : await disableMatchShare(match.id);
       setConfirmingOff(false);
@@ -681,13 +683,11 @@ export function SharePopoverPanel({
   } else if (team?.teamUrl && !isPublic) {
     note = "Teammates sign in to open this link.";
   } else {
-    // Only a match with a video has anything to say about it.
-    note =
-      hasVideo && canShareVideo
-        ? "A link shows the match report, visualizations and video."
-        : hasVideo
-          ? "A link shows the match report and visualizations."
-          : "A link shows the match report only.";
+    // What a new link starts with: Visualizations always, Video when the
+    // match has one and this viewer may share it.
+    note = videoOnByDefault
+      ? "A link shows the match report, visualizations and video."
+      : "A link shows the match report and visualizations.";
   }
 
   return (
