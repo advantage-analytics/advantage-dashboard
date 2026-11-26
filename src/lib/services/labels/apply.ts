@@ -360,10 +360,11 @@ export function splitPointStrokes(
   const lets = live.filter((shot) => isLetServe(shot));
   const rally = live.filter((shot) => !isLetServe(shot));
   const counted = countedServeIndex(rally, server);
-  const dropped = rally.filter(
-    (shot, i) => i < counted && !isServeStroke(shot.stroke),
-  );
-  const played = rally.filter((shot) => !dropped.includes(shot));
+  const dropped: LabelShot[] = [];
+  const played: LabelShot[] = [];
+  rally.forEach((shot, i) => {
+    (i < counted && !isServeStroke(shot.stroke) ? dropped : played).push(shot);
+  });
   return { played, lets, dropped };
 }
 
