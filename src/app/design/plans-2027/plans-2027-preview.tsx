@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { PlanCheckoutDialog } from "@/components/dashboard/billing/plan-checkout-dialog";
 import { FileStepContent } from "@/components/dashboard/matches/new-match-wizard/FileStepContent";
 import {
@@ -16,6 +17,20 @@ import {
   type VideoProbeSummary,
 } from "@/components/dashboard/matches/new-match-wizard/types";
 import { PlanSettings } from "@/components/dashboard/settings/plan-settings";
+import { PlanMeterPill } from "@/components/dashboard/beta-header-meter";
+import { PlanHomeCard } from "@/components/dashboard/home-feed/pilot-card";
+import { PersonalUsageCard } from "@/components/dashboard/settings/personal-usage-card";
+import { PlanHoursCard } from "@/components/dashboard/settings/teams/plan-hours-card";
+import {
+  homeCardView,
+  planHoursView,
+  planStandingFor,
+  teamMeterSuffix,
+  usageCardView,
+  type PlanStanding,
+} from "@/lib/billing/plan-copy";
+import type { ProgramUsage } from "@/lib/data/usage-server";
+import type { AllowanceWorkspace } from "@/lib/services/splitstep/allowance";
 import {
   fileStepHoursNote,
   meterSuffix,
@@ -172,7 +187,94 @@ type DialogState = {
 type State =
   | { kind: "page"; label: string; page: PlanPageInput }
   | DialogState
-  | { kind: "file"; label: string; plan: "free" | "coach" };
+  | { kind: "file"; label: string; plan: "free" | "coach" }
+  | { kind: "pill"; label: string }
+  | { kind: "home"; label: string }
+  | { kind: "usage"; label: string }
+  | { kind: "team-hours"; label: string }
+  | { kind: "team-meter"; label: string }
+  | { kind: "email"; label: string; email: string };
+
+/* ---------- Stage F fixtures: January 30, 2027 ---------- */
+
+const TODAY = "2027-01-30";
+const NOW = new Date(`${TODAY}T12:00:00Z`);
+const PROGRAM_ID = "22222222-2222-2222-2222-222222222222";
+
+const WS_FREE: AllowanceWorkspace = {
+  kind: "personal",
+  orgType: null,
+  plan: "free",
+};
+const WS_COACH: AllowanceWorkspace = {
+  kind: "personal",
+  orgType: null,
+  plan: "coach",
+  planPeriodStart: "2027-01-14T00:00:00Z",
+};
+const WS_COACH_PRO: AllowanceWorkspace = { ...WS_COACH, plan: "coach-pro" };
+const WS_SEASON: AllowanceWorkspace = {
+  kind: "team",
+  orgType: "college",
+  programPlan: {
+    id: "program",
+    term: "spring",
+    startsOn: "2027-01-01",
+    endsOn: "2027-05-31",
+  },
+};
+const WS_FULL_YEAR: AllowanceWorkspace = {
+  kind: "team",
+  orgType: "college",
+  programPlan: {
+    id: "elite",
+    term: "full_year",
+    startsOn: "2026-08-01",
+    endsOn: "2027-07-31",
+  },
+};
+const WS_PILOT: AllowanceWorkspace = {
+  kind: "team",
+  orgType: "college",
+  pilotEligible: true,
+  pilotEndsOn: "2027-05-31",
+  pilotEndedAt: null,
+};
+const WS_NO_PLAN: AllowanceWorkspace = { kind: "team", orgType: "college" };
+
+const standing = (workspace: AllowanceWorkspace): PlanStanding =>
+  planStandingFor(workspace, NOW);
+
+const TEAM_USAGE: ProgramUsage = {
+  usedSeconds: 58 * H,
+  capSeconds: 200 * H,
+  billingMonth: "2027-01-01",
+  lines: [
+    { userId: "u1", name: "Jordan Reyes", usedSeconds: 21 * H, matchCount: 12 },
+    { userId: "u2", name: "Sam Okafor", usedSeconds: 19 * H, matchCount: 10 },
+    { userId: "u3", name: "Diego Alvarez", usedSeconds: 18 * H, matchCount: 9 },
+  ],
+};
+const TEAM_ROLES = new Map([
+  ["u1", "coach"],
+  ["u2", "player"],
+  ["u3", "player"],
+] as const);
+
+const USAGE_MATCHES = [
+  {
+    id: "m1",
+    opponent: "Lucas Moreno",
+    date: "2027-01-18T00:00:00Z",
+    seconds: 63 * M,
+  },
+  {
+    id: "m2",
+    opponent: "Ethan Park",
+    date: "2027-01-09T00:00:00Z",
+    seconds: 45 * M,
+  },
+];
 
 const STATES: Record<string, State> = {
   "plan-free": {
@@ -304,13 +406,76 @@ const STATES: Record<string, State> = {
       "Upload wizard — file step, Coach with a video longer than what's left",
     plan: "coach",
   },
+  "header-pill": {
+    kind: "pill",
+    label: "Header pill — every plan and team state",
+  },
+  "home-card": {
+    kind: "home",
+    label: "Home — the usage card for each plan and team state",
+  },
+  usage: {
+    kind: "usage",
+    label: "Settings › Usage — the personal card, Coach and Free",
+  },
+  "team-hours": {
+    kind: "team-hours",
+    label: "Team page — Plan & hours: season, full year, pilot, no plan",
+  },
+  "team-meter": {
+    kind: "team-meter",
+    label: "Upload wizard — a team's footer meter: season, pilot",
+  },
+  "email-low": {
+    kind: "email",
+    label: "Email — 80% used, Coach",
+    email: "low",
+  },
+  "email-spent": {
+    kind: "email",
+    label: "Email — used up, Coach",
+    email: "spent",
+  },
+  "email-season-low": {
+    kind: "email",
+    label: "Email — 80% used, a program's season",
+    email: "season-low",
+  },
+  "email-season-spent": {
+    kind: "email",
+    label: "Email — used up, a program's season",
+    email: "season-spent",
+  },
 };
 
-export function Plans2027Preview({ state }: { state: string | null }) {
+export function Plans2027Preview({
+  state,
+  emails = {},
+}: {
+  state: string | null;
+  /** The usage emails, rendered on the server from the real templates. */
+  emails?: Record<string, string>;
+}) {
   const chosen = state ? STATES[state] : undefined;
   if (!chosen) return <Index unknown={state} />;
 
   if (chosen.kind === "file") return <FileStepState plan={chosen.plan} />;
+  if (chosen.kind === "pill") return <PillStates label={chosen.label} />;
+  if (chosen.kind === "home") return <HomeStates label={chosen.label} />;
+  if (chosen.kind === "usage") return <UsageStates label={chosen.label} />;
+  if (chosen.kind === "team-hours") {
+    return <TeamHoursStates label={chosen.label} />;
+  }
+  if (chosen.kind === "team-meter") {
+    return <TeamMeterStates label={chosen.label} />;
+  }
+  if (chosen.kind === "email") {
+    return (
+      <Frame label={chosen.label}>
+        <EmailFrame label={chosen.label} html={emails[chosen.email] ?? ""} />
+      </Frame>
+    );
+  }
 
   return (
     <main className="min-h-dvh bg-[var(--surface-card)] px-10 py-10">
@@ -459,5 +624,338 @@ function FileStepState({ plan }: { plan: "free" | "coach" }) {
         />
       </div>
     </WizardShell>
+  );
+}
+
+/* ---------- Stage F surfaces ---------- */
+
+/** An email in an iframe sized to its own content, so no message is cut off. */
+function EmailFrame({ label, html }: { label: string; html: string }) {
+  const [height, setHeight] = useState(900);
+  return (
+    <iframe
+      aria-label={label}
+      srcDoc={html}
+      scrolling="no"
+      onLoad={(event) => {
+        const doc = event.currentTarget.contentDocument;
+        if (doc) setHeight(doc.documentElement.scrollHeight);
+      }}
+      style={{ height }}
+      className="w-full max-w-[720px] rounded-[var(--radius-card)] border border-[var(--border-card)]"
+    />
+  );
+}
+
+function Frame({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <main className="min-h-dvh bg-[var(--surface-card)] px-10 py-10">
+      <p className="eyebrow">{label}</p>
+      <div className="mt-6 flex flex-col gap-8">{children}</div>
+    </main>
+  );
+}
+
+function Case({ name, children }: { name: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2.5">
+      <span className="text-[11px] text-[var(--ink-500)]">{name}</span>
+      {children}
+    </section>
+  );
+}
+
+/** The real pill with fixed hours. Hover one for its tooltip. */
+function PillStates({ label }: { label: string }) {
+  const cases: {
+    name: string;
+    workspace: AllowanceWorkspace;
+    hours: React.ComponentProps<typeof PlanMeterPill>["hours"];
+  }[] = [
+    {
+      name: "Free, no hours",
+      workspace: WS_FREE,
+      hours: { remainingSeconds: 0, capSeconds: 0 },
+    },
+    {
+      name: "Free, with extra hours",
+      workspace: WS_FREE,
+      hours: {
+        remainingSeconds: 0,
+        capSeconds: 0,
+        creditSeconds: 2 * H,
+        nextCreditExpiresAt: "2027-10-16T00:00:00Z",
+      },
+    },
+    {
+      name: "Coach",
+      workspace: WS_COACH,
+      hours: { remainingSeconds: 3 * H + 12 * M, capSeconds: 5 * H },
+    },
+    {
+      name: "Coach, with extra hours",
+      workspace: WS_COACH,
+      hours: {
+        remainingSeconds: 3 * H + 12 * M,
+        capSeconds: 5 * H,
+        creditSeconds: 1 * H,
+        nextCreditExpiresAt: "2027-10-16T00:00:00Z",
+      },
+    },
+    {
+      name: "Coach, running low",
+      workspace: WS_COACH,
+      hours: { remainingSeconds: 48 * M, capSeconds: 5 * H },
+    },
+    {
+      name: "Coach, out of hours",
+      workspace: WS_COACH,
+      hours: { remainingSeconds: 0, capSeconds: 5 * H },
+    },
+    {
+      name: "Coach Pro",
+      workspace: WS_COACH_PRO,
+      hours: { remainingSeconds: 7 * H + 40 * M, capSeconds: 10 * H },
+    },
+    {
+      name: "A team on Program, spring",
+      workspace: WS_SEASON,
+      hours: { remainingSeconds: 142 * H, capSeconds: 200 * H },
+    },
+    {
+      name: "A team on Elite, full year",
+      workspace: WS_FULL_YEAR,
+      hours: { remainingSeconds: 310 * H, capSeconds: 400 * H },
+    },
+    {
+      name: "A pilot team",
+      workspace: WS_PILOT,
+      hours: { remainingSeconds: 61.5 * H, capSeconds: 75 * H },
+    },
+    {
+      name: "A team with no plan",
+      workspace: WS_NO_PLAN,
+      hours: { remainingSeconds: 0, capSeconds: 0 },
+    },
+    { name: "Loading", workspace: WS_COACH, hours: "loading" },
+    { name: "The read failed", workspace: WS_COACH, hours: null },
+  ];
+  return (
+    <Frame label={label}>
+      <div className="grid max-w-[720px] grid-cols-2 gap-x-10 gap-y-6">
+        {cases.map((entry) => (
+          <Case key={entry.name} name={entry.name}>
+            <span>
+              <PlanMeterPill
+                standing={standing(entry.workspace)}
+                hours={entry.hours}
+                onClick={noop}
+              />
+            </span>
+          </Case>
+        ))}
+      </div>
+    </Frame>
+  );
+}
+
+function HomeStates({ label }: { label: string }) {
+  const personal = { owner: "Jordan Reyes", today: TODAY };
+  const cards = [
+    {
+      name: "Coach",
+      view: homeCardView({
+        ...personal,
+        standing: standing(WS_COACH),
+        usedSeconds: 1 * H + 48 * M,
+        capSeconds: 5 * H,
+        creditSeconds: 1 * H,
+        analyzed: 6,
+      }),
+    },
+    {
+      name: "Free, first month still to take",
+      view: homeCardView({
+        ...personal,
+        standing: standing(WS_FREE),
+        usedSeconds: 0,
+        capSeconds: 0,
+        analyzed: 4,
+        firstMonthEligible: true,
+      }),
+    },
+    {
+      name: "A team on Program, spring",
+      view: homeCardView({
+        standing: standing(WS_SEASON),
+        owner: "Northfield University",
+        programId: PROGRAM_ID,
+        usedSeconds: 58 * H,
+        capSeconds: 200 * H,
+        analyzed: 31,
+        today: TODAY,
+      }),
+    },
+    {
+      name: "A pilot team",
+      view: homeCardView({
+        standing: standing(WS_PILOT),
+        owner: "University of Georgia",
+        programId: PROGRAM_ID,
+        usedSeconds: 13.5 * H,
+        capSeconds: 75 * H,
+        analyzed: 18,
+        today: TODAY,
+      }),
+    },
+    {
+      name: "A team with no plan",
+      view: homeCardView({
+        standing: standing(WS_NO_PLAN),
+        owner: "Northfield University",
+        programId: PROGRAM_ID,
+        usedSeconds: 0,
+        capSeconds: 0,
+        analyzed: 12,
+        today: TODAY,
+      }),
+    },
+    {
+      name: "A team on Elite, full year",
+      view: homeCardView({
+        standing: standing(WS_FULL_YEAR),
+        owner: "Northfield University",
+        programId: PROGRAM_ID,
+        usedSeconds: 90 * H,
+        capSeconds: 400 * H,
+        analyzed: 52,
+        today: TODAY,
+      }),
+    },
+  ];
+  return (
+    <Frame label={label}>
+      <div className="grid max-w-[1000px] grid-cols-2 gap-6">
+        {cards.map((card) => (
+          <Case key={card.name} name={card.name}>
+            <PlanHomeCard view={card.view} />
+          </Case>
+        ))}
+      </div>
+    </Frame>
+  );
+}
+
+function UsageStates({ label }: { label: string }) {
+  return (
+    <Frame label={label}>
+      <div className="flex max-w-[640px] flex-col gap-8">
+        <Case name="Coach, two matches this month, an extra hour">
+          <PersonalUsageCard
+            view={usageCardView({
+              standing: standing(WS_COACH),
+              usedSeconds: 1 * H + 48 * M,
+              capSeconds: 5 * H,
+              creditSeconds: 1 * H,
+              nextCreditExpiresAt: "2027-10-16T00:00:00Z",
+              matches: USAGE_MATCHES,
+            })}
+          />
+        </Case>
+        <Case name="Free, nothing analyzed">
+          <PersonalUsageCard
+            view={usageCardView({
+              standing: standing(WS_FREE),
+              usedSeconds: 0,
+              capSeconds: 0,
+              creditSeconds: 0,
+              nextCreditExpiresAt: null,
+              matches: [],
+            })}
+          />
+        </Case>
+      </div>
+    </Frame>
+  );
+}
+
+function TeamHoursStates({ label }: { label: string }) {
+  const cases = [
+    {
+      name: "Program, spring",
+      workspace: WS_SEASON,
+      usage: TEAM_USAGE,
+    },
+    {
+      name: "Elite, full year",
+      workspace: WS_FULL_YEAR,
+      usage: { ...TEAM_USAGE, usedSeconds: 90 * H, capSeconds: 400 * H },
+    },
+    {
+      name: "A pilot",
+      workspace: WS_PILOT,
+      usage: { ...TEAM_USAGE, usedSeconds: 13.5 * H, capSeconds: 75 * H },
+    },
+    {
+      name: "No plan",
+      workspace: WS_NO_PLAN,
+      usage: { ...TEAM_USAGE, usedSeconds: 0, capSeconds: 0, lines: [] },
+    },
+  ];
+  return (
+    <Frame label={label}>
+      <div className="flex max-w-[640px] flex-col gap-8">
+        {cases.map((entry) => (
+          <Case key={entry.name} name={entry.name}>
+            <PlanHoursCard
+              view={planHoursView({
+                standing: standing(entry.workspace),
+                usedSeconds: entry.usage.usedSeconds,
+                capSeconds: entry.usage.capSeconds,
+              })}
+              usage={entry.usage}
+              pendingSeconds={0}
+              roles={TEAM_ROLES}
+              viewerId="u1"
+            />
+          </Case>
+        ))}
+      </div>
+    </Frame>
+  );
+}
+
+/** The wizard's real footer meter, with the suffix a team gets from January 1. */
+function TeamMeterStates({ label }: { label: string }) {
+  const cases = [
+    {
+      name: "Program, spring",
+      workspace: WS_SEASON,
+      left: 142 * H,
+      cap: 200 * H,
+    },
+    { name: "A pilot", workspace: WS_PILOT, left: 61.5 * H, cap: 75 * H },
+  ];
+  return (
+    <Frame label={label}>
+      {cases.map((entry) => (
+        <Case key={entry.name} name={entry.name}>
+          <span className="flex">
+            <FooterMeter
+              remainingSeconds={entry.left}
+              capSeconds={entry.cap}
+              suffix={teamMeterSuffix(standing(entry.workspace)) ?? ""}
+              pilotNote={false}
+            />
+          </span>
+        </Case>
+      ))}
+    </Frame>
   );
 }

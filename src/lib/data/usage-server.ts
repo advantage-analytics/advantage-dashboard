@@ -282,3 +282,121 @@ export async function getProgramUsage(
     ...period,
   };
 }
+
+/** One match analysed in the viewer's current hours window. */
+export interface PersonalUsageMatch {
+  /** The match id, or the ledger row's own id for a match since removed. */
+  id: string;
+  /** `matches.player2_name`; null when the match is gone or unnamed. */
+  opponent: string | null;
+  /** `matches.date`, a calendar day — read it through `match-day.ts`. */
+  date: string | null;
+  seconds: number;
+}
+
+/**
+ * The matches behind the personal meter: every unreleased ledger row in the
+ * CURRENT hours window (`allowanceFor()`'s, the one `getPersonalUsage()`
+ * sums), one line per match, newest first. A match analysed twice in the
+ * window is one line with both runs' time, and a row whose match has since
+ * been removed still shows, so the lines add up to the meter.
+ *
+ * Read as the viewer under RLS: their own ledger rows, their own jobs and
+ * matches. A failed ledger read answers null and logs, so the card can say
+ * the list could not be read rather than that nothing was analysed — the
+ * meter above is still the figure.
+ */
+export async function getPersonalUsageMatches(
+  personal: AllowanceWorkspace & Pick<Workspace, "id">,
+  now: Date = new Date(),
+): Promise<PersonalUsageMatch[] | null> {
+  const supabase = await createClient();
+  const allowance = allowanceFor(personal, now);
+
+  const { data, error } = await scopeToAllowance(
+    supabase
+      .from("processing_usage")
+      .select("id, job_id, reserved_seconds, actual_seconds, created_at")
+      .eq("account_id", personal.id)
+      .eq("account_type", "individual")
+      .eq("released", false),
+    allowance,
+  ).order("created_at", { ascending: false });
+  if (error) {
+    console.error("[usage] could not read personal usage lines", {
+      error: error.message,
+    });
+    return null;
+  }
+
+  const rows = (data ?? []) as {
+    id: string;
+    job_id: string | null;
+    reserved_seconds: number | null;
+    actual_seconds: number | null;
+  }[];
+  if (rows.length === 0) return [];
+
+  // Two batched reads rather than embeds: `processing_usage.job_id` is
+  // nullable, and a to-one embed on a nullable key quietly drops rows.
+  const jobIds = [...new Set(rows.flatMap((row) => row.job_id ?? []))];
+  const jobs =
+    jobIds.length > 0
+      ? await supabase
+          .from("processing_jobs")
+          .select("id, match_id")
+          .in("id", jobIds)
+      : { data: [], error: null };
+  const matchByJob = new Map<string, string>();
+  for (const job of (jobs.data ?? []) as {
+    id: string;
+    match_id: string | null;
+  }[]) {
+    if (job.match_id) matchByJob.set(job.id, job.match_id);
+  }
+
+  const matchIds = [...new Set(matchByJob.values())];
+  const matches =
+    matchIds.length > 0
+      ? await supabase
+          .from("matches")
+          .select("id, player2_name, date")
+          .in("id", matchIds)
+      : { data: [], error: null };
+  if (jobs.error || matches.error) {
+    console.error("[usage] could not name personal usage lines", {
+      jobs: jobs.error?.message,
+      matches: matches.error?.message,
+    });
+  }
+  const matchById = new Map(
+    (
+      (matches.data ?? []) as {
+        id: string;
+        player2_name: string | null;
+        date: string | null;
+      }[]
+    ).map((match) => [match.id, match]),
+  );
+
+  // Newest first, as the ledger came back; a second run of one match adds to
+  // the line its newest run opened.
+  const lines = new Map<string, PersonalUsageMatch>();
+  for (const row of rows) {
+    const matchId = row.job_id ? matchByJob.get(row.job_id) : undefined;
+    const match = matchId ? matchById.get(matchId) : undefined;
+    const key = match?.id ?? row.id;
+    const seconds = row.actual_seconds ?? row.reserved_seconds ?? 0;
+    const line = lines.get(key);
+    if (line) line.seconds += seconds;
+    else {
+      lines.set(key, {
+        id: key,
+        opponent: match?.player2_name?.trim() || null,
+        date: match?.date ?? null,
+        seconds,
+      });
+    }
+  }
+  return [...lines.values()];
+}

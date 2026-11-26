@@ -37,8 +37,8 @@ export type PlanId = CoachPlanId;
  * Anything that is not a plan on sale reads as Free: null, an unknown value,
  * and the legacy `pro` (the one Lifetime account, which moves to Free by
  * decision 4 of docs/plans/2027-pricing.md). The column still admits `pro`
- * until that row is moved; `isProPlan` below still names it for the beta
- * screens, which stage F replaces.
+ * until that row is moved; `isProPlan` below still names it for the beta's
+ * own Settings › Plan, which is what an account sees until plans go on sale.
  */
 export function planFor(plan: string | null | undefined): CoachPlan {
   return coachPlan(isCoachPlanId(plan) ? plan : "free");
@@ -61,10 +61,12 @@ export function isProPlan(plan: string | null | undefined): boolean {
 }
 
 /**
- * Which free programme a workspace is on: every team workspace is in the
- * pilot, a personal one is in the beta. One answer for the two places that
- * name it — the Plan strip below and the header pill — so they cannot call the
- * same workspace two different things.
+ * Which free programme a workspace is on UNTIL plans begin: every team
+ * workspace is in the pilot, a personal one is in the beta. One answer for
+ * the places that name it — the Plan strip below, the header pill and the
+ * welcome dialog — so they cannot call the same workspace two different
+ * things. From January 1, 2027 those surfaces read `planStandingFor()` in
+ * `lib/billing/plan-copy.ts` instead, which names the plan.
  */
 export function workspaceTier(
   active: Pick<Workspace, "kind">,
@@ -73,11 +75,13 @@ export function workspaceTier(
 }
 
 /**
- * The Plan strip's facts — Plan / Squad (team only) / Member since — built
- * once so Settings › Plan and its loading skeleton (`SettingsPlanPending`)
- * cannot say two different things while a request is still in flight. The
- * strip names the tier as a person would say it: Beta, Lifetime (an early
- * one-time Pro purchase) or Pilot (a program).
+ * The beta Plan strip's facts — Plan / Squad (team only) / Member since —
+ * built once so a team workspace's Settings › Plan and its loading skeleton
+ * (`SettingsPlanPending`) cannot say two different things while a request is
+ * still in flight. The strip names the tier as a person would say it: Beta,
+ * Lifetime (an early one-time Pro purchase) or Pilot (a program). Only drawn
+ * until plans go on sale: from then Settings › Plan is `PlanSettings` in
+ * every workspace and nothing reads this.
  */
 export function planFacts(
   active: Pick<Workspace, "kind" | "team">,
@@ -96,44 +100,3 @@ export function planFacts(
     (fact): fact is NonNullable<typeof fact> => fact !== null,
   );
 }
-
-/**
- * What a personal account gets during the beta — the rows of Settings › Plan
- * and of its loading skeleton, so the two cannot drift. The video figure is
- * the one `reserveQuota()` enforces for the individual tier; kept as a
- * literal rather than imported so this file stays free of the quota module.
- */
-export const BETA_PLAN_ROWS: readonly {
-  label: string;
-  value: string;
-  note?: string;
-}[] = [
-  {
-    label: "Video analysis",
-    value: "2 hours a month",
-    note: "About one full match. Resets on the 1st.",
-  },
-  { label: "SwingVision imports", value: "Unlimited" },
-  { label: "Match reports and stats", value: "Included" },
-];
-
-/**
- * `BETA_PLAN_ROWS` for a pilot individual's personal workspace: 10 hours a
- * month of video in place of 2 (`PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS`, written
- * as a literal here for the same reason the 2 is).
- */
-export function betaPlanRows(individualPilot: boolean | undefined) {
-  if (!individualPilot) return BETA_PLAN_ROWS;
-  return BETA_PLAN_ROWS.map((row) =>
-    row.label === "Video analysis"
-      ? {
-          ...row,
-          value: "10 hours a month",
-          note: "Pilot allowance. Resets on the 1st.",
-        }
-      : row,
-  );
-}
-
-/** When the beta's free terms end, as the landing page and /claim say it. */
-export const PAID_PLANS_BEGIN = "January 2027";

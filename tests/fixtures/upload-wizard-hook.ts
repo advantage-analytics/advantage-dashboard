@@ -18,6 +18,7 @@ import * as quota from "@/lib/services/splitstep/quota";
 import * as draftTarget from "@/lib/wizard/draft-target";
 import { secondsLeft } from "@/lib/data/usage-format";
 import * as billingPlans from "@/lib/billing/plans";
+import * as planCopy from "@/lib/billing/plan-copy";
 import * as userPlan from "@/lib/user/plan";
 import type {
   UseUploadMatchWizardProps,
@@ -407,6 +408,8 @@ export function uploadWizardHarness(
     // Pure, so the real ones: the plan a workspace is on, and whether plans
     // are on sale (which decides the paywall the wizard opens).
     "@/lib/billing/plans": billingPlans,
+    // Pure too: the words a team's footer meter closes with from January 1.
+    "@/lib/billing/plan-copy": planCopy,
     "@/lib/user/plan": userPlan,
     // Pure string constant shared with the admin upload file route's own 500
     // body; the hook string-matches it verbatim.

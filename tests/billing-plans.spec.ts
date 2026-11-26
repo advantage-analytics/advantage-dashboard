@@ -25,19 +25,14 @@ import {
   isCollegePlanId,
   isPlanTerm,
   planHoursSeconds,
+  plansBeginMonth,
   plansHaveBegun,
   programPlanFor,
   seasonAllowance,
   springExtendedEnd,
   usd,
 } from "@/lib/billing/plans";
-import {
-  BETA_PLAN_ROWS,
-  PAID_PLANS_BEGIN,
-  isPaidPlan,
-  isProPlan,
-  planFor,
-} from "@/lib/user/plan";
+import { isPaidPlan, isProPlan, planFor } from "@/lib/user/plan";
 
 /**
  * `src/lib/billing/plans.ts` — every figure the dashboard sells, enforces or
@@ -300,7 +295,7 @@ test.describe("planFor", () => {
   test("the legacy Lifetime value reads as Free (decision 4)", () => {
     expect(planFor("pro").id).toBe("free");
     expect(isPaidPlan("pro")).toBe(false);
-    // The beta screens still name it until stage F replaces them.
+    // The beta's own Settings › Plan still names it until plans go on sale.
     expect(isProPlan("pro")).toBe(true);
   });
 
@@ -317,13 +312,8 @@ test.describe("planFor", () => {
     expect(isPaidPlan("free")).toBe(false);
   });
 
-  test("the beta exports are unchanged in this stage", () => {
-    expect(PAID_PLANS_BEGIN).toBe("January 2027");
-    expect(BETA_PLAN_ROWS[0]).toEqual({
-      label: "Video analysis",
-      value: "2 hours a month",
-      note: "About one full match. Resets on the 1st.",
-    });
+  test("the month plans begin is read from PLANS_BEGIN, not typed", () => {
+    expect(plansBeginMonth()).toBe("January 2027");
     expect(isProPlan("coach")).toBe(false);
     expect(isProPlan(null)).toBe(false);
   });

@@ -5,6 +5,7 @@ import { SettingsCard } from "@/components/dashboard/settings/settings-card";
 import { SettingsAlert } from "@/components/dashboard/settings/settings-alert";
 import { SettingsSaveBar } from "@/components/dashboard/settings/settings-save-bar";
 import { saveTeamSettings } from "@/components/dashboard/settings/team-actions";
+import { PlanHoursCard } from "@/components/dashboard/settings/teams/plan-hours-card";
 import { ProgramHoursSummary } from "@/components/dashboard/settings/teams/program-hours-summary";
 import { TeamIdentityCard } from "@/components/dashboard/settings/teams/team-identity-card";
 import { TeamMembersCard } from "@/components/dashboard/settings/teams/team-members-card";
@@ -24,6 +25,7 @@ import type {
   TeamSettingsData,
 } from "@/lib/data/team-settings-server";
 import type { SeatUsage } from "@/lib/data/teams-server";
+import type { PlanHoursView } from "@/lib/billing/plan-copy";
 import type { ProgramUsage } from "@/lib/data/usage-server";
 import type { ProgramRole } from "@/lib/workspace/types";
 import { SUPPORT_EMAIL } from "@/lib/constants";
@@ -42,6 +44,10 @@ import { SUPPORT_EMAIL } from "@/lib/constants";
  * identity, the member list and the leave row; staff get the form and the
  * leave row; the owner also gets "Make owner", the delete row, and a note in
  * the leave row's place saying ownership has to move first.
+ *
+ * The first card is the program's hours. From January 1, 2027 the page hands
+ * in `planHours` and it is Plan & hours (`PlanHoursCard`): the season or
+ * pilot the team is on. Without it, the beta's monthly summary.
  */
 export function TeamDetail({
   programId,
@@ -49,6 +55,7 @@ export function TeamDetail({
   crestUrl,
   conferenceOptions,
   usage,
+  planHours = null,
   pendingSeconds,
   seats,
   viewerId,
@@ -62,6 +69,8 @@ export function TeamDetail({
   conferenceOptions: string[];
   crestUrl: string | null;
   usage: ProgramUsage;
+  /** `planHoursView()` once plans have begun; null keeps the beta's card. */
+  planHours?: PlanHoursView | null;
   pendingSeconds: number;
   seats: SeatUsage;
   viewerId: string;
@@ -124,12 +133,22 @@ export function TeamDetail({
         />
       )}
 
-      <ProgramHoursSummary
-        usage={usage}
-        pendingSeconds={pendingSeconds}
-        roles={roles}
-        viewerId={viewerId}
-      />
+      {planHours ? (
+        <PlanHoursCard
+          view={planHours}
+          usage={usage}
+          pendingSeconds={pendingSeconds}
+          roles={roles}
+          viewerId={viewerId}
+        />
+      ) : (
+        <ProgramHoursSummary
+          usage={usage}
+          pendingSeconds={pendingSeconds}
+          roles={roles}
+          viewerId={viewerId}
+        />
+      )}
 
       <TeamIdentityCard
         programId={programId}

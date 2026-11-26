@@ -40,7 +40,10 @@ export function FooterMeter({
   remainingSeconds: number;
   capSeconds: number;
   selectedSeconds?: number;
-  /** "resets on the 1st" for a personal allowance, "team hours" for a program's. */
+  /**
+   * "resets on the 1st" for a personal allowance, "team hours" for a
+   * program's; from January 1, 2027 the plan's own closing words.
+   */
   suffix: string;
   /**
    * Credits behind the free hours, for the idle readout only: with any, the
@@ -57,7 +60,8 @@ export function FooterMeter({
   /**
    * Close the idle readout with the beta's end date. True while the beta's
    * free hours are what the bar measures; false for a plan's hours, where
-   * `suffix` (the reset day) closes it instead.
+   * `suffix` closes it instead — a personal plan's reset day, a season's end
+   * ("Spring, ends May 31") or a pilot team's own end date.
    */
   pilotNote?: boolean;
 }) {

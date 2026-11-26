@@ -1,5 +1,16 @@
 import { getWorkspaceContext } from "@/lib/workspace/active-workspace-server";
-import { getPersonalUsage, getProgramUsage } from "@/lib/data/usage-server";
+import {
+  getPersonalUsage,
+  getPersonalUsageMatches,
+  getProgramUsage,
+} from "@/lib/data/usage-server";
+import {
+  planStandingFor,
+  plansApplyTo,
+  usageCardView,
+} from "@/lib/billing/plan-copy";
+import { plansHaveBegun } from "@/lib/billing/plans";
+import { PersonalUsageCard } from "@/components/dashboard/settings/personal-usage-card";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import {
@@ -45,6 +56,13 @@ export const metadata = { title: "Usage" };
  *
  * Match videos are the exception: that card follows the ACTIVE workspace
  * only, because the video cap is per workspace and Remove acts on it.
+ *
+ * From January 1, 2027 this page is the viewer's own meter and history: the
+ * personal card reads their plan (`PersonalUsageCard`, with the matches
+ * analysed in the current hours window) and the program cards leave — a
+ * team's hours live on its own page under Settings › Teams. The personal
+ * card switches earlier for a player already on a paid plan
+ * (`plansApplyTo()`).
  */
 export default async function UsagePage() {
   const billingMonth = currentBillingMonth();
@@ -56,7 +74,8 @@ export default async function UsagePage() {
     workspace.available.find((candidate) => candidate.kind === "personal") ??
     workspace.active;
 
-  const teams = workspace.available
+  // Before January 1 only: after it a team's hours are on its team page.
+  const teams = (plansHaveBegun() ? [] : workspace.available)
     .filter((candidate) => candidate.kind === "team")
     .sort(
       (a, b) =>
@@ -67,9 +86,12 @@ export default async function UsagePage() {
   // Every read is independent of the others, so they go together rather than
   // one after the other; the workspace has to land first because it decides
   // which program cards exist at all.
-  const [videos, personal, ...programs] = await Promise.all([
+  const plans = plansApplyTo(personalWorkspace);
+  const [videos, personal, analysed, ...programs] = await Promise.all([
     getMatchVideoUsage(workspace.active),
     getPersonalUsage(personalWorkspace, billingMonth),
+    // The plan card's "This month"; the beta's card has no such list.
+    plans ? getPersonalUsageMatches(personalWorkspace) : [],
     ...teams.map((team) => getProgramUsage(team.id, billingMonth, team)),
   ]);
 
@@ -101,65 +123,78 @@ export default async function UsagePage() {
 
   return (
     <div className="flex max-w-[640px] flex-col gap-5">
-      <SettingsCard className="gap-3 py-5">
-        <SettingsCardTitle
-          trailing={
-            <span className="mono text-[11px] text-[var(--ink-500)]">
-              {personalUnlimited ? (
-                "Unlimited"
-              ) : headlineTotal ? (
-                <>
-                  {formatHoursLong(
-                    personalBalance.freeLeftSeconds + personal.creditSeconds,
-                  )}{" "}
-                  left
-                </>
-              ) : (
-                <>
-                  {formatHoursLong(personalBalance.freeLeftSeconds)} of{" "}
-                  {formatHoursLong(personal.capSeconds)} free left
-                </>
-              )}
-            </span>
-          }
-        >
-          Your analysis time
-        </SettingsCardTitle>
-
-        {!personalUnlimited && <TwoBucketMeter balance={personalBalance} />}
-
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--ink-500)]">
-          <span>
-            {personal.creditSeconds <= 0
-              ? "Credits: none"
-              : `${
-                  headlineTotal
-                    ? `Free: ${formatHoursLong(personalBalance.freeLeftSeconds)} of ${formatHoursLong(personal.capSeconds)} this month · `
-                    : ""
-                }${
-                  extraWord === "added"
-                    ? `Added: ${formatHoursLong(personal.creditSeconds)}${creditsUntil ? `, until ${creditsUntil}` : ""}`
-                    : `Credits: ${formatHoursLong(personal.creditSeconds)}${creditsUntil ? ` · Next expire ${creditsUntil}` : ""}`
-                }`}
-          </span>
-          <span className="flex-1" />
-          <Link
-            href={PLAN_HREF}
-            className="inline-flex items-center gap-1 text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
+      {plans ? (
+        <PersonalUsageCard
+          view={usageCardView({
+            standing: planStandingFor(personalWorkspace),
+            usedSeconds: personal.usedSeconds,
+            capSeconds: personal.capSeconds,
+            creditSeconds: personal.creditSeconds,
+            nextCreditExpiresAt: personal.nextCreditExpiresAt,
+            matches: analysed,
+          })}
+        />
+      ) : (
+        <SettingsCard className="gap-3 py-5">
+          <SettingsCardTitle
+            trailing={
+              <span className="mono text-[11px] text-[var(--ink-500)]">
+                {personalUnlimited ? (
+                  "Unlimited"
+                ) : headlineTotal ? (
+                  <>
+                    {formatHoursLong(
+                      personalBalance.freeLeftSeconds + personal.creditSeconds,
+                    )}{" "}
+                    left
+                  </>
+                ) : (
+                  <>
+                    {formatHoursLong(personalBalance.freeLeftSeconds)} of{" "}
+                    {formatHoursLong(personal.capSeconds)} free left
+                  </>
+                )}
+              </span>
+            }
           >
-            Manage on Plan
-            <ArrowRight className="size-3" strokeWidth={1.75} aria-hidden />
-          </Link>
-        </div>
+            Your analysis time
+          </SettingsCardTitle>
 
-        <SettingsCardFootnote>
-          {personalUnlimited
-            ? "Personal uploads only · Admin accounts have no monthly cap"
-            : freeHoursReturnOn()
-              ? `Personal uploads only · Free hours reset ${formatResetDate(personal.billingMonth)} · Free through ${formatPilotEnd()}`
-              : `Personal uploads only · Free hours end ${formatPilotEnd()}`}
-        </SettingsCardFootnote>
-      </SettingsCard>
+          {!personalUnlimited && <TwoBucketMeter balance={personalBalance} />}
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-[var(--ink-500)]">
+            <span>
+              {personal.creditSeconds <= 0
+                ? "Credits: none"
+                : `${
+                    headlineTotal
+                      ? `Free: ${formatHoursLong(personalBalance.freeLeftSeconds)} of ${formatHoursLong(personal.capSeconds)} this month · `
+                      : ""
+                  }${
+                    extraWord === "added"
+                      ? `Added: ${formatHoursLong(personal.creditSeconds)}${creditsUntil ? `, until ${creditsUntil}` : ""}`
+                      : `Credits: ${formatHoursLong(personal.creditSeconds)}${creditsUntil ? ` · Next expire ${creditsUntil}` : ""}`
+                  }`}
+            </span>
+            <span className="flex-1" />
+            <Link
+              href={PLAN_HREF}
+              className="inline-flex items-center gap-1 text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
+            >
+              Manage on Plan
+              <ArrowRight className="size-3" strokeWidth={1.75} aria-hidden />
+            </Link>
+          </div>
+
+          <SettingsCardFootnote>
+            {personalUnlimited
+              ? "Personal uploads only · Admin accounts have no monthly cap"
+              : freeHoursReturnOn()
+                ? `Personal uploads only · Free hours reset ${formatResetDate(personal.billingMonth)} · Free through ${formatPilotEnd()}`
+                : `Personal uploads only · Free hours end ${formatPilotEnd()}`}
+          </SettingsCardFootnote>
+        </SettingsCard>
+      )}
 
       {teams.map((team, index) => (
         <ProgramUsageCard

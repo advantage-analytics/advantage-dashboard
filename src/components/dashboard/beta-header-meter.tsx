@@ -12,6 +12,13 @@ import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { HoursRing } from "@/components/dashboard/shared/hours-ring";
 import { PendingBar } from "@/components/dashboard/loading/pending";
 import type { HoursLeft } from "@/lib/services/splitstep/quota";
+import {
+  planPillHref,
+  planPillView,
+  planStandingFor,
+  plansApplyTo,
+  type PlanStanding,
+} from "@/lib/billing/plan-copy";
 import { formatCreditDate, PLAN_HREF } from "@/lib/services/credits/packs";
 import {
   currentBillingMonth,
@@ -29,10 +36,18 @@ import {
 
 /**
  * The header's video-hours pill: the welcome dialog's brand band shrunk to a
- * pill, carrying the one number people come back for — video hours left. A
- * personal workspace's pill goes to Settings › Plan, where hours and credits
- * are bought (frames C1–C4 in the Credit Packs Mockups (docs/plans/2027-player-pricing.md)); a team workspace's says
- * Pilot, as Settings › Plan does (`workspaceTier`), and reopens the dialog.
+ * pill, carrying the one number people come back for — video hours left.
+ *
+ * Once plans apply to the workspace (`plansApplyTo()`: January 1, 2027, or
+ * earlier for a player already on a paid plan) the tag is the plan — Free,
+ * Coach, Coach Pro, a team's plan, Pilot on a pilot team, No plan — and the
+ * figure and tooltip are the resolver's (`PlanMeterPill`). A personal pill
+ * goes to Settings › Plan; a team's goes to the team's own page.
+ *
+ * Until then it is the beta's pill (`BetaMeterPill`): a personal workspace's
+ * goes to Settings › Plan, where hours and credits are bought (frames C1–C4
+ * in the Credit Packs Mockups (docs/plans/2027-player-pricing.md)); a team
+ * workspace's says Pilot and reopens the welcome dialog.
  *
  * The figure comes from `/api/splitstep/hours-left`, the same peek the upload
  * refuses on. Advisory: the reservation at submit time still decides.
@@ -40,11 +55,22 @@ import {
  * upload spends hours without remounting it.
  */
 export function BetaHeaderMeter() {
+  const { active } = useWorkspace();
   const terms = useBetaWelcomeTerms();
   const hours = useHoursLeft();
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const tier = terms.tier ?? "beta";
+
+  if (plansApplyTo(active)) {
+    return (
+      <PlanMeterPill
+        standing={planStandingFor(active)}
+        hours={hours}
+        onClick={() => router.push(planPillHref(active))}
+      />
+    );
+  }
 
   return (
     <>
@@ -57,6 +83,125 @@ export function BetaHeaderMeter() {
       />
       <BetaWelcomeDialog open={open} onOpenChange={setOpen} terms={terms} />
     </>
+  );
+}
+
+/**
+ * The pill once plans apply: the plan's name as the tag, and the hours the
+ * resolver counts. Its words are `planPillView()`'s, so every state can be
+ * read without mounting it. `hours` is `"loading"` until the first answer
+ * lands and `null` when the read failed, exactly as `BetaMeterPill` has it.
+ */
+export function PlanMeterPill({
+  standing,
+  hours,
+  onClick,
+}: {
+  standing: PlanStanding;
+  hours: PillHours | "loading" | null;
+  onClick: () => void;
+}) {
+  const ready = hours !== "loading" && hours !== null ? hours : null;
+  const view = ready ? planPillView(standing, ready) : null;
+  return (
+    <PillFrame
+      name={standing.name}
+      label={view?.label ?? `${standing.name} plan`}
+      detail={
+        view?.detail ??
+        (hours === "loading"
+          ? "Checking your video hours"
+          : "Your plan and video hours")
+      }
+      ariaLabel={
+        view?.ariaLabel ??
+        (hours === "loading"
+          ? `${standing.name}: checking video hours left`
+          : standing.name)
+      }
+      state={hours === "loading" ? "loading" : ready ? "ready" : "failed"}
+      share={view?.share ?? 0}
+      onClick={onClick}
+    >
+      {view && (
+        <>
+          <span className="font-medium text-white">{view.figure.strong}</span>
+          {view.figure.rest ? ` ${view.figure.rest}` : null}
+        </>
+      )}
+    </PillFrame>
+  );
+}
+
+/**
+ * The pill's own markup, shared by the beta's and the plan's so they are one
+ * control with two sets of words: the tag, the ring and the figure, inside
+ * the tooltip. `failed` is a read that did not come back — the bare tag,
+ * never a full ring and never a skeleton waiting on an answer that is not
+ * coming.
+ */
+function PillFrame({
+  name,
+  label,
+  detail,
+  ariaLabel,
+  state,
+  share,
+  onClick,
+  children,
+}: {
+  name: string;
+  label: string;
+  detail: string;
+  ariaLabel: string;
+  state: "loading" | "ready" | "failed";
+  share: number;
+  onClick: () => void;
+  /** The figure, drawn only when `state` is `ready`. */
+  children: React.ReactNode;
+}) {
+  return (
+    <ChromeTooltip label={label} detail={detail}>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={ariaLabel}
+        aria-busy={state === "loading" || undefined}
+        className={cn(
+          "brand-mesh-gradient mr-1 inline-flex h-7 cursor-pointer items-center gap-2 rounded-full pr-3 pl-1 text-white shadow-[0_1px_2px_rgba(59,130,246,0.35)] transition-[filter,transform] duration-150 hover:brightness-105 active:scale-[0.97] motion-reduce:active:scale-100 touch:hit-area",
+          "focus-visible:shadow-[0_0_0_2px_white,0_0_0_4px_var(--blue)] focus-visible:outline-none",
+          state !== "failed" && "max-md:pl-2",
+        )}
+      >
+        {/* The tag gives way under 768px — the header there is 326px and
+            the ring and hours are what the pill is for; the name is still
+            the button's label. Kept when the read failed: then it is all
+            the pill has. */}
+        <span
+          className={cn(
+            "inline-flex h-5 items-center rounded-full bg-white/25 px-2 text-[9px] font-medium tracking-[0.08em] whitespace-nowrap uppercase",
+            state !== "failed" && "max-md:hidden",
+          )}
+        >
+          {name}
+        </span>
+        {state === "loading" && (
+          <>
+            <HoursRing share={null} tone="inverse" />
+            {/* Sized to "1.5h left", the figure most people will see. */}
+            <PendingBar tone="inverse" className="h-2 w-[46px]" />
+          </>
+        )}
+        {state === "ready" && (
+          <>
+            <HoursRing tone="inverse" share={share} />
+            <span className="tabular text-[12px] text-white/85">
+              {children}
+            </span>
+          </>
+        )}
+      </button>
+    </ChromeTooltip>
   );
 }
 
@@ -223,68 +368,35 @@ export function BetaMeterPill({
         );
 
   return (
-    <ChromeTooltip label={label} detail={detail}>
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={ariaLabel}
-        aria-busy={hours === "loading" || undefined}
-        className={cn(
-          "brand-mesh-gradient mr-1 inline-flex h-7 cursor-pointer items-center gap-2 rounded-full pr-3 pl-1 text-white shadow-[0_1px_2px_rgba(59,130,246,0.35)] transition-[filter,transform] duration-150 hover:brightness-105 active:scale-[0.97] motion-reduce:active:scale-100 touch:hit-area",
-          "focus-visible:shadow-[0_0_0_2px_white,0_0_0_4px_var(--blue)] focus-visible:outline-none",
-          hours !== null && "max-md:pl-2",
-        )}
-      >
-        {/* The tag gives way under 768px — the header there is 326px and
-            the ring and hours are what the pill is for; the name is still
-            the button's label. Kept when the read failed: then it is all
-            the pill has. */}
-        <span
-          className={cn(
-            "inline-flex h-5 items-center rounded-full bg-white/25 px-2 text-[9px] font-medium tracking-[0.08em] uppercase",
-            hours !== null && "max-md:hidden",
-          )}
-        >
-          {name}
-        </span>
-        {hours === "loading" && (
-          <>
-            <HoursRing share={null} tone="inverse" />
-            {/* Sized to "1.5h left", the figure most people will see. */}
-            <PendingBar tone="inverse" className="h-2 w-[46px]" />
-          </>
-        )}
-        {ready && (
-          <>
-            <HoursRing tone="inverse" share={share} />
-            <span className="tabular text-[12px] text-white/85">
-              {unlimited ? (
-                <span className="font-medium text-white">Unlimited</span>
-              ) : out ? (
-                <span className="font-medium text-white">Out of hours</span>
-              ) : onCredits ? (
-                <>
-                  <span className="font-medium text-white">
-                    {formatHoursShort(credits)}h
-                  </span>{" "}
-                  {word}
-                </>
-              ) : (
-                <>
-                  <span className="font-medium text-white">
-                    {formatHoursShort(
-                      withExtra ? total : ready.remainingSeconds,
-                    )}
-                    h
-                  </span>{" "}
-                  left
-                </>
-              )}
-            </span>
-          </>
-        )}
-      </button>
-    </ChromeTooltip>
+    <PillFrame
+      name={name}
+      label={label}
+      detail={detail}
+      ariaLabel={ariaLabel}
+      state={hours === "loading" ? "loading" : ready ? "ready" : "failed"}
+      share={share}
+      onClick={onClick}
+    >
+      {!ready ? null : unlimited ? (
+        <span className="font-medium text-white">Unlimited</span>
+      ) : out ? (
+        <span className="font-medium text-white">Out of hours</span>
+      ) : onCredits ? (
+        <>
+          <span className="font-medium text-white">
+            {formatHoursShort(credits)}h
+          </span>{" "}
+          {word}
+        </>
+      ) : (
+        <>
+          <span className="font-medium text-white">
+            {formatHoursShort(withExtra ? total : ready.remainingSeconds)}h
+          </span>{" "}
+          left
+        </>
+      )}
+    </PillFrame>
   );
 }
 

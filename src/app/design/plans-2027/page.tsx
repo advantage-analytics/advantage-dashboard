@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { planUsageAlertEmail, usageAlertEmail } from "@/lib/services/email";
 import { Plans2027Preview } from "./plans-2027-preview";
 
 export const metadata = { title: "Plans 2027 preview" };
@@ -6,8 +7,11 @@ export const metadata = { title: "Plans 2027 preview" };
 /**
  * The 2027 plan surfaces on fixtures, reachable without a session, a
  * subscription or a video: Settings › Plan for each plan, the one checkout
- * dialog in each of its scenes, and the upload wizard's file step with its
- * hours note.
+ * dialog in each of its scenes, the upload wizard's file step with its
+ * hours note, and — from stage F — the header pill, Home's usage card,
+ * Settings › Usage, a team page's Plan & hours card and the usage emails,
+ * each in every plan and team state. Nothing is sent: the emails are only
+ * rendered.
  *
  * Everything real is gated on `plansOnSale()` and on the viewer's own plan,
  * so none of it can be opened before January without this. The components
@@ -24,5 +28,51 @@ export default async function Plans2027DesignPage({
 }) {
   if (process.env.VERCEL_ENV === "production") notFound();
   const { state } = await searchParams;
-  return <Plans2027Preview state={typeof state === "string" ? state : null} />;
+  return (
+    <Plans2027Preview
+      state={typeof state === "string" ? state : null}
+      emails={previewEmails()}
+    />
+  );
+}
+
+const H = 3600;
+
+/** The real templates on the plan's own Coach example, and a spring season. */
+function previewEmails(): Record<string, string> {
+  const coach = {
+    to: "jordan@example.com",
+    planId: "coach" as const,
+    capSeconds: 5 * H,
+    resetsAt: new Date("2027-02-14T00:00:00Z"),
+  };
+  const season = {
+    to: "alex@example.com",
+    recipientName: "Alex",
+    programName: "Northfield University Men's",
+    capSeconds: 200 * H,
+    billingMonth: "2027-03-01",
+    period: "season" as const,
+    seasonEndsOn: "2027-05-31",
+    programId: "22222222-2222-2222-2222-222222222222",
+  };
+  return {
+    low: planUsageAlertEmail({ ...coach, severity: "low", usedSeconds: 4 * H })
+      .html,
+    spent: planUsageAlertEmail({
+      ...coach,
+      severity: "spent",
+      usedSeconds: 5 * H,
+    }).html,
+    "season-low": usageAlertEmail({
+      ...season,
+      severity: "low",
+      usedSeconds: 160 * H,
+    }).html,
+    "season-spent": usageAlertEmail({
+      ...season,
+      severity: "spent",
+      usedSeconds: 200 * H,
+    }).html,
+  };
 }

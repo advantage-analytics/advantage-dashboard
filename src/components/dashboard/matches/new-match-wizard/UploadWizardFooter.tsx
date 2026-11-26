@@ -36,6 +36,7 @@ export function WizardQuotaMeter() {
       plansActive,
       quotaAllowanceKind,
       quotaResetsOn,
+      quotaTeamSuffix,
     },
     view: { trimSelected },
     meta: { workspaceKind },
@@ -50,12 +51,15 @@ export function WizardQuotaMeter() {
   // Once plans are on sale the suffix says what is true of THIS allowance: a
   // plan's reset day, or "Free plan" where there are no plan hours. Null
   // keeps the beta's wording, for an account still drawing the beta's hours.
-  const planSuffix = plansActive
-    ? meterSuffix({
-        allowanceKind: quotaAllowanceKind,
-        resetsOn: quotaResetsOn,
-      })
-    : null;
+  // A team's is its season's end or its pilot's own end date, from January 1.
+  const planSuffix =
+    quotaTeamSuffix ??
+    (plansActive
+      ? meterSuffix({
+          allowanceKind: quotaAllowanceKind,
+          resetsOn: quotaResetsOn,
+        })
+      : null);
   const onPlan = planSuffix !== null && quotaAllowanceKind === "plan";
 
   // A Free player with no plan hours and no video priced yet: there is no

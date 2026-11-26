@@ -98,6 +98,11 @@ export interface LabelQueueJob extends JobVideoSpan {
   ownerEmail: string | null;
   /** When an admin added it to To do (`label_todo.added_at`); null if not. */
   addedAt?: string | null;
+  /**
+   * False when the match was not paid for and so is not offered for review
+   * (`review-eligibility.ts`, from `PLANS_BEGIN`). Absent reads as eligible.
+   */
+  reviewEligible?: boolean;
   session: QueueSession | null;
 }
 
@@ -133,7 +138,10 @@ export function enterLabelQueue(job: LabelQueueJob): boolean {
  * Whether an admin may add a job to To do: the same video and workspace
  * rules as the queue, not added yet, and nobody past To do on it — no
  * session, or an open one nobody holds. A published match is not offered
- * again; it is reopened from its own page.
+ * again; it is reopened from its own page. From `PLANS_BEGIN` it must also
+ * have been paid for (`reviewEligible`): human review is part of what a plan,
+ * extra hours, a season or a pilot buys. Only the offer is gated; work
+ * already past To do stays on the boards (`enterLabelQueue`).
  */
 export function canAddToTodo(job: LabelQueueJob): boolean {
   if (!job.completedAt || !Number.isFinite(toMs(job.completedAt))) {
@@ -142,6 +150,7 @@ export function canAddToTodo(job: LabelQueueJob): boolean {
   if (!(jobVideoSeconds(job) > 0)) return false;
   if (isTestOwner(job)) return false;
   if (job.addedAt) return false;
+  if (job.reviewEligible === false) return false;
   return isOpenToClaim(job.session);
 }
 
