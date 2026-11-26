@@ -16,7 +16,6 @@
  * module's imports are pinned by `tests/upload-source.spec.ts`.
  */
 
-import { plansHaveBegun } from "@/lib/billing/plans";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Loader2, Search, User } from "lucide-react";
@@ -34,6 +33,7 @@ import { formatHoursShort, isUnlimitedCap } from "@/lib/data/usage-format";
 import { searchAdminUploadTargetsAction } from "@/app/admin/uploads/new/target-actions";
 import type { AdminUploadTargetHit } from "@/lib/admin/uploads/targets";
 import type { AdminUploadBilling } from "@/lib/admin/uploads/types";
+import { plansHaveBegun } from "@/lib/billing/plans";
 import type { AdminWizardMode } from "./admin-mode";
 import {
   adminUploadHref,

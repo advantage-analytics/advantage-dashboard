@@ -331,6 +331,17 @@ function toAdminTeamRow(
   const owner = ownerOf(row.owner);
   const claim = latestClaim(row.program_claims);
   const needsDecision = claim !== null && NEEDS_DECISION.has(claim.status);
+  const onPilot =
+    row.status === "active" &&
+    (!plansHaveBegun() ||
+      pilotIsRunning(
+        {
+          pilotEligible: row.pilot_eligible === true,
+          pilotEndsOn: row.pilot_ends_on,
+          pilotEndedAt: row.pilot_ended_at,
+        },
+        new Date(),
+      ));
 
   return {
     id: row.id,
@@ -354,23 +365,7 @@ function toAdminTeamRow(
     // From January 1, 2027 "pilot" is a fact about the program, not about
     // being active: an admin put it on the pilot and its end date has not
     // passed (`pilotIsRunning`). Until then every active program is on it.
-    plan: (
-      plansHaveBegun()
-        ? row.status === "active" &&
-          pilotIsRunning(
-            {
-              pilotEligible: row.pilot_eligible === true,
-              pilotEndsOn: row.pilot_ends_on,
-              pilotEndedAt: row.pilot_ended_at,
-            },
-            new Date(),
-          )
-        : row.status === "active"
-    )
-      ? "pilot"
-      : needsDecision
-        ? "approve"
-        : "none",
+    plan: onPilot ? "pilot" : needsDecision ? "approve" : "none",
     pendingClaim:
       needsDecision && claim
         ? {

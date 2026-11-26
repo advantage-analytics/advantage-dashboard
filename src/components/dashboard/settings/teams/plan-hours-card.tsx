@@ -8,7 +8,10 @@ import {
   SettingsCardTitle,
 } from "@/components/dashboard/settings/settings-card";
 import { TwoBucketMeter } from "@/components/dashboard/credits/two-bucket-meter";
-import { HoursBreakdown } from "@/components/dashboard/settings/teams/program-hours-summary";
+import {
+  HOURS_CLOSING_NOTE,
+  HoursBreakdown,
+} from "@/components/dashboard/settings/teams/program-hours-summary";
 import type { PlanHoursView } from "@/lib/billing/plan-copy";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 import type { ProgramUsage } from "@/lib/data/usage-server";
@@ -122,7 +125,7 @@ export function PlanHoursCard({
           roles={roles}
           viewerId={viewerId}
           period={view.period}
-          closing="Hours reserve at submit and reconcile on completion — a failed job gives them back. Players see their own line plus the team total."
+          closing={HOURS_CLOSING_NOTE}
         />
       )}
       <SettingsCardFootnote>

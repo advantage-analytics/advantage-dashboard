@@ -203,12 +203,16 @@ export function ProgramHoursSummary({
           roles={roles}
           viewerId={viewerId}
           period="this month"
-          closing={`Hours reserve at submit and reconcile on completion — a failed job gives them back. Players see their own line plus the team total. · Pilot ends ${formatPilotEnd()}`}
+          closing={`${HOURS_CLOSING_NOTE} · Pilot ends ${formatPilotEnd()}`}
         />
       )}
     </SettingsCard>
   );
 }
+
+/** The breakdown's closing sentence, which each hours card may extend. */
+export const HOURS_CLOSING_NOTE =
+  "Hours reserve at submit and reconcile on completion — a failed job gives them back. Players see their own line plus the team total.";
 
 /**
  * The per-person breakdown a hours card unfolds in place: one row per person
