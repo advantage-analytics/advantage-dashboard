@@ -23,6 +23,8 @@ import { readFormFields } from "@/lib/auth/form-fields";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
 import { loginFailureReason, type LoginMethod } from "@/lib/auth/login-failure";
+import { loginDestination } from "@/lib/auth/next-area";
+import { track } from "@/lib/analytics";
 
 /**
  * Google's brand mark. Hoisted out of the component because it is static and
@@ -107,14 +109,17 @@ export function LoginForm({
       if (signInError) throw signInError;
       if (user && isPostHogConfigured) {
         posthog.identify(user.id);
-        posthog.capture("login_completed", { method: "password" });
+        track("login_completed", {
+          method: "password",
+          ...loginDestination(destination),
+        });
       }
       // The requested destination if there was one — an invite link parks
       // `/join/<token>` here so the accept page is what opens after sign-in —
       // otherwise the home dashboard, even if the profile is incomplete.
       router.push(destination);
     } catch (err: unknown) {
-      captureLoginFailed("password", err);
+      captureLoginFailed("password", err, destination);
       setError(toAuthError(err));
     } finally {
       setIsLoading(false);
@@ -150,7 +155,7 @@ export function LoginForm({
       },
     });
     if (oauthError) {
-      captureLoginFailed("google", oauthError);
+      captureLoginFailed("google", oauthError, destination);
       setError(toAuthError(oauthError));
       return;
     }
@@ -254,12 +259,20 @@ export function LoginForm({
 }
 
 /**
- * `login_failed`: the method and a fixed reason slug, never the error itself
- * or anything typed — see `login-failure.ts`. The only record of a sign-in
+ * `login_failed`: the method, a fixed reason slug and where the sign-in was
+ * headed as an area — never the error itself, the path or anything typed
+ * (`login-failure.ts`, `next-area.ts`). The only record of a sign-in
  * that did not work; without it a person stuck on `/login` looks like a
  * person who never tried.
  */
-function captureLoginFailed(method: LoginMethod, err: unknown): void {
-  if (!isPostHogConfigured) return;
-  posthog.capture("login_failed", { method, reason: loginFailureReason(err) });
+function captureLoginFailed(
+  method: LoginMethod,
+  err: unknown,
+  destination: string,
+): void {
+  track("login_failed", {
+    method,
+    reason: loginFailureReason(err),
+    ...loginDestination(destination),
+  });
 }

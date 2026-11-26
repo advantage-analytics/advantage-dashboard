@@ -5,6 +5,7 @@ import { AUTH_NEXT_COOKIE } from "@/lib/auth/auth-next-cookie";
 import { rememberPlanIntent } from "@/lib/billing/plan-intent-server";
 import { toAuthError } from "@/lib/auth/error-messages";
 import { trackServer } from "@/lib/analytics-server";
+import { loginDestination } from "@/lib/auth/next-area";
 
 /**
  * OAuth landing route (Google).
@@ -22,7 +23,8 @@ import { trackServer } from "@/lib/analytics-server";
  * cannot steer a later sign-in.
  *
  * A successful exchange captures `login_completed { method: "google" }`
- * server-side, keyed on the user id. The method is fixed rather than read
+ * server-side, keyed on the user id, with where it is headed as an area
+ * only (`loginDestination`) — never the path, which can carry a token. The method is fixed rather than read
  * from `user.app_metadata.provider`, which names the provider the account
  * was FIRST created with (an email account that later signs in with Google
  * still says "email"): the Google button is the only flow whose `redirectTo`
@@ -58,7 +60,12 @@ export async function GET(request: NextRequest) {
   }
 
   const user = data.user ?? data.session?.user ?? null;
-  if (user) trackServer(user.id, "login_completed", { method: "google" });
+  if (user) {
+    trackServer(user.id, "login_completed", {
+      method: "google",
+      ...loginDestination(next),
+    });
+  }
 
   // A plan picked on the landing site: onboarding drops `next`, so a new
   // account's choice is remembered for it to take back when it finishes.

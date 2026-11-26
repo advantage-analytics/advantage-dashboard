@@ -45,7 +45,7 @@ function loadCallback(exchange: Exchange) {
 const request = (query: string) =>
   new NextRequest(`https://app.example/callback${query}`);
 
-test("a successful exchange captures login_completed with the user id and method only", async () => {
+test("a successful exchange captures login_completed with the user id, method and destination area only", async () => {
   const { GET, captured } = loadCallback({
     data: { user: { id: "u-google" }, session: {} },
     error: null,
@@ -56,9 +56,41 @@ test("a successful exchange captures login_completed with the user id and method
     {
       distinctId: "u-google",
       event: "login_completed",
-      properties: { method: "google" },
+      properties: { method: "google", next_area: "oauth", has_next: true },
     },
   ]);
+});
+
+test("the carried cookie's destination is reported as its area, never its path", async () => {
+  const { GET, captured } = loadCallback({
+    data: { user: { id: "u-google" }, session: {} },
+    error: null,
+  });
+  const res = await GET(
+    new NextRequest("https://app.example/callback?code=abc&next=/dashboard", {
+      headers: { cookie: "auth-next=%2Fjoin%2Ftok_secret123" },
+    }),
+  );
+  expect(res.headers.get("location")).toContain("/join/tok_secret123");
+  expect(captured).toEqual([
+    {
+      distinctId: "u-google",
+      event: "login_completed",
+      properties: { method: "google", next_area: "join", has_next: true },
+    },
+  ]);
+  expect(JSON.stringify(captured)).not.toContain("tok_secret123");
+
+  const bare = loadCallback({
+    data: { user: { id: "u-google" }, session: {} },
+    error: null,
+  });
+  await bare.GET(request("?code=abc&next=/dashboard"));
+  expect(bare.captured[0]?.properties).toEqual({
+    method: "google",
+    next_area: "dashboard",
+    has_next: false,
+  });
 });
 
 test("a failed exchange, or no code, captures nothing", async () => {
