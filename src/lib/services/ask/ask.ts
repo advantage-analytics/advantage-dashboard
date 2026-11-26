@@ -1054,7 +1054,6 @@ export async function* askQuestion(
     // A follow-up planned as the previous query: sent back once, and when the
     // second plan is the same again, answered with ASK_NOTHING_NEW_MESSAGE.
     let repeatSentBack = false;
-    let repeatedPlan: AskPlanQuery | null = null;
     const questionNamesMeasures = questionMeasures(input.question).length > 0;
     const askedAgain = asksPreviousQuestionAgain(
       input.question,
@@ -1771,8 +1770,10 @@ export async function* askQuestion(
         !askedAgain &&
         !compareNarrowed &&
         repeatsPreviousPlan(input.previousPlan ?? null, step.plan);
-      repeatedPlan = sameAsBefore ? step.plan : null;
-      const repeated = sameAsBefore && !repeatSentBack;
+      // Sent back while an attempt is left to answer with; on the last one,
+      // or once told, it ends below as ASK_NOTHING_NEW_MESSAGE.
+      const repeated =
+        sameAsBefore && !repeatSentBack && attempt < MAX_PLAN_ATTEMPTS - 1;
       const check: typeof guard = !guard.ok
         ? guard
         : free && namesScopeCountColumn(step.plan.sql)
@@ -1792,7 +1793,11 @@ export async function* askQuestion(
                     : guard;
       if (guard.ok && foreign !== null) foreignSentBack = true;
       if (misfit !== null) misfitSentBack = true;
-      if (repeated) repeatSentBack = true;
+      // Only when the repeat is what the planner was told: a plan sent back
+      // for another reason has not heard it, and keeps its one try.
+      if (!check.ok && check.reason === REPEATS_PREVIOUS_REASON) {
+        repeatSentBack = true;
+      }
       if (!check.ok) {
         if (fallback) {
           ({ plan, result } = fallback);
@@ -1809,6 +1814,19 @@ export async function* askQuestion(
           continue;
         }
         yield await fail("cannot_answer", cannotAnswer);
+        return;
+      }
+
+      // Told once (or out of attempts) and the previous query came back
+      // again: nothing new to say, and the previous answer is already on the
+      // screen above. An earlier attempt's result, when there is one, is a
+      // different answer and is used instead. Nothing runs either way.
+      if (sameAsBefore) {
+        if (fallback) {
+          ({ plan, result } = fallback);
+          break;
+        }
+        yield await fail("cannot_answer", ASK_NOTHING_NEW_MESSAGE);
         return;
       }
 
@@ -2172,12 +2190,6 @@ export async function* askQuestion(
 
     if (plan === null || result === null) {
       yield await fail("cannot_answer", cannotAnswer);
-      return;
-    }
-    // Told once, and the previous query came back again: there is nothing
-    // new to say, and the previous answer is already on the screen above.
-    if (repeatSentBack && plan === repeatedPlan) {
-      yield await fail("cannot_answer", ASK_NOTHING_NEW_MESSAGE);
       return;
     }
 

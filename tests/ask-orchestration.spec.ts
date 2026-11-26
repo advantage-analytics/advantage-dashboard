@@ -3109,7 +3109,7 @@ test.describe("a follow-up planned as the previous query", () => {
     expect(runs[0].args?.scope_sql).toBe(OTHER.scope_sql);
   });
 
-  test("the same plan a second time says there is nothing new and spends nothing", async () => {
+  test("the same plan a second time says there is nothing new, runs nothing and spends nothing", async () => {
     const { db, calls, releases } = fakeDb();
     const { model, calls: modelCalls } = fakeModel([
       JSON.stringify(PLAN),
@@ -3132,8 +3132,36 @@ test.describe("a follow-up planned as the previous query", () => {
       error: ASK_NOTHING_NEW_MESSAGE,
     });
     expect(modelCalls).toHaveLength(2);
-    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(1);
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(0);
     expect(releases()).toHaveLength(1);
+  });
+
+  test("a repeat first planned on the last attempt says there is nothing new, not the generic refusal", async () => {
+    const { db, calls } = fakeDb({ run: [RUN_FAILED, RUN_FAILED] });
+    const { model, calls: modelCalls } = fakeModel([
+      JSON.stringify(OTHER),
+      JSON.stringify(OTHER),
+      JSON.stringify(PLAN),
+    ]);
+    const events = await collect(
+      askQuestion(
+        input({
+          db,
+          model,
+          question: "And against lefties?",
+          conversation: EARLIER,
+          previousPlan: PREVIOUS,
+        }),
+      ),
+    );
+    expect(last(events)).toMatchObject({
+      type: "error",
+      code: "cannot_answer",
+      error: ASK_NOTHING_NEW_MESSAGE,
+    });
+    expect(modelCalls).toHaveLength(3);
+    // The two refused queries ran; the repeat did not.
+    expect(calls.filter((call) => call.fn === "ask_run_query")).toHaveLength(2);
   });
 
   test("the previous question asked again may have the previous answer", async () => {
