@@ -667,17 +667,20 @@ test('a season mark names its match — "vs Jordan Lee · Nov 3" and where in it
   await expect(mark).toBeVisible();
   await mark.hover({ force: true });
   const readout = dialog.locator("[data-viz-readout]");
+  // The hover pill: no play badge without video.
+  await expect(readout.locator("[data-viz-readout-play]")).toHaveCount(0);
+  await mark.dispatchEvent("click");
+  await expect(mark).toHaveAttribute("aria-pressed", "true");
+  // The pinned card names the match and where in it.
   await expect(readout.locator("[data-viz-readout-match]")).toHaveText(
     "vs Jordan Lee · Nov 3",
   );
   await expect(readout).toContainText(
     /Set \d+ · Game \d+ · (Kim|Jordan Lee) serving/,
   );
-  await expect(readout.locator("[data-viz-readout-hint]")).toHaveText(
-    "Click to focus",
+  await expect(readout.locator("[data-viz-readout-no-video]")).toHaveText(
+    "No video for this point",
   );
-  await mark.dispatchEvent("click");
-  await expect(mark).toHaveAttribute("aria-pressed", "true");
   await mark.dispatchEvent("click");
   await expect(page).toHaveURL(new RegExp(`${PROFILE}\\?`));
   await expect(mark).toHaveAttribute("aria-pressed", "true");
@@ -689,14 +692,12 @@ test('a season mark names its match — "vs Jordan Lee · Nov 3" and where in it
   dialog = page.getByRole("dialog", { name: "All serves" });
   mark = marks(dialog).first();
   await mark.hover({ force: true });
-  await expect(readout.locator("[data-viz-readout-hint]")).toHaveText(
-    "Click to focus · Click again to watch",
-  );
+  await expect(readout.locator("[data-viz-readout-play]")).toHaveCount(1);
   await mark.dispatchEvent("click");
   await page.mouse.move(5, 5);
-  await expect(readout.locator("[data-viz-readout-hint]")).toHaveText(
-    "Click again to watch",
-  );
+  await expect(
+    readout.getByRole("button", { name: "Watch point" }),
+  ).toBeVisible();
   await page.screenshot({
     path: test.info().outputPath("season-readout.png"),
   });

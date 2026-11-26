@@ -99,3 +99,15 @@ is the runner's. Newest entries at the bottom.
 3. Arrow keys on the season page fetch a new court per press — debounce if it feels laggy.
 4. The harness has no error fixture, so the Errors switch spec runs on an empty court.
 5. Season spec title typo "writes vends in place".
+
+## T10 · Rebuild the mark readout as pill and card — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: needs-work (rows gated on the view drawing both ends, not on both ends existing) → fixed in the same run → VERDICT: pass; GATE PASS re-run on the fixed diff
+**changed:** Hover/focus shows `MarkPill` (lightbox-court.tsx): one-line ink-900 rounded-full pill with a merged title (`markTitle` in viz-readout.ts — "Ace"; Errors "{Shot} unforced/forced error", "Double fault"; elsewhere shot + call, e.g. "Backhand, out"), the score, and an 18px white play badge only when the point can be watched. Selecting pins `MarkCard` (236px, radius 12): title + score, where line, season match line, then "Hit from" (ring glyph) and "Landed" (dot glyph) rows whenever the mark has a landing and a recorded contact, in any view (phrases `hitFromPhrase`/`landedPhrase`, ft or m per unit); "Contact not recorded" in the Hit from row when the view draws contact and none was recorded. Ends under a hairline in a real "Watch point" button (watches via the existing second-click path) or "No video for this point". `markClickHint` and the old hint are gone. viz-model.ts adds `VizDotMeta.errorKind`. Specs: viz-readout, viz-lightbox-browser, season-viz-browser, viz-rally-placement-browser, viz-serve-zones-browser.
+**follow-ups:**
+
+1. With a mark selected, hovering another swaps the card for that mark's pill until the pointer leaves (one readout at a time).
+2. Pills are still placed above single marks (`placeReadout`) rather than strictly beside them.
+3. Errors titles don't include the out/net call.
+4. `MarkPill`/`MarkCard` hard-code rounded-full and pixel values — check against DS primitives at /pr-check.
+5. No visual check yet of the card with its Hit from / Landed rows (text-only browser assertions).

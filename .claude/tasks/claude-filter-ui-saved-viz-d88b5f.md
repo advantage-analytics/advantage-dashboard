@@ -142,7 +142,7 @@ ready).
 
 ## T10 · Rebuild the mark readout as pill and card
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T8
 - **files:** (guess) src/components/dashboard/matches/match-detail/shots/viz-readout.ts (`buildMarkReadout` ~:179, `markClickHint` ~~:172), src/components/dashboard/matches/match-detail/shots/lightbox-court.tsx (~~:728-807), src/components/dashboard/matches/match-detail/shots/viz-lightbox-shell.tsx (clicks ~:569, `canWatch` ~~:610), tests/viz-readout.spec.ts (~~:317, :409)

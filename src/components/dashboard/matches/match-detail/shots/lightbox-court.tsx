@@ -2,6 +2,7 @@
 
 import { memo, useCallback, useMemo, useState, type ReactNode } from "react";
 import { useDismissOnNextPress } from "@/hooks/use-long-press";
+import { cn } from "@/lib/utils";
 import { ZONES, type ZoneKey, type ZoneStats } from "@/lib/data/serve-zones";
 import {
   DARK_READOUT_CLASS,
@@ -48,11 +49,16 @@ import {
   buildMarkReadout,
   buildReadout,
   buildZoneReadout,
-  markClickHint,
+  HIT_FROM_LABEL,
+  LANDED_LABEL,
+  NO_VIDEO_LABEL,
   placeApronReadout,
   placeReadout,
+  WATCH_POINT_LABEL,
+  type MarkReadout,
   type PairPart,
 } from "./viz-readout";
+import type { DistanceUnit } from "@/lib/format/distance";
 import { nextMarkIndex } from "./viz-mark-roving";
 import { isPlacementCut } from "./cut-kinds";
 import type { Hand } from "../match-filters/shot-geometry";
@@ -232,8 +238,8 @@ const PAIR_LINK_STROKE = {
   strokeDasharray: "4 3",
   vectorEffect: "non-scaling-stroke",
 } as const;
-/** The mark readout's narrowest width (canvas S04). */
-const MIN_READOUT_W = 168;
+/** The selected mark's pinned card (board Readout-C): 236px wide. */
+const MARK_CARD_W = 236;
 /** The keyboard-only ring, outside the hover halo. */
 const FOCUS_RING_R = 7.6;
 /** A mark's hit area: its own radius and a little more for the hand, so the
@@ -425,6 +431,7 @@ export function LightboxCourt({
   whereFor,
   matchFor,
   canWatchMark,
+  unit = "ft",
   focusIds = null,
   opponentHand,
   outline = null,
@@ -482,9 +489,12 @@ export function LightboxCourt({
   /** "vs Lee · Nov 3" — which match a mark is from, on a court drawn over
    *  several (the season's); omitted on one match's court. */
   matchFor?: (dot: VizDot) => string | null;
-  /** Whether a second click on this mark can watch it — the readout's hint
-   *  says "Click to focus" alone when it cannot. Omitted: never. */
+  /** Whether this mark's point can be watched — the pill's play badge and
+   *  the card's "Watch point", else "No video for this point". Omitted:
+   *  never. */
   canWatchMark?: (dot: VizDot) => boolean;
+  /** The card's distances ("3 ft behind the baseline"): the viewer's unit. */
+  unit?: DistanceUnit;
   /** A hovered Statistics row's marks: the rest sit back at 40%. */
   focusIds?: ReadonlySet<string> | null;
   /**
@@ -572,6 +582,9 @@ export function LightboxCourt({
         ? pairPart.part
         : "placement";
 
+  // The selected mark's readout is the pinned card; any other (a hover, a
+  // keyboard focus) is the one-line pill.
+  const activeIsCard = active !== null && active.id === selectedId;
   const markReadout =
     active !== null && activeMeta
       ? buildMarkReadout(
@@ -581,10 +594,21 @@ export function LightboxCourt({
           activeMeta.pointId ? (whereFor?.(activeMeta.pointId) ?? null) : null,
           {
             match: matchFor?.(active) ?? null,
-            hint: markClickHint(
-              active.id === selectedId,
-              canWatchMark?.(active) ?? false,
-            ),
+            watch: canWatchMark?.(active) ?? false,
+            unit,
+            // The card's rows read the shot's two recorded ends, whichever
+            // the view draws: on a placement chart the landing is the dot's
+            // own place, and the contact its pair when one was recorded.
+            ends: {
+              landing: isPlacementCut(cut)
+                ? {
+                    lateralM: active.lateralM,
+                    depthM: active.depthM,
+                    atNet: active.atNet,
+                  }
+                : null,
+              contactDepthM: active.pair?.depthM ?? null,
+            },
             part: activePart,
             // The view draws contact, and this shot never had one recorded.
             contactMissing:
@@ -644,13 +668,19 @@ export function LightboxCourt({
         // never lies over the other half's marks (`placeApronReadout`).
         const centre =
           transform.px + viewerArtPoint(VIEWER_COURT.centreX, 0).x * z;
-        const place = placeApronReadout(anchor, stage, centre, ringPx + 8);
+        const place = placeApronReadout(
+          anchor,
+          stage,
+          centre,
+          ringPx + 8,
+          activeIsCard ? MARK_CARD_W : undefined,
+        );
         readoutSide = place.side;
         readoutStyle = {
           ...DARK_READOUT_STYLE,
           left: place.left,
           top: place.top,
-          minWidth: Math.min(MIN_READOUT_W, place.width),
+          ...(activeIsCard ? { width: place.width } : {}),
           maxWidth: place.width,
           transform: APRON_READOUT_TRANSFORM[place.side],
         };
@@ -659,12 +689,15 @@ export function LightboxCourt({
           anchor,
           stage,
           markReadout !== null ? ringPx + 8 : undefined,
+          markReadout !== null && activeIsCard ? MARK_CARD_W : undefined,
         );
         readoutStyle = {
           ...DARK_READOUT_STYLE,
           left: place.left,
           top: place.top,
-          minWidth: Math.min(MIN_READOUT_W, place.width),
+          ...(markReadout !== null && activeIsCard
+            ? { width: place.width }
+            : {}),
           maxWidth: place.width,
           transform: `translate(-50%, ${place.below ? "0" : "-100%"})`,
         };
@@ -865,72 +898,25 @@ export function LightboxCourt({
         {editorLayer}
       </div>
 
-      {markReadout !== null && readoutStyle !== null && active !== null && (
-        <div
-          data-viz-readout=""
-          data-viz-readout-side={readoutSide}
-          aria-hidden="true"
-          className={`pointer-events-none absolute z-[2] flex flex-col gap-0.5 px-3 pt-2.5 pb-[11px] ${DARK_READOUT_CLASS}`}
-          style={readoutStyle}
-        >
-          {markReadout.part !== undefined && (
-            // Which of the pair's two marks the card is about, first.
-            <span
-              data-viz-readout-part=""
-              className="text-[11px] leading-[1.45] text-white/[0.64]"
-            >
-              {markReadout.part}
-            </span>
-          )}
-          <span className="mb-0.5 flex items-center gap-[7px]">
-            <ReadoutGlyph dot={active} />
-            <span className="text-[12px] leading-[1.35] font-medium text-white">
-              {markReadout.title}
-            </span>
-            {markReadout.score !== null && (
-              <span className="ml-auto pl-3.5 text-[11px] leading-[1.35] text-white/[0.64] tabular-nums">
-                {markReadout.score}
-              </span>
-            )}
-          </span>
-          {markReadout.shot !== null && (
-            <span className="text-[11px] leading-[1.45] text-white/[0.64]">
-              {markReadout.shot}
-            </span>
-          )}
-          {markReadout.contact !== undefined && (
-            <span
-              data-viz-readout-contact=""
-              className="text-[11px] leading-[1.45] text-white/[0.64]"
-            >
-              {markReadout.contact}
-            </span>
-          )}
-          {markReadout.where !== null && (
-            <span className="text-[11px] leading-[1.45] text-white/[0.64]">
-              {markReadout.where}
-            </span>
-          )}
-          {markReadout.match !== null && (
-            <span
-              data-viz-readout-match=""
-              className="text-[11px] leading-[1.45] text-white/[0.64]"
-            >
-              {markReadout.match}
-            </span>
-          )}
-          {markReadout.hint !== null && (
-            // The hint under a 1px hairline, 6px either side (the column's
-            // 2px gap plus 4px above it).
-            <span
-              data-viz-readout-hint=""
-              className="mt-1 border-t border-[rgba(255,255,255,0.12)] pt-1.5 text-[11px] leading-[1.45] text-white/[0.64]"
-            >
-              {markReadout.hint}
-            </span>
-          )}
-        </div>
-      )}
+      {markReadout !== null &&
+        readoutStyle !== null &&
+        active !== null &&
+        (activeIsCard ? (
+          <MarkCard
+            readout={markReadout}
+            dot={active}
+            side={readoutSide}
+            style={readoutStyle}
+            onWatch={() => onSelect(active.id)}
+            onEnter={onReadoutEnter}
+          />
+        ) : (
+          <MarkPill
+            readout={markReadout}
+            side={readoutSide}
+            style={readoutStyle}
+          />
+        ))}
       {markReadout === null &&
         zoneReadout !== null &&
         readoutStyle !== null && (
@@ -1112,42 +1098,232 @@ function OutlineRect({ outline }: { outline: CourtOutline }) {
   );
 }
 
-/** The readout's legend glyph: the mark's own shape and fill, 10px. */
-function ReadoutGlyph({ dot }: { dot: VizDot }) {
-  const fill = fillFor(dot);
+/** The pill's and the card's play glyph: a solid triangle in `fill`. */
+function PlayGlyph({ size, fill }: { size: number; fill: string }) {
   return (
     <svg
       aria-hidden="true"
-      width={10}
-      height={10}
+      width={size}
+      height={size}
       viewBox="0 0 10 10"
       className="shrink-0"
     >
-      {dot.shape === "star" ? (
-        <polygon
-          points={starPoints(5, 5, 4.2)}
-          fill={fill}
-          stroke="#000"
-          strokeWidth={0.4}
-        />
-      ) : dot.shape === "triangle" ? (
-        <polygon
-          points={trianglePointsFor("serve", 5, 5, 2.2)}
-          fill={fill}
-          stroke="#000"
-          strokeWidth={0.4}
+      <path d="M2.5 1.2 L8.8 5 L2.5 8.8 Z" fill={fill} />
+    </svg>
+  );
+}
+
+/** Which mark of a pair the pointer is on — for screen readers only; the
+ *  card's rows say both ends. */
+function ReadoutPart({ readout }: { readout: MarkReadout }) {
+  if (readout.part === undefined) return null;
+  return (
+    <span data-viz-readout-part="" className="sr-only">
+      {readout.part}
+    </span>
+  );
+}
+
+/**
+ * The hover (or keyboard focus) readout, board Readout-C: a one-line dark
+ * pill beside the mark — the shot and its call, the score, and a white play
+ * badge when the point can be watched. A label, not a control: the pointer
+ * passes through it, and the mark's own `aria-label` already says it.
+ */
+function MarkPill({
+  readout,
+  side,
+  style,
+}: {
+  readout: MarkReadout;
+  side: string | undefined;
+  style: React.CSSProperties;
+}) {
+  return (
+    <div
+      data-viz-readout=""
+      data-viz-readout-pill=""
+      data-viz-readout-side={side}
+      aria-hidden="true"
+      className={cn(
+        "pointer-events-none absolute z-[2] flex items-center gap-2 rounded-full whitespace-nowrap",
+        readout.watch ? "py-[5px] pr-[5px] pl-[11px]" : "px-[11px] py-1.5",
+      )}
+      style={style}
+    >
+      <ReadoutPart readout={readout} />
+      <span
+        data-viz-readout-title=""
+        className="min-w-0 truncate text-[12px] leading-[1.35] font-medium text-white"
+      >
+        {readout.title}
+      </span>
+      {readout.score !== null && (
+        <span className="shrink-0 text-[11px] leading-[1.35] text-white/[0.64] tabular-nums">
+          {readout.score}
+        </span>
+      )}
+      {readout.watch && (
+        <span
+          data-viz-readout-play=""
+          className="flex size-[18px] shrink-0 items-center justify-center rounded-full bg-white"
+        >
+          <PlayGlyph size={8} fill="var(--ink-900)" />
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** A card row's 9px glyph: the contact ring (white middle, the outcome's
+ *  colour inset 2px) or the landing's solid dot. */
+function EndGlyph({ kind, fill }: { kind: "ring" | "dot"; fill: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      width={9}
+      height={9}
+      viewBox="0 0 9 9"
+      className="shrink-0"
+    >
+      {kind === "ring" ? (
+        <circle
+          cx={4.5}
+          cy={4.5}
+          r={3.5}
+          fill="#fff"
+          stroke={fill}
+          strokeWidth={2}
         />
       ) : (
-        <circle
-          cx={5}
-          cy={5}
-          r={3.6}
-          fill={fill}
-          stroke="#000"
-          strokeWidth={0.4}
-        />
+        <circle cx={4.5} cy={4.5} r={4.5} fill={fill} />
       )}
     </svg>
+  );
+}
+
+/**
+ * The selected mark's pinned card, board Readout-C: the title and score,
+ * where in the match (and, on a season court, which match), the "Hit from" /
+ * "Landed" rows when the shot has both ends recorded (in any view), and —
+ * under a hairline — "Watch point", a real button that watches the point (as
+ * a second click on the mark does), or "No video for this point".
+ *
+ * Unlike the pill it takes the pointer: `data-chrome` keeps a press on it
+ * from panning the court, and `data-viz-readout` from deselecting.
+ */
+function MarkCard({
+  readout,
+  dot,
+  side,
+  style,
+  onWatch,
+  onEnter,
+}: {
+  readout: MarkReadout;
+  dot: VizDot;
+  side: string | undefined;
+  style: React.CSSProperties;
+  onWatch: () => void;
+  onEnter?: () => void;
+}) {
+  const fill = fillFor(dot);
+  const rows: { kind: "ring" | "dot"; label: string; value: string }[] =
+    readout.hitFrom !== null && readout.landed !== null
+      ? [
+          { kind: "ring", label: HIT_FROM_LABEL, value: readout.hitFrom },
+          { kind: "dot", label: LANDED_LABEL, value: readout.landed },
+        ]
+      : [];
+  return (
+    <div
+      data-viz-readout=""
+      data-viz-readout-card=""
+      data-viz-readout-side={side}
+      data-chrome=""
+      className={`absolute z-[2] flex cursor-default flex-col gap-0.5 p-3 ${DARK_READOUT_CLASS}`}
+      style={style}
+      onPointerEnter={onEnter}
+    >
+      <ReadoutPart readout={readout} />
+      <span className="flex items-baseline gap-3">
+        <span
+          data-viz-readout-title=""
+          className="min-w-0 text-[12px] leading-[1.35] font-medium text-white"
+        >
+          {readout.title}
+        </span>
+        {readout.score !== null && (
+          <span className="ml-auto shrink-0 text-[11px] leading-[1.35] text-white/[0.64] tabular-nums">
+            {readout.score}
+          </span>
+        )}
+      </span>
+      {readout.where !== null && (
+        <span
+          data-viz-readout-where=""
+          className="text-[11px] leading-[1.45] text-white/[0.64]"
+        >
+          {readout.where}
+        </span>
+      )}
+      {readout.match !== null && (
+        <span
+          data-viz-readout-match=""
+          className="text-[11px] leading-[1.45] text-white/[0.64]"
+        >
+          {readout.match}
+        </span>
+      )}
+      {rows.length > 0 && (
+        <span className="mt-1.5 flex flex-col gap-1">
+          {rows.map((row) => (
+            <span
+              key={row.kind}
+              data-viz-readout-row={row.kind === "ring" ? "hit" : "landed"}
+              className="flex items-center gap-2 text-[11px] leading-[1.45]"
+            >
+              <EndGlyph kind={row.kind} fill={fill} />
+              <span className="w-[60px] shrink-0 text-white/[0.64]">
+                {row.label}
+              </span>
+              <span
+                // T9's "Contact not recorded", folded into the Hit from row.
+                {...(row.kind === "ring" && readout.contact !== undefined
+                  ? { "data-viz-readout-contact": "" }
+                  : {})}
+                className="min-w-0 text-white"
+              >
+                {row.value}
+              </span>
+            </span>
+          ))}
+        </span>
+      )}
+      <span
+        data-viz-readout-action=""
+        className="mt-2 border-t border-[rgba(255,255,255,0.12)] pt-2"
+      >
+        {readout.watch ? (
+          <button
+            type="button"
+            data-viz-readout-watch=""
+            onClick={onWatch}
+            className="-mx-1 flex items-center gap-1.5 rounded-[6px] px-1 text-[12px] leading-[1.35] font-medium text-white outline-none hover:text-white/80 focus-visible:ring-2 focus-visible:ring-white/70"
+          >
+            <PlayGlyph size={9} fill="#fff" />
+            {WATCH_POINT_LABEL}
+          </button>
+        ) : (
+          <span
+            data-viz-readout-no-video=""
+            className="text-[11px] leading-[1.45] text-white/[0.64]"
+          >
+            {NO_VIDEO_LABEL}
+          </span>
+        )}
+      </span>
+    </div>
   );
 }
 

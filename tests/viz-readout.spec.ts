@@ -3,10 +3,14 @@ import {
   buildMarkReadout,
   buildReadout,
   buildZoneReadout,
-  markClickHint,
+  hitFromPhrase,
+  landedPhrase,
+  markTitle,
+  NO_VIDEO_LABEL,
   placeApronReadout,
   placeReadout,
   statRowTooltip,
+  WATCH_POINT_LABEL,
   wonFigureLabel,
 } from "@/components/dashboard/matches/match-detail/shots/viz-readout";
 import type { VizDotMeta } from "@/components/dashboard/matches/match-detail/shots/viz-model";
@@ -354,7 +358,7 @@ test("a mark panned out of view pins the readout to the nearest edge", () => {
   });
 });
 
-test.describe("buildMarkReadout (the lightbox)", () => {
+test.describe("buildMarkReadout (the lightbox's pill and card)", () => {
   const meta = {
     pointId: "p",
     setNumber: 2,
@@ -364,33 +368,20 @@ test.describe("buildMarkReadout (the lightbox)", () => {
     result: "In",
     isAce: false,
   };
-  test("legend word, score, shot and the caller's where", () => {
+  test("title, score and the caller's where; no rows, no video by default", () => {
     expect(
       buildMarkReadout(meta, "won", "serve", "Set 2 · Game 5 · You serving"),
     ).toEqual({
-      title: "Point won",
+      title: "First serve, point won",
       score: "30-15",
-      shot: "First serve",
       where: "Set 2 · Game 5 · You serving",
       match: null,
-      hint: null,
+      hitFrom: null,
+      landed: null,
+      watch: false,
     });
   });
-  test("a measured speed is never printed beside the shot", () => {
-    expect(buildMarkReadout({ ...meta }, "won", "serve", null).shot).toBe(
-      "First serve",
-    );
-  });
-  test("an ace is Ace; a miss is Out; the errors cut says Error", () => {
-    expect(
-      buildMarkReadout({ ...meta, isAce: true }, "won", "serve", null).title,
-    ).toBe("Ace");
-    expect(
-      buildMarkReadout({ ...meta, result: "Out" }, "miss", "serve", null),
-    ).toMatchObject({ title: "Out", shot: "First serve, out" });
-    expect(buildMarkReadout(meta, "lost", "errors", null).title).toBe("Error");
-  });
-  test("nothing is invented: no score, no shot, no speed when unrecorded", () => {
+  test("nothing is invented: no score and no shot when unrecorded", () => {
     expect(
       buildMarkReadout(
         { ...meta, pointScore: null, shotType: null, result: null },
@@ -401,38 +392,163 @@ test.describe("buildMarkReadout (the lightbox)", () => {
     ).toEqual({
       title: "Point lost",
       score: null,
-      shot: null,
       where: null,
       match: null,
-      hint: null,
+      hitFrom: null,
+      landed: null,
+      watch: false,
     });
   });
-  test("the season's match line and the hint ride along as handed", () => {
+  test("the season's match line and the watch ride along as handed", () => {
     expect(
       buildMarkReadout(meta, "won", "serve", null, {
         match: "vs Lee · Nov 3",
-        hint: markClickHint(false, true),
+        watch: true,
+      }),
+    ).toMatchObject({ match: "vs Lee · Nov 3", watch: true });
+  });
+  test("a mark drawn at both ends has a Hit from and a Landed row", () => {
+    const m = { ...meta, shotType: "Forehand", result: "Out" };
+    expect(
+      buildMarkReadout(m, "lost", "errors", null, {
+        ends: {
+          // 0.61 m past the baseline (11.885 m past the net) = 2 ft long.
+          landing: { lateralM: 1, depthM: 11.885 + 0.61, atNet: false },
+          // 0.91 m behind the hitter's baseline = 3 ft.
+          contactDepthM: 0.91,
+        },
       }),
     ).toMatchObject({
-      match: "vs Lee · Nov 3",
-      hint: "Click to focus · Click again to watch",
+      hitFrom: "3 ft behind the baseline",
+      landed: "2 ft long",
+    });
+  });
+  test("the rows follow the shot's recorded ends, not the view: a pair has both even where the court draws its landing alone", () => {
+    expect(
+      buildMarkReadout(meta, "won", "rallyPlacement", null, {
+        ends: {
+          landing: { lateralM: 0, depthM: 8, atNet: false },
+          contactDepthM: -1.22,
+        },
+      }),
+    ).toMatchObject({
+      hitFrom: "4 ft inside the baseline",
+      landed: "13 ft inside the baseline",
+    });
+  });
+  test("a landing alone has no rows — unless the view draws contact and none was recorded", () => {
+    const landing = { lateralM: 0, depthM: 8, atNet: false };
+    expect(
+      buildMarkReadout(meta, "won", "rallyPlacement", null, {
+        ends: { landing, contactDepthM: null },
+      }),
+    ).toMatchObject({ hitFrom: null, landed: null });
+    expect(
+      buildMarkReadout(meta, "won", "rallyPlacement", null, {
+        ends: { landing, contactDepthM: null },
+        contactMissing: true,
+      }),
+    ).toMatchObject({
+      hitFrom: "Contact not recorded",
+      landed: "13 ft inside the baseline",
+      contact: "Contact not recorded",
     });
   });
 });
 
-test.describe("markClickHint (the readout's last line)", () => {
-  test("not selected: focus, then watch", () => {
-    expect(markClickHint(false, true)).toBe(
-      "Click to focus · Click again to watch",
+test.describe("markTitle (the pill's and card's title)", () => {
+  test("an ace is Ace", () => {
+    expect(markTitle(meta({ isAce: true }), "won", "serve")).toBe("Ace");
+  });
+  test("the errors cut names the error, judged or not", () => {
+    const m = meta({ shotType: "Forehand", result: "Out" });
+    expect(markTitle({ ...m, errorKind: "unforced" }, "lost", "errors")).toBe(
+      "Forehand unforced error",
     );
+    expect(markTitle({ ...m, errorKind: "forced" }, "lost", "errors")).toBe(
+      "Forehand forced error",
+    );
+    expect(markTitle({ ...m, errorKind: null }, "lost", "errors")).toBe(
+      "Forehand error",
+    );
+    expect(
+      markTitle(
+        { ...m, shotType: "Second Serve", errorKind: "doubleFault" },
+        "lost",
+        "errors",
+      ),
+    ).toBe("Double fault");
+    expect(markTitle({ ...m, shotType: null }, "lost", "errors")).toBe("Error");
   });
-  test("selected (the readout pinned): the second click watches", () => {
-    expect(markClickHint(true, true)).toBe("Click again to watch");
+  test("elsewhere the shot and its call, or what became of the point", () => {
+    expect(
+      markTitle(
+        meta({ shotType: "Backhand", result: "Out" }),
+        "miss",
+        "rallyPlacement",
+      ),
+    ).toBe("Backhand, out");
+    expect(
+      markTitle(
+        meta({ shotType: "Forehand", result: "Net" }),
+        "miss",
+        "rallyPlacement",
+      ),
+    ).toBe("Forehand, into the net");
+    expect(
+      markTitle(
+        meta({ shotType: "Forehand", result: "In" }),
+        "won",
+        "rallyPlacement",
+      ),
+    ).toBe("Forehand, point won");
+    expect(
+      markTitle(
+        meta({ shotType: "Forehand", result: "In" }),
+        "lost",
+        "returnPlacement",
+      ),
+    ).toBe("Forehand return, point lost");
+    // A miss the tracker gave no call is out.
+    expect(
+      markTitle(meta({ shotType: "Forehand", result: null }), "miss", "serve"),
+    ).toBe("Forehand, out");
+    expect(
+      markTitle(meta({ shotType: null, result: null }), "won", "serve"),
+    ).toBe("Point won");
   });
-  test("nothing to play: the focus alone, selected or not", () => {
-    expect(markClickHint(false, false)).toBe("Click to focus");
-    expect(markClickHint(true, false)).toBe("Click to focus");
+});
+
+test.describe("hitFromPhrase / landedPhrase (the card's rows)", () => {
+  test("contact: behind, inside or on the baseline, in the viewer's unit", () => {
+    expect(hitFromPhrase(0.91)).toBe("3 ft behind the baseline");
+    expect(hitFromPhrase(-1.22)).toBe("4 ft inside the baseline");
+    expect(hitFromPhrase(0.1)).toBe("On the baseline");
+    expect(hitFromPhrase(0.91, "m")).toBe("0.9 m behind the baseline");
   });
+  test("landing: net, long, wide, both, inside, and an out called on the line", () => {
+    const at = (lateralM: number, depthM: number, atNet = false) => ({
+      lateralM,
+      depthM,
+      atNet,
+    });
+    expect(landedPhrase(at(0, 3, true), "Net")).toBe("In the net");
+    expect(landedPhrase(at(0, 11.885 + 0.61), "Out")).toBe("2 ft long");
+    expect(landedPhrase(at(4.115 + 0.3, 6), "Out")).toBe("1 ft wide");
+    expect(landedPhrase(at(-(4.115 + 0.3), 11.885 + 0.61), "Out")).toBe(
+      "2 ft long, 1 ft wide",
+    );
+    expect(landedPhrase(at(0, 11.885 - 1.83), "In")).toBe(
+      "6 ft inside the baseline",
+    );
+    expect(landedPhrase(at(0, 11.885), "In")).toBe("On the baseline");
+    expect(landedPhrase(at(4.1, 11.8), "Out")).toBe("Out, on the line");
+  });
+});
+
+test("the card's closing words: Watch point, or No video for this point", () => {
+  expect(WATCH_POINT_LABEL).toBe("Watch point");
+  expect(NO_VIDEO_LABEL).toBe("No video for this point");
 });
 
 test.describe("statRowTooltip (a Statistics row's readout)", () => {

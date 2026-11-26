@@ -1,7 +1,17 @@
-import type { ZoneKey, ZoneStats } from "@/lib/data/serve-zones";
 import type { Cut, StatRow, VizDotMeta } from "./viz-model";
 import { marksAreShots } from "./cut-kinds";
 import { pointScoreLabel } from "@/lib/ui/score-format";
+import {
+  REAL_HALF_SINGLES,
+  REAL_NET_Y,
+  type ZoneKey,
+  type ZoneStats,
+} from "@/lib/data/serve-zones";
+import {
+  FT_PER_M,
+  formatDistance,
+  type DistanceUnit,
+} from "@/lib/format/distance";
 
 /**
  * The focused and fullscreen courts' hover/focus readout, as a PURE function of one
@@ -132,30 +142,44 @@ export function buildReadout(
 }
 
 /**
- * The lightbox's mark readout (canvas S04/S05): a header of the legend word
- * and the point score, the shot, then where in the match it was. `where` is
- * the caller's — the lightbox reads set, game and server off the point
- * itself, the way the Video tab's point list prints them — so this stays a
- * pure function of the dot. Every part is omitted when its field is missing.
+ * The lightbox's mark readout (board Readout-C, "polished C"), in two
+ * states the court draws from this one object:
+ *
+ * - **hover** (or keyboard focus): a one-line dark pill — `title`, `score`,
+ *   and a white play badge when `watch`;
+ * - **selected**: a pinned dark card — `title` and `score`, `where` (and the
+ *   season's `match`), the "Hit from" / "Landed" rows when the shot has
+ *   both ends recorded (in any view), then "Watch point" or "No video for
+ *   this point" under a hairline.
+ *
+ * `where` is the caller's — the lightbox reads set, game and server off the
+ * point itself, the way the Video tab's point list prints them — so this
+ * stays a pure function of the dot. Every part is omitted when its field is
+ * missing: nothing is invented.
  */
 export interface MarkReadout {
-  /** "Ace" / "Point won" / "Point lost" / "Out" / "Error". */
+  /** The shot and its call, one phrase: "Forehand unforced error",
+   *  "Backhand, out", "First serve, point won", "Ace" (`markTitle`). */
   title: string;
   /** The point score ("30-15"), or `null` when none was stored. */
   score: string | null;
-  /** The shot and its call (never its speed); `null` when none. */
-  shot: string | null;
   /** "Set 2 · Game 5 · You serving", or `null`. */
   where: string | null;
   /** Which match the point is from — the season's "vs Lee · Nov 3" — or
    *  `null` on a one-match court, where the match goes without saying. */
   match: string | null;
-  /** The last line, under a hairline: what a click does here
-   *  (`markClickHint`). `null` draws no hint. */
-  hint: string | null;
-  /** Which mark of a pair the card is about — "Contact" (where the shot
-   *  was struck) or "Placement" (where it landed) — drawn as the card's
-   *  first line. Absent on a mark drawn in one place. */
+  /** The card's "Hit from" row (ring glyph): "3 ft behind the baseline",
+   *  or "Contact not recorded". `null` when the row is not drawn. */
+  hitFrom: string | null;
+  /** The card's "Landed" row (dot glyph): "2 ft long". `null` when the row
+   *  is not drawn. The two rows are drawn together or not at all. */
+  landed: string | null;
+  /** The point can be watched: the pill ends in a play badge and the card in
+   *  "Watch point"; otherwise no badge, and "No video for this point". */
+  watch: boolean;
+  /** Which mark of a pair the pointer is on — "Contact" (where the shot was
+   *  struck) or "Placement" (where it landed). Read to screen readers only:
+   *  the card's rows say both. Absent on a mark drawn in one place. */
   part?: "Contact" | "Placement";
   /** "Contact not recorded": the view draws contact (Contact or Both) and
    *  this shot has none, so its landing stands alone. Absent otherwise. */
@@ -166,18 +190,101 @@ export interface MarkReadout {
  *  Approaches by default, every other placement chart in Both. */
 export type PairPart = "contact" | "placement";
 
+/** The card's closing action, and what it says when there is nothing to play. */
+export const WATCH_POINT_LABEL = "Watch point";
+export const NO_VIDEO_LABEL = "No video for this point";
+/** The card's two row labels. */
+export const HIT_FROM_LABEL = "Hit from";
+export const LANDED_LABEL = "Landed";
+
 /**
- * The readout's last line: what clicking the mark does, said in the state
- * the mark is in. The first click focuses (selects and glides), the second
- * watches; a selected mark has spent its first click. A host that cannot
- * play this point (no video, no clip) offers the focus alone, and a second
- * click there does nothing.
+ * The readout's title: the shot and the call on it in one sentence-case
+ * phrase.
+ *
+ * - An ace is "Ace" — the serve it was is the star itself.
+ * - The errors cut names the error: "Forehand unforced error",
+ *   "Backhand forced error", or "Forehand error" where the match's errors are
+ *   not judged (`VizDotMeta.errorKind` absent); a double fault is
+ *   "Double fault".
+ * - Everywhere else the shot, then the tracker's call ("Backhand, out",
+ *   "Forehand, into the net"), or — a ball called in — what became of the
+ *   point ("First serve, point won"). A miss with no recorded call is out.
+ *   With no shot recorded the call or the point's fate stands alone.
  */
-export function markClickHint(selected: boolean, canWatch: boolean): string {
-  if (!canWatch) return "Click to focus";
-  return selected
-    ? "Click again to watch"
-    : "Click to focus · Click again to watch";
+export function markTitle(
+  meta: VizDotMeta,
+  outcome: "won" | "lost" | "miss",
+  cut: Cut,
+): string {
+  if (meta.isAce || resultPhrase(meta.result) === "Ace") return "Ace";
+  const shot = shotPhrase(meta.shotType, cut);
+  if (cut === "errors") {
+    if (meta.errorKind === "doubleFault") return "Double fault";
+    const noun =
+      meta.errorKind === "unforced"
+        ? "unforced error"
+        : meta.errorKind === "forced"
+          ? "forced error"
+          : "error";
+    return shot !== null ? `${shot} ${noun}` : sentenceCase(noun);
+  }
+  const call = resultPhrase(meta.result) ?? (outcome === "miss" ? "Out" : null);
+  const fate = outcome === "won" ? "point won" : "point lost";
+  if (shot !== null)
+    return `${shot}, ${call !== null ? lowerFirst(call) : fate}`;
+  return call ?? sentenceCase(fate);
+}
+
+/** A readout distance: whole feet, or metres to a tenth — never under the
+ *  smallest step it prints, so a ball just long never reads "0 ft long". */
+function readoutDistance(m: number, unit: DistanceUnit): string {
+  const ft = Math.abs(m) * FT_PER_M;
+  if (unit === "ft") return `${Math.max(1, Math.round(ft))} ft`;
+  return formatDistance("m", Math.max(0.1 / 0.3048, ft));
+}
+
+/** Within half a step of zero, a distance reads as "on" the line. */
+function onLine(m: number, unit: DistanceUnit): boolean {
+  return unit === "ft" ? Math.abs(m) * FT_PER_M < 0.5 : Math.abs(m) < 0.05;
+}
+
+/**
+ * Where the shot was struck, from its contact (`VizDot.pair.depthM`: metres
+ * behind (+) or inside (−) the hitter's own baseline): "3 ft behind the
+ * baseline", "4 ft inside the baseline", "On the baseline".
+ */
+export function hitFromPhrase(
+  contactDepthM: number,
+  unit: DistanceUnit = "ft",
+): string {
+  if (onLine(contactDepthM, unit)) return "On the baseline";
+  return `${readoutDistance(contactDepthM, unit)} ${contactDepthM > 0 ? "behind" : "inside"} the baseline`;
+}
+
+/**
+ * Where the shot landed, from the dot's own placement (metres past the net,
+ * lateral from the centre line): "In the net", "2 ft long", "1 ft wide",
+ * "2 ft long, 1 ft wide", "6 ft inside the baseline", "On the baseline". A
+ * ball the tracker called out whose landing reads on a line (SwingVision
+ * imputes them there) is "Out, on the line".
+ */
+export function landedPhrase(
+  landing: { lateralM: number; depthM: number; atNet: boolean },
+  result: string | null,
+  unit: DistanceUnit = "ft",
+): string {
+  if (landing.atNet) return "In the net";
+  const long = landing.depthM - REAL_NET_Y;
+  const wide = Math.abs(landing.lateralM) - REAL_HALF_SINGLES;
+  const parts: string[] = [];
+  if (long > 0 && !onLine(long, unit))
+    parts.push(`${readoutDistance(long, unit)} long`);
+  if (wide > 0 && !onLine(wide, unit))
+    parts.push(`${readoutDistance(wide, unit)} wide`);
+  if (parts.length > 0) return parts.join(", ");
+  if ((result ?? "").trim().toLowerCase() === "out") return "Out, on the line";
+  if (long > 0 || onLine(long, unit)) return "On the baseline";
+  return `${readoutDistance(long, unit)} inside the baseline`;
 }
 
 export function buildMarkReadout(
@@ -187,38 +294,45 @@ export function buildMarkReadout(
   where: string | null,
   extra: {
     match?: string | null;
-    hint?: string | null;
+    /** The host can play this point (`canWatchMark`). */
+    watch?: boolean;
     /** The pair mark under the pointer, where both ends are drawn. */
     part?: PairPart | null;
     /** The view draws contact and this shot has no recorded contact. */
     contactMissing?: boolean;
+    /**
+     * The shot's two recorded ends, for the card's rows — in any view,
+     * drawn or not: the landing (the dot's own placement) and the contact's
+     * depth (`VizDot.pair.depthM`). The rows show when both exist, or when
+     * the landing does and `contactMissing` (the view draws contact, none
+     * was recorded) says why the contact does not.
+     */
+    ends?: {
+      landing: { lateralM: number; depthM: number; atNet: boolean } | null;
+      contactDepthM: number | null;
+    };
+    unit?: DistanceUnit;
   } = {},
 ): MarkReadout {
-  const title = meta.isAce
-    ? "Ace"
-    : cut === "errors"
-      ? "Error"
-      : outcome === "miss"
-        ? "Out"
-        : outcome === "won"
-          ? "Point won"
-          : "Point lost";
-  const shot = shotPhrase(meta.shotType, cut);
-  const call = resultPhrase(meta.result);
-  const shotLine = meta.isAce
-    ? shot
-    : shot !== null && call !== null
-      ? `${shot}, ${lowerFirst(call)}`
-      : (shot ?? call);
   const score = (meta.pointScore ?? "").trim();
+  const unit = extra.unit ?? "ft";
+  const landing = extra.ends?.landing ?? null;
+  const contactDepthM = extra.ends?.contactDepthM ?? null;
+  const rows =
+    landing !== null && (contactDepthM !== null || extra.contactMissing);
   return {
-    title,
+    title: markTitle(meta, outcome, cut),
     score: score === "" ? null : pointScoreLabel(score),
-    // No speed beside the shot — see `buildReadout`.
-    shot: shotLine === null || shotLine === "" ? null : shotLine,
+    // No speed anywhere — see `buildReadout`.
     where,
     match: extra.match ?? null,
-    hint: extra.hint ?? null,
+    hitFrom: !rows
+      ? null
+      : contactDepthM !== null
+        ? hitFromPhrase(contactDepthM, unit)
+        : "Contact not recorded",
+    landed: rows ? landedPhrase(landing, meta.result, unit) : null,
+    watch: extra.watch ?? false,
     ...(extra.part
       ? { part: extra.part === "contact" ? "Contact" : "Placement" }
       : {}),
@@ -326,11 +440,10 @@ export function placeReadout(
   /** Px between the anchor and the card — the lightbox passes the selection
    *  ring's own radius plus 8, so the card clears the ring. */
   gap: number = READOUT_GAP,
+  /** The card's widest — the selected mark's card is 236px. */
+  maxWidth: number = READOUT_WIDTH,
 ): ReadoutPlacement {
-  const width = Math.min(
-    READOUT_WIDTH,
-    Math.max(0, stage.w - READOUT_MARGIN * 2),
-  );
+  const width = Math.min(maxWidth, Math.max(0, stage.w - READOUT_MARGIN * 2));
   const left = Math.max(
     READOUT_MARGIN + width / 2,
     Math.min(anchor.x, stage.w - READOUT_MARGIN - width / 2),
@@ -384,11 +497,10 @@ export function placeApronReadout(
   courtCentreX: number,
   /** Px between the anchor and the card (the selection ring's radius + 8). */
   gap: number = READOUT_GAP,
+  /** The card's widest, as `placeReadout`'s. */
+  maxWidth: number = READOUT_WIDTH,
 ): ApronReadoutPlacement {
-  const width = Math.min(
-    READOUT_WIDTH,
-    Math.max(0, stage.w - READOUT_MARGIN * 2),
-  );
+  const width = Math.min(maxWidth, Math.max(0, stage.w - READOUT_MARGIN * 2));
   const fitsLeft = anchor.x - gap - width >= READOUT_MARGIN;
   const fitsRight = anchor.x + gap + width <= stage.w - READOUT_MARGIN;
   const preferred: "left" | "right" =
@@ -397,7 +509,7 @@ export function placeApronReadout(
   const fits = { left: fitsLeft, right: fitsRight };
   const side = fits[preferred] ? preferred : fits[other] ? other : null;
   if (side === null) {
-    const above = placeReadout(anchor, stage, gap);
+    const above = placeReadout(anchor, stage, gap, maxWidth);
     return {
       side: above.below ? "below" : "above",
       left: above.left,

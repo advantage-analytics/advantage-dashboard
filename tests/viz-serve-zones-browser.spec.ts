@@ -201,8 +201,8 @@ test("a mark pinned on Scatter does not stop the fullscreen zones answering on Z
   const fullscreen = page.getByTestId("fullscreen");
   const readout = fullscreen.locator("[data-viz-readout]");
   await fullscreen.locator('[data-viz-mark="p1-high-0-0"]').click();
-  // The lightbox readout carries no controls.
-  await expect(readout).toContainText("Point won");
+  // The selected mark's card carries no control without video.
+  await expect(readout).toContainText("First serve, point won");
   await expect(readout.locator("button")).toHaveCount(0);
   await page.getByRole("button", { name: "Scatter", exact: true }).click();
   await page.getByRole("menuitemradio", { name: /Zones/ }).click();

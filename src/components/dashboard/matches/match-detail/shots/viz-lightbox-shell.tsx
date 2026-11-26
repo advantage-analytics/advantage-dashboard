@@ -171,8 +171,9 @@ export interface VizLightboxShellProps {
    * Points row, watches that one point when `canWatch` says it can; the
    * first click only selects. `onWatch` is handed the strip's sentence (the
    * host's filters, then the legend's and a Statistics row's pick) to name
-   * the point by. Omitted, a second click does nothing and every hint reads
-   * "Click to focus".
+   * the point by. The selected mark's card offers the same watch as a
+   * "Watch point" button. Omitted, a second click does nothing and every
+   * card reads "No video for this point".
    */
   watch?: {
     /** Handed a drawn mark, or an Approaches entry with no landing (its
@@ -1275,6 +1276,7 @@ export function VizLightboxShell({
                       matchFor={matchFor}
                       opponentHand={opponentHand}
                       canWatchMark={canWatchMark}
+                      unit={unit}
                       focusIds={statHover !== null ? hoverIds : null}
                       outline={outline}
                       onReadoutEnter={holdReadout}

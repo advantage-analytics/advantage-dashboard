@@ -309,6 +309,13 @@ export interface VizDotMeta {
    * always agree on a point. Absent everywhere else.
    */
   stroke?: string;
+  /**
+   * Errors cut only: the kind of error, for the readout's title
+   * ("Forehand unforced error"). Read as stored on a match whose errors are
+   * judged; on one that is not, only a double fault has a kind — calling
+   * the rest "unforced" would claim a judgement nobody made.
+   */
+  errorKind?: ErrorValue | null;
   /** Approaches cut only: how the subject came in (`netEntryOf`). */
   entry?: NetEntry;
   /** Approaches cut only: the opponent's wing the approach went to. */
@@ -1590,6 +1597,7 @@ function computeErrorsViz(
     count++;
 
     const contact = contactMetrics(shot.contactX, shot.contactY);
+    const storedKind = errorKindOf(p, true);
     dots.push({
       id: p.id,
       lateralM: landing.lateralM,
@@ -1601,6 +1609,8 @@ function computeErrorsViz(
       meta: {
         ...pointDotMeta(p, subjectIsPlayer1, shot),
         stroke: finalShotOf(p)?.kind ?? "Other",
+        errorKind:
+          storedKind === "doubleFault" || errorSplitJudged ? storedKind : null,
       },
     });
   }

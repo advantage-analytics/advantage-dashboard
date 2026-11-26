@@ -127,7 +127,7 @@ test("a mark's readout appears on hover and stays inside the court", async ({
   }
 });
 
-test("click selects a mark: white ring, siblings at 40%, a control-free readout; Esc steps back", async ({
+test("click selects a mark: white ring, siblings at 40%, a pinned card with no control when there is no video; Esc steps back", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
@@ -1437,6 +1437,30 @@ test("Contact recorded for X of Y shows only while contact is drawn and some sho
   await expect(marks.first()).toBeVisible();
   // Placement draws no contact: nothing to say.
   await expect(line).toHaveCount(0);
+  // Placement draws no rings, but a selected shot whose contact was recorded
+  // still has both rows on its card; one without contact has neither (the
+  // view does not draw contact, so there is nothing to explain).
+  const recorded = dialog
+    .locator(
+      '[data-court-stage] [data-viz-mark]:not([data-viz-mark$="-p1-deep"])',
+    )
+    .first();
+  await recorded.dispatchEvent("click");
+  await page.mouse.move(5, 5);
+  const card = page.locator("[data-viz-readout-card]");
+  await expect(card.locator('[data-viz-readout-row="hit"]')).toContainText(
+    /^Hit from([\d.]+ (ft|m) (behind|inside) the baseline|On the baseline)$/,
+  );
+  await expect(card.locator('[data-viz-readout-row="landed"]')).toContainText(
+    /^Landed\S/,
+  );
+  await expect(card.locator("[data-viz-readout-contact]")).toHaveCount(0);
+  await dialog
+    .locator('[data-court-stage] [data-viz-mark$="-p1-deep"]')
+    .first()
+    .dispatchEvent("click");
+  await page.mouse.move(5, 5);
+  await expect(card.locator("[data-viz-readout-row]")).toHaveCount(0);
   const view = dialog.getByRole("radiogroup", { name: "Court view" });
   await view.getByRole("radio", { name: "Both" }).click();
   await expect(line).toHaveText(/^Contact recorded for \d+ of \d+$/);
@@ -1445,7 +1469,9 @@ test("Contact recorded for X of Y shows only while contact is drawn and some sho
   await expect(line).toHaveCSS("font-size", "11px");
   // The shot with no contact draws its landing alone; its readout says why.
   const missing = dialog.locator('[data-viz-mark$="-p1-deep"]').first();
-  await missing.hover({ force: true });
+  await missing.dispatchEvent("click");
+  await page.mouse.move(5, 5);
+  // The selected mark's card: its Hit from row says why there is no ring.
   const readout = page.locator("[data-viz-readout]");
   await expect(readout.locator("[data-viz-readout-contact]")).toHaveText(
     "Contact not recorded",
@@ -1966,37 +1992,68 @@ test("with reduced motion the glide is a jump; a Points row glides the court too
 
 /* ── Pass 3: the second click, the hint, the Statistics row's readout ──── */
 
-test("the readout's hint: focus then watch, the pinned readout's watch, and the focus alone without video", async ({
+test("the readout: a pill on hover (a play badge only with video), a pinned card on select ending in Watch point or No video for this point", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
-  const hint = page.locator("[data-viz-readout] [data-viz-readout-hint]");
+  const pill = page.locator("[data-viz-readout-pill]");
+  const card = page.locator("[data-viz-readout-card]");
 
-  // No playable video: the focus alone, before and after selecting.
+  // No playable video: a pill with no badge; the card says so.
   await page.goto(`${origin}/?tab=shots&cut=serve`);
   const stage = page.locator("[data-court-stage]");
   let mark = stage.locator("[data-viz-mark]").first();
   await mark.hover({ force: true });
-  await expect(hint).toHaveText("Click to focus");
+  await expect(pill).toBeVisible();
+  await expect(pill.locator("[data-viz-readout-play]")).toHaveCount(0);
   await mark.dispatchEvent("click");
   await expect(mark).toHaveAttribute("aria-pressed", "true");
-  await expect(hint).toHaveText("Click to focus");
+  await expect(card).toBeVisible();
+  await expect(card.locator("[data-viz-readout-no-video]")).toHaveText(
+    "No video for this point",
+  );
+  await expect(card.getByRole("button")).toHaveCount(0);
 
-  // Every point playable: focus then watch, then — pinned — watch.
+  // Every point playable: the pill ends in a play badge, the card in Watch
+  // point under a 1px hairline at 12% white — and the button watches.
   await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watchall`);
   mark = stage.locator("[data-viz-mark]").first();
   await mark.hover({ force: true });
-  await expect(hint).toHaveText("Click to focus · Click again to watch");
-  // The hint sits under a 1px hairline at 12% white.
-  const border = await hint.evaluate((el) => {
-    const cs = getComputedStyle(el);
-    return [cs.borderTopWidth, cs.borderTopColor, cs.paddingTop];
-  });
-  expect(border).toEqual(["1px", "rgba(255, 255, 255, 0.12)", "6px"]);
+  await expect(pill.locator("[data-viz-readout-play]")).toHaveCount(1);
   await mark.dispatchEvent("click");
   await expect(mark).toHaveAttribute("aria-pressed", "true");
   await page.mouse.move(5, 5);
-  await expect(hint).toHaveText("Click again to watch");
+  const action = card.locator("[data-viz-readout-action]");
+  const border = await action.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return [cs.borderTopWidth, cs.borderTopColor];
+  });
+  expect(border).toEqual(["1px", "rgba(255, 255, 255, 0.12)"]);
+  const watchButton = card.getByRole("button", { name: "Watch point" });
+  await expect(watchButton).toBeVisible();
+  await watchButton.click();
+  await expect(page).toHaveURL(/tab=film/);
+});
+
+test("the Watch point button is reached and pressed from the keyboard", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watchall`);
+  const stage = page.locator("[data-court-stage]");
+  const mark = stage.locator("[data-viz-mark]").first();
+  await mark.focus();
+  // A focused mark shows the pill; Enter selects it and pins the card.
+  await expect(page.locator("[data-viz-readout-pill]")).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(mark).toHaveAttribute("aria-pressed", "true");
+  const watchButton = page
+    .locator("[data-viz-readout-card]")
+    .getByRole("button", { name: "Watch point" });
+  await page.keyboard.press("Tab");
+  await expect(watchButton).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/tab=film/);
 });
 
 test("a second click on the selected mark watches that one point in the Video tab; Enter does too", async ({
