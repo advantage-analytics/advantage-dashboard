@@ -38,6 +38,7 @@ import { withMonthFallback } from "@/lib/supabase/missing-function";
 import {
   allowanceFor,
   allowanceResetsOn,
+  type AllowanceKind,
   type AllowanceScope,
   type AllowanceWorkspace,
   type VideoAllowance,
@@ -353,6 +354,7 @@ export async function reserveQuota(params: {
       remainingSeconds: remaining,
       capSeconds: row.cap_seconds,
       resetsOn: allowanceResetsOn(allowance),
+      kind: allowance.kind,
     }),
   };
 }
@@ -470,8 +472,29 @@ export function capRefusalMessage(params: {
    * says "the start of next month", which is true of every beta allowance.
    */
   resetsOn?: string | null;
+  /**
+   * The allowance's kind. A `season` is one pool for the season: it is
+   * named as that, and nothing resets. A team on `none` has no plan and no
+   * pilot, so there is no allowance to have run out. Omitted, the monthly
+   * wording.
+   */
+  kind?: AllowanceKind;
 }): string {
-  const { neededSeconds, remainingSeconds, capSeconds, resetsOn } = params;
+  const { neededSeconds, remainingSeconds, capSeconds, resetsOn, kind } =
+    params;
+  if (kind === "none" && capSeconds <= 0) {
+    return (
+      "Your team has no plan or video hours yet. Its page in Settings › " +
+      "Teams says how to set one up."
+    );
+  }
+  if (kind === "season") {
+    return (
+      `This match needs ${formatMinutes(neededSeconds)} of analysis but only ` +
+      `${formatMinutes(remainingSeconds)} is left of your team's hours this ` +
+      `season (${formatMinutes(capSeconds)}). A shorter trim will fit sooner.`
+    );
+  }
   const lead =
     `This match needs ${formatMinutes(neededSeconds)} of analysis but only ` +
     `${formatMinutes(remainingSeconds)} is left in your monthly allowance ` +
@@ -530,6 +553,8 @@ export interface QuotaPeek {
    * on a peek a meter built from bare figures.
    */
   resetsOn?: string | null;
+  /** The kind of that allowance, set with `resetsOn` — a refusal's wording. */
+  allowanceKind?: AllowanceKind;
 }
 
 /**
@@ -579,6 +604,7 @@ export function peekRefusalMessage(
     remainingSeconds: peek.remainingSeconds,
     capSeconds: peek.capSeconds,
     resetsOn: peek.resetsOn,
+    kind: peek.allowanceKind,
   });
 }
 
@@ -689,6 +715,7 @@ export async function peekQuota(
   return {
     ...buildPeek(usedSeconds, capSeconds, credits.seconds, credits),
     resetsOn: allowanceResetsOn(allowance),
+    allowanceKind: allowance.kind,
   };
 }
 

@@ -17,6 +17,8 @@ import type {
   AdminTeamProgram,
 } from "@/lib/data/admin-team-server";
 import type { ProgramUsage } from "@/lib/data/usage-server";
+import { plansHaveBegun } from "@/lib/billing/plans";
+import { pilotIsRunning } from "@/lib/services/splitstep/allowance";
 
 /**
  * The claim statuses a human still has to decide — same set `admin-teams-
@@ -69,15 +71,36 @@ export function TeamPageHeader({
   program,
   claim,
   usage,
+  pilot,
 }: {
   program: AdminTeamProgram;
+  /**
+   * The program's own pilot dates. From January 1, 2027 the Pilot pill is
+   * drawn only while that pilot is running (`pilotIsRunning`), never for
+   * being active.
+   */
+  pilot: { endsOn: string | null; endedAt: string | null };
   claim: AdminTeamClaim | null;
   /** The current billing month's ledger, for the hours bar. */
   usage: ProgramUsage;
 }) {
   const needsDecision = claim !== null && NEEDS_DECISION.has(claim.status);
-  const plan: "pilot" | "approve" | "none" =
-    program.status === "active" ? "pilot" : needsDecision ? "approve" : "none";
+  const onPilot =
+    program.status === "active" &&
+    (!plansHaveBegun() ||
+      pilotIsRunning(
+        {
+          pilotEligible: program.pilotEligible,
+          pilotEndsOn: pilot.endsOn,
+          pilotEndedAt: pilot.endedAt,
+        },
+        new Date(),
+      ));
+  const plan: "pilot" | "approve" | "none" = onPilot
+    ? "pilot"
+    : needsDecision
+      ? "approve"
+      : "none";
 
   const cityState = [program.city, program.state].filter(Boolean).join(", ");
 

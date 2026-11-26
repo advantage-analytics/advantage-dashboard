@@ -715,7 +715,7 @@ async function pilotDrafts(db: AdminClient): Promise<Draft[]> {
   const { data: users, error } = await db
     .from("users")
     .select(
-      "id, email, first_name, last_name, avatar_path, is_admin, video_hours_override",
+      "id, email, first_name, last_name, avatar_path, is_admin, video_hours_override, plan",
     )
     .eq("individual_pilot", true);
   if (error) {
@@ -730,6 +730,7 @@ async function pilotDrafts(db: AdminClient): Promise<Draft[]> {
     avatar_path: string | null;
     is_admin: boolean | null;
     video_hours_override: number | string | null;
+    plan: string | null;
   }[];
   if (pilots.length === 0) return [];
 
@@ -777,6 +778,8 @@ async function pilotDrafts(db: AdminClient): Promise<Draft[]> {
       pilotEligible: false,
       unlimitedVideo: pilot.is_admin === true,
       videoHoursOverride: Number.isFinite(override) ? override : null,
+      // From January 1, 2027 the pilot's 10 h is gone and the plan decides.
+      plan: pilot.plan,
     });
     if (!(cap > 0)) continue;
     const threshold = cap * PILOT_NEARLY_OUT;

@@ -22,6 +22,7 @@ import {
   type TeamCardId,
 } from "@/components/admin/team-sections";
 import { getAdminTeam } from "@/lib/data/admin-team-server";
+import { plansHaveBegun } from "@/lib/billing/plans";
 import { conferenceOptionsFor } from "@/lib/services/programs/admin-program-actions";
 import { quotaTierFor } from "@/lib/services/splitstep/quota";
 import { emailOrigin } from "@/lib/site-url";
@@ -142,6 +143,7 @@ export default async function AdminTeamPage({
             pilot={data.pilot}
             orgType={data.program.orgType}
             pilotEligible={data.program.pilotEligible}
+            plansBegun={plansHaveBegun()}
             teamPool={
               quotaTierFor({
                 kind: "team",
@@ -176,6 +178,7 @@ export default async function AdminTeamPage({
       program={data.program}
       claim={data.claim}
       usage={data.usage}
+      pilot={data.pilot}
     />
   );
 

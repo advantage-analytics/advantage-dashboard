@@ -12,6 +12,8 @@ import {
 } from "@/lib/data/teams-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
 import { TeamDetail } from "@/components/dashboard/settings/teams/team-detail";
+import { planHoursView, planStandingFor } from "@/lib/billing/plan-copy";
+import { plansHaveBegun } from "@/lib/billing/plans";
 import { loginRedirectPath } from "@/lib/auth/request-path";
 
 /**
@@ -63,6 +65,16 @@ export default async function TeamPage({
       crestUrl={await crestUrl(data.program.crestPath)}
       conferenceOptions={conferenceOptions}
       usage={usage}
+      // From January 1 the first card is the team's plan and its hours.
+      planHours={
+        plansHaveBegun()
+          ? planHoursView({
+              standing: planStandingFor(program),
+              usedSeconds: usage.usedSeconds,
+              capSeconds: usage.capSeconds,
+            })
+          : null
+      }
       pendingSeconds={pendingSeconds}
       seats={seats}
       viewerId={workspace.viewer.id}

@@ -62,8 +62,10 @@ import {
 } from "@/lib/services/splitstep/quota";
 import type { CreditsAdded } from "@/components/dashboard/credits/add-hours-dialog";
 import type { CheckoutResult } from "@/lib/billing/checkout-view";
+import { planStandingFor, teamMeterSuffix } from "@/lib/billing/plan-copy";
 import {
   planHoursSeconds,
+  plansHaveBegun,
   plansOnSale,
   type CoachPlanId,
 } from "@/lib/billing/plans";
@@ -659,6 +661,12 @@ export interface UseUploadMatchWizardReturn {
   quotaPlanId: CoachPlanId;
   /** `VideoAllowance.kind` for the billed workspace — which hours the meter is showing. */
   quotaAllowanceKind: string;
+  /**
+   * What closes a TEAM's footer meter once plans have begun — "Spring, ends
+   * May 31", "Pilot ends May 31", "No plan" — or null for the beta's wording
+   * and for a personal workspace.
+   */
+  quotaTeamSuffix: string | null;
   /** The plan checkout dialog finished: count what was bought and carry on. */
   handlePurchase: (result: CheckoutResult) => void;
   /**
@@ -1502,6 +1510,7 @@ export function useUploadMatchWizard({
           neededSeconds: 0,
           resetsOn: quotaResetsOn,
           workspaceKind: eligibilityWorkspace.kind,
+          allowanceKind: quotaAllowance.kind,
         })
       : null;
 
@@ -1527,6 +1536,7 @@ export function useUploadMatchWizard({
             ),
             resetsOn: quotaResetsOn,
             workspaceKind: eligibilityWorkspace.kind,
+            allowanceKind: quotaAllowance.kind,
           })
         : null,
     [
@@ -1534,6 +1544,7 @@ export function useUploadMatchWizard({
       remainingQuotaSeconds,
       quotaResetsOn,
       eligibilityWorkspace.kind,
+      quotaAllowance.kind,
     ],
   );
 
@@ -1551,6 +1562,12 @@ export function useUploadMatchWizard({
   const plansActive =
     canBuyCredits && (plansOnSale() || quotaPlanId !== "free");
   const freeHoursReturn = freeHoursReturnOn();
+  // A team's footer suffix from January 1: its season's end, its pilot's own
+  // end date, or that it has no plan. Null before then, and for a player.
+  const quotaTeamSuffix =
+    billedWorkspace.kind === "team" && plansHaveBegun()
+      ? teamMeterSuffix(planStandingFor(billedWorkspace))
+      : null;
 
   const openAddHours = useCallback(
     (neededSeconds?: number) => {
@@ -4475,6 +4492,7 @@ export function useUploadMatchWizard({
     plansActive,
     quotaPlanId,
     quotaAllowanceKind: quotaAllowance.kind,
+    quotaTeamSuffix,
     openAddHours,
     closeAddHours,
     handleCreditsAdded,

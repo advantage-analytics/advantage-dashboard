@@ -84,6 +84,49 @@ export async function readProgramPlanRef(
   }
 }
 
+/**
+ * The season plans of several teams in one read, keyed by program id — for a
+ * list that would otherwise ask once per row. A team with no plan has no
+ * entry. Never throws; a failed read (or no table yet) is an empty map, the
+ * same fail-closed "no plan" `readProgramPlanRef()` answers.
+ */
+export async function readProgramPlanRefs(
+  supabase: SupabaseClient,
+  programIds: readonly string[],
+): Promise<Map<string, ProgramPlanRef>> {
+  const plans = new Map<string, ProgramPlanRef>();
+  if (programIds.length === 0) return plans;
+  try {
+    const { data, error } = await supabase
+      .from("program_plans")
+      .select(PROGRAM_PLAN_REF_COLUMNS)
+      .in("program_id", [...programIds]);
+    if (error) {
+      if (!isMissingTable(error)) {
+        console.error("[plans] could not read the program plans", {
+          error: error.message,
+        });
+      }
+      return plans;
+    }
+    for (const row of (data ?? []) as {
+      program_id: string;
+      plan_id: unknown;
+      plan_term: unknown;
+      starts_on: string;
+      ends_on: string;
+    }[]) {
+      const ref = toProgramPlanRef(row);
+      if (ref) plans.set(row.program_id, ref);
+    }
+  } catch (error) {
+    console.error("[plans] could not read the program plans", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  return plans;
+}
+
 /** What Settings › Plan and the checkout dialog say about a subscription. */
 export interface PlanBilling {
   /** `users.plan` as the row holds it. Read it through `planFor()`. */

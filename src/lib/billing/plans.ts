@@ -52,6 +52,15 @@ export function plansHaveBegun(now: Date = new Date()): boolean {
   return now.getTime() >= Date.parse(`${PLANS_BEGIN}T00:00:00Z`);
 }
 
+/** `January 2027` — the month plans begin, as a sentence says it. */
+export function plansBeginMonth(): string {
+  return new Date(`${PLANS_BEGIN}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
 /**
  * Whether plans and extra hours can be BOUGHT at `now`. From `PLANS_BEGIN`
  * always. Before it, only once the owner sets `NEXT_PUBLIC_PLANS_ON_SALE=1`
