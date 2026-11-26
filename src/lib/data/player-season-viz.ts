@@ -1082,6 +1082,81 @@ export function scopeSeasonMatches<T extends SeasonScopeMatch>(
   return perMatch.filter((m) => seasonMatchPasses(m, applied));
 }
 
+/** What a Matches row reads off a match — the courts' season
+ *  (`SeasonVizMatch`) and the Statistics fold (`SeasonMatch`) both carry it. */
+export type SeasonOptionMatch = Pick<
+  SeasonVizMatch,
+  | "matchId"
+  | "date"
+  | "opponent"
+  | "won"
+  | "score"
+  | "opponentHand"
+  | "courtType"
+>;
+
+/**
+ * Every match of `perMatch` as a Matches row (`SeasonMatchOption`), newest
+ * first (`compareMatchDays`) — the one builder behind the lightbox's Matches
+ * sheet and the player page's "N of M matches" picker. `countOf(i)` is what
+ * `perMatch[i]` adds to the sum the list's Show button names: its marks under
+ * the live shot filters in the lightbox, 1 on the page (it counts matches).
+ */
+export function seasonMatchOptions(
+  perMatch: readonly SeasonOptionMatch[],
+  countOf: (index: number) => number,
+): SeasonMatchOption[] {
+  return perMatch
+    .map((m, i) => ({
+      id: m.matchId,
+      opponentName: m.opponent ?? "Opponent",
+      date: m.date ?? null,
+      count: countOf(i),
+      won: m.won ?? null,
+      score: m.score ?? null,
+      hand: opponentHandOf(m),
+      surface: seasonSurfaceOf(m.courtType),
+    }))
+    .sort((a, b) => compareMatchDays(b.date, a.date));
+}
+
+/** The player page's facts line under a match scope: "Showing N of M analyzed
+ *  matches" and what narrows it. */
+export interface MatchScopeSummary {
+  /** The matches the scope keeps. */
+  shown: number;
+  /** Every analyzed match of the season. */
+  analyzed: number;
+  /** The scope's result, hand and surface in the Matches menus' words
+   *  ("Won", "Left-handed", "Clay"); picked matches are in `shown`. */
+  words: string[];
+}
+
+/**
+ * The page's match scope as its facts line states it, or null when the scope
+ * keeps the whole season by saying nothing (`seasonScopeFilters`: no scope,
+ * or only ids that are not matches of this season) — the line then reads as
+ * it does unscoped.
+ */
+export function matchScopeSummary(
+  perMatch: readonly SeasonScopeMatch[],
+  scope: SeasonFilters | undefined,
+): MatchScopeSummary | null {
+  const applied = seasonScopeFilters(perMatch, scope);
+  if (!applied) return null;
+  const words: string[] = [];
+  if (applied.result != null) words.push(SEASON_RESULT_PHRASE[applied.result]);
+  if (applied.opponentHand !== null)
+    words.push(OPPONENT_HAND_PHRASE[applied.opponentHand]);
+  if (applied.surface != null)
+    words.push(SEASON_SURFACE_PHRASE[applied.surface]);
+  return {
+    shown: scopeSeasonMatches(perMatch, applied).length,
+    analyzed: perMatch.length,
+    words,
+  };
+}
+
 const mm = (metres: number) => Math.round(metres * 1000) / 1000;
 
 /**
@@ -1428,18 +1503,10 @@ export function buildSeasonLightbox(
       `${applied.matches.length} ${applied.matches.length === 1 ? "match" : "matches"}`,
     );
 
-  const matchOptions: SeasonMatchOption[] = perMatch
-    .map((m, i) => ({
-      id: m.matchId,
-      opponentName: m.opponent ?? "Opponent",
-      date: m.date ?? null,
-      count: allParts[i].result.count,
-      won: m.won ?? null,
-      score: m.score ?? null,
-      hand: opponentHandOf(m),
-      surface: seasonSurfaceOf(m.courtType),
-    }))
-    .sort((a, b) => compareMatchDays(b.date, a.date));
+  const matchOptions = seasonMatchOptions(
+    perMatch,
+    (i) => allParts[i].result.count,
+  );
 
   const subjectName = filters.player === "you" ? names.you : names.opponent;
   const subjectWord =

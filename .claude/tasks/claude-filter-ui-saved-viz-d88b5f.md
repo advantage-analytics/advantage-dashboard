@@ -184,7 +184,7 @@ ready).
 
 ## T13 · Add the "N of M matches" picker
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **needs:** T12
 - **files:** (guess) src/components/dashboard/team/player-profile/profile-actions.tsx, src/app/dashboard/team/roster/[playerId]/page.tsx (title row ~:296-341), src/components/dashboard/matches/match-detail/shots/lightbox-matches-sheet.tsx (`draftFrom`, `seasonFiltersFrom`, `countedMatches`), tests/player-profile.spec.ts, tests/season-viz-browser.spec.ts

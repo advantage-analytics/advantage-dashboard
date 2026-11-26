@@ -134,3 +134,14 @@ is the runner's. Newest entries at the bottom.
 3. A scope that keeps zero matches shows the generic empty copy; scope-specific copy would be new.
 4. The lightbox "Clear filter" clears to all matches, not back to the page scope; deep links with `cut=` + `s*` but no `v*` open on the whole season.
 5. T13 needs the season's match list on the Statistics request (build from `season.perMatch`); write the scope with router.replace/push.
+
+## T13 · Add the "N of M matches" picker — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: needs-work (trigger used the `Video` glyph, not the nav's Matches glyph) → fixed (`GalleryHorizontalEnd`) → VERDICT: pass; GATE PASS re-run on the final diff
+**changed:** New profile-match-scope.tsx: `ProfileMatchScope` — a quiet "N of M matches" button with the Matches glyph, before Ask and ⋯ via a new `matchScope` slot in profile-actions.tsx — opening a "Which matches" popover (heading "Matches", "For Statistics and Visualizations", search, Won · Opponent plays · Surface menus, month-grouped checkboxes, footer Clear all · counts · "Show N matches" writing `sres/sopp/ssurf/sm` with router.replace); `MatchScopeShowAll`. lightbox-matches-sheet.tsx was split into a shared `useMatchesDraft` + `MatchesDraftFilters/Status/List/Footer` used by both the lightbox sheet and the picker; its menu triggers now read "Won" and "Opponent plays". player-season-viz.ts adds `seasonMatchOptions` and `matchScopeSummary`; page.tsx streams the picker in its own Suspense with a `MatchScopePickerPending` bar (player-profile-pending.tsx), shows "Showing N of M analyzed matches · <filter words>" + Show all under a scope, and shares one season read per request. No picker on a season with 0 analysed matches or a failed read. Specs: player-season-viz, season-viz-browser (+harness `?picker=1`).
+**follow-ups:**
+
+1. The result menu's trigger reads "Won" both unchosen and chosen (only weight changes) — copy decision.
+2. Under a scope the facts line drops the "N verified" clause; picked matches appear only in N, not as words.
+3. Show uses router.replace; switch to push if Back should undo a scope change.
+4. Visual check only in the harness at 1280 (serif fallback font) — look at it in the app.

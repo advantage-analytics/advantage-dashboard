@@ -8,10 +8,16 @@ import {
   buildSeasonCards,
   buildSeasonLightbox,
   buildSeasonViewCards,
+  matchScopeSummary,
   parseSeasonMatchScope,
   parseSeasonVizState,
+  seasonMatchOptions,
   type SeasonVizMatch,
 } from "@/lib/data/player-season-viz";
+import {
+  MatchScopeShowAll,
+  ProfileMatchScope,
+} from "@/components/dashboard/team/player-profile/profile-match-scope";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import type { MatchPoint } from "@/lib/data/match-points-server";
 import type { SavedView } from "@/lib/data/saved-views-logic";
@@ -38,7 +44,9 @@ import { ASYMMETRIC_SERVES } from "./viz-serve-points";
  * the season three matches, each the same points under its own ids, whose
  * opponents play right (Jordan Lee, Nov 3), left (Sam Ortiz, Oct 20) and
  * unknown (Riley Park, Oct 6) — the profile's "Opponent plays" and
- * "Matches" filters. `?landing=some` makes the season one match of net
+ * "Matches" filters. `?picker=1` draws the title row's "N of M matches"
+ * picker and its facts line above the view, as `page.tsx` renders them for
+ * the URL "the server" last answered. `?landing=some` makes the season one match of net
  * points (`approach-points.ts`) with the landing taken off two of the
  * player's approaches (`PASSED_DTL`, `LOBBED`): they count, they draw no
  * mark. `?nethands=mixed` makes the season two matches of those net points
@@ -206,6 +214,9 @@ const SAVED_VIEWS: SavedView[] = LOAD_PARAMS.has("nosaved")
     ];
 
 /** What `page.tsx`'s Visualizations body hands the view for one URL. */
+/** The picker's rows, as `page.tsx` builds them: each match counts 1. */
+const PICKER_MATCHES = seasonMatchOptions(SEASON, () => 1);
+
 function serverRender(query: string) {
   const record: Record<string, string | string[]> = {};
   for (const [key, value] of new URLSearchParams(query)) {
@@ -225,6 +236,7 @@ function serverRender(query: string) {
     cards: buildSeasonCards(SEASON, side, BANDS, matchScope),
     savedCards: buildSeasonViewCards(SEASON, SAVED_VIEWS, BANDS, matchScope),
     lightbox: buildSeasonLightbox(SEASON, state, BANDS, NAMES, SAVED_VIEWS),
+    scopeSummary: matchScopeSummary(SEASON, matchScope),
     errorSplitJudged,
     // `?otherside=1`: the page's streamed other-side wall, landing a moment
     // after the answer, as `page.tsx` sends it.
@@ -273,19 +285,44 @@ function Harness() {
     window.addEventListener("harness-refresh", onRefresh);
     return () => window.removeEventListener("harness-refresh", onRefresh);
   }, []);
+  const { scopeSummary, ...viewProps } = answer.props;
   return (
     <main
       className="p-6"
       data-landed={answer.query}
       data-generation={generation}
     >
+      {LOAD_PARAMS.has("picker") && (
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <p
+            data-match-scope-facts-line=""
+            className="flex items-center gap-1 text-[12px]"
+          >
+            {scopeSummary ? (
+              <>
+                <span>
+                  Showing {scopeSummary.shown} of {scopeSummary.analyzed}{" "}
+                  analyzed matches
+                </span>
+                {scopeSummary.words.map((w) => (
+                  <span key={w}>· {w}</span>
+                ))}
+                <MatchScopeShowAll />
+              </>
+            ) : (
+              <span>{SEASON.length} analyzed</span>
+            )}
+          </p>
+          <ProfileMatchScope matches={PICKER_MATCHES} />
+        </div>
+      )}
       <WidgetBoundary label="Visualizations">
         <ProfileVisualizationsView
           playerName="Avery Kim"
           firstName="Avery"
           chipLabels={{ you: "Kim", opponent: "Opponents" }}
           analyzed={SEASON.length}
-          {...answer.props}
+          {...viewProps}
         />
       </WidgetBoundary>
     </main>

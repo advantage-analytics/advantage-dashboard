@@ -760,7 +760,7 @@ test("the chart menu: Scatter · Heat · Zones in the season's card, no band row
   expect(errors).toEqual([]);
 });
 
-test("Matches: a row in Filters opens the Matches sheet; its Result, Opponent and Surface menus and ticks are a draft that Show applies, the strip names them, Clear filter lets go", async ({
+test("Matches: a row in Filters opens the Matches sheet; its Won, Opponent plays and Surface menus and ticks are a draft that Show applies, the strip names them, Clear filter lets go", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -813,9 +813,10 @@ test("Matches: a row in Filters opens the Matches sheet; its Result, Opponent an
   await expect(show).toHaveText(`Show ${all} serves`);
   await expect(show).toBeDisabled();
 
-  // Result: Won leaves two matches; its count says so before the pick.
-  await sheet.getByRole("button", { name: "Result" }).click();
-  const resultMenu = page.getByRole("menu", { name: "Result" });
+  // Won (the result menu): Won leaves two matches; its count says so
+  // before the pick.
+  await sheet.getByRole("button", { name: "Won", exact: true }).click();
+  const resultMenu = page.getByRole("menu", { name: "Won" });
   await expect(
     resultMenu.getByRole("menuitemradio", { name: /Won/ }),
   ).toContainText("2");
@@ -1020,6 +1021,83 @@ test("the page's match scope (?sm=): the wall is drawn over the scoped matches, 
     .toEqual([false, false, "m-1,m-3"]);
   const scopedHref = new URL((await serveCard.getAttribute("href"))!, origin);
   expect(scopedHref.searchParams.getAll("vm")).toEqual(["m-1", "m-3"]);
+  expect(errors).toEqual([]);
+});
+
+test("the title row's \"N of M matches\" picker: a dialog of the sheet's own draft, Show writes the page scope and closes, and the facts line's Show all clears it", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&hands=1&picker=1&delay=100`,
+  );
+  const trigger = page.getByRole("button", { name: "3 of 3 matches" });
+  await expect(trigger).toBeVisible({ timeout: 8_000 });
+  await trigger.click();
+
+  const dialog = page.getByRole("dialog", { name: "Which matches" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Matches" })).toBeVisible();
+  await expect(dialog).toContainText("For Statistics and Visualizations");
+  // The sheet's three menus, and its rows by month: "vs", score, date.
+  // The board's trigger words: Won · Opponent plays · Surface.
+  for (const name of ["Won", "Opponent plays", "Surface"])
+    await expect(
+      dialog.getByRole("button", { name, exact: true }),
+    ).toBeVisible();
+  const rows = dialog.getByRole("checkbox");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.first()).toContainText("vs Jordan Lee");
+  await expect(rows.first()).toContainText("6–3, 6–4");
+  await expect(rows.first()).toContainText("Nov 3");
+  await expect(dialog).toContainText("October");
+  const show = dialog.getByRole("button", { name: /^Show \d+ match/ });
+  await expect(show).toBeDisabled();
+  await expect(
+    dialog.getByRole("button", { name: "Clear all" }),
+  ).toBeDisabled();
+
+  // A menu inside the popover keeps it open: Won leaves two.
+  await dialog.getByRole("button", { name: "Won", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: /^Won/ }).click();
+  await expect(dialog).toBeVisible();
+  await expect(rows).toHaveCount(2);
+  await expect(dialog).toContainText("2 of 3 matches");
+  await expect(show).toHaveText("Show 2 matches");
+  await show.click();
+
+  await expect(dialog).toHaveCount(0);
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("sres"))
+    .toBe("won");
+  await expect(
+    page.getByRole("button", { name: "2 of 3 matches" }),
+  ).toBeVisible();
+  const facts = page.locator("[data-match-scope-facts-line]");
+  await expect(facts).toContainText("Showing 2 of 3 analyzed matches");
+  await expect(facts).toContainText("· Won");
+
+  // Show all clears the scope; the tab and the rest of the URL stay.
+  await facts.getByRole("button", { name: "Show all" }).click();
+  await expect
+    .poll(() => {
+      const q = new URL(page.url()).searchParams;
+      return [q.has("sres"), q.get("tab")];
+    })
+    .toEqual([false, "visualizations"]);
+  await expect(
+    page.getByRole("button", { name: "3 of 3 matches" }),
+  ).toBeVisible();
+  await expect(facts).not.toContainText("Showing");
+
+  // Esc throws a draft away.
+  await page.getByRole("button", { name: "3 of 3 matches" }).click();
+  await dialog.getByRole("checkbox").first().click();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  expect(new URL(page.url()).searchParams.has("sm")).toBe(false);
   expect(errors).toEqual([]);
 });
 

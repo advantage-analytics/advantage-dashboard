@@ -18,10 +18,12 @@ import {
   cutNoun,
   mergeVizResults,
   mergeVizStats,
+  matchScopeSummary,
   optionCountKey,
   parseSeasonMatchScope,
   parseSeasonVizState,
   seasonMatchContext,
+  seasonMatchOptions,
   statPickKey,
   type SeasonCard,
   type SeasonLightboxData,
@@ -1793,13 +1795,19 @@ test.describe("one body per request", () => {
     expect(pageBody).toMatch(
       /<ProfileBodySlot\s+view="visualizations"\s+scope=\{active\.id\}\s+body=\{\s*courtsOnly \? \(\s*<Suspense[\s\S]*?<ProfileVisualizationsBody[\s\S]*?<\/Suspense>\s*\) : null\s*\}/,
     );
-    // The facts line reads whichever season the body of the request reads;
-    // the Visualizations body, rendered on its own request alone, reads the
-    // courts' season and never the full one.
-    expect(pageBody.split("courtsOnly={courtsOnly}").length - 1).toBe(1);
+    // The facts line and the "N of M matches" picker read whichever season
+    // the body of the request reads; the Visualizations body, rendered on
+    // its own request alone, reads the courts' season and never the full one.
+    expect(pageBody.split("courtsOnly={courtsOnly}").length - 1).toBe(2);
     expect(source).toMatch(
-      /async function AnalyzedCount[\s\S]*?courtsOnly\s*\?\s*getPlayerSeasonCourts\(programId, playerId\)\s*:\s*getPlayerSeason\(programId, playerId\)/,
+      /function requestSeason[\s\S]*?courtsOnly\s*\?\s*getPlayerSeasonCourts\(programId, playerId\)\s*:\s*getPlayerSeason\(programId, playerId\)/,
     );
+    for (const reader of ["AnalyzedCount", "MatchScopePicker"])
+      expect(source).toMatch(
+        new RegExp(
+          `async function ${reader}[\\s\\S]*?requestSeason\\(programId, playerId, courtsOnly\\)`,
+        ),
+      );
     const vizBody = source.slice(
       source.indexOf("async function ProfileVisualizationsBody"),
     );
@@ -2419,6 +2427,45 @@ test.describe("Opponent plays and Matches (the season's own filters)", () => {
     expect(parseSeasonMatchScope({ vm: "a", vopp: "left" })).toBeUndefined();
     const stranger = parseSeasonMatchScope({ sm: "nobody" });
     expect(buildSeasonCards(HANDS, "you", BANDS, stranger)).toEqual(whole);
+  });
+
+  test("the page's match picker: one row per analyzed match, newest first, the lightbox sheet's rows with each counting 1", () => {
+    const rows = seasonMatchOptions(HANDS, () => 1);
+    expect(rows.map((m) => [m.id, m.opponentName, m.date, m.count])).toEqual([
+      ["b", "Ortiz", "2026-11-03", 1],
+      ["d", "Park", "2026-10-20", 1],
+      ["a", "Lee", "2026-10-01", 1],
+    ]);
+    // The same builder as the lightbox's sheet: only the count differs.
+    const sheet = buildSeasonLightbox(
+      HANDS,
+      seasonState("cut=serve"),
+      BANDS,
+      NAMES,
+    )!.seasonOptions.matches;
+    expect(rows.map((m) => ({ ...m, count: 0 }))).toEqual(
+      sheet.map((m) => ({ ...m, count: 0 })),
+    );
+  });
+
+  test("the facts line under a match scope: shown of analyzed, the menus' words, and nothing for a scope that keeps the whole season by saying nothing", () => {
+    expect(matchScopeSummary(HANDS, undefined)).toBeNull();
+    expect(
+      matchScopeSummary(HANDS, parseSeasonMatchScope({ sm: "nobody" })),
+    ).toBeNull();
+    expect(
+      matchScopeSummary(HANDS, parseSeasonMatchScope({ sm: ["a", "d"] })),
+    ).toEqual({ shown: 2, analyzed: 3, words: [] });
+    expect(
+      matchScopeSummary(HANDS, parseSeasonMatchScope({ sopp: "left" })),
+    ).toEqual({ shown: 1, analyzed: 3, words: ["Left-handed"] });
+    // A scope that keeps nothing still says so rather than hiding.
+    expect(
+      matchScopeSummary(
+        HANDS,
+        parseSeasonMatchScope({ sopp: "left", ssurf: "clay" }),
+      ),
+    ).toEqual({ shown: 0, analyzed: 3, words: ["Left-handed", "Clay"] });
   });
 
   test("a court signature carries the season filters, canonical: tick order does not matter, a tick does", () => {

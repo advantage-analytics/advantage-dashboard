@@ -43,6 +43,10 @@ import {
   ProfileViewWhen,
 } from "@/components/dashboard/team/player-profile/profile-frame";
 import { ProfileActions } from "@/components/dashboard/team/player-profile/profile-actions";
+import {
+  MatchScopeShowAll,
+  ProfileMatchScope,
+} from "@/components/dashboard/team/player-profile/profile-match-scope";
 import { ProfileBodySlot } from "@/components/dashboard/team/player-profile/profile-body-deferred";
 import { ProfileStatisticsView } from "@/components/dashboard/team/player-profile/profile-statistics-view";
 import {
@@ -52,6 +56,7 @@ import {
 import { ProfileVisualizationsView } from "@/components/dashboard/team/player-profile/profile-visualizations-view";
 import {
   AnalyzedCountPending,
+  MatchScopePickerPending,
   ProfileStatisticsPanePending,
   ProfileVisualizationsPanePending,
 } from "@/components/dashboard/loading/player-profile-pending";
@@ -60,7 +65,9 @@ import {
   buildSeasonCards,
   buildSeasonLightbox,
   buildSeasonViewCards,
+  matchScopeSummary,
   parseSeasonMatchScope,
+  seasonMatchOptions,
   parseSeasonVizState,
   type SeasonCard,
 } from "@/lib/data/player-season-viz";
@@ -325,14 +332,28 @@ export default async function PlayerProfilePage({
                 className="text-micro tabular mt-[9px] flex min-h-[18px] items-center gap-1"
                 style={{ color: "var(--ink-700)" }}
               >
-                <span>
-                  {matchesPlayed} {matchesPlayed === 1 ? "match" : "matches"}
-                </span>
-                <Suspense fallback={<AnalyzedCountPending />}>
+                {/* Under a match scope the line becomes "Showing N of M
+                    analyzed matches", which needs the season, so the count
+                    of matches waits inside the boundary with it. */}
+                {matchScope === undefined && (
+                  <MatchesPlayed count={matchesPlayed} />
+                )}
+                <Suspense
+                  fallback={
+                    <>
+                      {matchScope !== undefined && (
+                        <MatchesPlayed count={matchesPlayed} />
+                      )}
+                      <AnalyzedCountPending />
+                    </>
+                  }
+                >
                   <AnalyzedCount
                     programId={active.id}
                     playerId={playerId}
                     courtsOnly={courtsOnly}
+                    matchScope={matchScope}
+                    matchesPlayed={matchesPlayed}
                   />
                 </Suspense>
               </p>
@@ -353,6 +374,15 @@ export default async function PlayerProfilePage({
                   { kind: "player", id: profile.playerId },
                 )}
                 askSubject={profile.firstName}
+                matchScope={
+                  <Suspense fallback={<MatchScopePickerPending />}>
+                    <MatchScopePicker
+                      programId={active.id}
+                      playerId={playerId}
+                      courtsOnly={courtsOnly}
+                    />
+                  </Suspense>
+                }
               />
             </MatchReportTitleActions>
           </MatchReportTitleRow>
@@ -424,29 +454,81 @@ export default async function PlayerProfilePage({
   );
 }
 
+/** The facts line's "N matches": the program's record, practice aside. */
+function MatchesPlayed({ count }: { count: number }) {
+  return (
+    <span>
+      {count} {count === 1 ? "match" : "matches"}
+    </span>
+  );
+}
+
+/** The season this request's body reads (`courtsOnly`), so the facts line and
+ *  the picker share its one read; null when the read fails — the body reports
+ *  that, with its retry. */
+function requestSeason(
+  programId: string,
+  playerId: string,
+  courtsOnly: boolean,
+) {
+  return (
+    courtsOnly
+      ? getPlayerSeasonCourts(programId, playerId)
+      : getPlayerSeason(programId, playerId)
+  ).catch(() => null);
+}
+
 /**
  * The facts line's "· N analyzed", once the season has landed. A season read
  * that fails is the body's to report (its retry); here it drops the clause
  * rather than print a count nobody measured. Reads the loader the body of
  * this request reads (`courtsOnly`), so the season is read once.
+ *
+ * Under a match scope that narrows the season (`matchScopeSummary`) the line
+ * is the scope instead: "Showing 4 of 24 analyzed matches · Won ·
+ * Left-handed", then "Show all", which clears it. A scope that keeps the
+ * whole season by saying nothing draws the unscoped line.
  */
 async function AnalyzedCount({
   programId,
   playerId,
   courtsOnly,
+  matchScope,
+  matchesPlayed,
 }: {
   programId: string;
   playerId: string;
   courtsOnly: boolean;
+  /** The page's match scope; undefined is the whole season. */
+  matchScope: SeasonFilters | undefined;
+  /** "N matches", drawn here when a scope kept it inside this boundary. */
+  matchesPlayed: number;
 }) {
-  const season = await (
-    courtsOnly
-      ? getPlayerSeasonCourts(programId, playerId)
-      : getPlayerSeason(programId, playerId)
-  ).catch(() => null);
-  if (!season) return null;
+  const season = await requestSeason(programId, playerId, courtsOnly);
+  const lead =
+    matchScope !== undefined ? <MatchesPlayed count={matchesPlayed} /> : null;
+  if (!season) return lead;
+  const scoped = matchScopeSummary(season.perMatch, matchScope);
+  if (scoped) {
+    return (
+      <span
+        data-match-scope-facts=""
+        className="inline-flex items-center gap-1"
+      >
+        <span>
+          Showing {scoped.shown} of {scoped.analyzed} analyzed{" "}
+          {scoped.analyzed === 1 ? "match" : "matches"}
+        </span>
+        {scoped.words.map((word) => (
+          <span key={word}>· {word}</span>
+        ))}
+        <MatchScopeShowAll />
+      </span>
+    );
+  }
   return (
     <>
+      {lead}
       <span>· {season.analyzed} analyzed</span>
       {/* How much of the season behind these figures a person checked.
           None is left out rather than printed as "0 verified". */}
@@ -457,6 +539,31 @@ async function AnalyzedCount({
         </span>
       ) : null}
     </>
+  );
+}
+
+/**
+ * The title row's "N of M matches" picker (`ProfileMatchScope`), once the
+ * season has landed: its rows are the season's analyzed matches
+ * (`seasonMatchOptions`, each counting 1 — the picker counts matches, not
+ * marks), built here so no point leaves the server. A season with no analyzed
+ * match has nothing to pick, and a season read that fails is the body's to
+ * report: both draw no picker rather than a "0 of 0" control that opens an
+ * empty list.
+ */
+async function MatchScopePicker({
+  programId,
+  playerId,
+  courtsOnly,
+}: {
+  programId: string;
+  playerId: string;
+  courtsOnly: boolean;
+}) {
+  const season = await requestSeason(programId, playerId, courtsOnly);
+  if (!season || season.perMatch.length === 0) return null;
+  return (
+    <ProfileMatchScope matches={seasonMatchOptions(season.perMatch, () => 1)} />
   );
 }
 
