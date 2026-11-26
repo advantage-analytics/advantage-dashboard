@@ -214,20 +214,31 @@ encode() {
   fi
 }
 
-# Same timeline or nothing: every SHOWN video frame (presentation time ≥ 0 —
-# an edit list hides pre-roll packets with negative times, which a copy may
-# drop) at the same time to the millisecond, and the same duration. Times are
-# compared in seconds because the two files' time bases differ.
+# Same timeline or nothing: every SHOWN video frame at the same time to the
+# millisecond, and the same duration. Times are compared in seconds because
+# the two files' time bases differ.
+#
+# Shown means inside the upload's video stream: an edit list hides pre-roll
+# packets with negative times AND packets past the stream's end, and a copy
+# may drop either. An iPhone 17 Pro .mov (2026-11-25) stored 3 frames after
+# its 2189.075 s end; the encode left them out and the copy was refused three
+# times for "losing" frames no player ever shows. Both files are cut at the
+# upload's end, so a copy that keeps them still compares.
+VIDEO_END="$(probe_stream duration)"
+VIDEO_START="$(probe_stream start_time)"
+VIDEO_END="$(awk -v d="$VIDEO_END" -v s="$VIDEO_START" \
+  'BEGIN { if (d + 0 > 0) printf "%.6f", d + (s + 0); else print "" }')"
 shown_times() {
   ffprobe -v error -select_streams v:0 -show_entries packet=pts_time \
-    -of csv=p=0 "$1" | awk '$1 != "N/A" && $1 >= 0' | sort -g
+    -of csv=p=0 "$1" \
+    | awk -v e="$VIDEO_END" '$1 != "N/A" && $1 >= 0 && (e == "" || $1 < e)' | sort -g
 }
 shown_times "$URL" >"$WORK/before.txt"
 same_timeline() {
   local out_duration
   shown_times "$OUT" >"$WORK/after.txt"
   out_duration="$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$OUT")"
-  log "timeline: upload $(wc -l <"$WORK/before.txt") frames ${DURATION}s," \
+  log "timeline: upload $(wc -l <"$WORK/before.txt") frames ${DURATION}s (video ends ${VIDEO_END:-?}s)," \
     "copy $(wc -l <"$WORK/after.txt") frames ${out_duration}s"
   [[ "$(wc -l <"$WORK/before.txt")" == "$(wc -l <"$WORK/after.txt")" ]] \
     && paste "$WORK/before.txt" "$WORK/after.txt" \
