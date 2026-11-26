@@ -15,13 +15,19 @@
  *   `let_replayed` / `not_a_point`, in `point_index` order.
  * - Its strokes are the live ones (`isLiveShot` with ghosts on: no tombstone,
  *   no site-removed stroke the labeller never restored), in video order.
- * - A let serve (`isLetServe`) is replayed, not played: it is never written as
- *   a serve, so it cannot count as a first serve in or out. It still widens
- *   the point's clip window, as the derivation's dropped strokes do.
+ * - A let serve (`isLetServe`) is replayed, not played: it is written at
+ *   `shot_number` 0 with `result` 'Let' (`LET_RESULT`) and no `zone`, its
+ *   landing kept, so the report can show it while every serve count skips it
+ *   (`calculate_match_stats` and the readers filter `result = 'Let'`). It
+ *   neither counts as a first serve in or out nor moves the counted serve.
+ * - A stroke that is not a serve, before the counted serve
+ *   (`countedServeIndex`), was hit at a fault or a let — nothing is in play
+ *   until the serve that counts. It is dropped, as the derivation's
+ *   `playedRally` drops it, and counted in `droppedBeforeServe`. It still
+ *   widens the point's clip window.
  * - A serve stored in whose landing reads out or net (`inServeLandingMiss`)
- *   is written as in with no `landing_x` / `landing_y` and no `zone`: the
- *   landing is the vendor's wrong bounce, and a serve with no placement is
- *   one every reader already skips (the derivation writes them too).
+ *   is written as in with its landing and zone as labelled: the call is the
+ *   labeller's, and the landing is what they placed.
  * - A stroke whose landing is the next air stroke's contact, filled or stored
  *   there (volley-link.ts), is written with the `zone` that place reads as and
  *   no `landing_x` / `landing_y`: the ball never bounced there. A landing stored
@@ -160,10 +166,15 @@ export interface AppliedRows {
   /** Oddities worth reading before a write, that do not block it. */
   warnings: string[];
   /**
-   * Live let serves across the applied points, left out of the written
-   * shots on purpose (a let is replayed, not played).
+   * Live let serves across the applied points, written at shot 0 as
+   * `LET_RESULT` rows that no serve count reads.
    */
-  letsLeftOut: number;
+  letsKept: number;
+  /**
+   * Strokes other than serves before a point's counted serve — hit at a
+   * fault or a let — dropped from the written shots (`splitPointStrokes`).
+   */
+  droppedBeforeServe: number;
 }
 
 export interface ApplyInput {
@@ -203,13 +214,20 @@ export function shotTypeOf(stroke: LabelStroke | null): string | null {
 }
 
 /**
+ * `shots.result` on a let serve: written at `shot_number` 0, and skipped by
+ * every serve count (`calculate_match_stats`, the serve and return readers).
+ */
+export const LET_RESULT = "Let";
+
+/**
  * `label_shots.result` → `shots.result` (inverts `labelShotResult`). A let is
- * not a result `shots` can hold; lets are never written (see the header).
+ * `LET_RESULT`, only ever on a serve (`label_shots_let_serve_only`).
  */
 export function shotResultOf(result: LabelShotResult | null): string | null {
   if (result === "in") return "In";
   if (result === "out") return "Out";
   if (result === "net") return "Net";
+  if (result === "let") return LET_RESULT;
   return null;
 }
 
@@ -329,9 +347,134 @@ function isAppliedPoint(point: Pick<LabelPoint, "status" | "ending">): boolean {
   return point.status !== "deleted" && !isNonPointEnding(point.ending);
 }
 
-/** The strokes a point writes: live, in video order, lets left out. */
-function playedShots(point: Pick<LabelPoint, "shots">): LabelShot[] {
-  return liveShotsInOrder(point, true).filter((shot) => !isLetServe(shot));
+/**
+ * A point's live strokes split three ways: `played`, the rally numbered and
+ * counted (lets out, and no stroke but a serve before the counted serve);
+ * `lets`, the replayed serves written at shot 0; `dropped`, the strokes hit
+ * at a fault or a let before the counted serve, never written.
+ */
+export function splitPointStrokes(
+  live: readonly LabelShot[],
+  server: LabelSide,
+): { played: LabelShot[]; lets: LabelShot[]; dropped: LabelShot[] } {
+  const lets = live.filter((shot) => isLetServe(shot));
+  const rally = live.filter((shot) => !isLetServe(shot));
+  const counted = countedServeIndex(rally, server);
+  const dropped = rally.filter(
+    (shot, i) => i < counted && !isServeStroke(shot.stroke),
+  );
+  const played = rally.filter((shot) => !dropped.includes(shot));
+  return { played, lets, dropped };
+}
+
+/**
+ * The `shots` rows of one point's live strokes, in video order: the rally
+ * (`played`) numbered from the counted serve, each let at shot 0, and the
+ * strokes before the counted serve that are not serves left out
+ * (`splitPointStrokes`). `at` names the point in messages.
+ */
+function buildShotRows(
+  live: readonly LabelShot[],
+  server: LabelSide,
+  ending: LabelEnding | null,
+  vendor: ReadonlyMap<number, VendorShotFacts> | undefined,
+  at: string,
+): {
+  shots: AppliedShotRow[];
+  played: LabelShot[];
+  from: number;
+  lets: number;
+  dropped: number;
+  problems: string[];
+  warnings: string[];
+} {
+  const problems: string[] = [];
+  const warnings: string[] = [];
+  const { played, lets, dropped } = splitPointStrokes(live, server);
+  const serveIndex = countedServeIndex(played, server);
+  if (played.length > 0 && serveIndex === -1) {
+    warnings.push(`${at}: no serve`);
+  }
+  played.forEach((shot, i) => {
+    if (isServeByReceiver(shot, server)) {
+      warnings.push(
+        `${at}: stroke ${i + 1} is a serve by ${shot.hitter}, but ${server} is serving`,
+      );
+    }
+  });
+  // With no serve the first stroke stands in for it, rather than the
+  // derivation's numbering starting at 2.
+  const from = Math.max(serveIndex, 0);
+
+  const byId = new Map<string, AppliedShotRow>();
+  const base = (shot: LabelShot) => {
+    const facts = shot.eventId !== null ? vendor?.get(shot.eventId) : undefined;
+    return {
+      is_player1: shot.hitter === "p1",
+      shot_type: shotTypeOf(shot.stroke),
+      spin_type: spinTypeOf(shot.spin),
+      speed_mph: facts?.speedMph ?? null,
+      contact_x: shot.contactX,
+      contact_y: shot.contactY,
+      video_time: shot.videoTime,
+      bounce_video_time: facts?.bounceVideoTime ?? null,
+      flags: [],
+      derived: true as const,
+    };
+  };
+  const named = (shot: LabelShot) => `stroke ${live.indexOf(shot) + 1}`;
+  played.forEach((shot, i) => {
+    // Met in the air, so its zone reads off where the next stroke met it. It
+    // never bounced, so no landing goes out for the courts to draw as one.
+    const next = played[i + 1];
+    const filled = filledLanding(shot, next);
+    const metInAir = landingTakesContact(shot, next, false);
+    if (shot.hitter === null) {
+      problems.push(`${at}: ${named(shot)} has no hitter`);
+      return;
+    }
+    if (shot.stroke === null) {
+      warnings.push(`${at}: ${named(shot)} has no stroke type`);
+    }
+    byId.set(shot.id, {
+      ...base(shot),
+      shot_number: shotNumber(i, from),
+      landing_x: metInAir ? null : shot.landingX,
+      landing_y: metInAir ? null : shot.landingY,
+      result: shotResultOf(playedOnResult(shot, next, ending)),
+      zone: isServeStroke(shot.stroke)
+        ? serveZone(shot.landingX)
+        : directionZone(filled?.x ?? shot.landingX, shot.contactX),
+    });
+  });
+  for (const shot of lets) {
+    if (shot.hitter === null) {
+      problems.push(`${at}: ${named(shot)} (a let) has no hitter`);
+      continue;
+    }
+    byId.set(shot.id, {
+      ...base(shot),
+      shot_number: 0,
+      landing_x: shot.landingX,
+      landing_y: shot.landingY,
+      result: LET_RESULT,
+      // No placement: a let is no serve of the point's.
+      zone: null,
+    });
+  }
+  const shots = live.flatMap((shot) => {
+    const row = byId.get(shot.id);
+    return row ? [row] : [];
+  });
+  return {
+    shots,
+    played,
+    from,
+    lets: lets.length,
+    dropped: dropped.length,
+    problems,
+    warnings,
+  };
 }
 
 /**
@@ -386,7 +529,8 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
   const errorsJudged = allErrorsJudged(points);
 
   const rows: AppliedPointRow[] = [];
-  let letsLeftOut = 0;
+  let letsKept = 0;
+  let droppedBeforeServe = 0;
   for (const point of points) {
     if (!isAppliedPoint(point)) continue;
     const at = `point ${point.pointIndex + 1}`;
@@ -429,69 +573,16 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
       continue;
     }
 
-    const played = playedShots(point);
     const live = liveShotsInOrder(point, true);
-    letsLeftOut += live.length - played.length;
+    const built = buildShotRows(live, server, ending, vendor, at);
+    problems.push(...built.problems);
+    warnings.push(...built.warnings);
+    const { played, from, shots } = built;
+    letsKept += built.lets;
+    droppedBeforeServe += built.dropped;
     const window = live
       .map((shot) => shot.videoTime)
       .filter((t): t is number => t !== null);
-
-    const serveIndex = countedServeIndex(played, server);
-    if (played.length > 0 && serveIndex === -1) {
-      warnings.push(`${at}: no serve`);
-    }
-    played.forEach((shot, i) => {
-      if (isServeByReceiver(shot, server)) {
-        warnings.push(
-          `${at}: stroke ${i + 1} is a serve by ${shot.hitter}, but ${server} is serving`,
-        );
-      }
-    });
-    // With no serve the first stroke stands in for it, rather than the
-    // derivation's numbering starting at 2.
-    const from = Math.max(serveIndex, 0);
-
-    const shots: AppliedShotRow[] = [];
-    played.forEach((shot, i) => {
-      // Met in the air, so its zone reads off where the next stroke met it. It
-      // never bounced, so no landing goes out for the courts to draw as one.
-      const next = played[i + 1];
-      const filled = filledLanding(shot, next);
-      const metInAir = landingTakesContact(shot, next, false);
-      if (shot.hitter === null) {
-        problems.push(`${at}: stroke ${i + 1} has no hitter`);
-        return;
-      }
-      if (shot.stroke === null) {
-        warnings.push(`${at}: stroke ${i + 1} has no stroke type`);
-      }
-      const facts =
-        shot.eventId !== null ? vendor?.get(shot.eventId) : undefined;
-      // An in serve whose landing is outside the box carries the wrong
-      // bounce: written as in, without the landing or the zone read off it.
-      const landed = inServeLandingMiss(shot) === null;
-      shots.push({
-        shot_number: shotNumber(i, from),
-        is_player1: shot.hitter === "p1",
-        shot_type: shotTypeOf(shot.stroke),
-        spin_type: spinTypeOf(shot.spin),
-        speed_mph: facts?.speedMph ?? null,
-        contact_x: shot.contactX,
-        contact_y: shot.contactY,
-        landing_x: landed && !metInAir ? shot.landingX : null,
-        landing_y: landed && !metInAir ? shot.landingY : null,
-        result: shotResultOf(playedOnResult(shot, next, ending)),
-        video_time: shot.videoTime,
-        bounce_video_time: facts?.bounceVideoTime ?? null,
-        zone: !landed
-          ? null
-          : isServeStroke(shot.stroke)
-            ? serveZone(shot.landingX)
-            : directionZone(filled?.x ?? shot.landingX, shot.contactX),
-        flags: [],
-        derived: true,
-      });
-    });
 
     const last = played.at(-1) ?? null;
     if (last && endedBy !== null && last.hitter !== endedBy) {
@@ -574,12 +665,24 @@ export function buildAppliedRows(input: ApplyInput): AppliedRows {
     });
   }
 
-  return { points: rows, errorsJudged, problems, warnings, letsLeftOut };
+  return {
+    points: rows,
+    errorsJudged,
+    problems,
+    warnings,
+    letsKept,
+    droppedBeforeServe,
+  };
 }
 
-/** The dry-run / write-summary line naming the lets left out (always printed). */
-export function letsLeftOutLine(count: number): string {
-  return `lets left out: ${count} (replayed serves, not written as shots)`;
+/** The dry-run / write-summary lines for lets and dropped strokes (always printed). */
+export function letsAndDroppedLines(
+  built: Pick<AppliedRows, "letsKept" | "droppedBeforeServe">,
+): string[] {
+  return [
+    `lets kept: ${built.letsKept} (replayed serves, written at shot 0, counted as nothing)`,
+    `strokes before the serve dropped: ${built.droppedBeforeServe} (hit at a fault or a let)`,
+  ];
 }
 
 /** The `points` insert row for a built point: its columns only. */
@@ -708,7 +811,10 @@ export function expectedStats(
           else stats[striker].unforcedErrors += 1;
         }
     }
-    const firstServe = point.shots.find((s) => s.shot_type === "First Serve");
+    // A let is replayed, not the first serve (`LET_RESULT`).
+    const firstServe = point.shots.find(
+      (s) => s.shot_type === "First Serve" && s.result !== LET_RESULT,
+    );
     if (firstServe) {
       stats[server].firstServes += 1;
       if (firstServe.result === "In") stats[server].firstServesIn += 1;

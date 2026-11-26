@@ -140,6 +140,8 @@ export const ADD_SHOT_ANSWER = "Add the shot";
 export const ADD_SECOND_SERVE_ANSWER = "Add the second serve";
 export const SPLIT_ANSWER = "Split here";
 export const SECOND_SERVE_ANSWER = "Make it a second serve";
+/** "First serve after a let?"'s answer: the serve retyped `first_serve`. */
+export const FIRST_SERVE_ANSWER = "Make it a first serve";
 export const VOLLEY_ANSWER = "Make it a volley";
 
 /** "Remove the 2 shots after" — the follow-up's other answer. */
@@ -764,6 +766,30 @@ function stepAnswers(
         });
       }
       for (const { mark } of openMembers(item)) {
+        if (mark.code === "first_serve_after_let") {
+          answers.push({
+            id: "first-serve",
+            label: FIRST_SERVE_ANSWER,
+            kind: "plain",
+            writes: [
+              {
+                write: "shot",
+                shotId: mark.params.shotId,
+                patch: { stroke: "first_serve" },
+              },
+            ],
+          });
+        }
+        if (mark.code === "hit_before_serve") {
+          answers.push({
+            id: "remove-before-serve",
+            label: removeShotsAfterLabel(mark.params.strokes.length),
+            kind: "plain",
+            // After a let or a fault, "after" stops at the next serve
+            // (operations.ts `shotsRemovedAfter`).
+            writes: [{ write: "removeAfter", shotId: mark.params.shotId }],
+          });
+        }
         if (mark.code === "second_serve_as_first") {
           answers.push({
             id: "second-serve",

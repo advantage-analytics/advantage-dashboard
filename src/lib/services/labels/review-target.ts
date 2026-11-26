@@ -70,6 +70,8 @@ export function memberShotId(
       return openMissingShot(point, marks)?.afterShotId ?? null;
     case "shot_after_point_end":
     case "second_serve_as_first":
+    case "first_serve_after_let":
+    case "hit_before_serve":
     case "serve_after_serve_in":
     case "serves_from_both_sides":
     case "serve_in_landing_out":
@@ -171,6 +173,8 @@ function memberTarget(
     case "serve_after_serve_in":
     case "serves_from_both_sides":
     case "second_serve_as_first":
+    case "first_serve_after_let":
+    case "hit_before_serve":
     case "serve_by_receiver":
     case "groundstroke_at_net":
       return [memberShotId(member, point, marks), null];

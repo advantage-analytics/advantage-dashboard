@@ -109,7 +109,7 @@ import {
   applyShotsRestored,
   destinationServerIn,
   gameInSetOf,
-  liveShotsAfter,
+  shotsRemovedAfter,
   moveNeedsServerSwitch,
   ADD_SHOT_AT_START,
   planAddedShot,
@@ -1696,7 +1696,7 @@ export function LabelConsole({
     // A draft point's insert is still in flight: its rows settle by the id
     // the server gives it, which this call could not name.
     if (pointId.startsWith(PENDING_POINT_PREFIX)) return;
-    const after = liveShotsAfter(point.shots, shotId, drawsGhosts(marks));
+    const after = shotsRemovedAfter(point.shots, shotId, drawsGhosts(marks));
     if (after.length === 0) return;
     const ids = new Set(after.map((shot) => shot.id));
     const reason = deadBallReason(

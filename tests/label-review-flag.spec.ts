@@ -79,6 +79,8 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   first_serve_fault_alone: {},
   serve_in_landing_out: { shotId: "s1", landing: "out" },
   serve_after_serve_in: { shotId: "s1" },
+  hit_before_serve: { shotId: "s1", strokes: ["s2"] },
+  first_serve_after_let: { shotId: "s1" },
   serves_from_both_sides: { shotId: "s1" },
   serve_by_receiver: { shotId: "s1", hitter: "p1", server: "p2" },
   placement_missing: { shotId: "s1", stroke: "serve", missing: "landing" },
@@ -404,6 +406,8 @@ test.describe("the item table", () => {
       ["shot_after_point_end", "last_shot_untracked"],
       [
         "second_serve_as_first",
+        "first_serve_after_let",
+        "hit_before_serve",
         "first_serve_fault_alone",
         "serve_by_receiver",
         "second_serve_called_out",

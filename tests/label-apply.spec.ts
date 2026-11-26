@@ -6,7 +6,8 @@ import {
   buildAppliedRows,
   countedServeIndex,
   expectedStats,
-  letsLeftOutLine,
+  LET_RESULT,
+  letsAndDroppedLines,
   pointInsertRow,
   pointScoreOf,
   resultTypeOf,
@@ -108,7 +109,7 @@ test.describe("vocabulary: the seed's mappings, inverted", () => {
     for (const result of ["in", "out", "net"] as const) {
       expect(labelShotResult(shotResultOf(result))).toBe(result);
     }
-    expect(shotResultOf("let")).toBeNull();
+    expect(shotResultOf("let")).toBe(LET_RESULT);
     expect(shotResultOf(null)).toBeNull();
 
     for (const spin of ["topspin", "flat", "backspin", "sidespin"] as const) {
@@ -311,14 +312,16 @@ test.describe("buildAppliedRows", () => {
     ).toEqual(["30-40"]);
   });
 
-  test("a let serve is not written: it neither counts nor shifts the serve", () => {
+  test("a let serve is written at shot 0 as Let: it neither counts nor shifts the serve", () => {
     const point = build().points[2];
-    expect(point.shots.map((s) => s.shot_type)).toEqual([
-      "First Serve",
-      "Backhand",
-      "Forehand",
+    expect(
+      point.shots.map((s) => [s.shot_number, s.shot_type, s.result, s.zone]),
+    ).toEqual([
+      [0, "First Serve", "Let", null],
+      [1, "First Serve", "In", point.shots[1].zone],
+      [2, "Backhand", "In", point.shots[2].zone],
+      [3, "Forehand", "In", point.shots[3].zone],
     ]);
-    expect(point.shots.map((s) => s.shot_number)).toEqual([1, 2, 3]);
     expect(point.rally_length).toBe(3);
     // The clip window still opens on the let.
     expect(point.video_time).toBe(104);
@@ -354,7 +357,12 @@ test.describe("buildAppliedRows", () => {
       for (const s of point.shots) expect(s.derived).toBe(true);
     }
     const rally = points[2];
-    expect(rally.shots.map((s) => s.is_player1)).toEqual([true, false, true]);
+    expect(rally.shots.map((s) => s.is_player1)).toEqual([
+      true,
+      true,
+      false,
+      true,
+    ]);
     expect(rally.server_is_player1).toBe(true);
     expect(rally.won_by_player1).toBe(true);
   });
@@ -431,10 +439,10 @@ test.describe("buildAppliedRows", () => {
     });
   });
 
-  test("an in serve whose landing is outside the box is written in, with no landing and no zone", () => {
+  test("an in serve whose landing is outside the box is written in, its landing and zone kept", () => {
     // Hit from behind the baseline on +x; the far service box ends 6.4 m
-    // past the net, so y 23 is long. The seed keeps such a serve in when a
-    // rally followed it: the landing is the vendor's wrong bounce.
+    // past the net, so y 23 is long. The call is the labeller's and the
+    // landing is what they placed: both go out as labelled.
     const placed = (landingY: number) =>
       build([
         pt(0, "p1", "ace", (p) => [
@@ -446,13 +454,14 @@ test.describe("buildAppliedRows", () => {
           }),
         ]),
       ]).points[0].shots[0];
-    expect(placed(23)).toMatchObject({
+    const long = placed(23);
+    expect(long).toMatchObject({
       result: "In",
-      landing_x: null,
-      landing_y: null,
-      zone: null,
+      landing_x: -1,
+      landing_y: 23,
       contact_x: 1,
     });
+    expect(long.zone).not.toBeNull();
     // The same serve with its bounce in the box keeps both.
     const inBox = placed(16);
     expect(inBox.landing_y).toBe(16);
@@ -616,11 +625,12 @@ test.describe("a point with no ending stored", () => {
   });
 });
 
-test.describe("lets left out", () => {
+test.describe("lets kept, strokes before the serve dropped", () => {
   test("the build counts live let serves on applied points only", () => {
-    expect(build().letsLeftOut).toBe(1);
-    expect(letsLeftOutLine(1)).toContain("lets left out: 1");
-    expect(letsLeftOutLine(0)).toContain("lets left out: 0");
+    expect(build().letsKept).toBe(1);
+    const lines = letsAndDroppedLines({ letsKept: 1, droppedBeforeServe: 2 });
+    expect(lines[0]).toContain("lets kept: 1");
+    expect(lines[1]).toContain("strokes before the serve dropped: 2");
   });
 
   test("a tombstoned let and a let on a deleted point are not counted", () => {
@@ -642,7 +652,65 @@ test.describe("lets left out", () => {
         { status: "deleted" },
       ),
     ];
-    expect(build(points).letsLeftOut).toBe(0);
+    expect(build(points).letsKept).toBe(0);
+  });
+
+  test("strokes played on after a let are dropped; the let and the replay stay", () => {
+    clock = 100;
+    id = 0;
+    const built = build([
+      pt(0, "p1", "ace", (p) => [
+        shot(p, "p1", "first_serve", "let"),
+        shot(p, "p2", "backhand", "in"),
+        shot(p, "p1", "forehand", "in"),
+        shot(p, "p1", "first_serve", "in"),
+      ]),
+    ]);
+    const point = built.points[0];
+    expect(
+      point.shots.map((s) => [s.shot_number, s.shot_type, s.result]),
+    ).toEqual([
+      [0, "First Serve", "Let"],
+      [1, "First Serve", "In"],
+    ]);
+    expect(point.rally_length).toBe(1);
+    expect(built.droppedBeforeServe).toBe(2);
+    expect(built.letsKept).toBe(1);
+    // The clip still opens on the let.
+    expect(point.video_time).toBe(101);
+  });
+
+  test("the preview counts the serve after a let, not the let", () => {
+    clock = 100;
+    id = 0;
+    const built = build([
+      pt(0, "p1", "ace", (p) => [
+        shot(p, "p1", "first_serve", "let"),
+        shot(p, "p1", "first_serve", "in"),
+      ]),
+    ]);
+    const stats = expectedStats(built.points);
+    expect(stats.p1.firstServes).toBe(1);
+    expect(stats.p1.firstServesIn).toBe(1);
+  });
+
+  test("a swing at a fault is dropped; the fault stays at shot 0", () => {
+    clock = 100;
+    id = 0;
+    const built = build([
+      pt(0, "p1", "ace", (p) => [
+        shot(p, "p1", "first_serve", "out"),
+        shot(p, "p2", "forehand", "out"),
+        shot(p, "p1", "second_serve", "in"),
+      ]),
+    ]);
+    expect(
+      built.points[0].shots.map((s) => [s.shot_number, s.shot_type]),
+    ).toEqual([
+      [0, "First Serve"],
+      [1, "Second Serve"],
+    ]);
+    expect(built.droppedBeforeServe).toBe(1);
   });
 });
 
