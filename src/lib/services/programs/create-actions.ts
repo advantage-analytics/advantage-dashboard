@@ -12,6 +12,7 @@ import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
 import { TERMS_NOT_ACCEPTED_SQLSTATE } from "./pilot-terms";
+import { termsRefusal } from "./pilot-terms-server";
 
 /**
  * Self-serve creation of a non-collegiate program — a club, a high school, an
@@ -59,10 +60,11 @@ export type CreateCustomProgramResult =
          */
         | "limit-reached"
         /**
-         * No `pilot_terms_acceptances` row for the current
-         * `PILOT_TERMS_VERSION` (`./pilot-terms.ts`). Raised by the RPC as
-         * `TERMS_NOT_ACCEPTED_SQLSTATE` once the enforcement migration is
-         * applied; the caller sends the coach to the terms screen.
+         * No `pilot_terms_acceptances` row at the version a new team is
+         * created under today (`./pilot-terms.ts`). Checked here before the
+         * RPC (`termsRefusal`), and raised by the RPC as
+         * `TERMS_NOT_ACCEPTED_SQLSTATE` for a coach with no acceptance at
+         * any live version; the caller sends the coach to the terms screen.
          */
         | "terms-not-accepted"
         | "failed";
@@ -112,6 +114,13 @@ export async function createCustomProgram(input: {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, reason: "no-session" };
+
+  // A team that does not exist yet is on no pilot, so the date alone picks
+  // the terms. Asked here and not only on the screens: this is a server
+  // action a browser can call directly, and the database accepts either live
+  // version.
+  const refusal = await termsRefusal(supabase, user.id, null);
+  if (refusal) return { ok: false, reason: refusal };
 
   const { data, error } = await supabase.rpc("create_custom_program", {
     p_name: name,

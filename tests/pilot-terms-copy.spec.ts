@@ -239,7 +239,7 @@ test("the acceptance is checked against the version the server resolved, by one 
     "utf8",
   );
   expect(actions.match(/^export /gm)).toHaveLength(1);
-  expect(actions).toContain("claimTermsVersion(");
+  expect(actions).toContain("resolveClaimTerms(");
 });
 
 test("the team terms, college flow", () => {

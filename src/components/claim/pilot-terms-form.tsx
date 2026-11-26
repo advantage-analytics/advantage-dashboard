@@ -42,6 +42,7 @@ export function PilotTermsForm({
   copy,
   version,
   token,
+  programKey,
   refused = false,
 }: {
   flow: PilotTermsFlow;
@@ -52,6 +53,11 @@ export function PilotTermsForm({
   version: string;
   /** College only: the signed-in link's `?token=`, carried back to verify. */
   token?: string | null;
+  /**
+   * College only: the program key in the screen's path, passed back so the
+   * accept resolves the terms version from what the screen resolved it from.
+   */
+  programKey?: string | null;
   /** Open in frame C: the last attempt was refused for want of acceptance. */
   refused?: boolean;
 }) {
@@ -73,7 +79,7 @@ export function PilotTermsForm({
       // `acceptPilotTermsForClaim`). Anything else returned is a refusal.
       const result =
         flow === "college"
-          ? await acceptPilotTermsForClaim({ version, token })
+          ? await acceptPilotTermsForClaim({ version, token, programKey })
           : await acceptPilotTermsAndCreateTeam({ version });
       if (result?.ok && "next" in result && result.next) {
         window.location.assign(result.next);

@@ -16,8 +16,7 @@ import {
 } from "@/lib/services/email";
 import { programDisplayName } from "@/lib/data/programs-server";
 import { claimInviteOpening } from "@/lib/billing/claim-copy";
-import { plansHaveBegun } from "@/lib/billing/plans";
-import { pilotIsRunning } from "@/lib/services/splitstep/allowance";
+import { programPilotIsRunning } from "./pilot-terms-server";
 import { getConferenceOptions } from "@/lib/data/team-settings-server";
 
 /**
@@ -483,24 +482,9 @@ async function inviteToClaim(args: {
   // (`pilotIsRunning`, the columns Admin › Teams sets); an approved claim
   // without one still opens on finish, with no hours until a plan.
   const now = new Date();
-  let pilotRunning = false;
-  if (pilot && plansHaveBegun(now)) {
-    const { data: row } = await args.db
-      .from("programs")
-      .select("pilot_eligible, pilot_ends_on, pilot_ended_at")
-      .eq("id", args.programId)
-      .maybeSingle();
-    pilotRunning = row
-      ? pilotIsRunning(
-          {
-            pilotEligible: row.pilot_eligible === true,
-            pilotEndsOn: (row.pilot_ends_on as string | null) ?? null,
-            pilotEndedAt: (row.pilot_ended_at as string | null) ?? null,
-          },
-          now,
-        )
-      : false;
-  }
+  const pilotRunning =
+    pilot &&
+    (await programPilotIsRunning(args.db, { programId: args.programId }, now));
 
   const sent = await sendEmail(
     programClaimInviteEmail({

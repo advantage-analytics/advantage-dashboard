@@ -1,7 +1,9 @@
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 import { plansHaveBegun } from "@/lib/billing/plans";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isMissingFunction } from "@/lib/supabase/missing-function";
 import { createClient } from "@/lib/supabase/server";
+import { getProgramPublicStatus } from "@/lib/data/programs-server";
 import { pilotIsRunning } from "@/lib/services/splitstep/allowance";
 import {
   PILOT_TERMS_VERSION,
@@ -106,19 +108,46 @@ export async function programPilotIsRunning(
  */
 let databaseKnowsTeamTerms = false;
 
+/** Test seam: forget a remembered "yes", so a spec can ask a fake again. */
+export function forgetTeamTermsProbe(): void {
+  databaseKnowsTeamTerms = false;
+}
+
 /**
  * Whether the database accepts an acceptance at `TEAM_TERMS_VERSION`, i.e.
  * whether `20261126100000_plans_2027_team_terms.sql` is applied. Before it,
  * `assert_pilot_terms_accepted` knows only the pilot version and
- * `accepted_terms_versions()` does not exist, so the call fails and this
- * answers false.
+ * `accepted_terms_versions()` does not exist, so the call fails with a
+ * missing-function error and this answers false.
+ *
+ * ONLY that error means "not applied". Anything else (a timeout, a refused
+ * grant, an answer that is not a list) says nothing about the migration, and
+ * reading it as "not applied" would quietly put a January claim back on the
+ * pilot terms. Those are logged and thrown: a page errors, an action answers
+ * `failed`, and nobody is shown or recorded under the wrong terms.
+ *
+ * The function is not executable signed out, so every caller holds a session
+ * before it gets here; a signed-out call is one of the thrown errors.
  */
 async function databaseAcceptsTeamTerms(
   supabase: SupabaseClient,
 ): Promise<boolean> {
   if (databaseKnowsTeamTerms) return true;
   const { data, error } = await supabase.rpc("accepted_terms_versions");
-  if (error || !Array.isArray(data)) return false;
+  if (error) {
+    if (isMissingFunction(error)) return false;
+    console.error("[pilot-terms] could not ask which terms are accepted", {
+      code: error.code,
+      message: error.message,
+    });
+    throw new Error("[pilot-terms] accepted_terms_versions() failed");
+  }
+  if (!Array.isArray(data)) {
+    console.error(
+      "[pilot-terms] accepted_terms_versions() did not answer a list",
+    );
+    throw new Error("[pilot-terms] accepted_terms_versions() failed");
+  }
   databaseKnowsTeamTerms = data.includes(TEAM_TERMS_VERSION);
   return databaseKnowsTeamTerms;
 }
@@ -131,6 +160,10 @@ async function databaseAcceptsTeamTerms(
  * pilot version. Showing the team terms then would record an acceptance the
  * claim RPCs refuse, and the coach would be sent back to this screen for
  * ever. The stale pilot wording is the lesser fault, and it is logged.
+ *
+ * Throws when the database could not be asked (see
+ * `databaseAcceptsTeamTerms`), and needs a signed-in `supabase` from
+ * `PLANS_BEGIN`.
  */
 export async function resolveTermsVersion(
   supabase: SupabaseClient,
@@ -179,10 +212,11 @@ export async function claimTermsVersion(
  * admin client, as in `claim-actions.ts`.
  */
 export async function pendingClaimProgramKey(
-  user: User,
+  user: Pick<User, "id" | "email">,
   token: string | null,
+  /** The service-role client; a spec passes a fake. */
+  db: SupabaseClient = createAdminClient(),
 ): Promise<string | null> {
-  const db = createAdminClient();
   const now = new Date();
 
   if (token) {
@@ -210,14 +244,112 @@ export async function pendingClaimProgramKey(
   return row.program_key as string;
 }
 
+/** What `resolveClaimTerms` found. */
+export interface ClaimTerms {
+  /** The program of this session's live pending claim, or null. */
+  pendingKey: string | null;
+  /** The program the version was decided for: `pendingKey`, else the checked fallback. */
+  programKey: string | null;
+  version: TermsVersion;
+}
+
+/**
+ * THE resolver for a college claim's terms: which program, hence which
+ * version. The terms screen, its accept action and `/claim/verify` all call
+ * this with the same inputs, so they cannot disagree about what a coach is
+ * shown, what their acceptance must carry and what verify then looks for.
+ *
+ *   1. The pending claim's program, when this session has a live one
+ *      (`pendingClaimProgramKey`).
+ *   2. Otherwise `programKey`: the key in the terms screen's path, which its
+ *      form passes back on accept. It comes from a browser, so it is checked
+ *      to be a real program by the read the screen itself draws from
+ *      (`getProgramPublicStatus`), and it only ever selects which of the two
+ *      versions applies. A key that is no program reads as no program.
+ *   3. Otherwise no program: the date's version alone.
+ *
+ * The version itself never comes from the browser. Needs a signed-in
+ * `supabase`, and throws as `resolveTermsVersion` does.
+ */
+export async function resolveClaimTerms(
+  supabase: SupabaseClient,
+  user: Pick<User, "id" | "email">,
+  {
+    token = null,
+    programKey = null,
+    now = new Date(),
+    admin,
+  }: {
+    token?: string | null;
+    /** The fallback, used only when there is no pending claim. */
+    programKey?: unknown;
+    now?: Date;
+    /** The service-role client; a spec passes a fake. */
+    admin?: SupabaseClient;
+  } = {},
+): Promise<ClaimTerms> {
+  const pendingKey = await pendingClaimProgramKey(user, token, admin);
+  const key =
+    pendingKey ?? (await checkedProgramKey(supabase, programKey)) ?? null;
+  return {
+    pendingKey,
+    programKey: key,
+    version: await claimTermsVersion(supabase, key, now),
+  };
+}
+
+/** `key` when it names a real program, else null. */
+async function checkedProgramKey(
+  supabase: SupabaseClient,
+  key: unknown,
+): Promise<string | null> {
+  if (typeof key !== "string" || !key || key.length > 200) return null;
+  return (await getProgramPublicStatus(supabase, key)) ? key : null;
+}
+
+/**
+ * Why a creation or claim may not go ahead on the terms, or null when it may.
+ *
+ * The database accepts an acceptance at EITHER live version, so it cannot
+ * tell a coach who accepted the pilot terms from one who accepted the team
+ * terms. Which of the two this claim needs is decided here, and the three
+ * browser-callable completions (`completeClaim`, `completeClaimWithToken`,
+ * `createCustomProgram`) ask before calling their RPC: the terms screens are
+ * a courtesy in front of this, not the enforcement.
+ *
+ * `programKey` is the claim's OWN program, read by the caller from the
+ * pending claim it is about to spend (the program `resolveClaimTerms` finds
+ * for the same claim); null for a custom team, which is on no pilot, so the
+ * date alone decides. `failed` when the version could not be resolved.
+ */
+export async function termsRefusal(
+  supabase: SupabaseClient,
+  userId: string,
+  programKey: string | null,
+  now: Date = new Date(),
+): Promise<"terms-not-accepted" | "failed" | null> {
+  let version: TermsVersion;
+  try {
+    version = await claimTermsVersion(supabase, programKey, now);
+  } catch {
+    // Already logged where it failed.
+    return "failed";
+  }
+  return (await hasAcceptedTermsForUser(userId, version, supabase))
+    ? null
+    : "terms-not-accepted";
+}
+
 // ── Reading and recording ───────────────────────────────────────────────────
 
 /** Whether this coach holds an acceptance at `version`. */
 export async function hasAcceptedTermsForUser(
   userId: string,
   version: TermsVersion,
+  /** The coach's own session client; made here when not passed. */
+  client?: SupabaseClient,
 ): Promise<boolean> {
-  const supabase = await createClient();
+  const supabase = client ?? (await createClient());
   const { data, error } = await supabase
     .from("pilot_terms_acceptances")
     .select("id")

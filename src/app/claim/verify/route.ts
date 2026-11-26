@@ -7,9 +7,9 @@ import {
   completeClaimWithToken,
 } from "@/lib/services/programs/claim-actions";
 import {
-  claimTermsVersion,
   hasAcceptedTermsForUser,
-  pendingClaimProgramKey,
+  resolveClaimTerms,
+  type ClaimTerms,
 } from "@/lib/services/programs/pilot-terms-server";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
 
@@ -52,22 +52,28 @@ import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
  * ── Terms first ──────────────────────────────────────────────────────────────
  * A claim makes the coach an owner, so it waits on the terms. Before either
  * completion runs, a signed-in coach with no acceptance at the version this
- * claim is made under (`claimTermsVersion`: the pilot's before January 1,
- * 2027 and for a program on a running pilot, the team terms otherwise; read
- * through the session client) is sent to
+ * claim is made under (`resolveClaimTerms`, the resolver the terms screen
+ * and its accept use: the pilot's before January 1, 2027 and for a program on
+ * a running pilot, the team terms otherwise; read through the session
+ * client) is sent to
  * `/claim/[programKey]/terms`, carrying `?token=` when this request had one.
  * That screen's accept comes back HERE with the same token, and only that
  * return trip calls `completeClaim` / `completeClaimWithToken`. The detour is
  * taken only when there is a live claim for it to lead back to
- * (`pendingClaimProgramKey`); anything else (no session, no pending row, the wrong
+ * (the resolver's `pendingKey`); anything else (no session, no pending row, the wrong
  * account, an expired link) falls straight through to the completion, which
  * already names each of those endings.
  *
- * This UI check is what enforces the order today. Once the enforcement
- * migration is live the RPCs refuse the same thing (`terms-not-accepted`),
- * and that refusal also lands on the terms screen, as frame C (`?refused=1`),
- * never on the failure screen's `restart`: the pending claim is untouched, so
- * accepting and coming back through here finishes it.
+ * This check is the courteous half. The completions ask the same question
+ * themselves before their RPC (`termsRefusal`), since a browser can call
+ * them without coming through here, and the database refuses a coach with no
+ * acceptance at all. Either refusal (`terms-not-accepted`) also lands on the
+ * terms screen, as frame C (`?refused=1`), never on the failure screen's
+ * `restart`: the pending claim is untouched, so accepting and coming back
+ * through here finishes it.
+ *
+ * If the database cannot say which terms apply, nothing is completed and the
+ * coach gets the failure screen's `failed`, with the pending claim intact.
  */
 export async function GET(request: Request) {
   const token = new URL(request.url).searchParams.get("token");
@@ -77,16 +83,19 @@ export async function GET(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  let terms: ClaimTerms | null = null;
   if (user) {
-    const programKey = await pendingClaimProgramKey(user, token);
+    try {
+      terms = await resolveClaimTerms(supabase, user, { token });
+    } catch {
+      // Logged where it failed. `redirect()` throws, so it stays outside.
+    }
+    if (!terms) redirect("/claim/verify/failed?reason=failed");
     if (
-      programKey &&
-      !(await hasAcceptedTermsForUser(
-        user.id,
-        await claimTermsVersion(supabase, programKey),
-      ))
+      terms.pendingKey &&
+      !(await hasAcceptedTermsForUser(user.id, terms.version))
     ) {
-      redirect(termsHref(programKey, token));
+      redirect(termsHref(terms.pendingKey, token));
     }
   }
 
@@ -94,10 +103,10 @@ export async function GET(request: Request) {
     ? await completeClaimWithToken(token)
     : await completeClaim();
 
-  if (!result.ok && result.reason === "terms-not-accepted" && user) {
-    const programKey = await pendingClaimProgramKey(user, token);
-    if (programKey) redirect(termsHref(programKey, token, true));
-  }
+  // The same claim the detour above looked at: a refused completion leaves
+  // the pending row as it was.
+  if (!result.ok && result.reason === "terms-not-accepted" && terms?.pendingKey)
+    redirect(termsHref(terms.pendingKey, token, true));
 
   // A code, never the copy — see `ClaimFailure`. The screen owns the wording.
   if (!result.ok) redirect(`/claim/verify/failed?reason=${result.reason}`);

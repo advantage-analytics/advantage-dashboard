@@ -25,6 +25,7 @@ import {
   resolveTermsVersion,
   type AcceptPilotTermsResult,
 } from "@/lib/services/programs/pilot-terms-server";
+import type { TermsVersion } from "@/lib/services/programs/pilot-terms";
 import {
   PENDING_TEAM_COOKIE,
   PENDING_TEAM_COOKIE_OPTIONS,
@@ -116,11 +117,23 @@ export async function acceptPilotTermsAndCreateTeam(input: {
   const pending = await readPendingTeam();
   if (!pending) redirect("/claim/team/type");
 
+  // Signed in first: which terms apply is asked of the database, and it does
+  // not answer signed out.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, reason: "no-session" };
+
   // A team that does not exist yet is on no pilot: the version is the date's.
-  const accepted = await recordTermsAcceptance(
-    input?.version,
-    await resolveTermsVersion(await createClient()),
-  );
+  let expected: TermsVersion;
+  try {
+    expected = await resolveTermsVersion(supabase);
+  } catch {
+    // Logged where it failed.
+    return { ok: false, reason: "failed" };
+  }
+  const accepted = await recordTermsAcceptance(input?.version, expected);
   if (!accepted.ok) return accepted;
 
   const result = await createCustomTeam(pending);
@@ -136,7 +149,8 @@ export async function acceptPilotTermsAndCreateTeam(input: {
 /**
  * Whether the signed-in coach already holds an acceptance at the version a
  * NEW team is created under today (the pilot terms before January 1, 2027,
- * the team terms from it).
+ * the team terms from it). False when the database could not say which
+ * version that is: the terms screen is then where the coach finds out.
  */
 async function hasAcceptedNewTeamTerms(): Promise<boolean> {
   const supabase = await createClient();
@@ -144,7 +158,15 @@ async function hasAcceptedNewTeamTerms(): Promise<boolean> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return false;
-  return hasAcceptedTermsForUser(user.id, await resolveTermsVersion(supabase));
+  try {
+    return await hasAcceptedTermsForUser(
+      user.id,
+      await resolveTermsVersion(supabase),
+    );
+  } catch {
+    // Logged where it failed.
+    return false;
+  }
 }
 
 /**

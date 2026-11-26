@@ -3,10 +3,10 @@
 import { createClient } from "@/lib/supabase/server";
 import { verifyHref } from "./pilot-terms";
 import {
-  claimTermsVersion,
-  pendingClaimProgramKey,
   recordTermsAcceptance,
+  resolveClaimTerms,
   type AcceptPilotTermsResult,
+  type ClaimTerms,
 } from "./pilot-terms-server";
 
 /**
@@ -19,9 +19,17 @@ import {
  * browser can pass them a version of its choosing.
  *
  * The version accepted is the one THIS claim is made under, resolved here
- * from the session and the pending claim (`claimTermsVersion`), exactly as
- * the screen resolved it to render. `version` is only what the screen showed:
- * if it is not that one, nothing is recorded and the screen re-renders.
+ * by `resolveClaimTerms` from the same inputs the screen gave it to render:
+ * the session, the token and the screen's own program key. `version` is only
+ * what the screen showed: if it is not that one, nothing is recorded and the
+ * screen re-renders.
+ *
+ * `programKey` is the key in the screen's path, passed back by its form. It
+ * matters only when there is no pending claim, where the screen fell back to
+ * it too; the resolver checks it is a real program and uses it for nothing
+ * but choosing between the two versions. Without it a program on a running
+ * pilot was shown the pilot terms and then told, on every accept, that they
+ * had changed.
  *
  * `token` is the signed-in link's `?token=`, carried here from the screen so
  * the claim finishes by the same path it arrived on. It is only ever put back
@@ -42,6 +50,7 @@ import {
 export async function acceptPilotTermsForClaim(input: {
   version: string;
   token?: string | null;
+  programKey?: string | null;
 }): Promise<AcceptPilotTermsResult> {
   const token =
     typeof input?.token === "string" && input.token ? input.token : null;
@@ -52,11 +61,17 @@ export async function acceptPilotTermsForClaim(input: {
   } = await supabase.auth.getUser();
   if (!user) return { ok: false, reason: "no-session" };
 
-  const expected = await claimTermsVersion(
-    supabase,
-    await pendingClaimProgramKey(user, token),
-  );
-  const result = await recordTermsAcceptance(input?.version, expected);
+  let terms: ClaimTerms;
+  try {
+    terms = await resolveClaimTerms(supabase, user, {
+      token,
+      programKey: input?.programKey,
+    });
+  } catch {
+    // The database could not say which terms apply (logged where it failed).
+    return { ok: false, reason: "failed" };
+  }
+  const result = await recordTermsAcceptance(input?.version, terms.version);
   if (!result.ok) return result;
 
   return { ok: true, next: verifyHref(token) };

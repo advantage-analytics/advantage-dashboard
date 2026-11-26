@@ -9,9 +9,8 @@ import { ClaimShell } from "@/components/claim/claim-shell";
 import { PilotTermsForm } from "@/components/claim/pilot-terms-form";
 import { termsCopyFor, verifyHref } from "@/lib/services/programs/pilot-terms";
 import {
-  claimTermsVersion,
   hasAcceptedTermsForUser,
-  pendingClaimProgramKey,
+  resolveClaimTerms,
 } from "@/lib/services/programs/pilot-terms-server";
 import { quotaTierFor } from "@/lib/services/splitstep/quota";
 import { termsNamingCopy } from "@/lib/billing/claim-copy";
@@ -42,11 +41,12 @@ export function generateMetadata() {
  * exactly as before, and the acceptance names no program, so a swapped key
  * changes a label and cannot move a claim.
  *
- * Which terms are shown (the pilot's or the team terms, `claimTermsVersion`)
+ * Which terms are shown (the pilot's or the team terms, `resolveClaimTerms`)
  * follows the program the pending claim is FOR, found from the session and
  * the token as verify finds it, and only falls back to the path's key when
- * there is no live claim. The accept action resolves the version the same
- * way, so the two always agree and a swapped key cannot swap the terms.
+ * there is no live claim. The form passes that key back and the accept
+ * action calls the same resolver with the same three inputs, so the two
+ * always agree and a swapped key cannot swap the terms of a live claim.
  *
  * Every exit that is not "show the terms" goes back through verify, which
  * already owns the wording for each ending: no session (it reports
@@ -75,8 +75,10 @@ export default async function ClaimPilotTermsPage({
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect(verify);
-  const claimKey = (await pendingClaimProgramKey(user, token)) ?? programKey;
-  const version = await claimTermsVersion(supabase, claimKey);
+  const { version } = await resolveClaimTerms(supabase, user, {
+    token,
+    programKey,
+  });
   if (!refused && (await hasAcceptedTermsForUser(user.id, version)))
     redirect(verify);
 
@@ -104,6 +106,7 @@ export default async function ClaimPilotTermsPage({
         copy={copy}
         version={version}
         token={token}
+        programKey={programKey}
         refused={refused}
       />
     </ClaimShell>
