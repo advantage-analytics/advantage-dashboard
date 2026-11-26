@@ -42,6 +42,20 @@
  *     --questions scripts/ask-eval-team.json \
  *     --sub "Sokolov=Rudy Quan" --sub "Reyes=Emon van Loben Sels"
  *
+ * A question with `after` continues the conversation of the question it
+ * names, and through it every earlier one it follows, oldest first — the
+ * whole thread, as the route sends it. `differs: true` in its `expect`
+ * fails it when its headline is the previous answer's.
+ *
+ * `scripts/ask-eval-follow-ups.json` (personal) and
+ * `scripts/ask-eval-follow-ups-team.json` (team, placeholders as above) are
+ * the 58 follow-ups real players asked, as conversations, each noting how it
+ * went live (`docs/plans/2026-11-25-ask-follow-up-context.md`, step 1):
+ *
+ *   npx tsx scripts/ask-eval.ts --out team.md --program <uuid> \
+ *     --questions scripts/ask-eval-follow-ups-team.json \
+ *     --sub "Sokolov=…" --sub "Reyes=…" --sub "Okafor=…" --sub "Lindqvist=…"
+ *
  * `--sub "From=To"` is repeatable. Each replaces the whole word `From`
  * (case-sensitive; "Sokolov's" becomes "Rudy Quan's") in the question's
  * text, in every name it tags (`players`, `opponents`, `matches`) BEFORE the
@@ -644,16 +658,29 @@ async function main() {
     };
 
     const prior = entry.after === undefined ? null : transcripts[entry.after];
-    const conversation = prior
-      ? conversationTurnsFromMessages([
-          { role: "user", content: prior.question },
-          { role: "assistant", content: prior.answer },
-        ])
-      : [];
+    // The whole thread, as the route sends it: follow `after` back through
+    // every earlier exchange that answered, oldest first. A turn that did
+    // not answer ends the chain there.
+    const chain: NonNullable<Transcript>[] = [];
+    let first = entry.after;
+    for (
+      let at = entry.after;
+      at !== undefined && transcripts[at];
+      at = questions[at].after
+    ) {
+      chain.unshift(transcripts[at]!);
+      first = at;
+    }
+    const conversation = conversationTurnsFromMessages(
+      chain.flatMap((turn) => [
+        { role: "user" as const, content: turn.question },
+        { role: "assistant" as const, content: turn.answer },
+      ]),
+    );
     if (entry.after !== undefined) {
       lines.push(
         prior
-          ? `Conversation: ${conversation.length} turn(s) from question ${entry.after + 1}`
+          ? `Conversation: ${conversation.length} turn(s), from question ${(first ?? 0) + 1}`
           : `Conversation: question ${entry.after + 1} has no answer to follow`,
         "",
       );
@@ -774,6 +801,7 @@ async function main() {
         body: body.trim(),
         error: failure ? String(failure.code ?? failure.type) : null,
         notice,
+        previousHeadline: prior?.answer.headline ?? null,
       },
       mode === "agent" ? { ignore: ["modelCalls", "queries"] } : {},
     );
