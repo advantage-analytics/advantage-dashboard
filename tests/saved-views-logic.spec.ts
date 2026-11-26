@@ -1,7 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { saveViewKeeps } from "@/components/dashboard/matches/match-detail/shots/save-view-keeps";
 import {
   courtEndsFor,
   EMPTY_VIZ_FILTERS,
+  type VizFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
   applyIdOrder,
@@ -907,5 +909,69 @@ test("savedViewScopeLine says a view is kept across matches, and for whom", () =
   );
   expect(savedViewScopeLine("team", true)).toBe(
     "Saved for the team on every match and player profile.",
+  );
+});
+
+/* ── saveViewKeeps ──────────────────────────────────────────────────────── */
+
+test("saveViewKeeps lists what a saved view keeps: chart and kind, the applied filters, the matches it reads and where it opens", () => {
+  const state = {
+    cut: "serve" as const,
+    chart: "scatter" as const,
+    filters: {
+      ...EMPTY_VIZ_FILTERS,
+      ball: ["first"],
+      pressure: ["break"],
+    } satisfies VizFilters,
+  };
+  expect(
+    saveViewKeeps({
+      ...state,
+      matches: { kind: "match" },
+      workspaceKind: "team",
+    }),
+  ).toEqual([
+    { term: "Chart", value: "Serve placement · Scatter" },
+    { term: "Shots", value: "1st · Break points" },
+    { term: "Matches", value: "This match" },
+    { term: "Opens on", value: "Every match and player profile" },
+  ]);
+
+  // The player page: the page's scope words, then where they come from.
+  const onPage = (words: string[]) =>
+    saveViewKeeps({
+      ...state,
+      matches: { kind: "page", words },
+      workspaceKind: "team",
+    })[2];
+  expect(onPage(["Won"])).toEqual({
+    term: "Matches",
+    value: "Won · From this page",
+  });
+  expect(onPage([])).toEqual({
+    term: "Matches",
+    value: "All matches · From this page",
+  });
+});
+
+test("saveViewKeeps names Returns' Contact or Both, and the cut's noun when no filter is on", () => {
+  const rows = (filters: typeof EMPTY_VIZ_FILTERS, chart: "scatter" | "heat") =>
+    saveViewKeeps({
+      cut: "returnPlacement",
+      chart,
+      filters,
+      matches: { kind: "match" },
+      workspaceKind: "personal",
+    });
+  const placement = rows(EMPTY_VIZ_FILTERS, "scatter");
+  expect(placement[0].value).toBe("Returns · Scatter");
+  expect(placement[1].value).toBe("All returns");
+  // A personal workspace has no player profiles.
+  expect(placement[3].value).toBe("Every match");
+  expect(
+    rows({ ...EMPTY_VIZ_FILTERS, ends: "contact" }, "scatter")[0].value,
+  ).toBe("Returns · Contact · Scatter");
+  expect(rows({ ...EMPTY_VIZ_FILTERS, ends: "both" }, "heat")[0].value).toBe(
+    "Returns · Both · Heat",
   );
 });

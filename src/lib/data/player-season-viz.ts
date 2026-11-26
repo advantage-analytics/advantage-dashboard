@@ -1157,6 +1157,36 @@ export function matchScopeSummary(
   };
 }
 
+/**
+ * The page's match scope in the strip's words, for the Save popover's
+ * Matches row ("Won · Left-handed · 2 matches"): the result, hand and
+ * surface, then the ticked matches that are matches of this season
+ * (`options`, the Matches sheet's rows — an unknown `?sm=` id is ignored).
+ * Empty when the scope keeps the whole season.
+ */
+export function matchScopeWords(
+  options: readonly Pick<SeasonMatchOption, "id">[],
+  scope: SeasonFilters | undefined,
+): string[] {
+  const known = new Set(options.map((o) => o.id));
+  const applied = normalizeSeasonFilters(
+    scope && {
+      ...scope,
+      matches: scope.matches.filter((id) => known.has(id)),
+    },
+  );
+  if (!applied) return [];
+  const words: string[] = [];
+  if (applied.result != null) words.push(SEASON_RESULT_PHRASE[applied.result]);
+  if (applied.opponentHand !== null)
+    words.push(OPPONENT_HAND_PHRASE[applied.opponentHand]);
+  if (applied.surface != null)
+    words.push(SEASON_SURFACE_PHRASE[applied.surface]);
+  const n = applied.matches.length;
+  if (n > 0) words.push(`${n} ${n === 1 ? "match" : "matches"}`);
+  return words;
+}
+
 const mm = (metres: number) => Math.round(metres * 1000) / 1000;
 
 /**

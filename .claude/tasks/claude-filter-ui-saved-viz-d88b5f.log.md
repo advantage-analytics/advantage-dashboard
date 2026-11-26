@@ -145,3 +145,14 @@ is the runner's. Newest entries at the bottom.
 2. Under a scope the facts line drops the "N verified" clause; picked matches appear only in N, not as words.
 3. Show uses router.replace; switch to push if Back should undo a scope change.
 4. Visual check only in the harness at 1280 (serif fallback font) — look at it in the app.
+
+## T14 · Add the keeps summary to Save this view — done
+
+**gate:** mechanical GATE PASS · completion VERDICT: pass
+**changed:** "Save this view" shows "What this view keeps" — a `<dl>` (64px/1fr; 11px ink-500 terms, 12px ink-900 values) built by the new pure `saveViewKeeps()` (shots/save-view-keeps.ts): Chart = chart label (+ ends when not the default) · kind ("Serve placement · Scatter", "Returns · Contact · Scatter"); Shots = the strip's filter labels ("1st · Break points") or "All serves"/"All returns"/…; Matches = "This match" on a match report, or the page scope's words + "From this page" on the player page (`matchScopeWords()` in player-season-viz.ts, passed through season-viz-lightbox.tsx and save-as-view-button.tsx); Opens on = "Every match and player profile" (team) / "Every match" (personal). The "Everyone in <program> can open it" share hint already existed. What is saved, RLS and actions untouched. Specs: saved-views-logic, player-season-viz, viz-lightbox-browser.
+**follow-ups:**
+
+1. Shots reuses the strip's labels ("1st", not the board's "1st serves") — copy decision.
+2. Team-workspace and player-page versions not checked on screen (the season harness doesn't draw "Save as view").
+3. `savedViewScopeLine()` in saved-views-logic.ts is now dead (only its spec calls it).
+4. The Share toggle no longer changes any popover copy (the old scope line is gone).

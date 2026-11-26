@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   useEffect,
   useId,
   useState,
@@ -18,7 +19,6 @@ import type { FloatMenuTone } from "@/components/ui/float-menu";
 import {
   hasDuplicateViewName,
   savedViewNamePool,
-  savedViewScopeLine,
 } from "@/lib/data/saved-views-logic";
 import { createSavedView } from "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions";
 import type { SavedView, SavedViewRow } from "@/lib/data/saved-views-server";
@@ -27,7 +27,8 @@ import type { Cut, Chart, VizFilters } from "./viz-model";
 import { activeFilterEntries } from "./viz-url";
 import type { PhraseNames } from "../match-filters/applied-words";
 import { useErrorSplitJudged } from "../match-filters/provider";
-import { CUT_LABEL, CHART_LABEL } from "./viz-labels";
+import { CUT_LABEL } from "./viz-labels";
+import { saveViewKeeps } from "./save-view-keeps";
 import { cn } from "@/lib/utils";
 
 /**
@@ -96,6 +97,7 @@ export function SaveViewDialog({
   align = "start",
   names,
   note,
+  matchScope,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -117,6 +119,10 @@ export function SaveViewDialog({
   /** One more quiet line under "Depth bands are not part of a view": what
    *  else on screen the view will not keep (a season's match filters). */
   note?: string;
+  /** The player page's match scope in words (`matchScopeWords`), for the
+   *  keeps list's Matches row; empty is the whole season. Absent: the
+   *  dialog is on a match report, and the row reads "This match". */
+  matchScope?: readonly string[];
 }) {
   const router = useRouter();
   const dark = tone === "dark";
@@ -161,10 +167,19 @@ export function SaveViewDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const n = activeFilterEntries({ cut, chart, filters, viewId: null }).length;
-  const definitionLine = `${CUT_LABEL[cut]} · ${CHART_LABEL[chart]} · ${n} ${
-    n === 1 ? "filter" : "filters"
-  }`;
+  const keepsId = useId();
+  const keeps = saveViewKeeps({
+    cut,
+    chart,
+    filters,
+    errorSplitJudged,
+    matches:
+      matchScope === undefined
+        ? { kind: "match" }
+        : { kind: "page", words: matchScope },
+    workspaceKind,
+  });
+  const quiet = dark ? "rgba(255,255,255,0.45)" : "var(--ink-500)";
 
   function candidatePoolNames(forShared: boolean): string[] {
     return savedViewNamePool(savedViews, { shared: forShared });
@@ -340,40 +355,49 @@ export function SaveViewDialog({
               padding: "10px 12px",
             }}
           >
+            {/* What this view keeps (board Final-11): a view is a cut, a
+                chart and filters — no match — so the list says what it
+                draws, which matches it reads where it is opened, and that
+                it is there on every match, not only this one. */}
             <p
-              className="text-[12px]"
-              style={{
-                color: dark ? "rgba(255,255,255,0.78)" : "var(--ink-700)",
-              }}
+              id={keepsId}
+              className="text-[11px] font-medium"
+              style={{ color: quiet }}
             >
-              {definitionLine}
+              What this view keeps
             </p>
-            {/* Where it is kept: a view is a cut, a chart and filters — no
-                match — so it is there on every match, not only this one. */}
-            <p
-              data-save-view-scope=""
-              className="text-[11px]"
-              style={{
-                color: dark ? "rgba(255,255,255,0.45)" : "var(--ink-500)",
-              }}
+            <dl
+              data-save-view-keeps=""
+              aria-labelledby={keepsId}
+              className="grid grid-cols-[64px_1fr] gap-x-2 gap-y-1"
             >
-              {savedViewScopeLine(workspaceKind, shared)}
-            </p>
-            <p
-              className="text-[11px]"
-              style={{
-                color: dark ? "rgba(255,255,255,0.45)" : "var(--ink-500)",
-              }}
-            >
+              {keeps.map((row) => (
+                <Fragment key={row.term}>
+                  <dt
+                    className="text-[11px] leading-[18px]"
+                    style={{ color: quiet }}
+                  >
+                    {row.term}
+                  </dt>
+                  <dd
+                    className="min-w-0 text-[12px] leading-[18px]"
+                    style={{
+                      color: dark ? "rgba(255,255,255,0.9)" : "var(--ink-900)",
+                    }}
+                  >
+                    {row.value}
+                  </dd>
+                </Fragment>
+              ))}
+            </dl>
+            <p className="pt-1 text-[11px]" style={{ color: quiet }}>
               Depth bands are not part of a view.
             </p>
             {note && (
               <p
                 data-save-view-note=""
                 className="text-[11px]"
-                style={{
-                  color: dark ? "rgba(255,255,255,0.45)" : "var(--ink-500)",
-                }}
+                style={{ color: quiet }}
               >
                 {note}
               </p>

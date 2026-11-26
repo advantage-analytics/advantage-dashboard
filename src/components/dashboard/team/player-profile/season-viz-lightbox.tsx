@@ -10,7 +10,7 @@ import {
   useState,
   type LazyExoticComponent,
 } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { LightboxChunkPending } from "@/components/dashboard/loading/lightbox-pending";
 import { useVizState } from "@/components/dashboard/matches/match-detail/shots/use-viz-state";
@@ -32,6 +32,7 @@ import {
 import {
   courtFor,
   normalizeSeasonFilters,
+  parseMatchScope,
   withoutSeasonFilters,
   type SeasonFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
@@ -47,6 +48,7 @@ import {
   courtSignature,
   cutNoun,
   decodeStatRowDots,
+  matchScopeWords,
   optionCountKey,
   seasonAdvancedOptions,
   statPickKey,
@@ -308,6 +310,9 @@ export function SeasonVizLightbox({
   const { state, setState } = useVizState();
   const mounted = useMounted();
   const router = useRouter();
+  // The page's match scope (`?sres=` …), which a view opened on this page
+  // reads its matches under — the Save popover's Matches row names it.
+  const searchParams = useSearchParams();
 
   // Each mark's match and point, by mark id and by point id (a point id is
   // unique across matches, as a mark id is).
@@ -667,6 +672,12 @@ export function SeasonVizLightbox({
                           ? "The Matches filters are not part of a view."
                           : undefined
                       }
+                      matchScope={matchScopeWords(
+                        court.seasonOptions.matches,
+                        parseMatchScope(
+                          new URLSearchParams(searchParams.toString()),
+                        ),
+                      )}
                     />
                   </Suspense>
                 ),

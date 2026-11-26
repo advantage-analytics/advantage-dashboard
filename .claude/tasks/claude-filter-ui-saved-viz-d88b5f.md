@@ -198,7 +198,7 @@ ready).
 
 ## T14 · Add the keeps summary to Save this view
 
-- **status:** todo
+- **status:** done
 - **model:** opus
 - **files:** (guess) src/components/dashboard/matches/match-detail/shots/save-view-dialog.tsx (Share with team ~:383-427), src/components/dashboard/matches/match-detail/shots/save-as-view-button.tsx, src/components/dashboard/team/player-profile/use-season-saved-views.ts, tests/saved-views-logic.spec.ts
 - **routes:** /dashboard/matches/[matchId], /dashboard/team/roster/[playerId]

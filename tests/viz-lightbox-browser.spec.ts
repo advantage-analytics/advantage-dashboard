@@ -607,6 +607,29 @@ test("a read-only host leaves out Save as view and, without video, Watch — and
   ).toBeVisible();
 });
 
+test("Save as view opens Save this view with what the view keeps: chart, shots, matches and where it opens", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&ball=first&pressure=break`);
+  const lightbox = page.getByRole("dialog").first();
+  await lightbox.getByRole("button", { name: "Save as view" }).click();
+  const save = page.getByRole("dialog", { name: "Save this view" });
+  await expect(save).toBeVisible();
+  const keeps = save.getByRole("term");
+  await expect(save).toContainText("What this view keeps");
+  await expect(keeps).toHaveText(["Chart", "Shots", "Matches", "Opens on"]);
+  await expect(save.getByRole("definition")).toHaveText([
+    "Serve placement · Scatter",
+    "1st · Break points",
+    "This match",
+    // The harness is a personal workspace: no player profiles.
+    "Every match",
+  ]);
+  await page.waitForTimeout(300);
+  await save.screenshot({ path: test.info().outputPath("save-view.png") });
+});
+
 /* ── Gate fixes (PR #684 review, round 2) ─────────────────────────────── */
 
 test("1 · a filter edit or a player switch keeps the lightbox mounted: popover, picks, pane and focus return survive", async ({

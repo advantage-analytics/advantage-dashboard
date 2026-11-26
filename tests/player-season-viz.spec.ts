@@ -19,6 +19,7 @@ import {
   mergeVizResults,
   mergeVizStats,
   matchScopeSummary,
+  matchScopeWords,
   optionCountKey,
   parseSeasonMatchScope,
   parseSeasonVizState,
@@ -2466,6 +2467,24 @@ test.describe("Opponent plays and Matches (the season's own filters)", () => {
         parseSeasonMatchScope({ sopp: "left", ssurf: "clay" }),
       ),
     ).toEqual({ shown: 0, analyzed: 3, words: ["Left-handed", "Clay"] });
+  });
+
+  test("the Save popover's Matches words: the page scope's menu words, then its known ticked matches, empty for the whole season", () => {
+    const rows = seasonMatchOptions(HANDS, () => 1);
+    expect(matchScopeWords(rows, undefined)).toEqual([]);
+    // An id that is not a match of this season says nothing.
+    expect(
+      matchScopeWords(rows, parseSeasonMatchScope({ sm: "nobody" })),
+    ).toEqual([]);
+    expect(
+      matchScopeWords(rows, parseSeasonMatchScope({ sres: "won" })),
+    ).toEqual(["Won"]);
+    expect(
+      matchScopeWords(
+        rows,
+        parseSeasonMatchScope({ sopp: "left", sm: ["a", "nobody"] }),
+      ),
+    ).toEqual(["Left-handed", "1 match"]);
   });
 
   test("a court signature carries the season filters, canonical: tick order does not matter, a tick does", () => {
