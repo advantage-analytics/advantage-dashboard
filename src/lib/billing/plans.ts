@@ -194,6 +194,12 @@ export function isPlanTerm(value: unknown): value is PlanTerm {
   return value === "spring" || value === "full_year";
 }
 
+/** A term's name wherever one is printed: `Spring`, `Full year`. */
+export const PLAN_TERM_LABELS = {
+  spring: "Spring",
+  full_year: "Full year",
+} as const satisfies Record<PlanTerm, string>;
+
 export function collegePlan(id: CollegePlanId): CollegePlan {
   const plan = COLLEGE_PLANS.find((candidate) => candidate.id === id);
   if (!plan) throw new Error(`Unknown college plan: ${id}`);

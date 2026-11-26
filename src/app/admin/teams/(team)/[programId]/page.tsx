@@ -12,6 +12,7 @@ import { AdminPeopleList } from "@/components/admin/admin-people-card";
 import { AdminScheduleCard } from "@/components/admin/admin-schedule-card";
 import { AdminUsageCard } from "@/components/admin/admin-usage-card";
 import { PilotUsageCard } from "@/components/admin/pilot-usage-card";
+import { PlanCard } from "@/components/admin/plan-card";
 import { TeamLatestMatches } from "@/components/admin/team-latest-matches";
 import { TeamPageHeader } from "@/components/admin/team-page-header";
 import {
@@ -69,7 +70,7 @@ export async function generateMetadata({
  * width of the admin page like Matches and Teams (decided 2026-11-13).
  *
  * The cards the artboard has no place for stay behind `?view=`
- * (`team-sections.ts`): `schedule`, `usage` (Pilot + Usage — where `Add
+ * (`team-sections.ts`): `schedule`, `usage` (Pilot + Plan + Usage — where `Add
  * hours` goes), and `people` (the People list plus Contacts). Each renders
  * alone under the header with a link back. `roster`, `activity` (the log is
  * on the default view now) and any unknown value are the default — the old `/admin/teams/<id>/<slug>` routes
@@ -148,6 +149,14 @@ export default async function AdminTeamPage({
                 pilotEligible: data.program.pilotEligible,
               }) === "program"
             }
+          />
+        );
+      case "plan":
+        return (
+          <PlanCard
+            programId={programId}
+            programName={data.program.schoolName}
+            plan={data.plan}
           />
         );
       case "usage":

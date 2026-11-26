@@ -5,6 +5,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 import { loadConferenceTeams } from "@/lib/services/programs/admin-conference-actions";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import {
+  isCollegePlanId,
+  isPlanTerm,
+  type CollegePlanId,
+  type PlanTerm,
+} from "@/lib/billing/plans";
 import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
 import { crestUrl, type SeatUsage } from "@/lib/data/teams-server";
 import { onAdvantageStatus } from "@/lib/data/admin-teams-server";
@@ -204,6 +211,26 @@ export interface AdminTeamPilot {
 }
 
 /**
+ * The season plan an admin assigned to the program — its `program_plans` row
+ * as `admin_get_program_plan` returns it, the invoice note and the setter's
+ * name included. `AdminTeamData.plan` is null for a team with no plan.
+ */
+export interface AdminTeamPlan {
+  planId: CollegePlanId;
+  planTerm: PlanTerm;
+  /** `starts_on` — first day of the season, inclusive. `YYYY-MM-DD`. */
+  planStartsOn: string;
+  /** `ends_on` — last day of the season, inclusive. `YYYY-MM-DD`. */
+  planEndsOn: string;
+  /** The invoice or PO reference. The team never reads it. */
+  planNote: string | null;
+  /** When the plan was last set. */
+  planSetAt: string;
+  /** The admin who set it; null for a deleted or nameless account. */
+  planSetByName: string | null;
+}
+
+/**
  * A member row, plus the one column the console can toggle that Settings ›
  * Team's `TeamMember` has no field for.
  *
@@ -377,6 +404,8 @@ interface AdminTeamData {
   seats: SeatUsage;
   /** Never null — see `AdminTeamPilot`. */
   pilot: AdminTeamPilot;
+  /** Null when no plan is assigned, and when the read failed. */
+  plan: AdminTeamPlan | null;
   /** Null when `programs.conference_id` is null. */
   conference: AdminTeamConference | null;
   /** The latest 20 audit rows, newest first. */
@@ -864,6 +893,84 @@ async function readPilot(
 }
 
 // ---------------------------------------------------------------------------
+// Plan — the program's `program_plans` row, through `admin_get_program_plan`
+// ---------------------------------------------------------------------------
+
+/**
+ * What a call that reaches for something not there comes back as. PostgREST
+ * answers from its schema cache (`PGRST202` for a function, `PGRST205` for a
+ * table) before the query reaches PostgreSQL; `42883` and `42P01` are
+ * PostgreSQL's own `undefined_function` and `undefined_table`, which is what
+ * arrives when the cache is ahead of the database.
+ */
+const MISSING_PLAN_MODEL_CODES = new Set([
+  "PGRST202",
+  "42883",
+  "PGRST205",
+  "42P01",
+]);
+
+/**
+ * The program's plan, or null when it has none.
+ *
+ * Read through `admin_get_program_plan` on the SESSION client, as the
+ * signed-in admin: `note` and `set_by` carry no client grant, the function is
+ * the one read of them, and it checks `is_admin()` against `auth.uid()`, which
+ * is null through the service role.
+ *
+ * Never fatal, like `programPlansByProgram` in the workspace loader.
+ * `program_plans` and this function arrive with
+ * `20261126060000_plans_2027_plan_model`, a migration applied by hand, and
+ * this code can be deployed before it: a missing function or table then reads
+ * as "no plan", which is true until an admin can assign one, and is not worth
+ * a log line on every request. Any other failure is logged and degrades the
+ * same way. The missing-function branch can go once the migration is live.
+ */
+async function readPlan(programId: string): Promise<AdminTeamPlan | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_get_program_plan", {
+    p_program_id: programId,
+  });
+
+  if (error) {
+    if (!MISSING_PLAN_MODEL_CODES.has(error.code)) {
+      console.error("[admin team] could not read plan", {
+        programId,
+        error: error.message,
+      });
+    }
+    return null;
+  }
+
+  const row = (
+    (Array.isArray(data) ? data : data ? [data] : []) as {
+      plan_id: string;
+      plan_term: string;
+      starts_on: string;
+      ends_on: string;
+      note: string | null;
+      set_at: string;
+      set_by_name: string | null;
+    }[]
+  )[0];
+  // The CHECKs pin both value sets; a value this build does not know is a
+  // plan newer than this code, and reads as no plan rather than a guess.
+  if (!row || !isCollegePlanId(row.plan_id) || !isPlanTerm(row.plan_term)) {
+    return null;
+  }
+
+  return {
+    planId: row.plan_id,
+    planTerm: row.plan_term,
+    planStartsOn: row.starts_on,
+    planEndsOn: row.ends_on,
+    planNote: row.note,
+    planSetAt: row.set_at,
+    planSetByName: row.set_by_name,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Conference — the row, plus its teams via `loadConferenceTeams`
 // ---------------------------------------------------------------------------
 
@@ -1311,6 +1418,7 @@ export const getAdminTeam = cache(
       seats,
       usage,
       pilot,
+      plan,
       conference,
       activity,
       contactsResult,
@@ -1355,6 +1463,7 @@ export const getAdminTeam = cache(
       readSeatUsage(admin, programId, row.seats ?? 0),
       readUsage(admin, programId, billingMonth, { orgType, pilotEligible }),
       readPilot(admin, row, viewer.id),
+      readPlan(programId),
       readConference(admin, programId, row.conference_id),
       readActivity(admin, programId),
       // Service role: `program_contacts` has no policy and no grant on
@@ -1535,6 +1644,7 @@ export const getAdminTeam = cache(
       })),
       seats,
       pilot,
+      plan,
       conference,
       activity,
       usage,
