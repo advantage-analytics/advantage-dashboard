@@ -36,6 +36,19 @@
 import type { NormaliseReason } from "@/lib/match-video/playback-format";
 import { MAX_VIDEO_SIZE_BYTES } from "@/lib/services/splitstep/config";
 
+/**
+ * Which input tracks the cut carries: the primary video and audio, nothing
+ * else. The vendor and both players use exactly those two.
+ *
+ * Mediabunny's default is every track, and any video or audio track it can't
+ * carry is discarded — which the worker rightly treats as a failed cut, so
+ * the ORIGINAL goes up, uncut and unconverted. An iPhone 17 Pro adds a second,
+ * spatial-audio track (Apple's `apac`, which Mediabunny can't read) beside its
+ * AAC stereo: Jerry Shi's 5.3 GB HDR HEVC match (2026-11-25) uploaded whole,
+ * its 24 s–2164 s window ignored, and played the raw file from Canada East.
+ */
+export const CONVERSION_TRACKS = "primary" satisfies "all" | "primary";
+
 /** Handles this close to either end of the clip count as "not trimmed". */
 export const WHOLE_CLIP_TOLERANCE_SECONDS = 0.5;
 
