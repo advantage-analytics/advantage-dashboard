@@ -4,8 +4,14 @@
  * tested without a database and the send script only fetches and sends.
  *
  *  - **Pilot**: owners and coaches of the pilot teams get the pilot wording,
- *    one mail per team they run. They get no general mail as well: the pilot
- *    mail already says their own workspace's beta hours end.
+ *    one mail per team they run, once that mail can go: the wording is
+ *    approved (`pilotNoticeReady`) and the team has a `pilot_ends_on`. They
+ *    get no general mail as well: the pilot mail already says their own
+ *    workspace's beta hours end.
+ *  - **Held pilot**: a pilot coach whose pilot mail can't go yet. They get
+ *    the GENERAL notice instead, so nobody goes unnotified while the pilot
+ *    wording waits (`pilotHeld` names them; they are inside `general`). When
+ *    the pilot mail is ready later they get that too, under its own key.
  *  - **General**: every other account with a confirmed address — players,
  *    staff, owners of non-pilot teams, and the players on pilot teams (their
  *    own workspace is the one losing its hours).
@@ -61,7 +67,10 @@ export interface PilotRecipient extends GeneralRecipient {
 
 export interface NoticeRecipients {
   general: GeneralRecipient[];
+  /** Pilot mails that can go now: wording approved, end date set. */
   pilot: PilotRecipient[];
+  /** Pilot coaches whose pilot mail can't go yet — already inside `general`. */
+  pilotHeld: PilotRecipient[];
   /** Owners of non-pilot teams — already inside `general`. */
   teamOwners: GeneralRecipient[];
   /** Pilot ids with no program row (TCU until it joins). */
@@ -86,6 +95,8 @@ export function selectNoticeRecipients(input: {
   memberships: NoticeMembership[];
   programs: NoticeProgram[];
   pilotProgramIds?: readonly string[];
+  /** `PILOT_NOTICE_APPROVED`. False holds every pilot mail. */
+  pilotNoticeReady: boolean;
   /** Extra addresses to leave out (the verifier accounts), lower-cased. */
   excludeEmails?: readonly string[];
 }): NoticeRecipients {
@@ -132,7 +143,9 @@ export function selectNoticeRecipients(input: {
     }
   }
 
-  const pilotUsers = new Set(pilot.map((p) => p.userId));
+  const ready = (p: PilotRecipient) =>
+    input.pilotNoticeReady && p.pilotEndsOn !== null;
+  const pilotUsers = new Set(pilot.filter(ready).map((p) => p.userId));
   const general = [...sendable.values()].filter(
     (r) => !pilotUsers.has(r.userId),
   );
@@ -146,7 +159,8 @@ export function selectNoticeRecipients(input: {
 
   return {
     general,
-    pilot,
+    pilot: pilot.filter(ready),
+    pilotHeld: pilot.filter((p) => !ready(p)),
     teamOwners,
     missingPilotPrograms: [...pilotIds].filter((id) => !programs.has(id)),
     skipped,

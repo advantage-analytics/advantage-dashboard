@@ -16,7 +16,9 @@
  *  - Refuses under CI or a test runner, and without `RESEND_API_KEY` (which
  *    would otherwise print every mail instead of sending it).
  *  - The pilot group refuses until `PILOT_NOTICE_APPROVED` is true in the
- *    template, and while any pilot team has no `pilot_ends_on`.
+ *    template. Until then, and for any pilot team with no `pilot_ends_on`,
+ *    that team's owners and coaches are HELD: they get the general notice
+ *    instead, so nobody goes unnotified, and the pilot mail later on top.
  *  - Every mail claims `notification_sends` first (`plans_2027_notice:<user>`,
  *    `plans_2027_pilot_notice:<program>:<user>`), so a re-run after a crash or
  *    a partial send mails only those who didn't get it. A failed send releases
@@ -183,6 +185,7 @@ async function main() {
       ownerUserId: p.owner_user_id,
       pilotEndsOn: p.pilot_ends_on,
     })),
+    pilotNoticeReady: PILOT_NOTICE_APPROVED,
     excludeEmails: [
       process.env.EYES_ON_EMAIL,
       process.env.EYES_ON_LABELLER_EMAIL,
@@ -197,7 +200,14 @@ async function main() {
   console.log(`  pilot notice       ${r.pilot.length}`);
   for (const p of r.pilot)
     console.log(
-      `    ${p.programName} · ${redact(p.email)} · ends ${p.pilotEndsOn ?? "NOT SET"}`,
+      `    ${p.programName} · ${redact(p.email)} · ends ${p.pilotEndsOn}`,
+    );
+  console.log(
+    `  pilot held         ${r.pilotHeld.length} (sent the general notice until their pilot mail can go)`,
+  );
+  for (const p of r.pilotHeld)
+    console.log(
+      `    ${p.programName} · ${redact(p.email)} · ${PILOT_NOTICE_APPROVED ? "no pilot_ends_on" : "wording not approved"}`,
     );
   if (r.missingPilotPrograms.length)
     console.log(
@@ -223,12 +233,8 @@ async function main() {
       fail(
         "The pilot wording is not approved yet (PILOT_NOTICE_APPROVED). Send --group general, or get Cj's yes first.",
       );
-    const unset = r.pilot.filter((p) => !p.pilotEndsOn);
-    if (args.send && unset.length)
-      fail(
-        `${unset.length} pilot recipient(s) belong to a team with no pilot_ends_on. Set the end dates in Admin first.`,
-      );
     for (const p of r.pilot) {
+      // `r.pilot` holds only teams with an end date; this narrows the type.
       if (!p.pilotEndsOn) continue;
       queue.push({
         recipient: p,

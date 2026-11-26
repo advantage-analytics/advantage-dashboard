@@ -96,6 +96,7 @@ test.describe("recipients", () => {
   const PILOT = "pilot-team";
   const base = {
     pilotProgramIds: [PILOT, "missing-team"],
+    pilotNoticeReady: true,
     accounts: [
       { id: "u1", email: "a@school.edu", confirmed: true, banned: false },
       { id: "u2", email: "b@school.edu", confirmed: false, banned: false },
@@ -110,7 +111,12 @@ test.describe("recipients", () => {
       { programId: PILOT, userId: "player", role: "player" },
     ],
     programs: [
-      { id: PILOT, name: "Pilot U", ownerUserId: "coach", pilotEndsOn: null },
+      {
+        id: PILOT,
+        name: "Pilot U",
+        ownerUserId: "coach",
+        pilotEndsOn: "2027-03-31",
+      },
       { id: "club", name: "Club", ownerUserId: "owner", pilotEndsOn: null },
     ],
   };
@@ -130,6 +136,23 @@ test.describe("recipients", () => {
       ["u3", "test"],
       ["u7", "banned"],
     ]);
+  });
+
+  test("a pilot coach whose pilot mail can't go gets the general notice", () => {
+    const unapproved = selectNoticeRecipients({
+      ...base,
+      pilotNoticeReady: false,
+    });
+    expect(unapproved.pilot).toEqual([]);
+    expect(unapproved.pilotHeld.map((p) => p.userId)).toEqual(["coach"]);
+    expect(unapproved.general.map((g) => g.userId)).toContain("coach");
+
+    const noEndDate = selectNoticeRecipients({
+      ...base,
+      programs: base.programs.map((p) => ({ ...p, pilotEndsOn: null })),
+    });
+    expect(noEndDate.pilot).toEqual([]);
+    expect(noEndDate.general.map((g) => g.userId)).toContain("coach");
   });
 
   test("excluded addresses are skipped as test accounts", () => {
