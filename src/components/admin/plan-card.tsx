@@ -15,6 +15,7 @@ import {
   ConfirmProse,
   Em,
 } from "@/components/ui/confirm-dialog";
+import { Kv } from "@/components/admin/pilot-usage-card";
 import { DateField } from "@/components/ui/date-field";
 import { MenuSelect } from "@/components/ui/menu-select";
 import {
@@ -37,6 +38,7 @@ import {
 } from "@/lib/billing/plans";
 import type { AdminTeamPlan } from "@/lib/data/admin-team-server";
 import { shortDate } from "@/lib/data/match-utils";
+import { utcToday } from "@/lib/data/match-day";
 import {
   clearProgramPlan,
   setProgramPlan,
@@ -50,11 +52,6 @@ const TERM_OPTIONS: { value: PlanTerm; label: string }[] = [
   { value: "spring", label: PLAN_TERM_LABELS.spring },
   { value: "full_year", label: PLAN_TERM_LABELS.full_year },
 ];
-
-/** Today in UTC, `YYYY-MM-DD` — the day the season defaults are picked from. */
-function utcToday(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 function savedPlanOf(plan: AdminTeamPlan | null): SavedPlan | null {
   return plan
@@ -334,18 +331,6 @@ function PlanForm({
         pilot on the plan&rsquo;s start date.
       </SettingsCardFootnote>
     </SettingsCard>
-  );
-}
-
-/** One fact line — label left at ink-500, value right at ink-900. */
-function Kv({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex min-h-9 items-center justify-between gap-4 py-1.5">
-      <dt className="text-[12px] text-[var(--ink-500)]">{label}</dt>
-      <dd className="text-[12px] text-[var(--ink-900)] tabular-nums">
-        {value}
-      </dd>
-    </div>
   );
 }
 

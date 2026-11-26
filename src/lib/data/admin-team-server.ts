@@ -6,6 +6,8 @@ import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 import { loadConferenceTeams } from "@/lib/services/programs/admin-conference-actions";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { isMissingFunction } from "@/lib/supabase/missing-function";
+import { isMissingTable } from "@/lib/data/season-points-cache";
 import {
   isCollegePlanId,
   isPlanTerm,
@@ -897,20 +899,6 @@ async function readPilot(
 // ---------------------------------------------------------------------------
 
 /**
- * What a call that reaches for something not there comes back as. PostgREST
- * answers from its schema cache (`PGRST202` for a function, `PGRST205` for a
- * table) before the query reaches PostgreSQL; `42883` and `42P01` are
- * PostgreSQL's own `undefined_function` and `undefined_table`, which is what
- * arrives when the cache is ahead of the database.
- */
-const MISSING_PLAN_MODEL_CODES = new Set([
-  "PGRST202",
-  "42883",
-  "PGRST205",
-  "42P01",
-]);
-
-/**
  * The program's plan, or null when it has none.
  *
  * Read through `admin_get_program_plan` on the SESSION client, as the
@@ -933,7 +921,7 @@ async function readPlan(programId: string): Promise<AdminTeamPlan | null> {
   });
 
   if (error) {
-    if (!MISSING_PLAN_MODEL_CODES.has(error.code)) {
+    if (!isMissingFunction(error) && !isMissingTable(error)) {
       console.error("[admin team] could not read plan", {
         programId,
         error: error.message,

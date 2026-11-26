@@ -14,6 +14,7 @@ import {
   isPlanTerm,
   type ProgramPlanRef,
 } from "@/lib/billing/plans";
+import { isMissingTable } from "@/lib/data/season-points-cache";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import type { ProgramStatus } from "@/lib/services/programs/claim-state";
 import type {
@@ -138,31 +139,6 @@ async function claimedProfilesByProgram(
 }
 
 /**
- * Team workspaces the viewer belongs to.
- *
- * Filtered to `userId` explicitly. RLS alone is NOT enough here: the select
- * policy is `user_id = auth.uid() OR is_program_staff(program_id)`, so a coach
- * reading this table gets the whole roster back. Every one of those rows maps
- * to the same program id, and the cookie lookup downstream takes the first
- * match by `joined_at` — so a coach who joined after one of their players
- * resolved as `role: 'player'` and lost every staff control on their own team,
- * with the workspace name still correct on screen.
- *
- * `canSubmitVideo` comes from the program's claim state, not from the
- * membership: a program still in review can invite people and build a roster
- * but must not spend the vendor budget, because that spend cannot be taken
- * back. `programStatusFor()` maps a claim to `claim_pending`, which is exactly
- * the state that withholds it.
- */
-/**
- * What a read of a table that is not there comes back as. PostgREST answers
- * from its schema cache (`PGRST205`) before the query reaches PostgreSQL;
- * `42P01` is PostgreSQL's own `undefined_table`, which is what arrives when
- * the cache is ahead of the database.
- */
-const MISSING_TABLE_CODES = new Set(["PGRST205", "42P01"]);
-
-/**
  * The season plan of every team the viewer can see one for —
  * `program_plans`, keyed by `program_id`.
  *
@@ -189,7 +165,7 @@ async function programPlansByProgram(
     .select("program_id, plan_id, plan_term, starts_on, ends_on");
 
   if (error) {
-    if (!MISSING_TABLE_CODES.has(error.code)) {
+    if (!isMissingTable(error)) {
       console.error("[workspace] could not load program plans", {
         error: error.message,
       });
@@ -212,6 +188,23 @@ async function programPlansByProgram(
   return byProgram;
 }
 
+/**
+ * Team workspaces the viewer belongs to.
+ *
+ * Filtered to `userId` explicitly. RLS alone is NOT enough here: the select
+ * policy is `user_id = auth.uid() OR is_program_staff(program_id)`, so a coach
+ * reading this table gets the whole roster back. Every one of those rows maps
+ * to the same program id, and the cookie lookup downstream takes the first
+ * match by `joined_at` — so a coach who joined after one of their players
+ * resolved as `role: 'player'` and lost every staff control on their own team,
+ * with the workspace name still correct on screen.
+ *
+ * `canSubmitVideo` comes from the program's claim state, not from the
+ * membership: a program still in review can invite people and build a roster
+ * but must not spend the vendor budget, because that spend cannot be taken
+ * back. `programStatusFor()` maps a claim to `claim_pending`, which is exactly
+ * the state that withholds it.
+ */
 async function listProgramWorkspaces(
   supabase: SupabaseClient,
   userId: string,

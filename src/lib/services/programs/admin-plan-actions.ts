@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { planDraftProblem, setProgramPlanArgs } from "@/lib/billing/plan-draft";
 import type { CollegePlanId, PlanTerm } from "@/lib/billing/plans";
+import { isMissingFunction } from "@/lib/supabase/missing-function";
 import { createClient } from "@/lib/supabase/server";
 import { requireAdmin } from "./admin-guard";
 
@@ -25,13 +26,7 @@ import { requireAdmin } from "./admin-guard";
 const ADMIN_PATH = "/admin";
 const NOT_AUTHORIZED = "Not authorized.";
 
-/**
- * What a call to a function that is not there comes back as: PostgREST's own
- * `PGRST202` when its schema cache has no such function, PostgreSQL's
- * `42883` (`undefined_function`) when the cache is ahead of the database.
- * The migration is applied by hand and this code can be deployed before it.
- */
-const MISSING_FUNCTION_CODES = new Set(["PGRST202", "42883"]);
+/** The migration is applied by hand and this code can be deployed before it. */
 const NOT_APPLIED =
   "Plans cannot be saved yet. The plan model's database migration has not been applied.";
 
@@ -41,7 +36,7 @@ type RpcError = { code?: string; message?: string };
 
 function refusal(error: RpcError, fallback: string): string {
   const code = error.code ?? "";
-  if (MISSING_FUNCTION_CODES.has(code)) return NOT_APPLIED;
+  if (isMissingFunction(error)) return NOT_APPLIED;
   if (code === "42501") return NOT_AUTHORIZED;
   if (code === "P0002") return "That team no longer exists.";
   // The RPC's own argument refusals are written as sentences to show.
