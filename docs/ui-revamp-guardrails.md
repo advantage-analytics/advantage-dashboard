@@ -386,6 +386,32 @@ be. Doubles teams and existing users depend on it.
 > database changes. This section's "stop and ask" rule was quoted to them by
 > `/pr-check` on 2026-11-26, after the approval.
 
+> **A user-approved exception, added 2026-11-26: `calculate_match_stats` does not
+> count a replayed let point.**
+>
+> A hand-labelled publish (`labels/apply.ts`) writes each label point marked
+> `let_replayed` as a whole `points` row, strokes and all, flagged `let_replayed`
+> with `result_type = 'Let'`, no pressure flag, a null `rally_length` and the
+> server as a placeholder `won_by_player1` — so the Video tab can show it.
+> Migration `20261128032804_let_points_count_as_nothing` makes every read of
+> `public.points` in `calculate_match_stats` (96, plus 6 `public.points.<col>`
+> references) read `points` without that flag, and nothing else: shots are only
+> reached through a point, so a let point's strokes go with it. The same
+> migration filters the flag in `key_moments`, `backfill_returns_in_and_net_points`,
+> `rebuild_ask_point_facts`, `ask.points` and `ask.shots`, and seeds a let point
+> into a self-review session as a `let_replayed` label rather than a point. All
+> are patched from the live definitions and assert their hit counts. No row
+> carried the flag when it was applied; no SwingVision or vendor writer emits it.
+> **No backfill**: nothing changes until a labelled match is published again.
+>
+> **The approval.** The owner approved the change and a rolled-back production
+> dry run in session on 2026-11-26 ("Approve, dry-run first"), after this
+> section's "stop and ask" rule was quoted to them. The dry run, through the
+> claude.ai Supabase connector on 2026-11-27, flagged one point of match
+> 1e7f4043 as a let under the patched SQL and got the same `match_stats` and
+> `key_moments` fingerprints as today's functions with that point deleted;
+> both runs rolled back. Applied then, as version `20261128032804`.
+
 > **A one-off data repair, 2026-09-26: two `matches.result` captions.**
 >
 > Not a code path — a single hand-run `UPDATE`, approved by the owner in

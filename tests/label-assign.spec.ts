@@ -272,6 +272,10 @@ test.describe("the Labels list's session fields", () => {
     expect(sessionReads).toHaveLength(1);
     expect(sessionReads[0].columns).toContain("assignee:users!assigned_to(");
     expect(fake.calls.some((c) => c.table === "users")).toBe(false);
+    // The point count leaves replayed lets out (let-points.ts).
+    const pointCounts = fake.calls.filter((c) => c.table === "points");
+    expect(pointCounts).toHaveLength(1);
+    expect(pointCounts[0].notContains).toEqual({ flags: '["let_replayed"]' });
   });
 
   test("a submitted session is in progress, with its own pill words", () => {

@@ -43,6 +43,12 @@ interface MatchDataContextValue {
    * identical even when somebody clicks two bookmarks in the same tick.
    */
   pointsRef: RefObject<MatchPoint[]>;
+  /**
+   * Replayed lets (`letReplayed`, let-points.ts), never in `points`: the
+   * Video tab's list shows them as "Let · Replayed" and nothing counts them.
+   * Empty on every page that does not pass them.
+   */
+  letPoints: MatchPoint[];
   /** Replace the points array; writes the ref and the state together. */
   setPoints: (next: MatchPoint[]) => void;
   keyMoments: Array<{ moment: string; description: string }>;
@@ -59,6 +65,9 @@ interface MatchDataContextValue {
   kpiHistory: MatchKpiHistory | null;
 }
 
+/** One stable empty array, so a page with no lets never re-renders for one. */
+const EMPTY_LETS: MatchPoint[] = [];
+
 const MatchDataContext = createContext<MatchDataContextValue | null>(null);
 
 export function useMatchData(): MatchDataContextValue {
@@ -73,6 +82,8 @@ interface MatchDataProviderProps {
   match: Match;
   statsResult: MatchStatisticsResult | null;
   points: MatchPoint[];
+  /** Replayed lets for the Video tab's list; see the context's `letPoints`. */
+  letPoints?: MatchPoint[];
   keyMoments?: Array<{ moment: string; description: string }>;
   insights?: {
     player1?: {
@@ -92,6 +103,7 @@ export function MatchDataProvider({
   match,
   statsResult,
   points,
+  letPoints = EMPTY_LETS,
   keyMoments = [],
   insights = null,
   kpiHistory = null,
@@ -139,6 +151,7 @@ export function MatchDataProvider({
         points: livePoints,
         pointsRef,
         setPoints,
+        letPoints,
         keyMoments,
         insights,
         kpiHistory,

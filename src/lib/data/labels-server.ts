@@ -58,6 +58,7 @@ import {
 import { cachedTranscriptForJob } from "@/lib/services/labels/transcript-cache";
 import { idChunks } from "@/lib/services/labels/chunks";
 import { labellerName } from "@/lib/services/labels/assign-session";
+import { LET_POINT_FILTER } from "@/lib/data/let-points";
 
 /** One completed job an admin could start or continue labelling. */
 export interface LabelJobRow {
@@ -316,7 +317,9 @@ async function countPointsByMatch(
       const { count, error } = await db
         .from("points")
         .select("id", { count: "exact", head: true })
-        .eq("match_id", matchId);
+        .eq("match_id", matchId)
+        // A replayed let is published to be shown, not a point.
+        .not(...LET_POINT_FILTER);
       if (error) {
         throw new Error(
           `Could not count points for ${matchId}: ${error.message}`,

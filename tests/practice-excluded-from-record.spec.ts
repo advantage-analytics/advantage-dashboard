@@ -266,6 +266,8 @@ test.describe("loadHomeServes", () => {
         limit: () => builder,
         order: () => builder,
         range: () => builder,
+        // The let-point filter (let-points.ts).
+        not: () => builder,
         in(column: string, values: unknown[]) {
           if (table === "points" && column === "match_id") asked.push(values);
           return builder;
