@@ -9,6 +9,7 @@ import { AttachmentWizardRoute } from "@/components/dashboard/matches/match-vide
 import type { AttachmentFlowDeps } from "@/components/dashboard/matches/match-video-attachment/use-attachment-flow";
 import type { SourcePoint, SourceShot } from "@/lib/match-video/alignment";
 import { defaultAttachmentTrimWindow } from "@/lib/match-video/trim-window";
+import { reportTrimSkip } from "@/lib/video/trim-telemetry";
 import {
   matchVideoError,
   type ActiveAttachment,
@@ -47,6 +48,8 @@ import type {
  * here `prepare` is always a fake, chosen by `?prepare=`:
  *
  *   skip (default)  resolves `{ trimmed: false, reason: "whole-clip" }`
+ *   unsupported     resolves `{ trimmed: false, reason: "unsupported" }` with
+ *                   an iPhone's unreadable spatial-audio track as discarded
  *   cut             resolves a cut: the first half of the picked file's bytes
  *   hold            reports 50%, then waits for `releasePrepare()` to cut
  *
@@ -158,6 +161,18 @@ function fakeDeps(params: URLSearchParams): Partial<AttachmentFlowDeps> {
       return { trimmed: false, file, reason: "whole-clip" };
     }
 
+    if (kind === "unsupported") {
+      call.result = { trimmed: false, sizeBytes: file.size };
+      return {
+        trimmed: false,
+        file,
+        reason: "unsupported",
+        discarded: [
+          { type: "audio", codec: null, reason: "unknown_source_codec" },
+        ],
+      };
+    }
+
     if (kind === "hold") {
       options.onProgress?.(0.5);
       try {
@@ -195,6 +210,11 @@ function fakeDeps(params: URLSearchParams): Partial<AttachmentFlowDeps> {
     discardPrepared: async (storageName) => {
       harness.discardCalls.push(storageName);
     },
+    // The real report, with only its PostHog send captured.
+    reportSkip: (skip, context) =>
+      reportTrimSkip(skip, context, (event, properties) => {
+        harness.skipEvents.push({ event, properties });
+      }),
     trimWindow: (input) =>
       defaultAttachmentTrimWindow({
         ...input,
@@ -248,6 +268,7 @@ function boot() {
   harness.savedEvents = [];
   harness.prepareCalls = [];
   harness.discardCalls = [];
+  harness.skipEvents = [];
   harness.guardAsks = [];
   harness.clock = 0;
   harness.routerPushes = [];
