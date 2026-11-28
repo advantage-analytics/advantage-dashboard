@@ -50,6 +50,7 @@ import {
   fulfilHoursCheckout,
   fulfilPlanCheckout,
 } from "./checkout";
+import { errorMessage } from "./http";
 import { syncSubscription, type SyncOutcome } from "./subscription";
 
 export interface WebhookAnswer {
@@ -66,9 +67,6 @@ const retry = (error: string): WebhookAnswer => ({
   status: 500,
   body: { error },
 });
-
-const message = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
 
 /**
  * A sync's answer. A duplicate subscription that could not be both cancelled
@@ -113,7 +111,7 @@ async function handleCheckoutSession(
       console.error("[stripe webhook] could not record the plan", {
         eventId: event.id,
         sessionId: session.id,
-        error: message(error),
+        error: errorMessage(error),
       });
       return retry("Could not record the plan");
     }
@@ -130,7 +128,7 @@ async function handleCheckoutSession(
     console.error("[stripe webhook] could not record credits", {
       eventId: event.id,
       sessionId: session.id,
-      error: message(error),
+      error: errorMessage(error),
     });
     return retry("Could not record credits");
   }
@@ -179,7 +177,7 @@ async function handleSubscription(
       eventId: event.id,
       type: event.type,
       subscriptionId,
-      error: message(error),
+      error: errorMessage(error),
     });
     return retry("Could not sync the subscription");
   }
@@ -232,7 +230,7 @@ async function handleRefund(
     console.error("[stripe webhook] could not revoke credits", {
       eventId: event.id,
       paymentIntent,
-      error: message(error),
+      error: errorMessage(error),
     });
     return retry("Could not revoke credits");
   }

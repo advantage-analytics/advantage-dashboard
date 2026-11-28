@@ -46,6 +46,7 @@ import {
   programPlanFor,
   type ProgramPlanRef,
 } from "@/lib/billing/plans";
+import { utcToday } from "@/lib/data/match-day";
 import { UNLIMITED_CAP_SECONDS } from "@/lib/data/usage-format";
 import { planFor } from "@/lib/user/plan";
 import type { Workspace } from "@/lib/workspace/types";
@@ -185,11 +186,6 @@ export function hoursWindow(
   return { start: addMonthsUtc(from, n), end: addMonthsUtc(from, n + 1) };
 }
 
-/** `now`'s UTC calendar day, `YYYY-MM-DD`. */
-function utcDay(now: Date): string {
-  return now.toISOString().slice(0, 10);
-}
-
 /** Midnight UTC that starts the day after `day` (`YYYY-MM-DD`). */
 function dayAfter(day: string): Date {
   const date = new Date(`${day}T00:00:00Z`);
@@ -209,7 +205,7 @@ export function pilotIsRunning(
 ): boolean {
   if (workspace.pilotEligible !== true) return false;
   if (!workspace.pilotEndsOn || workspace.pilotEndedAt) return false;
-  const today = utcDay(now);
+  const today = utcToday(now);
   return today <= workspace.pilotEndsOn && today <= PILOT_LATEST_END;
 }
 
@@ -320,7 +316,7 @@ export function allowanceFor(
     return { kind: "plan", capSeconds: planSeconds, ...window, ...base };
   }
 
-  const today = utcDay(now);
+  const today = utcToday(now);
   const season = programPlanFor(workspace);
   if (season && season.startsOn <= today && today <= season.endsOn) {
     const windowEnd = dayAfter(season.endsOn);

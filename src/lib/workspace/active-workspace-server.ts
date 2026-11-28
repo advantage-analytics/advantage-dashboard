@@ -10,7 +10,10 @@ import { getInitials } from "@/lib/data/match-utils";
 import { isRecordingSource } from "@/app/onboarding/answers";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
 import type { ProgramPlanRef } from "@/lib/billing/plans";
-import { isMissingTable } from "@/lib/data/season-points-cache";
+import {
+  VERSIONS_ABSENT_RETRY_MS,
+  isMissingTable,
+} from "@/lib/data/season-points-cache";
 import {
   readPlanWindow,
   toProgramPlanRef,
@@ -164,9 +167,19 @@ async function claimedProfilesByProgram(
  * a log line on every request. Any other failure is logged and degrades the
  * same way. The missing-table branch can go once the migration is live.
  */
+/**
+ * Until when `program_plans` counts as missing, per server instance: no
+ * query is sent before then, so a database without the plan-model migration
+ * costs one failed read every `VERSIONS_ABSENT_RETRY_MS`, not one per
+ * dashboard request. Applying the migration turns plans on within that,
+ * with no deploy (`season-points-cache.ts` does the same for its table).
+ */
+let programPlansAbsentUntil = 0;
+
 async function programPlansByProgram(
   supabase: SupabaseClient,
 ): Promise<Map<string, ProgramPlanRef>> {
+  if (Date.now() < programPlansAbsentUntil) return new Map();
   // `hours_from` arrives with a later migration than the table: asked for,
   // and done without where the column is not there yet — `withHoursFrom()`.
   const { data, error } = await withHoursFrom((columns) =>
@@ -174,7 +187,9 @@ async function programPlansByProgram(
   );
 
   if (error) {
-    if (!isMissingTable(error)) {
+    if (isMissingTable(error)) {
+      programPlansAbsentUntil = Date.now() + VERSIONS_ABSENT_RETRY_MS;
+    } else {
       console.error("[workspace] could not load program plans", {
         error: error.message,
       });

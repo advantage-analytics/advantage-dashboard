@@ -14,6 +14,7 @@ import {
   readCreditBalance,
   readProgramUsedSeconds,
   scopeToAllowance,
+  sumUsedSeconds,
   windowArgs,
 } from "@/lib/services/splitstep/quota";
 import { formatResetDate } from "@/lib/data/usage-format";
@@ -174,13 +175,9 @@ export async function getPersonalUsage(
     console.error("[usage] could not read personal usage", {
       error: error.message,
     });
-    return { usedSeconds: 0, capSeconds, billingMonth, ...creditFields };
   }
 
-  const usedSeconds = (data ?? []).reduce(
-    (total, row) => total + (row.actual_seconds ?? row.reserved_seconds ?? 0),
-    0,
-  );
+  const usedSeconds = error ? 0 : sumUsedSeconds(data ?? []);
 
   return { usedSeconds, capSeconds, billingMonth, ...creditFields };
 }
