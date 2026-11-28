@@ -304,6 +304,14 @@ export type ProgramPlanRef = {
   startsOn: string;
   /** Last day of the season, inclusive, `YYYY-MM-DD`. Unused hours expire here. */
   endsOn: string;
+  /**
+   * `program_plans.hours_from`, an ISO instant: the moment the plan was first
+   * saved. The season pool counts video analysed from the LATER of this and
+   * `startsOn`, so nothing a team analysed before it had the plan is drawn
+   * from it. Absent on a database without the column, which reads as "from
+   * `startsOn`".
+   */
+  hoursFrom?: string | null;
 };
 
 export type ProgramPlan = ProgramPlanRef & {

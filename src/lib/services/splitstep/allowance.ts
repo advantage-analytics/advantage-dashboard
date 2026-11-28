@@ -12,9 +12,16 @@
  *    (`users.plan_period_start` plus whole months), which is the Stripe
  *    period for a monthly subscriber and a fresh month twelve times a year
  *    for a yearly one;
- *  - team: a season plan's hours over the whole season, one pool; else a
- *    running pilot's 75 h a calendar month; else none. Being a college no
- *    longer grants hours.
+ *  - team: a season plan's hours over the season, one pool, counted from the
+ *    later of the season's first day and the moment the plan was first saved
+ *    (`program_plans.hours_from`); else a running pilot's 75 h a calendar
+ *    month; else none. Being a college no longer grants hours.
+ *
+ * A paid personal plan whose renewal FAILED (`users.plan_status =
+ * 'past_due'`) keeps its name and everything else while Stripe retries, but
+ * the unpaid window carries no plan hours: the plan path with a cap of 0 and
+ * `pastDue`. Extra hours still spend, and the hours appear the moment the
+ * invoice is paid and the webhook writes `active`.
  *
  * An admin's own allowance (`videoHoursOverride`) and an admin's unlimited
  * personal workspace behave as before on both sides of the date.
@@ -37,6 +44,7 @@ import {
   planHoursSeconds,
   plansHaveBegun,
   programPlanFor,
+  type ProgramPlanRef,
 } from "@/lib/billing/plans";
 import { utcToday } from "@/lib/data/match-day";
 import { UNLIMITED_CAP_SECONDS } from "@/lib/data/usage-format";
@@ -69,6 +77,11 @@ export interface VideoAllowance {
   windowed: boolean;
   /** `YYYY-MM-01` for `now`, UTC — what a new ledger row is filed under. */
   billingMonth: string;
+  /**
+   * Set only on a paid personal plan whose last payment failed: `kind` is
+   * still `"plan"` and `capSeconds` is 0 until the invoice is paid.
+   */
+  pastDue?: true;
 }
 
 /** The part of an allowance a ledger read or a window-keyed RPC is scoped by. */
@@ -89,6 +102,7 @@ export type AllowanceWorkspace = Pick<
   | "programPlan"
   | "plan"
   | "planPeriodStart"
+  | "planStatus"
   | "unlimitedVideo"
   | "videoHoursOverride"
 >;
@@ -195,6 +209,25 @@ export function pilotIsRunning(
   return today <= workspace.pilotEndsOn && today <= PILOT_LATEST_END;
 }
 
+/**
+ * Where a season's pool starts counting: the later of its first day (00:00
+ * UTC) and the moment the plan was first saved (`hoursFrom`). A team that
+ * analysed video before an admin saved its plan does not find those hours
+ * already drawn from the season. No `hoursFrom` (a database without the
+ * column), an unreadable one, or one at or past the window's end reads as
+ * "from the first day".
+ */
+export function seasonWindowStart(
+  season: Pick<ProgramPlanRef, "startsOn" | "hoursFrom">,
+  windowEnd: Date,
+): Date {
+  const firstDay = new Date(`${season.startsOn}T00:00:00Z`);
+  const saved = season.hoursFrom ? new Date(season.hoursFrom) : null;
+  if (!saved || Number.isNaN(saved.getTime())) return firstDay;
+  if (saved.getTime() <= firstDay.getTime()) return firstDay;
+  return saved.getTime() < windowEnd.getTime() ? saved : firstDay;
+}
+
 function overrideSeconds(workspace: AllowanceWorkspace): number | null {
   return workspace.kind === "personal" &&
     workspace.videoHoursOverride != null &&
@@ -273,19 +306,25 @@ export function allowanceFor(
         ...base,
       };
     }
-    return planSeconds > 0
-      ? { kind: "plan", capSeconds: planSeconds, ...window, ...base }
-      : { kind: "none", capSeconds: 0, ...window, ...base };
+    if (planSeconds <= 0) {
+      return { kind: "none", capSeconds: 0, ...window, ...base };
+    }
+    // A failed renewal: the plan stays, the unpaid window holds no hours.
+    if (workspace.planStatus === "past_due") {
+      return { kind: "plan", capSeconds: 0, pastDue: true, ...window, ...base };
+    }
+    return { kind: "plan", capSeconds: planSeconds, ...window, ...base };
   }
 
   const today = utcToday(now);
   const season = programPlanFor(workspace);
   if (season && season.startsOn <= today && today <= season.endsOn) {
+    const windowEnd = dayAfter(season.endsOn);
     return {
       kind: "season",
       capSeconds: season.allowance.hours * 3600,
-      windowStart: new Date(`${season.startsOn}T00:00:00Z`),
-      windowEnd: dayAfter(season.endsOn),
+      windowStart: seasonWindowStart(season, windowEnd),
+      windowEnd,
       ...base,
     };
   }
@@ -304,10 +343,12 @@ export function allowanceFor(
  * The day the window turns over, as `"Feb 1"` (UTC) — the date a surface
  * prints where it says the hours reset. Null when there is nothing to come
  * back: no allowance at all, or no cap. For a season it is the day after the
- * season ends, when its unused hours expire.
+ * season ends, when its unused hours expire. Null too after a failed
+ * payment: those hours come with the payment, not with a date.
  */
 export function allowanceResetsOn(allowance: VideoAllowance): string | null {
   if (allowance.kind === "none" || allowance.kind === "unlimited") return null;
+  if (allowance.pastDue) return null;
   return allowance.windowEnd.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",

@@ -7,7 +7,12 @@ import type {
   CheckoutMode,
   PreviewState,
 } from "@/lib/billing/checkout-view";
+import { readFileSync } from "node:fs";
 import { planHoursSeconds } from "@/lib/billing/plans";
+import {
+  PORTAL_TAB_BLOCKED,
+  openBillingPortalTab,
+} from "@/lib/billing/portal-client";
 import { quoteUpgrade } from "@/lib/billing/upgrade";
 import { createLoader } from "./fixtures/vm-modules";
 
@@ -63,9 +68,13 @@ const stubs = {
   "@/components/ui/live-dots": { LiveDots: () => null },
 };
 
-const { PlanCheckoutDialog } = createLoader({ stubs }).load(
-  "src/components/dashboard/billing/plan-checkout-dialog.tsx",
-) as {
+const { PlanCheckoutDialog, CheckoutProblemLine } = createLoader({
+  stubs,
+}).load("src/components/dashboard/billing/plan-checkout-dialog.tsx") as {
+  CheckoutProblemLine: React.ComponentType<{
+    message: string;
+    portalUrl?: string | null;
+  }>;
   PlanCheckoutDialog: React.ComponentType<{
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -302,4 +311,234 @@ test("a payment that has not shown up offers no way to pay again", () => {
   expect(html).toContain("Your payment went through.");
   expect(radios(html)).toEqual([]);
   expect(html).not.toContain("Continue to pay");
+});
+
+test("Pay yearly: the year chosen with its credit, the month beside it with the grey pill, no checkout form", () => {
+  const html = draw({ kind: "yearly" }, COACH, {
+    preview: {
+      status: "ready",
+      preview: {
+        ...quoteUpgrade({
+          from: "coach",
+          to: "coach",
+          period: "monthly",
+          toPeriod: "yearly",
+          periodStart: new Date("2027-04-14T00:00:00Z"),
+          periodEnd: new Date("2027-05-14T00:00:00Z"),
+          now: new Date("2027-04-29T00:00:00Z"),
+          usedSeconds: planHoursSeconds("coach") - (3 * H + 12 * M),
+        }),
+        period: "yearly",
+        fromPeriod: "monthly",
+      },
+    },
+  });
+  expect(texts(html, /<h2[^>]*>(.*?)<\/h2>/g)).toEqual(["Pay yearly."]);
+  // One selectable row; the current plan is not a choice.
+  expect(radios(html)).toEqual([
+    "Coach, yearly$75 credit for your 15 days left$1,575then $1,650 a year",
+  ]);
+  expect(html).toContain("Coach, monthly");
+  expect(html).toContain("Your plan");
+  expect(html).toContain("Then $1,650 a year, next on Apr 29, 2028");
+  expect(primary(html)).toEqual(["Continue to pay $1,575"]);
+  expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Continue to pay/);
+  // The card on file is charged: Stripe's frame is never drawn.
+  expect(html).not.toContain("data-stripe");
+  // No monthly / yearly pills: there is one thing to do here.
+  expect(html).not.toContain("Yearly · 1 month free");
+});
+
+test("Pay yearly: bars while the price loads, and nothing to press", () => {
+  const html = draw({ kind: "yearly" }, COACH, {
+    preview: { status: "loading" },
+  });
+  expect(html).toContain('role="status"');
+  expect(radios(html)).toEqual([]);
+  expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Continue to pay</);
+});
+
+test("Upload paywall, a failed payment: extra hours only, and Update card in the aside", () => {
+  const html = draw(
+    NEEDED,
+    { ...COACH_SPENT, planLeftSeconds: 0, resetsOn: null, pastDue: true },
+    { wizard: true },
+  );
+  expect(radios(html)).toHaveLength(1);
+  expect(radios(html)[0]).toContain("2 extra hours");
+  expect(html).not.toContain("Move up to");
+  expect(html).toContain(
+    "Your last payment failed. Update your card to get this month's hours.",
+  );
+  expect(html).toMatch(
+    /<button[^>]*type="button"[^>]*>Update card ↗<\/button>/,
+  );
+  expect(html).toContain("Payment failed");
+  expect(html).toContain("Pay $70 and send");
+});
+
+test("MOCK, move down to Coach: the smaller plan chosen, the current one with the pill, a live button", () => {
+  const html = draw(
+    {
+      kind: "change",
+      change: {
+        to: { plan: "coach", period: "monthly" },
+        effectiveOn: "2027-02-14",
+      },
+    },
+    {
+      plan: "coach-pro",
+      period: "monthly",
+      planLeftSeconds: 7 * H + 40 * M,
+      extraSeconds: 0,
+      resetsOn: "Feb 14",
+      firstMonthEligible: false,
+    },
+  );
+  expect(texts(html, /<h2[^>]*>(.*?)<\/h2>/g)).toEqual(["Move down to Coach."]);
+  expect(radios(html)).toEqual([
+    "Coach$150 a month from Feb 14 · 5 hours a month$0today",
+  ]);
+  expect(html).toContain("Coach Pro");
+  expect(html).toContain("Your plan");
+  expect(html).toContain(
+    "You keep Coach Pro and its 10 hours until Feb 14. Nothing is charged today.",
+  );
+  expect(html).toContain("Not now");
+  expect(html).toContain("Move to Coach on Feb 14");
+  expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Move to Coach/);
+  expect(html).not.toContain("data-stripe");
+});
+
+test("MOCK, yearly → monthly: Pay monthly, switching at the year's renewal", () => {
+  const html = draw(
+    {
+      kind: "change",
+      change: {
+        to: { plan: "coach", period: "monthly" },
+        effectiveOn: "2028-01-14",
+      },
+    },
+    { ...COACH, period: "yearly", resetsOn: "Feb 14" },
+  );
+  expect(texts(html, /<h2[^>]*>(.*?)<\/h2>/g)).toEqual(["Pay monthly."]);
+  expect(radios(html)).toEqual([
+    "Coach, monthly$150 a month from Jan 14, 2028$0today",
+  ]);
+  expect(html).toContain(
+    "Your year is paid through Jan 14, 2028. Nothing is charged today.",
+  );
+  expect(html).toContain("Switch on Jan 14, 2028");
+});
+
+test.describe("Update card when the browser will not open a tab", () => {
+  const URL = "https://billing.stripe.com/p/session/test_123";
+  const granted = async () => ({ ok: true as const, url: URL });
+
+  function fakeTab() {
+    const tab = {
+      opener: {} as unknown,
+      closed: false,
+      replaced: [] as string[],
+      openerWhenPointed: undefined as unknown,
+      close() {
+        tab.closed = true;
+      },
+      location: {
+        replace(url: string) {
+          tab.openerWhenPointed = tab.opener;
+          tab.replaced.push(url);
+        },
+      },
+    };
+    return tab;
+  }
+
+  test("a blocked pop-up hands back the address instead of trying a second one", async () => {
+    let opens = 0;
+    const answer = await openBillingPortalTab(() => {
+      opens++;
+      return null;
+    }, granted);
+    expect(answer).toEqual({ kind: "blocked", url: URL });
+    expect(opens).toBe(1);
+  });
+
+  test("the tab that opens is cut off from this page before it is pointed at the portal", async () => {
+    const tab = fakeTab();
+    const answer = await openBillingPortalTab(() => tab, granted);
+    expect(answer).toEqual({ kind: "opened" });
+    expect(tab.replaced).toEqual([URL]);
+    expect(tab.openerWhenPointed).toBeNull();
+  });
+
+  test("a tab closed while the address was on its way counts as blocked", async () => {
+    const tab = fakeTab();
+    const answer = await openBillingPortalTab(
+      () => tab,
+      async () => {
+        tab.close();
+        return granted();
+      },
+    );
+    expect(answer).toEqual({ kind: "blocked", url: URL });
+    expect(tab.replaced).toEqual([]);
+  });
+
+  test("a portal that cannot be had closes the blank tab and says why", async () => {
+    const tab = fakeTab();
+    const answer = await openBillingPortalTab(
+      () => tab,
+      async () => ({ ok: false, message: "Billing couldn't open." }),
+    );
+    expect(answer).toEqual({
+      kind: "failed",
+      message: "Billing couldn't open.",
+    });
+    expect(tab.closed).toBe(true);
+  });
+
+  test("the error line carries the sentence and the address as a real link", () => {
+    const html = renderToStaticMarkup(
+      el(CheckoutProblemLine, { message: PORTAL_TAB_BLOCKED, portalUrl: URL }),
+    ).replace(/&#x27;/g, "'");
+    expect(html).toMatch(/^<p role="alert"[^>]*>.*<\/p>$/);
+    expect(html).toContain("Billing couldn't open in a new tab.");
+    const link = html.match(/<a [^>]*>(.*?)<\/a>/)!;
+    expect(link[1]).toBe("Open billing ↗");
+    expect(link[0]).toContain(`href="${URL}"`);
+    expect(link[0]).toContain('target="_blank"');
+    expect(link[0]).toContain('rel="noopener noreferrer"');
+    // The quiet link "Update card" is drawn with, in the line it stood in.
+    expect(link[0]).toContain(
+      'class="text-[var(--blue)] hover:text-[var(--blue-hover)]"',
+    );
+  });
+
+  test("any other problem is the sentence alone", () => {
+    const html = renderToStaticMarkup(
+      el(CheckoutProblemLine, {
+        message: "Update your card before upgrading.",
+      }),
+    );
+    expect(html).not.toContain("<a ");
+    expect(draw(NEEDED, COACH_SPENT, { refusal: "No." })).not.toContain(
+      "Open billing",
+    );
+  });
+
+  test("the dialog draws the link only beside the blocked sentence, in the error line's own slot", () => {
+    const source = readFileSync(
+      "src/components/dashboard/billing/plan-checkout-dialog.tsx",
+      "utf8",
+    );
+    expect(source).toContain(
+      "portalUrl={problem === PORTAL_TAB_BLOCKED ? portalUrl : null}",
+    );
+    expect(source).toMatch(
+      /if \(answer\.kind === "blocked"\) \{\s*setPortalUrl\(answer\.url\);\s*setProblem\(PORTAL_TAB_BLOCKED\);/,
+    );
+    // One open, inside the click: no second `window.open` after an await.
+    expect(source).not.toContain("window.open(");
+  });
 });

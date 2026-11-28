@@ -1,9 +1,19 @@
 /**
- * What an upgrade costs today — decision 7 of docs/plans/2027-pricing.md.
+ * What a change that is charged today costs — decision 7 of
+ * docs/plans/2027-pricing.md, and the same rule for paying yearly.
  *
- * Coach → Coach Pro starts a new billing period the moment it happens: the
- * new plan's full period price, less a credit for the unused part of the old
- * plan, and the new plan's full hours fresh.
+ * Exactly two changes are charged today (`upgradeKind()`), and both start a
+ * new billing period the moment they happen:
+ *
+ *   plan     Coach → Coach Pro on the same period: the new plan's full period
+ *            price, less a credit for the unused part of the old plan, and
+ *            the new plan's full hours fresh.
+ *   period   monthly → yearly on the same plan: the yearly price, less the
+ *            same credit for the unused part of the current month. Hours stay
+ *            monthly slices, the first one fresh today.
+ *
+ * Everything else (a smaller plan, yearly → monthly, both at once) waits for
+ * renewal and is not priced here.
  *
  *   credit = what the old plan cost for the period
  *            × min(share of the period's TIME left,
@@ -21,6 +31,12 @@
  * month left but 23m of 5h left credits $11.50, not $75. Stripe's own
  * proration only counts days, which is why the server computes this and
  * hands Stripe the figure (`services/billing/upgrade.ts`).
+ *
+ * TIME is counted in WHOLE DAYS, a part day as one: `daysLeft` of
+ * `periodDays`. The dialog prints "your 30 days left", so the share is that
+ * same count — measured to the second, upgrading five minutes after
+ * subscribing credited $74.99 of a $75 month and charged a cent more than the
+ * difference between the plans.
  *
  * A yearly plan's hours come as twelve monthly slices that do not carry
  * over. Its "period's plan hours" are all twelve: the slices that have not
@@ -51,6 +67,35 @@ export function isUpgrade(from: CoachPlanId, to: CoachPlanId): boolean {
   return from === "coach" && to === "coach-pro";
 }
 
+/** A plan and how it is billed: where a subscription is, or is going. */
+export interface UpgradeTarget {
+  plan: CoachPlanId;
+  period: PlanPeriod;
+}
+
+/** `plan`: Coach → Coach Pro. `period`: monthly → yearly. */
+export type UpgradeKind = "plan" | "period";
+
+/**
+ * Which charged-today change `from` → `to` is, or null when it is not one.
+ * Exactly two are: a bigger plan on the same period, and the same paid plan
+ * moved from monthly to yearly. Both at once is neither.
+ */
+export function upgradeKind(
+  from: UpgradeTarget,
+  to: UpgradeTarget,
+): UpgradeKind | null {
+  if (from.period === to.period) {
+    return isUpgrade(from.plan, to.plan) ? "plan" : null;
+  }
+  return from.plan === to.plan &&
+    from.plan !== "free" &&
+    from.period === "monthly" &&
+    to.period === "yearly"
+    ? "period"
+    : null;
+}
+
 /** A plan's price for one billing period, in US cents. */
 export function periodPriceCents(
   plan: CoachPlanId,
@@ -63,7 +108,14 @@ export function periodPriceCents(
 export interface UpgradeInput {
   from: CoachPlanId;
   to: CoachPlanId;
+  /** How the CURRENT subscription is billed. */
   period: PlanPeriod;
+  /**
+   * How the new one is billed. Left out, the same as `period` (a plan
+   * upgrade); `"yearly"` from a monthly `period` is the switch to yearly.
+   * With `to`, this is the target `{ plan, period }`.
+   */
+  toPeriod?: PlanPeriod;
   /** The current billing period, as Stripe has it. */
   periodStart: Date;
   periodEnd: Date;
@@ -95,8 +147,13 @@ export interface UpgradeQuote {
    */
   daysCreditCents: number;
   hoursCreditCents: number;
-  /** Days of the current period left; a part day counts as one. */
+  /**
+   * Days of the current period left; a part day counts as one, never more
+   * than `periodDays`. The time share is exactly `daysLeft / periodDays`.
+   */
   daysLeft: number;
+  /** The current period's length in whole days. */
+  periodDays: number;
   /** Plan seconds left in the current hours slice — what the meter shows. */
   hoursLeftSeconds: number;
   /** The new plan's full price for one period. */
@@ -149,9 +206,10 @@ function futureSlices(periodStart: Date, now: Date): number {
 
 export function quoteUpgrade(input: UpgradeInput): UpgradeQuote {
   const { from, to, period, periodStart, periodEnd, now } = input;
+  const toPeriod = input.toPeriod ?? period;
 
   const oldPeriodPriceCents = periodPriceCents(from, period);
-  const newPeriodPriceCents = periodPriceCents(to, period);
+  const newPeriodPriceCents = periodPriceCents(to, toPeriod);
   const paid = input.paidForPeriodCents;
   const creditBaseCents =
     typeof paid === "number" && Number.isFinite(paid)
@@ -160,6 +218,10 @@ export function quoteUpgrade(input: UpgradeInput): UpgradeQuote {
 
   const totalMs = Math.max(0, periodEnd.getTime() - periodStart.getTime());
   const leftMs = clamp(periodEnd.getTime() - now.getTime(), 0, totalMs);
+  // Whole days, a part day as one: the number the dialog prints is the
+  // number the credit is a share of.
+  const periodDays = Math.round(totalMs / DAY_MS);
+  const daysLeft = clamp(Math.ceil(leftMs / DAY_MS), 0, periodDays);
 
   const sliceSeconds = planHoursSeconds(from);
   const used = Number.isFinite(input.usedSeconds) ? input.usedSeconds : 0;
@@ -172,10 +234,10 @@ export function quoteUpgrade(input: UpgradeInput): UpgradeQuote {
     ? futureSlices(periodStart, now) * sliceSeconds + hoursLeftSeconds
     : hoursLeftSeconds;
 
-  // leftMs / totalMs  <=  hoursLeft / hoursTotal, cross-multiplied. A tie is
-  // "days"; a period or plan with nothing in it has a zero share.
-  const timeN = BigInt(leftMs);
-  const timeD = BigInt(totalMs);
+  // daysLeft / periodDays  <=  hoursLeft / hoursTotal, cross-multiplied. A
+  // tie is "days"; a period or plan with nothing in it has a zero share.
+  const timeN = BigInt(daysLeft);
+  const timeD = BigInt(periodDays);
   const hoursN = BigInt(periodHoursLeftSeconds);
   const hoursD = BigInt(periodHoursSeconds);
   const daysIsSmaller =
@@ -202,12 +264,14 @@ export function quoteUpgrade(input: UpgradeInput): UpgradeQuote {
     creditBasis,
     daysCreditCents,
     hoursCreditCents,
-    daysLeft: Math.ceil(leftMs / DAY_MS),
+    daysLeft,
+    periodDays,
     hoursLeftSeconds,
     newPeriodPriceCents,
     oldPeriodPriceCents,
     creditBaseCents,
-    nextBillingDay: addMonthsUtc(now, yearly ? 12 : 1)
+    // The NEW subscription's first renewal: a year on when it is yearly.
+    nextBillingDay: addMonthsUtc(now, toPeriod === "yearly" ? 12 : 1)
       .toISOString()
       .slice(0, 10),
     periodHoursLeftSeconds,

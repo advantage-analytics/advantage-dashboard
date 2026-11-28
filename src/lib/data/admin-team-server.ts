@@ -226,6 +226,12 @@ export interface AdminTeamPlan {
   planStartsOn: string;
   /** `ends_on` — last day of the season, inclusive. `YYYY-MM-DD`. */
   planEndsOn: string;
+  /**
+   * `hours_from` — when the plan was first saved, which the season pool
+   * counts from when it is later than `planStartsOn`. Null on a database
+   * without the column.
+   */
+  planHoursFrom: string | null;
   /** The invoice or PO reference. The team never reads it. */
   planNote: string | null;
   /** When the plan was last set. */
@@ -951,6 +957,7 @@ async function readPlan(programId: string): Promise<AdminTeamPlan | null> {
       plan_term: string;
       starts_on: string;
       ends_on: string;
+      hours_from?: string | null;
       note: string | null;
       set_at: string;
       set_by_name: string | null;
@@ -967,6 +974,7 @@ async function readPlan(programId: string): Promise<AdminTeamPlan | null> {
     planTerm: row.plan_term,
     planStartsOn: row.starts_on,
     planEndsOn: row.ends_on,
+    planHoursFrom: row.hours_from ?? null,
     planNote: row.note,
     planSetAt: row.set_at,
     planSetByName: row.set_by_name,

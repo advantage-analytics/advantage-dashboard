@@ -119,8 +119,9 @@ export function PersonalPlan({
             <span className="font-medium text-[var(--ink-900)]">
               {packName(creditPack(added.pack))} added.
             </span>{" "}
-            They last until {formatCreditDate(added.expiresAt)}. A receipt is on
-            its way to your email.
+            {creditPack(added.pack).hours === 1 ? "It lasts" : "They last"}{" "}
+            until {formatCreditDate(added.expiresAt)}. A receipt is on its way
+            to your email.
           </span>
         </div>
       )}

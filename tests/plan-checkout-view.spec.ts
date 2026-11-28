@@ -15,9 +15,11 @@ import {
   ordinal,
   planPricing,
   purchaseNote,
+  upgradeRequestFor,
   type CheckoutAccount,
   type CheckoutMode,
   type PreviewState,
+  type ScheduledChange,
 } from "@/lib/billing/checkout-view";
 import { formatUsdCents, planHoursSeconds } from "@/lib/billing/plans";
 import { quoteUpgrade } from "@/lib/billing/upgrade";
@@ -510,6 +512,39 @@ test.describe("Upgrade", () => {
     expect(refused.problem).toBe("Update your card before upgrading.");
     expect(refused.rows.map((r) => r.id)).toEqual(["current"]);
   });
+  test("five minutes after subscribing: the 30 days printed are the 30 days credited", () => {
+    // The test-mode run: a half-off $75 month, upgraded at once. Counted to
+    // the second this read "$74.99 credit for your 30 days left" and
+    // "Continue to pay $225.01".
+    const fresh: PreviewState = {
+      status: "ready",
+      preview: {
+        ...quoteUpgrade({
+          from: "coach",
+          to: "coach-pro",
+          period: "monthly",
+          periodStart: new Date("2027-04-14T00:00:00Z"),
+          periodEnd: new Date("2027-05-14T00:00:00Z"),
+          now: new Date("2027-04-14T00:05:00Z"),
+          usedSeconds: 0,
+          paidForPeriodCents: 7500,
+        }),
+        period: "monthly",
+      },
+    };
+    const v = view(
+      { kind: "upgrade" },
+      { ...COACH, planLeftSeconds: 5 * H },
+      { preview: fresh },
+    );
+    const row = v.rows.find((r) => r.id === "upgrade");
+    expect(row?.line).toBe(
+      "10 fresh hours today · $75 credit for your 30 days left",
+    );
+    expect(row?.price).toBe("$225");
+    expect(v.primary).toBe("Continue to pay $225");
+    expect(v.action).toEqual({ kind: "upgrade", payTodayCents: 22500 });
+  });
 });
 
 test.describe("A refused upgrade", () => {
@@ -644,6 +679,18 @@ test.describe("small words", () => {
       lead: "2 extra hours added.",
       rest: "They last until Jan 5, 2028. A receipt is on its way to your email.",
     });
+    // One hour is "it": "1 extra hour added. They last…" did not agree.
+    expect(
+      purchaseNote({
+        kind: "hours",
+        hours: 1,
+        seconds: 3600,
+        expiresAt: "2027-11-28T10:00:00Z",
+      }),
+    ).toEqual({
+      lead: "1 extra hour added.",
+      rest: "It lasts until Nov 28, 2027. A receipt is on its way to your email.",
+    });
     expect(
       purchaseNote({ kind: "plan", plan: "coach", period: "monthly" }),
     ).toEqual({
@@ -726,5 +773,295 @@ test.describe("the upload wizard's file step", () => {
         meterSuffix({ allowanceKind: kind, resetsOn: "Jan 1" }),
       ).toBeNull();
     }
+  });
+});
+
+/* ---------- Pay yearly ---------- */
+
+/** Coach monthly → yearly on Apr 29: the same 15 of 30 days left. */
+function yearlyPreview(
+  planLeftSeconds: number,
+  over: Partial<Parameters<typeof quoteUpgrade>[0]> = {},
+): PreviewState {
+  return {
+    status: "ready",
+    preview: {
+      ...quoteUpgrade({
+        from: "coach",
+        to: "coach",
+        period: "monthly",
+        toPeriod: "yearly",
+        periodStart: new Date("2027-04-14T00:00:00Z"),
+        periodEnd: new Date("2027-05-14T00:00:00Z"),
+        now: new Date("2027-04-29T00:00:00Z"),
+        usedSeconds: planHoursSeconds("coach") - planLeftSeconds,
+        ...over,
+      }),
+      period: "yearly",
+      fromPeriod: "monthly",
+    },
+  };
+}
+
+test.describe("Pay yearly", () => {
+  const YEARLY: CheckoutMode = { kind: "yearly" };
+
+  test("only a monthly subscriber has a year to switch to", () => {
+    expect(checkoutScene(YEARLY, COACH)).toBe("pay-yearly");
+    expect(checkoutScene(YEARLY, { ...COACH, plan: "coach-pro" })).toBe(
+      "pay-yearly",
+    );
+    expect(checkoutScene(YEARLY, { ...COACH, period: "yearly" })).toBe("hours");
+    expect(checkoutScene(YEARLY, FREE)).toBe("choose");
+    // It is priced by the same preview, asked for the year.
+    expect(needsUpgradePreview(YEARLY, COACH)).toBe(true);
+    expect(upgradeRequestFor(YEARLY, COACH)).toEqual({ period: "yearly" });
+    // The plan upgrade still sends nothing.
+    expect(upgradeRequestFor({ kind: "upgrade" }, COACH)).toBeUndefined();
+    expect(upgradeRequestFor(PAYWALL, COACH)).toBeUndefined();
+  });
+
+  test("the year selected with today's price and the credit, the month beneath it", () => {
+    const v = view(YEARLY, COACH, { preview: yearlyPreview(3 * H + 12 * M) });
+    expect(v.scene).toBe("pay-yearly");
+    expect(v.band).toMatchObject({ lead: "Pay", figure: "yearly", trail: "." });
+    expect(v.band.body).toBe(
+      "Coach for $1,650 a year: one month free. Your year starts today with a fresh 5 hours, and 5 more each month.",
+    );
+    expect(v.periodPills).toBe(false);
+    expect(v.rows).toEqual([
+      {
+        id: "yearly",
+        name: "Coach, yearly",
+        line: "$75 credit for your 15 days left",
+        price: "$1,575",
+        then: "then $1,650 a year",
+        selectable: true,
+        selected: true,
+      },
+      {
+        id: "current",
+        name: "Coach, monthly",
+        pill: "Your plan",
+        line: "5h a month, about 3 matches",
+        price: "$150",
+        then: "a month",
+        selectable: false,
+        selected: false,
+      },
+    ]);
+    // The rule, both numbers, and when the year next bills.
+    expect(v.aside).toBe(
+      "Your credit is the smaller of what's left of your Coach month: 15 days ($75) or 3h 12m of hours ($96). Then $1,650 a year, next on Apr 29, 2028, and your 1h of extra hours stays.",
+    );
+    expect(v.primary).toBe("Continue to pay $1,575");
+    expect(v.secondary).toBe("Not now");
+    // Charged to the card on file, like the upgrade: never Embedded Checkout.
+    expect(v.action).toEqual({
+      kind: "upgrade",
+      payTodayCents: 157500,
+      period: "yearly",
+    });
+    expect(v.working).toBe("Switching you to yearly…");
+    expect(v.sampleLink).toBe(false);
+  });
+
+  test("the hours set the credit when they are the smaller share", () => {
+    const v = view(YEARLY, COACH_SPENT, { preview: yearlyPreview(23 * M) });
+    expect(v.rows[0]).toMatchObject({
+      line: "$11.50 credit for your 23m",
+      price: "$1,638.50",
+    });
+    expect(v.aside).toBe(
+      "Your credit is the smaller of what's left of your Coach month: 15 days ($75) or 23m of hours ($11.50). Then $1,650 a year, next on Apr 29, 2028.",
+    );
+    expect(v.primary).toBe("Continue to pay $1,638.50");
+  });
+
+  test("a discounted first month says what the shares are of", () => {
+    const v = view(YEARLY, COACH, {
+      preview: yearlyPreview(3 * H + 12 * M, { paidForPeriodCents: 7500 }),
+    });
+    expect(v.rows[0]).toMatchObject({
+      line: "$37.50 credit for your 15 days left",
+      price: "$1,612.50",
+    });
+    expect(v.aside).toContain(
+      "15 days ($37.50) or 3h 12m of hours ($48), of the $75 you paid this month.",
+    );
+  });
+
+  test("nothing left to credit: the full year, and no credit line", () => {
+    const v = view(
+      YEARLY,
+      { ...COACH_SPENT, planLeftSeconds: 0 },
+      {
+        preview: yearlyPreview(0),
+      },
+    );
+    expect(v.rows[0]).toMatchObject({
+      line: "5 fresh hours today, then 5 each month",
+      price: "$1,650",
+    });
+    expect(v.primary).toBe("Continue to pay $1,650");
+    expect(v.action).toMatchObject({ payTodayCents: 165000 });
+  });
+
+  test("Coach Pro switches to its own year", () => {
+    const pro: CheckoutAccount = { ...COACH, plan: "coach-pro" };
+    const v = view(YEARLY, pro, {
+      preview: yearlyPreview(0, {
+        from: "coach-pro",
+        to: "coach-pro",
+        usedSeconds: 0,
+      }),
+    });
+    expect(v.rows.map((row) => [row.name, row.price, row.then])).toEqual([
+      ["Coach Pro, yearly", "$3,150", "then $3,300 a year"],
+      ["Coach Pro, monthly", "$300", "a month"],
+    ]);
+    expect(v.aside).toContain("Then $3,300 a year, next on Apr 29, 2028");
+  });
+
+  test("while the price loads there is nothing to pay; when it cannot be priced, why", () => {
+    const loading = view(YEARLY, COACH, { preview: { status: "loading" } });
+    expect(loading.rows[0]).toMatchObject({
+      id: "yearly",
+      name: "Coach, yearly",
+      pending: true,
+      selectable: false,
+    });
+    expect(loading.rows[1].id).toBe("current");
+    expect(loading.action).toBeNull();
+    expect(loading.primary).toBe("Continue to pay");
+
+    const failed = view(YEARLY, COACH, {
+      preview: {
+        status: "failed",
+        message: "Paying yearly isn't available yet. Try again later.",
+      },
+    });
+    expect(failed.rows.map((row) => row.id)).toEqual(["current"]);
+    expect(failed.problem).toBe(
+      "Paying yearly isn't available yet. Try again later.",
+    );
+    expect(failed.action).toBeNull();
+  });
+
+  test("what the page says once it is done", () => {
+    expect(
+      purchaseNote({ kind: "yearly", plan: "coach", period: "yearly" }),
+    ).toEqual({
+      lead: "Coach is now paid yearly.",
+      rest: "Your 5 hours are ready. A receipt is on its way to your email.",
+    });
+  });
+});
+
+/* ---------- MOCK ONLY: a change at renewal ---------- */
+
+test.describe("MOCK: a change at renewal", () => {
+  const PRO: CheckoutAccount = {
+    plan: "coach-pro",
+    period: "monthly",
+    planLeftSeconds: 7 * H + 40 * M,
+    extraSeconds: 0,
+    resetsOn: "Feb 14",
+    firstMonthEligible: false,
+  };
+  const DOWN: ScheduledChange = {
+    to: { plan: "coach", period: "monthly" },
+    effectiveOn: "2027-02-14",
+  };
+  const YEAR: CheckoutAccount = {
+    ...COACH,
+    period: "yearly",
+    resetsOn: "Feb 14",
+  };
+  const MONTHLY: ScheduledChange = {
+    to: { plan: "coach", period: "monthly" },
+    effectiveOn: "2028-01-14",
+  };
+
+  test("move down to Coach: nothing today, Coach Pro until the renewal", () => {
+    const mode: CheckoutMode = { kind: "change", change: DOWN };
+    const v = view(mode, PRO);
+    expect(v.scene).toBe("change");
+    expect(v.band).toMatchObject({
+      lead: "Move down to",
+      figure: "Coach",
+      trail: ".",
+    });
+    expect(v.rows).toEqual([
+      {
+        id: "change",
+        name: "Coach",
+        line: "$150 a month from Feb 14 · 5 hours a month",
+        price: "$0",
+        then: "today",
+        selectable: true,
+        selected: true,
+      },
+      {
+        id: "current",
+        name: "Coach Pro",
+        pill: "Your plan",
+        line: "10h a month, about 5 matches",
+        price: "$300",
+        then: "a month",
+        selectable: false,
+        selected: false,
+      },
+    ]);
+    expect(v.aside).toBe(
+      "You keep Coach Pro and its 10 hours until Feb 14. Nothing is charged today.",
+    );
+    expect([v.secondary, v.primary]).toEqual([
+      "Not now",
+      "Move to Coach on Feb 14",
+    ]);
+    // Data only: the dialog closes on it and calls nothing.
+    expect(v.action).toEqual({ kind: "schedule", change: DOWN });
+    // Nothing is priced, so nothing is fetched.
+    expect(needsUpgradePreview(mode, PRO)).toBe(false);
+    expect(upgradeRequestFor(mode, PRO)).toBeUndefined();
+  });
+
+  test("yearly → monthly: at the year's renewal, with its year", () => {
+    const v = view({ kind: "change", change: MONTHLY }, YEAR);
+    expect(v.band).toMatchObject({
+      lead: "Pay",
+      figure: "monthly",
+      trail: ".",
+    });
+    expect(v.rows.map((row) => [row.name, row.line, row.price])).toEqual([
+      ["Coach, monthly", "$150 a month from Jan 14, 2028", "$0"],
+      ["Coach, yearly", "5h a month, about 3 matches", "$1,650"],
+    ]);
+    expect(v.rows[1].pill).toBe("Your plan");
+    expect(v.aside).toBe(
+      "Your year is paid through Jan 14, 2028. Nothing is charged today.",
+    );
+    expect(v.primary).toBe("Switch on Jan 14, 2028");
+  });
+
+  test("no real mode reaches it: every other way in is one of the six scenes", () => {
+    const modes: CheckoutMode[] = [
+      { kind: "choose" },
+      { kind: "hours" },
+      PAYWALL,
+      { kind: "upgrade" },
+      { kind: "yearly" },
+    ];
+    for (const mode of modes) {
+      for (const account of [FREE, COACH, PRO, YEAR]) {
+        expect(checkoutScene(mode, account)).not.toBe("change");
+        expect(view(mode, account).action?.kind).not.toBe("schedule");
+      }
+    }
+    // A Free account has no plan to change.
+    expect(checkoutScene({ kind: "change", change: DOWN }, FREE)).toBe(
+      "choose",
+    );
   });
 });

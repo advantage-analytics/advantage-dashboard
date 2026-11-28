@@ -8,12 +8,16 @@ import {
   hoursWindow,
   pilotIsRunning,
   quotaTierFor,
+  seasonWindowStart,
   type AllowanceWorkspace,
   type VideoAllowance,
 } from "@/lib/services/splitstep/allowance";
 import {
+  buildPeek,
   capRefusalMessage,
   monthlyCapSecondsFor,
+  peekRefusalMessage,
+  personalRefusalMessage,
   scopeToAllowance,
   windowArgs,
 } from "@/lib/services/splitstep/quota";
@@ -310,6 +314,136 @@ test.describe("from January 1, 2027: a personal workspace draws its plan", () =>
   });
 });
 
+test.describe("a failed renewal: the plan stays, the unpaid window has no plan hours", () => {
+  const coach = (fields: Partial<AllowanceWorkspace> = {}) =>
+    personal({
+      plan: "coach",
+      planPeriodStart: "2027-01-20T00:00:00Z",
+      ...fields,
+    });
+
+  test("past_due is the plan path with a cap of 0 and the flag", () => {
+    for (const plan of ["coach", "coach-pro"]) {
+      const allowance = allowanceFor(
+        coach({ plan, planStatus: "past_due" }),
+        FEB_10,
+      );
+      expect([
+        allowance.kind,
+        allowance.capSeconds,
+        allowance.pastDue,
+        allowance.windowed,
+      ]).toEqual(["plan", 0, true, true]);
+      // Still the subscription's own window: paying brings THIS month's hours.
+      expect(iso(allowance)).toEqual(
+        window("2027-01-20T00:00:00Z", "2027-02-20T00:00:00Z"),
+      );
+      // Nothing comes back with a date; it comes back with the payment.
+      expect(allowanceResetsOn(allowance)).toBeNull();
+    }
+  });
+
+  test("the hours appear the moment the status is active again", () => {
+    const paid = allowanceFor(coach({ planStatus: "active" }), FEB_10);
+    expect([paid.kind, paid.capSeconds, paid.pastDue]).toEqual([
+      "plan",
+      5 * H,
+      undefined,
+    ]);
+    // Every other status, and none at all, is a paid window.
+    for (const planStatus of [null, undefined, "canceled", "trialing"]) {
+      expect(allowanceFor(coach({ planStatus }), FEB_10).capSeconds).toBe(
+        5 * H,
+      );
+    }
+  });
+
+  test("it applies in December too, to a plan bought early", () => {
+    const allowance = allowanceFor(
+      coach({
+        planPeriodStart: "2026-12-10T00:00:00Z",
+        planStatus: "past_due",
+      }),
+      LAST_BETA_INSTANT,
+    );
+    expect([allowance.kind, allowance.capSeconds, allowance.pastDue]).toEqual([
+      "plan",
+      0,
+      true,
+    ]);
+  });
+
+  test("an admin's override and an unlimited workspace keep their precedence", () => {
+    const override = allowanceFor(
+      coach({ planStatus: "past_due", videoHoursOverride: 3 }),
+      FEB_10,
+    );
+    expect([override.kind, override.capSeconds, override.pastDue]).toEqual([
+      "override",
+      3 * H,
+      undefined,
+    ]);
+    const unlimited = allowanceFor(
+      coach({ planStatus: "past_due", unlimitedVideo: true }),
+      FEB_10,
+    );
+    expect([unlimited.kind, unlimited.capSeconds, unlimited.pastDue]).toEqual([
+      "unlimited",
+      UNLIMITED_CAP_SECONDS,
+      undefined,
+    ]);
+  });
+
+  test("Free and a team are never past due, whatever the status says", () => {
+    const free = allowanceFor(personal({ planStatus: "past_due" }), FEB_10);
+    expect([free.kind, free.pastDue]).toEqual(["none", undefined]);
+    const season = allowanceFor(
+      team({ programPlan: SPRING, planStatus: "past_due" }),
+      FEB_10,
+    );
+    expect([season.kind, season.capSeconds, season.pastDue]).toEqual([
+      "season",
+      80 * H,
+      undefined,
+    ]);
+  });
+
+  test("the out-of-hours refusal says the payment failed, not to add hours", () => {
+    const SENTENCE =
+      "Your last payment failed. Update your card to get this month's hours.";
+    expect(
+      personalRefusalMessage({
+        neededSeconds: 2 * H,
+        remainingSeconds: 0,
+        pastDue: true,
+      }),
+    ).toBe(`You're out of video hours. ${SENTENCE}`);
+    // Extra hours still count, and still fall short.
+    expect(
+      personalRefusalMessage({
+        neededSeconds: 2 * H,
+        remainingSeconds: 1 * H,
+        pastDue: true,
+      }),
+    ).toBe(`This video needs 2h. You have 1h left. ${SENTENCE}`);
+    // The peek `/api/splitstep/upload-url` refuses from says the same words.
+    const peek = { ...buildPeek(0, 0, 1 * H), pastDue: true };
+    expect(peekRefusalMessage(peek, 2 * H, { kind: "personal" })).toBe(
+      `This video needs 2h. You have 1h left. ${SENTENCE}`,
+    );
+    // Extra hours that cover it are not refused at all.
+    expect(peekRefusalMessage(peek, 30 * 60, { kind: "personal" })).toBeNull();
+    // Paid up, the refusal is the usual one.
+    expect(
+      personalRefusalMessage({
+        neededSeconds: 2 * H,
+        remainingSeconds: 0,
+        now: FEB_10,
+      }),
+    ).not.toContain("payment failed");
+  });
+});
+
 test.describe("the hours window", () => {
   const at = (anchor: string | null, now: string) => {
     const { start, end } = hoursWindow(anchor, new Date(now));
@@ -405,6 +539,67 @@ test.describe("from January 1, 2027: a team draws a season, a pilot, or nothing"
       expect(allowance.windowed).toBe(true);
     }
     expect(seasonAt("2027-03-14T15:00:00Z").billingMonth).toBe("2027-03-01");
+  });
+
+  test("a plan saved before its start date counts from the start date", () => {
+    // Saved in December for a January 1 season: nothing earlier is in play.
+    const allowance = seasonAt("2027-03-14T15:00:00Z", {
+      programPlan: { ...SPRING, hoursFrom: "2026-12-12T18:30:00Z" },
+    });
+    expect(iso(allowance)).toEqual(
+      window("2027-01-01T00:00:00Z", "2027-06-01T00:00:00Z"),
+    );
+    // Saved in the season's first instant is the same answer.
+    expect(
+      iso(
+        seasonAt("2027-03-14T15:00:00Z", {
+          programPlan: { ...SPRING, hoursFrom: "2027-01-01T00:00:00Z" },
+        }),
+      ),
+    ).toEqual(window("2027-01-01T00:00:00Z", "2027-06-01T00:00:00Z"));
+  });
+
+  test("a plan saved mid-season counts from the moment it was saved", () => {
+    // Saved February 10: January's video is not drawn from this pool.
+    const saved = "2027-02-10T15:30:00.123Z";
+    const allowance = seasonAt("2027-03-14T15:00:00Z", {
+      programPlan: { ...SPRING, hoursFrom: saved },
+    });
+    expect([allowance.kind, allowance.capSeconds]).toEqual(["season", 80 * H]);
+    expect(iso(allowance)).toEqual(window(saved, "2027-06-01T00:00:00Z"));
+    // The same instants reach the window-keyed RPCs and the ledger read.
+    expect(windowArgs(allowance)).toEqual({
+      p_window_start: saved,
+      p_window_end: "2027-06-01T00:00:00.000Z",
+    });
+    // The season still ends, and resets, where it did.
+    expect(allowanceResetsOn(allowance)).toBe("Jun 1");
+  });
+
+  test("no hours_from column, or an unreadable one, reads as from the start date", () => {
+    for (const hoursFrom of [undefined, null, "", "not a date"]) {
+      expect(
+        iso(
+          seasonAt("2027-03-14T15:00:00Z", {
+            programPlan: { ...SPRING, hoursFrom },
+          }),
+        ),
+      ).toEqual(window("2027-01-01T00:00:00Z", "2027-06-01T00:00:00Z"));
+    }
+    // A stamp at or past the season's end cannot open a window: the start date.
+    const end = new Date("2027-06-01T00:00:00Z");
+    expect(
+      seasonWindowStart(
+        { startsOn: "2027-01-01", hoursFrom: "2027-06-01T00:00:00Z" },
+        end,
+      ).toISOString(),
+    ).toBe("2027-01-01T00:00:00.000Z");
+    expect(
+      seasonWindowStart(
+        { startsOn: "2027-01-01", hoursFrom: "2027-05-31T23:59:59Z" },
+        end,
+      ).toISOString(),
+    ).toBe("2027-05-31T23:59:59.000Z");
   });
 
   test("the day after a season ends the team has nothing", () => {

@@ -37,6 +37,7 @@ import {
   type CheckoutAccount,
   type CheckoutMode,
   type PreviewState,
+  type ScheduledChange,
 } from "@/lib/billing/checkout-view";
 import type { PlanBilling } from "@/lib/billing/plan-fields";
 import type { PlanPageInput } from "@/lib/billing/plan-page-view";
@@ -171,7 +172,95 @@ const PREVIEW_HOURS: PreviewState = {
   },
 };
 
+/** Coach, monthly → yearly on the same day: the same $75 credit for 15 days. */
+const PREVIEW_YEARLY: PreviewState = {
+  status: "ready",
+  preview: {
+    ...quoteUpgrade({
+      from: "coach",
+      to: "coach",
+      period: "monthly",
+      toPeriod: "yearly",
+      periodStart: PERIOD_START,
+      periodEnd: PERIOD_END,
+      now: new Date("2027-04-29T00:00:00Z"),
+      usedSeconds: planHoursSeconds("coach") - (3 * H + 12 * M),
+    }),
+    period: "yearly",
+    fromPeriod: "monthly",
+  },
+};
+
 const NEEDED = 1 * H + 52 * M;
+
+/* ---------- A failed renewal: the plan stays, the hours wait ---------- */
+
+const PAGE_PAST_DUE: PlanPageInput = {
+  ...PAGE_COACH,
+  billing: { ...subscribed("coach"), status: "past_due" },
+  // What `allowanceFor()` answers for a past-due plan: its own kind, no hours.
+  capSeconds: 0,
+  planLeftSeconds: 0,
+  extraSeconds: 0,
+  nextExtraExpiresAt: null,
+  resetsOn: null,
+};
+
+const ACCOUNT_PAST_DUE: CheckoutAccount = {
+  ...ACCOUNT_COACH,
+  planLeftSeconds: 0,
+  extraSeconds: 0,
+  resetsOn: null,
+  pastDue: true,
+};
+
+/* ---------- MOCK ONLY: a change at renewal (nothing is wired) ---------- */
+
+/** Coach Pro, monthly, Jan 14 to Feb 14, 2027. */
+const PAGE_PRO_FEB: PlanPageInput = {
+  ...PAGE_COACH_PRO,
+  billing: {
+    ...subscribed("coach-pro"),
+    periodStart: "2027-01-14T00:00:00Z",
+    periodEnd: "2027-02-14T00:00:00Z",
+  },
+  resetsOn: "Feb 14",
+};
+const ACCOUNT_PRO_FEB: CheckoutAccount = {
+  plan: "coach-pro",
+  period: "monthly",
+  planLeftSeconds: 7 * H + 40 * M,
+  extraSeconds: 0,
+  resetsOn: "Feb 14",
+  firstMonthEligible: false,
+};
+/** Coach Pro → Coach, at the month's renewal. */
+const MOVE_DOWN: ScheduledChange = {
+  to: { plan: "coach", period: "monthly" },
+  effectiveOn: "2027-02-14",
+};
+
+/** Coach, yearly, Jan 14, 2027 to Jan 14, 2028. */
+const PAGE_COACH_YEAR: PlanPageInput = {
+  ...PAGE_COACH,
+  billing: {
+    ...subscribed("coach"),
+    period: "yearly",
+    periodStart: "2027-01-14T00:00:00Z",
+    periodEnd: "2028-01-14T00:00:00Z",
+  },
+  resetsOn: "Feb 14",
+};
+const ACCOUNT_COACH_YEAR: CheckoutAccount = {
+  ...ACCOUNT_COACH,
+  period: "yearly",
+  resetsOn: "Feb 14",
+};
+/** Coach yearly → Coach monthly, at the year's renewal. */
+const PAY_MONTHLY: ScheduledChange = {
+  to: { plan: "coach", period: "monthly" },
+  effectiveOn: "2028-01-14",
+};
 
 type DialogState = {
   kind: "dialog";
@@ -187,7 +276,7 @@ type DialogState = {
 type State =
   | { kind: "page"; label: string; page: PlanPageInput }
   | DialogState
-  | { kind: "file"; label: string; plan: "free" | "coach" }
+  | { kind: "file"; label: string; plan: "free" | "coach"; pastDue?: boolean }
   | { kind: "pill"; label: string }
   | { kind: "home"; label: string }
   | { kind: "usage"; label: string }
@@ -213,6 +302,10 @@ const WS_COACH: AllowanceWorkspace = {
   planPeriodStart: "2027-01-14T00:00:00Z",
 };
 const WS_COACH_PRO: AllowanceWorkspace = { ...WS_COACH, plan: "coach-pro" };
+const WS_COACH_PAST_DUE: AllowanceWorkspace = {
+  ...WS_COACH,
+  planStatus: "past_due",
+};
 const WS_SEASON: AllowanceWorkspace = {
   kind: "team",
   orgType: "college",
@@ -291,6 +384,21 @@ const STATES: Record<string, State> = {
     kind: "page",
     label: "Settings › Plan — Coach Pro",
     page: PAGE_COACH_PRO,
+  },
+  "plan-past-due": {
+    kind: "page",
+    label: "Settings › Plan — Coach, the last payment failed",
+    page: PAGE_PAST_DUE,
+  },
+  "plan-coach-pro-change": {
+    kind: "page",
+    label: "MOCK — Settings › Plan, Coach Pro with a quiet Change plan",
+    page: { ...PAGE_PRO_FEB, mock: { kind: "change-plan", change: MOVE_DOWN } },
+  },
+  "plan-scheduled": {
+    kind: "page",
+    label: "MOCK — Settings › Plan, a move to Coach waiting for Feb 14",
+    page: { ...PAGE_PRO_FEB, mock: { kind: "scheduled", change: MOVE_DOWN } },
   },
   choose: {
     kind: "dialog",
@@ -387,6 +495,36 @@ const STATES: Record<string, State> = {
     preview: PREVIEW_DAYS,
     refusal: "Update your card before upgrading.",
   },
+  "pay-yearly": {
+    kind: "dialog",
+    label: "Dialog — Pay yearly (Coach, monthly → yearly)",
+    page: PAGE_COACH,
+    mode: { kind: "yearly" },
+    account: ACCOUNT_COACH,
+    preview: PREVIEW_YEARLY,
+  },
+  "paywall-past-due": {
+    kind: "dialog",
+    label: "Dialog — Upload paywall, Coach whose last payment failed",
+    page: PAGE_PAST_DUE,
+    mode: { kind: "paywall", neededSeconds: NEEDED },
+    account: ACCOUNT_PAST_DUE,
+    wizard: true,
+  },
+  downgrade: {
+    kind: "dialog",
+    label: "MOCK — Dialog, move down to Coach at renewal",
+    page: { ...PAGE_PRO_FEB, mock: { kind: "change-plan", change: MOVE_DOWN } },
+    mode: { kind: "change", change: MOVE_DOWN },
+    account: ACCOUNT_PRO_FEB,
+  },
+  "downgrade-monthly": {
+    kind: "dialog",
+    label: "MOCK — Dialog, yearly → monthly at the year's renewal",
+    page: PAGE_COACH_YEAR,
+    mode: { kind: "change", change: PAY_MONTHLY },
+    account: ACCOUNT_COACH_YEAR,
+  },
   pending: {
     kind: "dialog",
     label: "Dialog — paid, not shown on the account yet",
@@ -405,6 +543,12 @@ const STATES: Record<string, State> = {
     label:
       "Upload wizard — file step, Coach with a video longer than what's left",
     plan: "coach",
+  },
+  "file-past-due": {
+    kind: "file",
+    label: "Upload wizard — file step, Coach whose last payment failed",
+    plan: "coach",
+    pastDue: true,
   },
   "header-pill": {
     kind: "pill",
@@ -459,7 +603,9 @@ export function Plans2027Preview({
   const chosen = state ? STATES[state] : undefined;
   if (!chosen) return <Index unknown={state} />;
 
-  if (chosen.kind === "file") return <FileStepState plan={chosen.plan} />;
+  if (chosen.kind === "file") {
+    return <FileStepState plan={chosen.plan} pastDue={chosen.pastDue} />;
+  }
   if (chosen.kind === "pill") return <PillStates label={chosen.label} />;
   if (chosen.kind === "home") return <HomeStates label={chosen.label} />;
   if (chosen.kind === "usage") return <UsageStates label={chosen.label} />;
@@ -484,6 +630,7 @@ export function Plans2027Preview({
         <PlanSettings
           {...chosen.page}
           preview={chosen.page.plan === "coach" ? PREVIEW_DAYS : undefined}
+          yearlyPreview={PREVIEW_YEARLY}
         />
       </div>
       {chosen.kind === "dialog" && (
@@ -511,7 +658,9 @@ function Index({ unknown }: { unknown: string | null }) {
       <h1 className="text-display mt-3">Plans 2027</h1>
       <p className="text-body-sm mt-3 max-w-[520px]">
         Each surface on fixtures. Nothing here charges a card: checkout is not
-        opened, and the upgrade&rsquo;s figures are fixed.
+        opened, and the upgrade&rsquo;s figures are fixed. The states marked
+        MOCK draw a change at renewal that is not built: no page opens it and
+        its button calls nothing.
         {unknown ? ` No state called "${unknown}".` : ""}
       </p>
       <ul className="mt-8 flex max-w-[640px] flex-col">
@@ -544,19 +693,27 @@ const PROBE = {
 } as VideoProbeSummary;
 
 /** The real shell, file step and footer meter, with the note the wizard draws. */
-function FileStepState({ plan }: { plan: "free" | "coach" }) {
-  const withFile = plan === "coach";
-  const remaining = plan === "coach" ? 23 * M : 0;
+function FileStepState({
+  plan,
+  pastDue = false,
+}: {
+  plan: "free" | "coach";
+  pastDue?: boolean;
+}) {
+  const withFile = plan === "coach" && !pastDue;
+  const remaining = plan === "coach" && !pastDue ? 23 * M : 0;
   const note = fileStepHoursNote({
     enabled: true,
     plan,
     remainingSeconds: remaining,
     videoSeconds: withFile ? PROBE.durationSeconds : null,
+    pastDue,
   });
   const suffix =
     meterSuffix({
       allowanceKind: plan === "coach" ? "plan" : "none",
-      resetsOn: RESETS_ON,
+      resetsOn: pastDue ? null : RESETS_ON,
+      pastDue,
     }) ?? "";
 
   return (
@@ -567,7 +724,7 @@ function FileStepState({ plan }: { plan: "free" | "coach" }) {
       description={STEP_CONFIG_PROCESSING.file?.description}
       back={noop}
       meter={
-        plan === "coach" ? (
+        plan === "coach" && !pastDue ? (
           <FooterMeter
             remainingSeconds={remaining}
             capSeconds={planHoursSeconds("coach")}
@@ -719,6 +876,11 @@ function PillStates({ label }: { label: string }) {
       hours: { remainingSeconds: 0, capSeconds: 5 * H },
     },
     {
+      name: "Coach, the last payment failed",
+      workspace: WS_COACH_PAST_DUE,
+      hours: { remainingSeconds: 0, capSeconds: 0 },
+    },
+    {
       name: "Coach Pro",
       workspace: WS_COACH_PRO,
       hours: { remainingSeconds: 7 * H + 40 * M, capSeconds: 10 * H },
@@ -776,6 +938,16 @@ function HomeStates({ label }: { label: string }) {
         usedSeconds: 1 * H + 48 * M,
         capSeconds: 5 * H,
         creditSeconds: 1 * H,
+        analyzed: 6,
+      }),
+    },
+    {
+      name: "Coach, the last payment failed",
+      view: homeCardView({
+        ...personal,
+        standing: standing(WS_COACH_PAST_DUE),
+        usedSeconds: 0,
+        capSeconds: 0,
         analyzed: 6,
       }),
     },
@@ -865,6 +1037,18 @@ function UsageStates({ label }: { label: string }) {
               creditSeconds: 1 * H,
               nextCreditExpiresAt: "2027-10-16T00:00:00Z",
               matches: USAGE_MATCHES,
+            })}
+          />
+        </Case>
+        <Case name="Coach, the last payment failed">
+          <PersonalUsageCard
+            view={usageCardView({
+              standing: standing(WS_COACH_PAST_DUE),
+              usedSeconds: 0,
+              capSeconds: 0,
+              creditSeconds: 0,
+              nextCreditExpiresAt: null,
+              matches: [],
             })}
           />
         </Case>

@@ -28,6 +28,7 @@ import {
   type PlanPageInput,
 } from "@/lib/billing/plan-page-view";
 import { PLAN_SETTINGS_PATH } from "@/lib/billing/plan-intent";
+import { requestBillingPortal } from "@/lib/billing/portal-client";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +43,8 @@ const USAGE_HREF = "/dashboard/settings/usage";
  * meter lives on Usage), and _Plan_ is rows — the plan, extra hours and, for
  * a subscriber, billing. What each row says is `buildPlanPage()`'s; every
  * button opens the one checkout dialog, or Stripe's portal for card,
- * receipts and cancelling.
+ * receipts and cancelling. A monthly subscriber has a Pay yearly row too, and
+ * after a failed payment the plan row's button is Update card (the portal).
  *
  * `initialDialog` is `?plan=&period=` from the landing site: the dialog opens
  * on it once and the query is dropped from the URL, so a reload does not
@@ -52,6 +54,7 @@ export function PlanSettings({
   initialDialog = null,
   cleanUrl = false,
   preview,
+  yearlyPreview,
   ...input
 }: PlanPageInput & {
   /** The dialog to open on arrival. */
@@ -60,6 +63,8 @@ export function PlanSettings({
   cleanUrl?: boolean;
   /** Fixed upgrade figures, for the design preview. */
   preview?: PreviewState;
+  /** Fixed figures for the switch to yearly, for the design preview. */
+  yearlyPreview?: PreviewState;
 }) {
   const router = useRouter();
   const [dialog, setDialog] = useState<CheckoutMode | null>(initialDialog);
@@ -86,30 +91,18 @@ export function PlanSettings({
     extraSeconds: input.extraSeconds,
     resetsOn: input.allowanceKind === "plan" ? input.resetsOn : null,
     firstMonthEligible: !input.billing.everSubscribed,
+    pastDue: input.plan !== "free" && input.billing.status === "past_due",
   };
 
+  // One call for Manage billing and for Update card after a failed payment.
   const openPortal = async () => {
     setPortal({ state: "opening" });
-    try {
-      const response = await fetch("/api/billing/portal", { method: "POST" });
-      const body = (await response.json().catch(() => null)) as {
-        url?: string;
-        error?: string;
-      } | null;
-      if (response.ok && body?.url) {
-        window.location.assign(body.url);
-        return;
-      }
-      setPortal({
-        state: "failed",
-        message: body?.error ?? "Billing couldn't open. Try again in a moment.",
-      });
-    } catch {
-      setPortal({
-        state: "failed",
-        message: "Billing couldn't open. Check your connection and try again.",
-      });
+    const answer = await requestBillingPortal();
+    if (answer.ok) {
+      window.location.assign(answer.url);
+      return;
     }
+    setPortal({ state: "failed", message: answer.message });
   };
 
   const control = (action: PlanPageAction | undefined) => {
@@ -120,9 +113,22 @@ export function PlanSettings({
           type="button"
           disabled={portal.state === "opening"}
           onClick={() => void openPortal()}
-          className={advButton("outline", "sm")}
+          className={advButton(action.tone, "sm")}
         >
           {portal.state === "opening" ? "Opening…" : action.label}
+        </button>
+      );
+    }
+    if (action.kind === "quiet") {
+      // MOCK ONLY (`PlanPageInput.mock`): a quiet text action on the plan row.
+      const mode = action.mode;
+      return (
+        <button
+          type="button"
+          onClick={mode ? () => setDialog(mode) : undefined}
+          className="cursor-pointer text-[12px] text-[var(--blue)] hover:text-[var(--blue-hover)]"
+        >
+          {action.label}
         </button>
       );
     }
@@ -224,7 +230,7 @@ export function PlanSettings({
         }}
         mode={dialog ?? { kind: "choose" }}
         account={account}
-        preview={preview}
+        preview={dialog?.kind === "yearly" ? yearlyPreview : preview}
         onDone={(result) => {
           setDialog(null);
           setDone(result);

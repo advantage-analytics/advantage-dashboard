@@ -35,6 +35,7 @@ export function WizardQuotaMeter() {
       freeHoursReturnOn,
       plansActive,
       quotaAllowanceKind,
+      quotaPastDue,
       quotaResetsOn,
       quotaTeamSuffix,
     },
@@ -58,15 +59,17 @@ export function WizardQuotaMeter() {
       ? meterSuffix({
           allowanceKind: quotaAllowanceKind,
           resetsOn: quotaResetsOn,
+          pastDue: quotaPastDue,
         })
       : null);
   const onPlan = planSuffix !== null && quotaAllowanceKind === "plan";
 
   // A Free player with no plan hours and no video priced yet: there is no
   // allowance to draw a bar for, so the readout is the balance and the plan.
+  // The same for a subscriber whose payment failed: no plan hours this month.
   if (
     planSuffix !== null &&
-    quotaAllowanceKind === "none" &&
+    (quotaAllowanceKind === "none" || quotaPastDue) &&
     selectedSeconds === undefined
   ) {
     return (

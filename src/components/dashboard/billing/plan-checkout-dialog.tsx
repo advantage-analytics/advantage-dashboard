@@ -15,6 +15,7 @@ import {
   initialSelection,
   needsUpgradePreview,
   planPricing,
+  upgradeRequestFor,
   type CheckoutAccount,
   type CheckoutAction,
   type CheckoutMode,
@@ -29,6 +30,10 @@ import {
   formatUsdCents,
   type PlanPeriod,
 } from "@/lib/billing/plans";
+import {
+  PORTAL_TAB_BLOCKED,
+  openBillingPortalTab,
+} from "@/lib/billing/portal-client";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
@@ -88,8 +93,10 @@ const OFFLINE =
  * A new plan and extra hours pay through Stripe Embedded Checkout IN the
  * dialog (`/api/billing/checkout`, then `/api/billing/confirm`). It never
  * redirects: in the wizard the picked video is an in-memory `File`, and
- * leaving the page would lose it and the trim. An upgrade has no checkout —
- * `/api/billing/upgrade` charges the card on file and answers directly.
+ * leaving the page would lose it and the trim. An upgrade and the switch to
+ * yearly have no checkout — `/api/billing/upgrade` charges the card on file
+ * and answers directly. A change at renewal (`scene: "change"`) is a mock:
+ * its button closes the dialog and calls nothing.
  *
  * The shell is `AddHoursDialog`'s (the brand band, radio rows, an aside, a
  * quiet link left and one primary right), which stays for the months before
@@ -161,26 +168,58 @@ export function PlanCheckoutDialog({
   );
 }
 
+/**
+ * The dialog's one error line. With `portalUrl` (the browser blocked the
+ * billing tab) the sentence is followed by the address as a link, in the
+ * place "Update card" held in the aside this line stands in for.
+ */
+export function CheckoutProblemLine({
+  message,
+  portalUrl,
+}: {
+  message: string;
+  portalUrl?: string | null;
+}) {
+  return (
+    <p role="alert" className="text-[12px] leading-[1.6] text-[var(--error)]">
+      {message}
+      {portalUrl && (
+        <>
+          {" "}
+          <a
+            href={portalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
+          >
+            Open billing ↗
+          </a>
+        </>
+      )}
+    </p>
+  );
+}
+
+/** What Stripe's embedded form is opened for: a new plan, or extra hours. */
+type PaidAction = Extract<CheckoutAction, { kind: "plan" | "hours" }>;
+
 type Phase =
   | { kind: "choose" }
-  | {
-      kind: "checkout";
-      action: Exclude<CheckoutAction, { kind: "upgrade" }>;
-    }
+  | { kind: "checkout"; action: PaidAction }
   /** The upgrade is charging the card on file. */
   | { kind: "working" }
   | { kind: "recording"; what: string }
   /** Paid, but it has not shown up yet. Never offers Pay again. */
   | { kind: "pending" };
 
-function actionKey(action: Exclude<CheckoutAction, { kind: "upgrade" }>) {
+function actionKey(action: PaidAction) {
   return action.kind === "plan"
     ? `plan:${action.plan}:${action.period}`
     : `hours:${action.hours}`;
 }
 
 /** "Coach, monthly" / "2 extra hours" — what is being paid for. */
-function actionName(action: Exclude<CheckoutAction, { kind: "upgrade" }>) {
+function actionName(action: PaidAction) {
   return action.kind === "plan"
     ? `${coachPlan(action.plan).name}, ${action.period}`
     : `${action.hours} extra ${action.hours === 1 ? "hour" : "hours"}`;
@@ -217,6 +256,8 @@ function PlanCheckoutContent({
     startPending ? { kind: "pending" } : { kind: "choose" },
   );
   const [problem, setProblem] = useState<string | null>(initialProblem ?? null);
+  /** The portal's address when no tab could be opened for it. */
+  const [portalUrl, setPortalUrl] = useState<string | null>(null);
   const [fetched, setFetched] = useState<PreviewState>(
     wantsPreview && !previewOverride
       ? { status: "loading" }
@@ -230,11 +271,16 @@ function PlanCheckoutContent({
   const sessionIdRef = useRef<string | null>(null);
 
   const preview = previewOverride ?? fetched;
+  // The switch to yearly names its period; the plan upgrade sends nothing.
+  const yearly = upgradeRequestFor(mode, account) !== undefined;
 
   useEffect(() => {
     if (!wantsPreview || previewOverride) return;
     let cancelled = false;
-    postJson("/api/billing/upgrade/preview")
+    postJson(
+      "/api/billing/upgrade/preview",
+      yearly ? { period: "yearly" } : undefined,
+    )
       .then(({ ok, body }) => {
         if (cancelled) return;
         setFetched(
@@ -247,7 +293,9 @@ function PlanCheckoutContent({
                 status: "failed",
                 message:
                   (body as Refusal)?.error ??
-                  "The upgrade couldn't be priced. Try again in a moment.",
+                  (yearly
+                    ? "The switch to yearly couldn't be priced. Try again in a moment."
+                    : "The upgrade couldn't be priced. Try again in a moment."),
               },
         );
       })
@@ -257,7 +305,7 @@ function PlanCheckoutContent({
     return () => {
       cancelled = true;
     };
-  }, [wantsPreview, previewOverride, previewNonce]);
+  }, [wantsPreview, previewOverride, previewNonce, yearly]);
 
   const view = useMemo(
     () =>
@@ -355,19 +403,25 @@ function PlanCheckoutContent({
   }, [checkoutAction, onDone, onPaymentPending]);
 
   const runUpgrade = useCallback(
-    async (payTodayCents: number) => {
+    async (payTodayCents: number, toYearly: boolean) => {
       setProblem(null);
       setPhase({ kind: "working" });
       const answer = await postJson("/api/billing/upgrade", {
         payTodayCents,
+        ...(toYearly ? { period: "yearly" } : {}),
       }).catch(() => null);
       if (answer?.ok && answer.body) {
         const body = answer.body as { plan?: string; period?: string };
-        onDone({
-          kind: "upgrade",
-          plan: body.plan === "coach" ? "coach" : "coach-pro",
-          period: body.period === "yearly" ? "yearly" : "monthly",
-        });
+        const plan = body.plan === "coach" ? "coach" : "coach-pro";
+        onDone(
+          toYearly
+            ? { kind: "yearly", plan, period: "yearly" }
+            : {
+                kind: "upgrade",
+                plan,
+                period: body.period === "yearly" ? "yearly" : "monthly",
+              },
+        );
         return;
       }
       const refusal = answer?.body as Refusal;
@@ -381,7 +435,9 @@ function PlanCheckoutContent({
       setProblem(
         answer
           ? (refusal?.error ??
-              "The upgrade couldn't be made. Try again in a moment.")
+              (toYearly
+                ? "The switch to yearly couldn't be made. Try again in a moment."
+                : "The upgrade couldn't be made. Try again in a moment."))
           : OFFLINE,
       );
       setPhase({ kind: "choose" });
@@ -389,12 +445,36 @@ function PlanCheckoutContent({
     [onDone, preview, previewOverride],
   );
 
+  /**
+   * Stripe's portal in a NEW tab: the wizard behind this dialog holds an
+   * in-memory video, so this page must not navigate away. When the browser
+   * will not open one, the error line says so and carries the address as a
+   * link, which a click of the user's own always opens.
+   */
+  const openCardPortal = async () => {
+    setProblem(null);
+    setPortalUrl(null);
+    const answer = await openBillingPortalTab();
+    if (answer.kind === "opened") return;
+    if (answer.kind === "blocked") {
+      setPortalUrl(answer.url);
+      setProblem(PORTAL_TAB_BLOCKED);
+      return;
+    }
+    setProblem(answer.message);
+  };
+
   const onPrimary = () => {
     const action = view.action;
     if (!action) return;
     setProblem(null);
     if (action.kind === "upgrade") {
-      void runUpgrade(action.payTodayCents);
+      void runUpgrade(action.payTodayCents, action.period === "yearly");
+      return;
+    }
+    if (action.kind === "schedule") {
+      // A mock: there is no endpoint that schedules a change. Close only.
+      onOpenChange(false);
       return;
     }
     setDiscounted(null);
@@ -407,7 +487,9 @@ function PlanCheckoutContent({
     phase.kind === "recording";
   const primaryDisabled =
     view.action === null ||
-    (view.action.kind !== "upgrade" && !CHECKOUT_CONFIGURED);
+    // Only Stripe's embedded form needs the publishable key.
+    ((view.action.kind === "plan" || view.action.kind === "hours") &&
+      !CHECKOUT_CONFIGURED);
 
   return (
     <DialogPrimitive.Content
@@ -492,16 +574,26 @@ function PlanCheckoutContent({
           </div>
 
           {(problem ?? view.problem) ? (
-            <p
-              role="alert"
-              className="text-[12px] leading-[1.6] text-[var(--error)]"
-            >
-              {problem ?? view.problem}
-            </p>
+            <CheckoutProblemLine
+              message={problem ?? view.problem ?? ""}
+              portalUrl={problem === PORTAL_TAB_BLOCKED ? portalUrl : null}
+            />
           ) : (
             view.aside && (
               <ConfirmAside>
                 {view.aside}
+                {view.portalLink && (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      onClick={() => void openCardPortal()}
+                      className="cursor-pointer text-[var(--blue)] hover:text-[var(--blue-hover)]"
+                    >
+                      Update card ↗
+                    </button>
+                  </>
+                )}
                 {view.sampleLink && (
                   <>
                     {" "}
@@ -593,7 +685,8 @@ function PlanCheckoutContent({
             </>
           ) : phase.kind === "working" ? (
             <p role="status" className="py-6 text-[13px] text-[var(--ink-600)]">
-              Moving you up to {coachPlan("coach-pro").name}…
+              {view.working ??
+                `Moving you up to ${coachPlan("coach-pro").name}…`}
             </p>
           ) : phase.kind === "recording" ? (
             <p role="status" className="py-6 text-[13px] text-[var(--ink-600)]">

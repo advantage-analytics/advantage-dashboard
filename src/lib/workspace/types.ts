@@ -251,6 +251,13 @@ export interface Workspace {
    */
   planPeriodStart?: string | null;
   /**
+   * `users.plan_status` of the personal workspace's owner: `active`,
+   * `past_due`, `canceled`, or null for never subscribed. Only `past_due`
+   * changes anything: the plan stays but its unpaid window carries no plan
+   * hours (`allowanceFor()`). Absent reads as paid.
+   */
+  planStatus?: string | null;
+  /**
    * `programs.status` as the server read it — the column `canSubmitVideo` is
    * derived from, carried raw. Null for a personal workspace, which has no
    * program row.

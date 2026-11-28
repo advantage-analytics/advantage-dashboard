@@ -8,10 +8,7 @@ import type {
   Workspace,
   WorkspaceContextValue,
 } from "@/lib/workspace/types";
-import {
-  readPlanPeriodStart,
-  readProgramPlanRef,
-} from "@/lib/billing/plan-fields";
+import { readPlanWindow, readProgramPlanRef } from "@/lib/billing/plan-fields";
 import { allowanceFor } from "@/lib/services/splitstep/allowance";
 import { peekQuota, scopeToAllowance } from "@/lib/services/splitstep/quota";
 import { getInitials } from "@/lib/data/match-utils";
@@ -468,8 +465,9 @@ export const getAdminPersonalUploadContext = cache(
         row.video_hours_override == null
           ? null
           : Number(row.video_hours_override);
-      // The anchor of the player's hours window, in its own tolerant read.
-      const planPeriodStart = await readPlanPeriodStart(admin, userId);
+      // The anchor of the player's hours window and whether their last
+      // payment failed, in their own tolerant read.
+      const planWindow = await readPlanWindow(admin, userId);
       // The player's own workspace exactly as the dashboard builds it, so the
       // cap and the peek are the figures the player would see themselves.
       const own: Workspace = {
@@ -487,7 +485,7 @@ export const getAdminPersonalUploadContext = cache(
         unlimitedVideo: row.is_admin === true,
         videoHoursOverride: Number.isFinite(override) ? override : null,
         plan: row.plan,
-        planPeriodStart,
+        ...planWindow,
         programStatus: null,
         playersCanUpload: false,
         uploadPolicy: "everyone",
