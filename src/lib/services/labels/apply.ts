@@ -354,20 +354,19 @@ function isAppliedPoint(point: Pick<LabelPoint, "status" | "ending">): boolean {
 /**
  * How to publish a serve called in that the server hit again: `serve` is a
  * serve before the counted one, `later` the played strokes after it up to and
- * including the counted serve. "fault" when it is a first serve and a second
- * serve follows (the ball was out, played on); "let" for any other serve
- * followed by another serve (replayed, unmarked). Null when the serve is not
- * stored in, or no serve follows it.
+ * including the counted serve. Read off the next serve alone: "fault" when
+ * it is a first serve and the next serve is a second serve (the ball was
+ * out, played on); "let" for any other next serve (replayed, unmarked). Null
+ * when the serve is not stored in, or no serve follows it.
  */
 export function servedAgainAfterIn(
   serve: Pick<LabelShot, "stroke" | "result">,
   later: readonly Pick<LabelShot, "stroke">[],
 ): "fault" | "let" | null {
   if (!isServeStroke(serve.stroke) || serve.result !== "in") return null;
-  const serves = later.filter((s) => isServeStroke(s.stroke));
-  if (serves.length === 0) return null;
-  return serve.stroke === "first_serve" &&
-    serves.some((s) => s.stroke === "second_serve")
+  const next = later.find((s) => isServeStroke(s.stroke));
+  if (!next) return null;
+  return serve.stroke === "first_serve" && next.stroke === "second_serve"
     ? "fault"
     : "let";
 }
@@ -462,7 +461,6 @@ function buildShotRows(
     if (shot.stroke === null) {
       warnings.push(`${at}: ${named(shot)} has no stroke type`);
     }
-    const result = shotResultOf(playedOnResult(shot, next, ending));
     const zone = isServeStroke(shot.stroke)
       ? serveZone(shot.landingX)
       : directionZone(filled?.x ?? shot.landingX, shot.contactX);
@@ -482,7 +480,12 @@ function buildShotRows(
       shot_number: shotNumber(i, from),
       landing_x: metInAir ? null : shot.landingX,
       landing_y: metInAir ? null : shot.landingY,
-      result: again === "fault" ? null : again === "let" ? LET_RESULT : result,
+      result:
+        again === "fault"
+          ? null
+          : again === "let"
+            ? LET_RESULT
+            : shotResultOf(playedOnResult(shot, next, ending)),
       zone: again ? null : zone,
     });
   });

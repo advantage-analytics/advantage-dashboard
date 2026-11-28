@@ -407,7 +407,8 @@ export function deadBallRun(
     .slice(at + 1)
     .filter((shot) => shot.status === "deleted" || isLiveShot(shot, ghosts));
   const anchor = ordered[at];
-  if (isReplayedServe(anchor)) {
+  const replayed = isReplayedServe(anchor);
+  if (replayed) {
     const replay = after.findIndex(
       (shot) =>
         shot.status !== "deleted" &&
@@ -417,18 +418,12 @@ export function deadBallRun(
           shot.hitter === anchor.hitter),
     );
     if (replay !== -1) after = after.slice(0, replay);
-    const dead = after.every(
-      (shot) =>
-        shot.status === "deleted" &&
-        shot.deleteReason === "dead_ball_after_fault",
-    );
-    return dead ? after.map((shot) => shot.id) : [];
   }
   const dead = after.every(
     (shot) =>
       shot.status === "deleted" &&
-      (shot.deleteReason === "dead_ball_after_point" ||
-        shot.deleteReason === "dead_ball_after_fault"),
+      (shot.deleteReason === "dead_ball_after_fault" ||
+        (!replayed && shot.deleteReason === "dead_ball_after_point")),
   );
   return dead ? after.map((shot) => shot.id) : [];
 }

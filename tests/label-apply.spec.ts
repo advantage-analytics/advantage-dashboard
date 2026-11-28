@@ -756,6 +756,14 @@ test.describe("lets kept, strokes before the serve dropped", () => {
         { stroke: "second_serve" },
       ]),
     ).toBe("let");
+    // The next serve decides: a first serve again means the first was a let,
+    // even when that one faulted and a second serve came after.
+    expect(
+      servedAgainAfterIn({ stroke: "first_serve", result: "in" }, [
+        { stroke: "first_serve" },
+        { stroke: "second_serve" },
+      ]),
+    ).toBe("let");
   });
 
   test("a swing at a fault is dropped; the fault stays at shot 0", () => {
