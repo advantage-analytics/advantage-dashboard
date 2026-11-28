@@ -1085,7 +1085,7 @@ function scheduledChangeView(input: {
 /* ---------- The upload wizard's file step and footer ---------- */
 
 /**
- * The one-line grey note above the drop zone, when hours are the news:
+ * The one-line grey note under the drop zone, when hours are the news:
  *
  *  - `no-hours`: a Free player with nothing to spend, told before they pick a
  *    video that a plan or hours comes before analysis;

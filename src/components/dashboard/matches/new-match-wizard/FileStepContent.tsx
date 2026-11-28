@@ -77,10 +77,11 @@ export interface FileStepContentProps {
    */
   notices?: string[];
   /**
-   * The step already carries a grey note above the drop zone (the hours
-   * note): leave out "Nothing is uploading yet", one grey strip per place.
+   * The step's one-line hours note (`FileHoursNote`), or null when hours are
+   * not the news. It takes the grey strip's slot under the drop zone / file
+   * row, in place of "Nothing is uploading yet" — one grey strip per place.
    */
-  hideIdleNote?: boolean;
+  hoursNote?: React.ReactNode;
   /** Probing a video, validating or reading an export. */
   busy: boolean;
   /** Why the file was refused. */
@@ -294,7 +295,7 @@ function FileStepContentImpl({
   warnings,
   notes = [],
   notices = [],
-  hideIdleNote = false,
+  hoursNote = null,
   busy,
   error,
   parsingState,
@@ -470,6 +471,8 @@ function FileStepContentImpl({
               )}
             </div>
           )}
+
+          {hoursNote}
         </div>
       ) : (
         <div className="flex flex-col gap-3.5">
@@ -561,10 +564,10 @@ function FileStepContentImpl({
             </div>
           ))}
 
-          {isVideo &&
-            warnings.length === 0 &&
-            notices.length === 0 &&
-            !hideIdleNote && (
+          {/* The step's one grey-strip slot: the hours note when hours are
+              the news, otherwise the idle note. */}
+          {hoursNote ??
+            (isVideo && warnings.length === 0 && notices.length === 0 && (
               /* The honest thing about timing: nothing has left the machine. */
               <div className={noteStripCls}>
                 <Info
@@ -577,7 +580,7 @@ function FileStepContentImpl({
                   saved — trimming and details come first.
                 </span>
               </div>
-            )}
+            ))}
 
           {parsingState.parseWarnings.map((w) => (
             <div key={w} className={warningStripCls}>
