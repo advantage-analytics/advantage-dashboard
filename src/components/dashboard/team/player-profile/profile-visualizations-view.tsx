@@ -118,8 +118,8 @@ export function ProfileVisualizationsView({
   /** The wall's cards for the OTHER side, streamed after the page: once they
    *  land, the wall's You | Opponent swaps sides in the browser. */
   otherSideCards?: Promise<SeasonCard[]>;
-  /** The page's match scope keeps no match: one message in place of the
-   *  wall (`MatchScopeEmpty`). */
+  /** The page's match scope keeps no match: the wall draws its day-zero
+   *  state (the page passes `analyzed` 0), its sentence saying so. */
   scopeEmpty?: boolean;
 }) {
   // Both sides' wall cards as they arrive: the server's for `side` with the

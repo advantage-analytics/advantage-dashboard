@@ -1,6 +1,7 @@
 import { PointEndingsBody } from "@/components/dashboard/matches/match-detail/point-endings-body";
 import { SEASON_OPPONENTS_LABEL } from "@/components/dashboard/team/player-profile/season-head-to-head-card";
 import { surname } from "@/lib/data/match-utils";
+import { matchReadiness } from "./season-empty";
 import type { SeasonOutcomes } from "@/lib/data/player-season";
 
 /**
@@ -38,7 +39,7 @@ export function seasonEndingsEmptySentence(
   scopeEmpty = false,
 ): string {
   return analyzed === 0
-    ? `Winners, aces and errors add up here once one of ${surname(playerName)}'s matches ${scopeEmpty ? "fits this scope" : "is analyzed"}.`
+    ? `Winners, aces and errors add up here once one of ${surname(playerName)}'s matches ${matchReadiness(scopeEmpty)}.`
     : "No point in these matches records how it ended.";
 }
 

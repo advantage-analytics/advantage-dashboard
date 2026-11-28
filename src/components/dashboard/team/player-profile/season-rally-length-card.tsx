@@ -1,6 +1,7 @@
 import { RallyLengthBody } from "@/components/dashboard/matches/match-detail/rally-length-body";
 import { SEASON_OPPONENTS_LABEL } from "@/components/dashboard/team/player-profile/season-head-to-head-card";
 import { surname } from "@/lib/data/match-utils";
+import { matchReadiness } from "./season-empty";
 import type { SeasonRallyBands } from "@/lib/data/player-season";
 
 /**
@@ -35,7 +36,7 @@ export function seasonRallyEmptySentence(
   scopeEmpty = false,
 ): string {
   return analyzed === 0
-    ? `Rally lengths add up here once one of ${surname(playerName)}'s matches ${scopeEmpty ? "fits this scope" : "is analyzed"}.`
+    ? `Rally lengths add up here once one of ${surname(playerName)}'s matches ${matchReadiness(scopeEmpty)}.`
     : "No point in these matches records its rally length.";
 }
 

@@ -1,6 +1,7 @@
 import { NetGameBody } from "@/components/dashboard/matches/match-detail/net-game-body";
 import { SEASON_OPPONENTS_LABEL } from "@/components/dashboard/team/player-profile/season-head-to-head-card";
 import { surname } from "@/lib/data/match-utils";
+import { matchReadiness } from "./season-empty";
 import type { SeasonNetGame } from "@/lib/data/player-season";
 
 /**
@@ -37,7 +38,7 @@ export function seasonNetEmptySentence(
   scopeEmpty = false,
 ): string {
   return analyzed === 0
-    ? `Net points add up here once one of ${surname(playerName)}'s matches ${scopeEmpty ? "fits this scope" : "is analyzed"}.`
+    ? `Net points add up here once one of ${surname(playerName)}'s matches ${matchReadiness(scopeEmpty)}.`
     : "Neither side came to the net in these matches.";
 }
 

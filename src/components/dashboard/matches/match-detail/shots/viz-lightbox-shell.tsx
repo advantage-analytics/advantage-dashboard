@@ -1017,12 +1017,15 @@ export function VizLightboxShell({
   // The strip's sentence: the host's filters, then the legend's pick and a
   // Statistics row — so nothing narrows or widens the court unseen.
   const phrases = [...filterPhrases];
-  if (legendPick !== null)
-    // A won / lost pick says who won, in the legend's own words ("Kim won").
-    phrases.push(
-      legend.find((item) => item.key === legendPick)?.label ??
-        LEGEND_WORD[legendPick],
-    );
+  if (legendPick !== null) {
+    // A won / lost pick says who won, in the legend's own words ("Kim won");
+    // Out and Aces keep the strip's own.
+    const named =
+      legendPick === "won" || legendPick === "lost"
+        ? legend.find((item) => item.key === legendPick)?.label
+        : undefined;
+    phrases.push(named ?? LEGEND_WORD[legendPick]);
+  }
   if (activeStatPick !== null) phrases.push(activeStatPick.label);
   useEffect(() => {
     phrasesRef.current = phrases;

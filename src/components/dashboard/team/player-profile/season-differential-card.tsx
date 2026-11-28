@@ -19,6 +19,7 @@ import {
 import { SEASON_OPPONENTS_LABEL } from "@/components/dashboard/team/player-profile/season-head-to-head-card";
 import { EmptyMark } from "@/components/ui/empty-mark";
 import { surname } from "@/lib/data/match-utils";
+import { matchReadiness } from "./season-empty";
 import type { SeasonOutcomes } from "@/lib/data/player-season";
 
 /**
@@ -183,7 +184,7 @@ export function SeasonDifferentialCard({
         ))}
         <p className="text-micro pt-0.5" style={{ color: "var(--ink-500)" }}>
           {analyzed === 0
-            ? `Winners and errors add up here once one of ${name}'s matches ${scopeEmpty ? "fits this scope" : "is analyzed"}.`
+            ? `Winners and errors add up here once one of ${name}'s matches ${matchReadiness(scopeEmpty)}.`
             : "No point in these matches records a winner or an error."}
         </p>
       </section>

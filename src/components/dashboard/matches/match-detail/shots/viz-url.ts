@@ -1275,18 +1275,19 @@ export function activeFilterEntries(
     }
 
     const values = state.filters[key] as readonly string[];
+    const winners =
+      key === "result"
+        ? state.filters.player === "you"
+          ? { won: names.you, lost: names.opponent }
+          : { won: names.opponent, lost: names.you }
+        : null;
     for (const value of values) {
       // Won / Lost are the CHARTED player's (as the legend's are), so the
       // token names who won the point — "Kim won", never a bare "Won".
-      const subject =
-        state.filters.player === "you" ? names.you : names.opponent;
-      const other = state.filters.player === "you" ? names.opponent : names.you;
       const label =
-        key === "result" && value === "won"
-          ? `${subject} won`
-          : key === "result" && value === "lost"
-            ? `${other} won`
-            : getLabel(key, value);
+        winners && (value === "won" || value === "lost")
+          ? `${winners[value]} won`
+          : getLabel(key, value);
       result.push({ key, value, label });
     }
   }
