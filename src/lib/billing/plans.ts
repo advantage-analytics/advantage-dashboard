@@ -121,6 +121,22 @@ export function aboutMatches(hours: number): number {
 }
 
 /**
+ * `about half a match`, `about 1 match`, `about 3 matches` — what a count of
+ * hours covers in a sentence, from `HOURS_PER_MATCH`: a half, or the nearest
+ * whole match. Null under half a match, where a row says nothing. The one
+ * place a match count is put in words: the usage email and the extra-hours
+ * row both read it, so 1 hour is "about half a match" in each.
+ */
+export function matchesPhrase(seconds: number): string | null {
+  const matches = Math.max(0, seconds) / 3600 / HOURS_PER_MATCH;
+  const halves = Math.round(matches * 2);
+  if (halves <= 0) return null;
+  if (halves === 1) return "about half a match";
+  const whole = Math.max(1, Math.round(matches));
+  return `about ${whole} ${whole === 1 ? "match" : "matches"}`;
+}
+
+/**
  * `$35 an hour (about $60 per extra match)` — the extra-hours price as the
  * extra-hours row says it. The only place a price per hour is shown.
  */
@@ -245,6 +261,15 @@ function hoursPhrase(hours: number): string {
 export function planHoursLine(id: PersonalPlanId): string | null {
   const { hours } = personalPlan(id);
   return hours === null ? null : hoursPhrase(hours);
+}
+
+/**
+ * `planHoursLine` for the checkout dialog, whose rows are narrower than
+ * Settings › Plan's: `5 hours`. Null for Free.
+ */
+export function planHoursShort(id: PersonalPlanId): string | null {
+  const { hours } = personalPlan(id);
+  return hours === null ? null : `${hours} ${hours === 1 ? "hour" : "hours"}`;
 }
 
 /**

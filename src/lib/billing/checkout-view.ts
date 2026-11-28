@@ -33,13 +33,13 @@ import {
   EXTRA_HOUR_VALIDITY_MONTHS,
   FIRST_MONTH_DISCOUNT_PERCENT,
   PERSONAL_PLAN_AUDIENCE,
-  aboutMatches,
   extraHourRate,
   firstMonthOffer,
   formatUsdCents,
+  matchesPhrase,
   personalPlan,
   planHeadline,
-  planHoursLine,
+  planHoursShort,
   planHoursSeconds,
   usd,
   type PersonalPlanId,
@@ -379,9 +379,12 @@ export function planPricing(
   return { dueCents: monthly * 100, wasCents: null, then: "a month" };
 }
 
-/** `About 3 verified matches a month · 5 hours of match video`. */
+/**
+ * `About 3 verified matches a month · 5 hours`. The dialog's rows are narrower
+ * than Settings › Plan's, so the hours go without "of match video".
+ */
 function planLine(plan: PaidPlan): string {
-  const hours = planHoursLine(plan);
+  const hours = planHoursShort(plan);
   return hours ? `${planHeadline(plan)} · ${hours}` : planHeadline(plan);
 }
 
@@ -389,9 +392,20 @@ function hoursName(hours: number): string {
   return plural(hours, "extra hour", "extra hours");
 }
 
+/**
+ * `About half a match · Last 12 months`: what the extra hours cover, in the
+ * usage email's own words. Under half a match the line is the validity alone.
+ */
+function hoursCoverLine(hours: number): string {
+  const about = matchesPhrase(hours * 3600);
+  return about
+    ? `${about.charAt(0).toUpperCase()}${about.slice(1)} · ${HOURS_LAST}`
+    : HOURS_LAST;
+}
+
 /** The price beside an extra-hours figure, where the row's line says the rest. */
 const HOUR_RATE = `${usd(EXTRA_HOUR_PRICE)} an hour`;
-/** The extra-hours row's own line: the rate, and about what a match costs. */
+/** The buy-hours band's rate: the price, and about what a match costs. */
 const HOUR_RATE_LINE = extraHourRate();
 const HOURS_LAST = `Last ${EXTRA_HOUR_VALIDITY_MONTHS} months`;
 const SALES_FINAL = "All sales final, except where required by law.";
@@ -596,7 +610,7 @@ export function buildCheckoutView(input: {
         {
           id: "hours",
           name: hoursName(hours),
-          line: `About ${plural(aboutMatches(hours), "match", "matches")} · ${HOURS_LAST}`,
+          line: hoursCoverLine(hours),
           price: formatUsdCents(hoursCents),
           then: HOUR_RATE,
           selectable: true,
@@ -640,7 +654,7 @@ export function buildCheckoutView(input: {
     const hoursRow: CheckoutRowView = {
       id: "hours",
       name: hoursName(hours),
-      line: `${HOUR_RATE_LINE} · No plan · ${HOURS_LAST}`,
+      line: `${HOUR_RATE} · No plan · ${HOURS_LAST}`,
       price: formatUsdCents(hoursCents),
       selectable: true,
       selected: chosen === "hours",

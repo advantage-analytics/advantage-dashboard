@@ -30,10 +30,12 @@ import {
   isCollegePlanId,
   isPersonalPlanId,
   isPlanTerm,
+  matchesPhrase,
   personalPlan,
   personalPlanIdFrom,
   planHeadline,
   planHoursLine,
+  planHoursShort,
   planSubCopy,
   planHoursSeconds,
   plansBeginMonth,
@@ -99,6 +101,10 @@ test.describe("personal plans", () => {
     expect(planHoursLine("player")).toBe("5 hours of match video");
     expect(planHeadline("player-pro")).toBe("About 6 verified matches a month");
     expect(planHoursLine("player-pro")).toBe("10 hours of match video");
+    // The checkout dialog's narrower rows drop "of match video".
+    expect(planHoursShort("free")).toBeNull();
+    expect(planHoursShort("player")).toBe("5 hours");
+    expect(planHoursShort("player-pro")).toBe("10 hours");
   });
 
   test("the full approved sub-copy stays whole for the landing handoff", () => {
@@ -307,6 +313,17 @@ test.describe("rules across plans", () => {
     expect(aboutMatches(5)).toBe(3);
     expect(aboutMatches(9)).toBe(5);
     expect(aboutMatches(-2)).toBe(0);
+  });
+
+  test("matchesPhrase says a half, or whole matches, and nothing under half", () => {
+    const H = 3600;
+    expect(matchesPhrase(1 * H)).toBe("about half a match");
+    expect(matchesPhrase(2 * H)).toBe("about 1 match");
+    expect(matchesPhrase(5 * H)).toBe("about 3 matches");
+    expect(matchesPhrase(10 * H)).toBe("about 6 matches");
+    expect(matchesPhrase(600)).toBeNull();
+    expect(matchesPhrase(0)).toBeNull();
+    expect(matchesPhrase(-H)).toBeNull();
   });
 });
 

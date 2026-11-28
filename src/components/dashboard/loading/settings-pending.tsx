@@ -540,7 +540,7 @@ export function SettingsPlanPending() {
             description={
               paid
                 ? "About 3 verified matches a month · 5 hours of match video"
-                : "Free for SwingVision users · 20 Ask questions a month · Player from $150, 30% off your first month"
+                : "Free for SwingVision users · 20 Ask questions a month"
             }
             control={
               planFor(viewer.plan).id === "player-pro" ? null : (
@@ -558,7 +558,7 @@ export function SettingsPlanPending() {
           {paid && (
             <CardRow
               label="Billing"
-              description="Card, receipts and cancelling."
+              description="Renews Feb 14 at $150"
               control={<Button>Manage billing ↗</Button>}
             />
           )}

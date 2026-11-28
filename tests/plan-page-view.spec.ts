@@ -144,7 +144,7 @@ test.describe("Plan rows", () => {
     ]);
     const [plan, extra] = buildPlanPage(FREE).rows;
     expect(plan.description).toBe(
-      "Free for SwingVision users · 20 Ask questions a month · Player from $150, 30% off your first month",
+      "Free for SwingVision users · 20 Ask questions a month",
     );
     expect(plan.action).toEqual({
       kind: "dialog",
@@ -161,15 +161,15 @@ test.describe("Plan rows", () => {
     });
   });
 
-  test("a returning Free player is not promised the first-month offer", () => {
+  test("the Free row is one line, with no price or offer on it", () => {
+    // The Choose a plan button and the dialog carry the offer, so the row
+    // reads the same to a returning player as to a new one.
     expect(
       buildPlanPage({
         ...FREE,
         billing: { ...NEVER, status: "canceled", everSubscribed: true },
       }).rows[0].description,
-    ).toBe(
-      "Free for SwingVision users · 20 Ask questions a month · Player from $150 a month",
-    );
+    ).toBe("Free for SwingVision users · 20 Ask questions a month");
   });
 
   test("Player: upgrade, buy hours, manage billing", () => {
@@ -191,7 +191,8 @@ test.describe("Plan rows", () => {
     expect(extra.description).toBe(
       "$35 an hour (about $60 per extra match) · Last 12 months · Used after your plan's hours",
     );
-    expect(billing.description).toBe("Card, receipts and cancelling.");
+    // The renewal is the Billing row's line: the plan row has no room for it.
+    expect(billing.description).toBe("Renews Feb 14 at $150");
     expect(billing.action).toEqual({
       kind: "portal",
       label: "Manage billing ↗",
@@ -211,12 +212,26 @@ test.describe("Plan rows", () => {
       ["extra", "Extra hours", "Buy hours"],
       ["billing", "Billing", "Manage billing ↗"],
     ]);
-    const [plan] = buildPlanPage(input).rows;
+    const [plan, , billing] = buildPlanPage(input).rows;
     expect(plan.pill).toBe("Yearly");
-    // A yearly renewal is far enough off to need its year.
     expect(plan.description).toBe(
       "About 6 verified matches a month · 10 hours of match video",
     );
+    // A yearly renewal is far enough off to need its year.
+    expect(billing.description).toBe("Renews Feb 14, 2027 at $3,300");
+    expect(
+      buildPlanPage({
+        ...input,
+        billing: { ...input.billing, periodEnd: "2028-01-14T00:00:00Z" },
+      }).rows[2].description,
+    ).toBe("Renews Jan 14, 2028 at $3,300");
+    // No renewal day on record: the row says what the portal holds.
+    expect(
+      buildPlanPage({
+        ...input,
+        billing: { ...input.billing, periodEnd: null },
+      }).rows[2].description,
+    ).toBe("Card, receipts and cancelling.");
   });
 
   test("Pay yearly: a monthly subscriber's own plan, a year at a time", () => {
@@ -278,6 +293,8 @@ test.describe("Plan rows", () => {
     expect(plan.description).toBe(
       "Payment failed. Update your card to get this month's hours.",
     );
+    // No renewal is promised while the payment has failed.
+    expect(view.rows[2].description).toBe("Card, receipts and cancelling.");
     // The same portal call Manage billing makes.
     expect(plan.action).toEqual({
       kind: "portal",
@@ -365,5 +382,9 @@ test.describe("Plan rows", () => {
       "extra",
       "billing",
     ]);
+    // Nor told it renews at the price it is leaving.
+    expect(scheduled.rows[2].description).toBe(
+      "Card, receipts and cancelling.",
+    );
   });
 });

@@ -28,7 +28,6 @@ import {
   ASK_QUESTIONS_PER_MONTH,
   EXTRA_HOUR_VALIDITY_MONTHS,
   extraHourRate,
-  firstMonthOffer,
   personalPlan,
   planHeadline,
   planHoursLine,
@@ -174,15 +173,15 @@ function changeDay(change: ScheduledChange, withYear: boolean): string {
 export function buildPlanPage(input: PlanPageInput): PlanPageView {
   const { plan, billing } = input;
   const rows: PlanPageRow[] = [];
-  const player = personalPlan("player");
+  // What the Billing row says where there is no renewal to name.
+  let billingLine = "Card, receipts and cancelling.";
 
   if (plan === "free") {
     rows.push({
       id: "plan",
       label: "Free",
-      description: `${planHeadline("free")} · ${ASK_QUESTIONS_PER_MONTH.free} Ask questions a month · ${player.name} from ${usd(player.monthly)}${
-        billing.everSubscribed ? " a month" : `, ${firstMonthOffer()}`
-      }`,
+      // One line: the offer is the Choose a plan button's and the dialog's.
+      description: `${planHeadline("free")} · ${ASK_QUESTIONS_PER_MONTH.free} Ask questions a month`,
       action: {
         kind: "dialog",
         label: "Choose a plan",
@@ -235,6 +234,16 @@ export function buildPlanPage(input: PlanPageInput): PlanPageView {
     }
     rows.push(planRow);
 
+    // The renewal, on the Billing row: the plan row's one line has no room.
+    // A failed payment has no renewal to promise, and a change waiting for
+    // renewal is already the plan row's line.
+    const renews = billing.periodEnd
+      ? utcDayLabel(billing.periodEnd, yearly)
+      : null;
+    if (renews && !pastDue && mock?.kind !== "scheduled") {
+      billingLine = `Renews ${renews} at ${usd(yearly ? current.yearly : current.monthly)}`;
+    }
+
     // Pay yearly: one month free, for a monthly subscriber in good standing.
     if (
       billing.period === "monthly" &&
@@ -276,7 +285,7 @@ export function buildPlanPage(input: PlanPageInput): PlanPageView {
     rows.push({
       id: "billing",
       label: "Billing",
-      description: "Card, receipts and cancelling.",
+      description: billingLine,
       action: { kind: "portal", label: "Manage billing ↗", tone: "outline" },
     });
   }

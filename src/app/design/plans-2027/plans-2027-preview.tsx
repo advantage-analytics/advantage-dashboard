@@ -141,6 +141,20 @@ const ACCOUNT_PLAYER_PRO_SPENT: CheckoutAccount = {
   plan: "player-pro",
 };
 
+/** The page behind a spent account's dialog: the same 23 minutes, no extra. */
+const PAGE_PLAYER_SPENT: PlanPageInput = {
+  ...PAGE_PLAYER,
+  planLeftSeconds: ACCOUNT_PLAYER_SPENT.planLeftSeconds,
+  extraSeconds: ACCOUNT_PLAYER_SPENT.extraSeconds,
+  nextExtraExpiresAt: null,
+};
+
+const PAGE_PLAYER_PRO_SPENT: PlanPageInput = {
+  ...PAGE_PLAYER_PRO,
+  planLeftSeconds: ACCOUNT_PLAYER_PRO_SPENT.planLeftSeconds,
+  extraSeconds: ACCOUNT_PLAYER_PRO_SPENT.extraSeconds,
+};
+
 /** The real quote, on fixed dates: 15 days left, so the credit is by days. */
 const PREVIEW_DAYS: PreviewState = {
   status: "ready",
@@ -450,7 +464,7 @@ const STATES: Record<string, State> = {
   "paywall-player": {
     kind: "dialog",
     label: "Dialog — Upload paywall, Player out of hours",
-    page: PAGE_PLAYER,
+    page: PAGE_PLAYER_SPENT,
     mode: { kind: "paywall", neededSeconds: NEEDED },
     account: ACCOUNT_PLAYER_SPENT,
     preview: PREVIEW_HOURS,
@@ -459,7 +473,7 @@ const STATES: Record<string, State> = {
   "paywall-player-pro": {
     kind: "dialog",
     label: "Dialog — Upload paywall, Player Pro out of hours",
-    page: PAGE_PLAYER_PRO,
+    page: PAGE_PLAYER_PRO_SPENT,
     mode: { kind: "paywall", neededSeconds: NEEDED },
     account: ACCOUNT_PLAYER_PRO_SPENT,
     wizard: true,
@@ -475,7 +489,7 @@ const STATES: Record<string, State> = {
   "upgrade-hours": {
     kind: "dialog",
     label: "Dialog — Upgrade (credit by hours)",
-    page: PAGE_PLAYER,
+    page: PAGE_PLAYER_SPENT,
     mode: { kind: "upgrade" },
     account: ACCOUNT_PLAYER_SPENT,
     preview: PREVIEW_HOURS,

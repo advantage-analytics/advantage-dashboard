@@ -191,7 +191,7 @@ test.describe("Choose a plan", () => {
       [
         "player",
         "Player",
-        "About 3 verified matches a month · 5 hours of match video",
+        "About 3 verified matches a month · 5 hours",
         "$150",
         "$105",
         "then $150 a month",
@@ -199,7 +199,7 @@ test.describe("Choose a plan", () => {
       [
         "player-pro",
         "Player Pro",
-        "About 6 verified matches a month · 10 hours of match video",
+        "About 6 verified matches a month · 10 hours",
         "$300",
         "$210",
         "then $300 a month",
@@ -270,12 +270,8 @@ test.describe("Upload paywall, a Free player", () => {
       ["player-pro", "Player Pro", "$210", undefined],
       ["hours", "2 extra hours", "$70", "Or pay for just this match"],
     ]);
-    expect(v.rows[0].line).toBe(
-      "About 3 verified matches a month · 5 hours of match video",
-    );
-    expect(v.rows[2].line).toBe(
-      "$35 an hour (about $60 per extra match) · No plan · Last 12 months",
-    );
+    expect(v.rows[0].line).toBe("About 3 verified matches a month · 5 hours");
+    expect(v.rows[2].line).toBe("$35 an hour · No plan · Last 12 months");
     expect(v.aside).toBe(
       "Player covers this match with 3h 08m to spare. Prefer yearly? $1,650, one month free.",
     );
@@ -444,7 +440,7 @@ test.describe("Upgrade", () => {
         "current",
         "Player",
         "Your plan",
-        "About 3 verified matches a month · 5 hours of match video",
+        "About 3 verified matches a month · 5 hours",
         "$150",
         "a month",
       ],
@@ -627,6 +623,13 @@ test.describe("Extra hours", () => {
         selection: { choice: "hours", period: "monthly", hours },
       });
     expect(pick(5).rows[0].name).toBe("5 extra hours");
+    // A match is about 1.8 hours, in the usage email's own words.
+    expect([1, 2, 5, 10].map((hours) => pick(hours).rows[0].line)).toEqual([
+      "About half a match · Last 12 months",
+      "About 1 match · Last 12 months",
+      "About 3 matches · Last 12 months",
+      "About 6 matches · Last 12 months",
+    ]);
     expect(pick(5).action).toEqual({
       kind: "hours",
       hours: 5,
@@ -852,7 +855,7 @@ test.describe("Pay yearly", () => {
         id: "current",
         name: "Player, monthly",
         pill: "Your plan",
-        line: "About 3 verified matches a month · 5 hours of match video",
+        line: "About 3 verified matches a month · 5 hours",
         price: "$150",
         then: "a month",
         selectable: false,
@@ -1015,7 +1018,7 @@ test.describe("MOCK: a change at renewal", () => {
         id: "current",
         name: "Player Pro",
         pill: "Your plan",
-        line: "About 6 verified matches a month · 10 hours of match video",
+        line: "About 6 verified matches a month · 10 hours",
         price: "$300",
         then: "a month",
         selectable: false,
@@ -1047,7 +1050,7 @@ test.describe("MOCK: a change at renewal", () => {
       ["Player, monthly", "$150 a month from Jan 14, 2028", "$0"],
       [
         "Player, yearly",
-        "About 3 verified matches a month · 5 hours of match video",
+        "About 3 verified matches a month · 5 hours",
         "$1,650",
       ],
     ]);
