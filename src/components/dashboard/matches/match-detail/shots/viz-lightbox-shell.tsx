@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { Maximize, Minus, Plus, RotateCcw, X } from "lucide-react";
+import { Maximize, Minus, Plus, RotateCcw, Users, X } from "lucide-react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
@@ -41,12 +41,11 @@ import {
 } from "./band-editor-state";
 import { APRON_FILL, HEAT_APRON_FILL } from "./court-art";
 import {
-  projectViewerDot,
   viewerArtPoint,
   viewerFullCourtTransform,
   viewerInitialTransform,
 } from "./court-geometry";
-import { bandKindFor } from "./cut-kinds";
+import { bandKindFor, isPlacementCut } from "./cut-kinds";
 import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
 import type { PlayerChipLabels } from "./player-chip-labels";
@@ -58,13 +57,18 @@ import { LightboxAdvancedDrawer } from "./lightbox-advanced-drawer";
 import { LightboxMatchesSheet } from "./lightbox-matches-sheet";
 import {
   LightboxCourt,
+  framingCut,
+  markAnchor,
+  marksDrawn,
   pairContactPoint,
   type CourtOutline,
+  type CourtPinnedRow,
 } from "./lightbox-court";
 import {
   COUNT_NOUN,
   LegendFilter,
   LightboxFilterPanel,
+  toolbarChipsFor,
   type LightboxAdvancedFilters,
   type LightboxSeasonFilters,
 } from "./lightbox-filters";
@@ -94,13 +98,14 @@ import {
   editorContext,
 } from "./viz-bands-editor";
 import type { VizBandsOverlayProps } from "./viz-bands-overlay";
-import { legendItemsFor } from "./viz-labels";
+import { legendItemsFor, withOutcomeNames } from "./viz-labels";
 import { isMarkRovingKey } from "./viz-mark-roving";
 import { notDrawnNote } from "./wall-summary";
 import {
   approachNoun,
   bandStatRowsForDots,
   type Chart,
+  type CourtEnds,
   type Cut,
   type PlayerFilter,
   type VizDot,
@@ -108,6 +113,7 @@ import {
   type VizMark,
   type VizResult,
   type VizStats,
+  courtEndsFor,
 } from "./viz-model";
 
 /** What the Points column draws, handed to the host's `render`. */
@@ -165,8 +171,9 @@ export interface VizLightboxShellProps {
    * Points row, watches that one point when `canWatch` says it can; the
    * first click only selects. `onWatch` is handed the strip's sentence (the
    * host's filters, then the legend's and a Statistics row's pick) to name
-   * the point by. Omitted, a second click does nothing and every hint reads
-   * "Click to focus".
+   * the point by. The selected mark's card offers the same watch as a
+   * "Watch point" button. Omitted, a second click does nothing and every
+   * card reads "No video for this point".
    */
   watch?: {
     /** Handed a drawn mark, or an Approaches entry with no landing (its
@@ -182,8 +189,15 @@ export interface VizLightboxShellProps {
    *  and zoom tooltips get it: an open tooltip is the topmost layer and
    *  would otherwise take the Esc meant for the lightbox. */
   headerAction?: (ctx: { onTooltipEscape: () => void }) => ReactNode;
+  /** Beside the title: an open shared view's "Shared with team" /
+   *  "Shared by <name>". */
+  titleTag?: string;
   /** One line under the subtitle: a change to the view the server refused. */
   notice?: string;
+  /** A text action at the notice's end — the share clash's "Rename", which
+   *  opens the rename popover. With it, the notice is the 12px inline alert
+   *  (board Final-18). */
+  noticeAction?: { label: string; onClick: () => void };
   subtitle: string;
   /** The strip's sentence for the filters (the shell adds the legend's and a
    *  Statistics row's pick). Empty: no strip unless a pick is on. */
@@ -221,6 +235,10 @@ export interface VizLightboxShellProps {
   /** The control row's menus (view, chart). `enterBandEdit` opens the band
    *  editor, when `bandEditor` allows it. */
   controls?: (ctx: { enterBandEdit: () => void }) => ReactNode;
+  /** The bands menu, drawn beside the legend under the court
+   *  (`VizBandsMenu`). `enterBandEdit` as for `controls`. Omitted, or
+   *  rendering nothing (a cut without bands), no trigger is drawn. */
+  bandsMenu?: (ctx: { enterBandEdit: () => void }) => ReactNode;
   /** The band editor: who may edit, the live bands, how to save, and the
    *  receipt. Omitted, there is no editing. */
   bandEditor?: {
@@ -247,6 +265,15 @@ export interface VizLightboxShellProps {
   } | null;
   /** "Create view": the blank court with its prompt. */
   draft?: { readOnly: boolean; onChooseView: () => void };
+  /**
+   * The court's Placement · Contact · Both switch (plan 2026-11-25 §6),
+   * drawn beside the zoom control on Scatter. The host passes it only for a
+   * chart with both ends — Errors, Returns, Rally shots, Approaches
+   * (`isPlacementCut` of the CHART cut, never the drawn one) — and
+   * `onChange` writes `withCourtEnds` against that chart cut. Omitted (Serves,
+   * Rally position, a draft), no switch.
+   */
+  courtEnds?: { value: CourtEnds; onChange: (ends: CourtEnds) => void };
   /**
    * The frame alone, while the host's data is on its way: the header's
    * words and the two columns are drawn as a loading status named for
@@ -308,7 +335,9 @@ export function VizLightboxShell({
   watch,
   title,
   headerAction,
+  titleTag,
   notice,
+  noticeAction,
   subtitle,
   filterPhrases,
   sentenceNote,
@@ -318,11 +347,13 @@ export function VizLightboxShell({
   player,
   filterPanel,
   controls,
+  bandsMenu,
   bandEditor,
   pointList,
   statHint,
   footer,
   draft,
+  courtEnds,
   pending = false,
 }: VizLightboxShellProps) {
   const isDraft = draft !== undefined;
@@ -406,6 +437,9 @@ export function VizLightboxShell({
     pick: StatPick;
   } | null>(null);
   const [statHover, setStatHover] = useState<StatPick | null>(null);
+  /** The Statistics row of a band or lane pinned on the court (plan §8):
+   *  lit as if hovered until the court lets the pin go. Never a filter. */
+  const [courtPin, setCourtPin] = useState<CourtPinnedRow | null>(null);
   const courtStamp = `${cut}:${player?.value ?? ""}`;
   // A pick whose stamp no longer matches is DROPPED, not just hidden, so
   // switching back never brings it back: the legend's on a cut change or a
@@ -445,6 +479,32 @@ export function VizLightboxShell({
       ),
     [result, legendPick, pickIds],
   );
+  // Which ends of each shot the court draws: the chart's Placement ·
+  // Contact · Both view, on Scatter — Heat and Zones draw no marks, and read
+  // each shot at its landing as they always have.
+  const ends = chart === "scatter" ? courtEndsFor(cut, filters) : null;
+  // The cut whose opening frame the court is seen on: the whole length once
+  // contact marks are drawn on a placement cut (`framingCut`).
+  const frameCut = framingCut(cut, ends);
+  // The marks the court draws: in Contact, a shot with no recorded contact
+  // has no mark. It still lists, counts and watches, as an Approaches entry
+  // with no landing does.
+  const courtDots = useMemo(
+    () => marksDrawn(cut, ends, dots),
+    [cut, ends, dots],
+  );
+  // "Contact recorded for X of Y": while the view draws contact (Contact or
+  // Both) on a placement court, of the shown marks (Y), those with a
+  // recorded contact (X, `VizDot.pair`). Only said when some have none — in
+  // Contact those are not drawn, in Both they draw their landing alone.
+  const contactLine = useMemo(() => {
+    if (!isPlacementCut(cut) || (ends !== "contact" && ends !== "both"))
+      return null;
+    const withContact = dots.filter((d) => d.pair !== undefined).length;
+    return withContact < dots.length
+      ? `Contact recorded for ${withContact} of ${dots.length}`
+      : null;
+  }, [cut, ends, dots]);
   // Every mark the Points list stands for: the drawn ones, then the
   // Approaches cut's counted approaches with no landing, narrowed by the
   // same picks. They list, count and watch like a mark; the court never
@@ -477,7 +537,7 @@ export function VizLightboxShell({
   // but there is no mark to ring, nor siblings to fade.
   const drawnSelectedMarkId =
     visibleSelectedMarkId !== null &&
-    dots.some((dot) => dot.id === visibleSelectedMarkId)
+    courtDots.some((dot) => dot.id === visibleSelectedMarkId)
       ? visibleSelectedMarkId
       : null;
   // A selection whose mark has left the court (a filter, a legend or
@@ -517,7 +577,7 @@ export function VizLightboxShell({
   );
   const exitEdit = useCallback(() => setEditor(null), []);
 
-  const pz = usePanZoom(cut, stageRef, dropActiveMark, editing);
+  const pz = usePanZoom(frameCut, stageRef, dropActiveMark, editing);
 
   /* ── Selecting a mark glides the court to it ──────────────────────────── */
 
@@ -525,7 +585,7 @@ export function VizLightboxShell({
   // the stage, easing in to 150% of the cut's 100% on the way when the court
   // is further out than that; deselecting leaves the court where it is.
   //
-  // An Approaches pair is one mark drawn in two places, so it glides to the
+  // A pair is one mark drawn in two places, so it glides to the
   // MIDPOINT of its contact and placement instead, and its zoom is capped at
   // the scale that keeps both inside the stage with `PAIR_GLIDE_MARGIN_PX` to
   // spare — zooming back out if the court was closer in than that. Centring
@@ -534,11 +594,12 @@ export function VizLightboxShell({
   const glideToMark = useCallback(
     (dot: VizDot) => {
       if (pzStage.w === 0 || pzStage.h === 0) return;
-      const placed = projectViewerDot(cut, dot);
+      const placed = markAnchor(cut, ends, dot);
+      if (placed === null) return;
       const p = viewerArtPoint(placed.x, placed.y);
-      const home = viewerInitialTransform(cut, pzStage);
+      const home = viewerInitialTransform(frameCut, pzStage);
       const minZ = home.z * GLIDE_MIN_RELATIVE_ZOOM;
-      const contact = pairContactPoint(cut, dot);
+      const contact = pairContactPoint(cut, dot, ends);
       if (contact === null) {
         glideTo(p, minZ);
         return;
@@ -556,7 +617,7 @@ export function VizLightboxShell({
         maxZ,
       );
     },
-    [cut, pzStage, glideTo],
+    [cut, ends, frameCut, pzStage, glideTo],
   );
   // The host's watch and the strip's sentence, read at click time through
   // refs so `select` keeps its identity across the host's renders (the mark
@@ -580,10 +641,10 @@ export function VizLightboxShell({
       }
       setSelectedMarkId(mark.id);
       // An undrawn approach has no place to glide to: the row lights alone.
-      const drawn = dots.find((d) => d.id === mark.id);
+      const drawn = courtDots.find((d) => d.id === mark.id);
       if (drawn) glideToMark(drawn);
     },
-    [visibleSelectedMarkId, glideToMark, dots],
+    [visibleSelectedMarkId, glideToMark, courtDots],
   );
   const selectMark = useCallback(
     (id: string) => {
@@ -718,6 +779,15 @@ export function VizLightboxShell({
     filtersTriggerRef.current?.focus({ preventScroll: true });
   }, [drawerPhase]);
   const advancedFilters = filterPanel?.advanced;
+  // The toolbar's lead chips for this chart (see the toolbar), or none.
+  const toolbarChips =
+    filterPanel &&
+    toolbarChipsFor({
+      cut,
+      filters,
+      setFilters: filterPanel.onChange,
+      errorSplitJudged: filterPanel.errorSplitJudged,
+    });
   const seasonFilters = filterPanel?.season;
   const drawerShown =
     drawerPhase !== "closed" &&
@@ -902,7 +972,7 @@ export function VizLightboxShell({
   // a landing cut's half court is 100%, so "150%" is 1.5× that and the whole
   // court ("Full court") reads below 100%.
   const measured = pz.stage.w > 0 && pz.stage.h > 0;
-  const homeT = measured ? viewerInitialTransform(cut, pz.stage) : null;
+  const homeT = measured ? viewerInitialTransform(frameCut, pz.stage) : null;
   const fullT = measured ? viewerFullCourtTransform(pz.stage) : null;
   const zoomRelative = homeT ? pz.t.z / homeT.z : 1;
   const sameT = (a: { z: number; px: number; py: number } | null) =>
@@ -930,7 +1000,12 @@ export function VizLightboxShell({
           many: approachNoun(filters.entry, 2),
         }
       : undefined;
-  const legend = legendItemsFor(cut, chart);
+  // Named for who won the point, by the player chips' words ("JR won").
+  const legend = withOutcomeNames(
+    legendItemsFor(cut, chart),
+    player?.value,
+    player?.labels,
+  );
   const heat = chart === "heat";
 
   function clearFilters() {
@@ -942,7 +1017,15 @@ export function VizLightboxShell({
   // The strip's sentence: the host's filters, then the legend's pick and a
   // Statistics row — so nothing narrows or widens the court unseen.
   const phrases = [...filterPhrases];
-  if (legendPick !== null) phrases.push(LEGEND_WORD[legendPick]);
+  if (legendPick !== null) {
+    // A won / lost pick says who won, in the legend's own words ("Kim won");
+    // Out and Aces keep the strip's own.
+    const named =
+      legendPick === "won" || legendPick === "lost"
+        ? legend.find((item) => item.key === legendPick)?.label
+        : undefined;
+    phrases.push(named ?? LEGEND_WORD[legendPick]);
+  }
   if (activeStatPick !== null) phrases.push(activeStatPick.label);
   useEffect(() => {
     phrasesRef.current = phrases;
@@ -1036,6 +1119,19 @@ export function VizLightboxShell({
                   >
                     {pending ? <LightboxTitlePending label={title} /> : title}
                   </DialogPrimitive.Title>
+                  {titleTag && !pending && (
+                    <span
+                      data-lightbox-title-tag=""
+                      className="inline-flex shrink-0 items-center gap-1 text-[12px] text-[var(--ink-500)]"
+                    >
+                      <Users
+                        className="size-3"
+                        strokeWidth={1.5}
+                        aria-hidden="true"
+                      />
+                      {titleTag}
+                    </span>
+                  )}
                 </div>
                 <p
                   id="viz-lightbox-subtitle"
@@ -1046,9 +1142,24 @@ export function VizLightboxShell({
                 {notice && !pending && (
                   <p
                     role="alert"
-                    className="m-0 text-[11px] text-[var(--error)]"
+                    className={cn(
+                      "m-0 text-[var(--error)]",
+                      noticeAction ? "text-[12px]" : "text-[11px]",
+                    )}
                   >
                     {notice}
+                    {noticeAction && (
+                      <>
+                        {" "}
+                        <button
+                          type="button"
+                          onClick={noticeAction.onClick}
+                          className="cursor-pointer font-medium text-[var(--blue)] hover:underline focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none"
+                        >
+                          {noticeAction.label}
+                        </button>
+                      </>
+                    )}
                   </p>
                 )}
               </div>
@@ -1087,7 +1198,10 @@ export function VizLightboxShell({
               >
                 {/* Court column */}
                 <div className="flex min-w-0 shrink-0 flex-col gap-3 md:min-h-0 md:max-w-[800px] md:flex-1 md:shrink">
-                  <div className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3">
+                  <div
+                    data-lightbox-toolbar=""
+                    className="flex min-h-7 flex-wrap items-center gap-2 border-b border-[var(--border-hairline)] pb-3"
+                  >
                     {player && (
                       <PlayerChips
                         value={player.value}
@@ -1096,6 +1210,34 @@ export function VizLightboxShell({
                         className="flex gap-1.5"
                       />
                     )}
+                    {/* The chart's lead chips, behind a hairline from the
+                        player chips: Returns the serve they answer, Serves
+                        1st or 2nd (board Final-04), Rally shots their rally
+                        length (Final-07), Errors their type, Approaches
+                        their way to the net. Drawn in a draft too — the
+                        Filters menu is not, and the chips hold the one
+                        control for these keys. */}
+                    {toolbarChips && (
+                      <>
+                        {player && (
+                          <span
+                            aria-hidden="true"
+                            className="h-4 w-px bg-[var(--border-medium)]"
+                          />
+                        )}
+                        {toolbarChips}
+                      </>
+                    )}
+                    {/* The spacer: the chart menu and Filters sit at the
+                        row's right end (the Final boards). The bands
+                        receipt reads into it, right-aligned beside them. */}
+                    <span
+                      aria-hidden="true"
+                      data-toolbar-spacer=""
+                      className="min-w-0 flex-1 truncate text-right text-[11px] text-[var(--ink-600)]"
+                    >
+                      {receipt?.message}
+                    </span>
                     {controls && (
                       <ControlsSlot
                         render={controls}
@@ -1112,7 +1254,6 @@ export function VizLightboxShell({
                         engaged={anyCut}
                         result={result}
                         sets={filterPanel.sets}
-                        errorSplitJudged={filterPanel.errorSplitJudged}
                         countWith={filterPanel.countWith}
                         advanced={filterPanel.advanced}
                         onOpenAdvanced={openAdvanced}
@@ -1120,14 +1261,6 @@ export function VizLightboxShell({
                         triggerRef={filtersTriggerRef}
                         season={filterPanel.season}
                       />
-                    )}
-                    {receipt !== null && (
-                      <span
-                        aria-hidden="true"
-                        className="ml-auto truncate text-[11px] text-[var(--ink-600)]"
-                      >
-                        {receipt.message}
-                      </span>
                     )}
                   </div>
 
@@ -1190,7 +1323,8 @@ export function VizLightboxShell({
                     <LightboxCourt
                       cut={cut}
                       chart={chart}
-                      dots={isDraft ? [] : dots}
+                      ends={ends}
+                      dots={isDraft ? [] : courtDots}
                       zoneStats={isDraft ? null : result.zoneStats}
                       filters={filters}
                       subjectName={subjectName}
@@ -1210,8 +1344,10 @@ export function VizLightboxShell({
                       matchFor={matchFor}
                       opponentHand={opponentHand}
                       canWatchMark={canWatchMark}
+                      unit={unit}
                       focusIds={statHover !== null ? hoverIds : null}
                       outline={outline}
+                      onPinRow={setCourtPin}
                       onReadoutEnter={holdReadout}
                       onReadoutLeave={releaseReadout}
                       editing={editing}
@@ -1300,6 +1436,9 @@ export function VizLightboxShell({
                     ) : (
                       !isDraft && (
                         <ZoomControls
+                          courtEnds={
+                            chart === "scatter" ? courtEnds : undefined
+                          }
                           relative={zoomRelative}
                           atHome={atHome}
                           atFullCourt={atFullCourt}
@@ -1314,64 +1453,92 @@ export function VizLightboxShell({
                   </div>
 
                   {!isDraft && (
-                    <div className="flex items-center justify-between gap-3 [&>*:first-child]:min-w-0">
-                      {chart === "scatter" ? (
-                        <LegendFilter
-                          items={legend}
-                          counts={legendCounts(resultMarks(result))}
-                          pick={legendPick}
-                          onPick={(next) => {
-                            setLegendPick(next);
-                            setSelectedMarkId(null);
-                          }}
-                        />
-                      ) : (
-                        // `min-h-6`: the Scatter legend's row height (its
-                        // keys are 24px buttons), so a chart switch never
-                        // changes the stage's height — a resized stage re-fits
-                        // the court (`usePanZoom`) and would throw away the
-                        // reader's pan and zoom.
-                        <div
-                          role="group"
-                          aria-label="Legend"
-                          className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-0.5"
-                        >
-                          {legend.map((item) =>
-                            item.glyph === "ramp" ? (
-                              <HeatRampLegend key={item.key} />
-                            ) : (
-                              <span key={item.key} className="px-1">
-                                <LegendMark item={item} />
-                              </span>
-                            ),
-                          )}
-                        </div>
-                      )}
-                      {(showNotDrawn || sentenceNote) && (
-                        <div className="flex shrink-0 items-center gap-3">
-                          {/* Some approaches drawn, some not: the same
+                    <div
+                      data-lightbox-legend-row=""
+                      className="flex items-center justify-between gap-3"
+                    >
+                      {/* The legend keys and its quiet notes on the left,
+                          the bands menu at the row's far right (the Final
+                          boards; plan 2026-11-25 §4: bands left the chart
+                          menu). */}
+                      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
+                        {chart === "scatter" ? (
+                          <LegendFilter
+                            items={legend}
+                            counts={legendCounts(resultMarks(result))}
+                            pick={legendPick}
+                            onPick={(next) => {
+                              setLegendPick(next);
+                              setSelectedMarkId(null);
+                            }}
+                          />
+                        ) : (
+                          // `min-h-6`: the Scatter legend's row height (its
+                          // keys are 24px buttons), so a chart switch never
+                          // changes the stage's height — a resized stage re-fits
+                          // the court (`usePanZoom`) and would throw away the
+                          // reader's pan and zoom.
+                          <div
+                            role="group"
+                            aria-label="Legend"
+                            className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-0.5"
+                          >
+                            {legend.map((item) =>
+                              item.glyph === "ramp" ? (
+                                <HeatRampLegend key={item.key} />
+                              ) : (
+                                <span key={item.key} className="px-1">
+                                  <LegendMark item={item} />
+                                </span>
+                              ),
+                            )}
+                          </div>
+                        )}
+                        {(showNotDrawn || sentenceNote || contactLine) && (
+                          <div className="flex shrink-0 items-center gap-3">
+                            {/* Some approaches drawn, some not: the same
                               sentence as a quiet line at the legend's end, so
                               the marks on court never read as every approach
                               counted. */}
-                          {showNotDrawn && (
-                            <p
-                              data-viz-not-drawn=""
-                              className="text-micro m-0 leading-6 text-[var(--ink-600)] tabular-nums"
-                            >
-                              {notDrawnLine}
-                            </p>
-                          )}
-                          {/* A drawn mark's wing rests on a hand the match
+                            {showNotDrawn && (
+                              <p
+                                data-viz-not-drawn=""
+                                className="text-micro m-0 leading-6 text-[var(--ink-600)] tabular-nums"
+                              >
+                                {notDrawnLine}
+                              </p>
+                            )}
+                            {/* A drawn mark's wing rests on a hand the match
                               does not hold: said here, once, whether or not
                               a filter strip is up. */}
-                          {sentenceNote && (
-                            <p
-                              data-viz-hand-assumed=""
-                              className="text-micro m-0 leading-6 text-[var(--ink-600)]"
-                            >
-                              {sentenceNote}
-                            </p>
-                          )}
+                            {sentenceNote && (
+                              <p
+                                data-viz-hand-assumed=""
+                                className="text-micro m-0 leading-6 text-[var(--ink-600)]"
+                              >
+                                {sentenceNote}
+                              </p>
+                            )}
+                            {/* Some shown shots have no recorded contact:
+                              said once, quietly, so a court drawing contact
+                              never reads as every shot's. */}
+                            {contactLine !== null && (
+                              <p
+                                data-viz-contact-recorded=""
+                                className="m-0 text-[11px] leading-6 text-[var(--ink-500)] tabular-nums"
+                              >
+                                {contactLine}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      {bandsMenu && (
+                        <div className="flex shrink-0 items-center">
+                          <ControlsSlot
+                            render={bandsMenu}
+                            enterBandEdit={enterBandEdit}
+                          />
                         </div>
                       )}
                     </div>
@@ -1453,6 +1620,7 @@ export function VizLightboxShell({
                             );
                           }}
                           onHover={setStatHover}
+                          highlight={courtPin}
                           hint={statHint}
                         />
                       </div>
@@ -1556,6 +1724,7 @@ function StageCard({ children }: { children: ReactNode }) {
  * already there.
  */
 function ZoomControls({
+  courtEnds,
   relative,
   atHome,
   atFullCourt,
@@ -1565,6 +1734,9 @@ function ZoomControls({
   onReset,
   onEscape,
 }: {
+  /** The Placement · Contact · Both switch, drawn first in the same card
+   *  (board Errors-both-2-zoom, variant B). Omitted, the zoom alone. */
+  courtEnds?: { value: CourtEnds; onChange: (ends: CourtEnds) => void };
   relative: number;
   atHome: boolean;
   atFullCourt: boolean;
@@ -1581,71 +1753,92 @@ function ZoomControls({
     <>
       <div
         data-chrome=""
-        role="group"
-        aria-label="Zoom"
         className="absolute right-3 bottom-3 flex items-center gap-0.5 rounded-[10px] bg-[var(--surface-card)] p-[3px] shadow-[var(--shadow-dropdown)]"
       >
-        <ChromeTooltip
-          label="Zoom in"
-          shortcut="+"
-          side="top"
-          onEscapeKeyDown={onEscape}
+        {courtEnds && (
+          <>
+            <CourtEndsSwitch
+              value={courtEnds.value}
+              onChange={courtEnds.onChange}
+              onEscape={onEscape}
+            />
+            <span
+              aria-hidden="true"
+              className="mx-0.5 h-4 w-px bg-[var(--border-medium)]"
+            />
+          </>
+        )}
+        <div
+          role="group"
+          aria-label="Zoom"
+          className="flex items-center gap-0.5"
         >
-          <button
-            type="button"
-            aria-label="Zoom in"
-            onClick={onZoomIn}
-            className={button}
+          <ChromeTooltip
+            label="Zoom in"
+            shortcut="+"
+            side="top"
+            onEscapeKeyDown={onEscape}
           >
-            <Plus className="size-3.5" strokeWidth={1.5} aria-hidden />
-          </button>
-        </ChromeTooltip>
-        <ChromeTooltip
-          label="Zoom out"
-          shortcut="−"
-          side="top"
-          onEscapeKeyDown={onEscape}
-        >
-          <button
-            type="button"
-            aria-label="Zoom out"
-            onClick={onZoomOut}
-            className={button}
+            <button
+              type="button"
+              aria-label="Zoom in"
+              onClick={onZoomIn}
+              className={button}
+            >
+              <Plus className="size-3.5" strokeWidth={1.5} aria-hidden />
+            </button>
+          </ChromeTooltip>
+          <ChromeTooltip
+            label="Zoom out"
+            shortcut="−"
+            side="top"
+            onEscapeKeyDown={onEscape}
           >
-            <Minus className="size-3.5" strokeWidth={1.5} aria-hidden />
-          </button>
-        </ChromeTooltip>
-        <span
-          aria-hidden="true"
-          className="mx-0.5 h-4 w-px bg-[var(--border-medium)]"
-        />
-        <ChromeTooltip
-          label="Reset view"
-          shortcut="0"
-          side="top"
-          onEscapeKeyDown={onEscape}
-        >
-          <button
-            type="button"
-            aria-label="Reset view"
-            onClick={onReset}
-            disabled={atHome}
-            className={button}
+            <button
+              type="button"
+              aria-label="Zoom out"
+              onClick={onZoomOut}
+              className={button}
+            >
+              <Minus className="size-3.5" strokeWidth={1.5} aria-hidden />
+            </button>
+          </ChromeTooltip>
+          <span
+            aria-hidden="true"
+            className="mx-0.5 h-4 w-px bg-[var(--border-medium)]"
+          />
+          <ChromeTooltip
+            label="Reset view"
+            shortcut="0"
+            side="top"
+            onEscapeKeyDown={onEscape}
           >
-            <RotateCcw className="size-3.5" strokeWidth={1.5} aria-hidden />
-          </button>
-        </ChromeTooltip>
-        <ChromeTooltip label="Full court" side="top" onEscapeKeyDown={onEscape}>
-          <button
-            type="button"
-            aria-label="Full court"
-            onClick={onFullCourt}
-            disabled={atFullCourt}
-            className={button}
+            <button
+              type="button"
+              aria-label="Reset view"
+              onClick={onReset}
+              disabled={atHome}
+              className={button}
+            >
+              <RotateCcw className="size-3.5" strokeWidth={1.5} aria-hidden />
+            </button>
+          </ChromeTooltip>
+          <ChromeTooltip
+            label="Full court"
+            side="top"
+            onEscapeKeyDown={onEscape}
           >
-            <Maximize className="size-3.5" strokeWidth={1.5} aria-hidden />
-          </button>
-        </ChromeTooltip>
+            <button
+              type="button"
+              aria-label="Full court"
+              onClick={onFullCourt}
+              disabled={atFullCourt}
+              className={button}
+            >
+              <Maximize className="size-3.5" strokeWidth={1.5} aria-hidden />
+            </button>
+          </ChromeTooltip>
+        </div>
       </div>
       {!atHome && (
         <span
@@ -1656,5 +1849,136 @@ function ZoomControls({
         </span>
       )}
     </>
+  );
+}
+
+/** The switch's three options: its name (the button's accessible name and
+ *  the tooltip's 12/500 title), the tooltip's 11px detail line, and which
+ *  half of the court glyph is shaded. */
+const COURT_ENDS_OPTIONS: readonly {
+  ends: CourtEnds;
+  label: string;
+  detail: string;
+}[] = [
+  { ends: "placement", label: "Placement", detail: "Where it landed" },
+  { ends: "contact", label: "Contact", detail: "Where it was hit" },
+  {
+    ends: "both",
+    label: "Both",
+    detail: "Where it was hit and where it landed",
+  },
+];
+
+/**
+ * Placement · Contact · Both (plan 2026-11-25 §6): three 28px court-glyph
+ * buttons, one radio group. The checked one takes the subtle surface and
+ * ink-900, the others ink-700 on nothing. A press writes the view in place —
+ * the lightbox stays mounted and focus stays on the pressed button. Arrows
+ * move the choice, as a radio group's do, and are kept from the court's own
+ * arrow-key pan.
+ */
+function CourtEndsSwitch({
+  value,
+  onChange,
+  onEscape,
+}: {
+  value: CourtEnds;
+  onChange: (ends: CourtEnds) => void;
+  onEscape: () => void;
+}) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+  function onKeyDown(e: React.KeyboardEvent, index: number) {
+    const step =
+      e.key === "ArrowRight" || e.key === "ArrowDown"
+        ? 1
+        : e.key === "ArrowLeft" || e.key === "ArrowUp"
+          ? -1
+          : 0;
+    if (step === 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const n = COURT_ENDS_OPTIONS.length;
+    const next = (index + step + n) % n;
+    refs.current[next]?.focus();
+    onChange(COURT_ENDS_OPTIONS[next].ends);
+  }
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Court view"
+      className="flex items-center gap-0.5"
+    >
+      {COURT_ENDS_OPTIONS.map((option, index) => {
+        const checked = option.ends === value;
+        return (
+          <ChromeTooltip
+            key={option.ends}
+            label={option.label}
+            detail={option.detail}
+            side="top"
+            onEscapeKeyDown={onEscape}
+          >
+            <button
+              ref={(el) => {
+                refs.current[index] = el;
+              }}
+              type="button"
+              role="radio"
+              aria-checked={checked}
+              aria-label={option.label}
+              tabIndex={checked ? 0 : -1}
+              onClick={() => {
+                if (!checked) onChange(option.ends);
+              }}
+              onKeyDown={(e) => onKeyDown(e, index)}
+              className={cn(
+                "flex size-7 cursor-pointer items-center justify-center rounded-[8px] transition-colors duration-200 hover:bg-[var(--surface-subtle)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area",
+                checked
+                  ? "bg-[var(--surface-subtle)] text-[var(--ink-900)]"
+                  : "text-[var(--ink-700)]",
+              )}
+            >
+              <CourtEndsGlyph ends={option.ends} />
+            </button>
+          </ChromeTooltip>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * A 14px court seen from above, net across its middle: the far half shaded
+ * for Placement (where shots land), the near half for Contact (where they
+ * are hit from), the whole court for Both.
+ */
+function CourtEndsGlyph({ ends }: { ends: CourtEnds }) {
+  const shade =
+    ends === "placement"
+      ? { y: 1.75, height: 5.25 }
+      : ends === "contact"
+        ? { y: 7, height: 5.25 }
+        : { y: 1.75, height: 10.5 };
+  return (
+    <svg
+      viewBox="0 0 14 14"
+      className="size-3.5"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.25}
+      aria-hidden="true"
+    >
+      <rect
+        x={3.75}
+        y={shade.y}
+        width={6.5}
+        height={shade.height}
+        fill="currentColor"
+        stroke="none"
+        opacity={0.35}
+      />
+      <rect x={3.625} y={1.625} width={6.75} height={10.75} rx={1} />
+      <line x1={3.625} y1={7} x2={10.375} y2={7} />
+    </svg>
   );
 }

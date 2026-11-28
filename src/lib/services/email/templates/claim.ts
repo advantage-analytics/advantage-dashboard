@@ -3,6 +3,10 @@ import { verifyIdentityUrl } from "@/lib/services/programs/claim-verification";
 import { renderEmail, renderText, type EmailContent } from "../shell";
 import type { EmailMessage } from "../send";
 import { OUTREACH_UNSUBSCRIBE_URL, SUPPORT_ADDRESS } from "../config";
+import {
+  claimInviteSentence,
+  type ClaimInviteOpening,
+} from "@/lib/billing/claim-copy";
 
 /**
  * The six emails a program claim produces.
@@ -160,10 +164,11 @@ export interface ProgramClaimInviteInput {
   /** The directory key — `/claim/[programKey]` is the whole point of this email. */
   programKey: string;
   /**
-   * Whether the pilot is already waiting on the other side. It changes what
-   * the recipient finds, so it changes what the email may promise.
+   * What is waiting on the other side (`claimInviteOpening()`): the pilot, a
+   * workspace that opens with no hours until a plan, or a review. It changes
+   * what the recipient finds, so it changes what the email may promise.
    */
-  pilot: boolean;
+  opening: ClaimInviteOpening;
 }
 
 /**
@@ -192,6 +197,11 @@ export interface ProgramClaimInviteInput {
  * who expects a wait will put the email down. With the pilot off there is a
  * review step and the copy does not pretend otherwise.
  *
+ * From January 1, 2027 that switch still opens the workspace on finish, but
+ * it only means free hours for a program whose pilot is actually running.
+ * For any other the line says the workspace opens and video waits on a plan
+ * (`opening: "plan"`); the three sentences are in `billing/claim-copy.ts`.
+ *
  * Like `claimVerifyIdentityEmail`, the recipient may never have heard of us,
  * so it reads as an offer and not a summons: one question, one button, and an
  * explicit line that ignoring it costs them nothing.
@@ -199,7 +209,7 @@ export interface ProgramClaimInviteInput {
 export function programClaimInviteEmail(
   input: ProgramClaimInviteInput,
 ): EmailMessage {
-  const { to, programName, programKey, pilot } = input;
+  const { to, programName, programKey, opening } = input;
 
   const content: EmailContent = {
     preheader: `${programName} is set up on Advantage — finish setting it up in a couple of minutes.`,
@@ -207,9 +217,7 @@ export function programClaimInviteEmail(
     heading: `${programName} is ready for you`,
     body: [
       `We've added ${programName} to Advantage — a match analysis tool for collegiate programs — and you're listed as its head coach. Setting it up takes a couple of minutes and confirms the address you read this at.`,
-      pilot
-        ? "Your program is already on the pilot, so the workspace opens as soon as you finish — there's no wait and nothing to pay."
-        : "Once you finish, we'll check the details and open the workspace.",
+      claimInviteSentence(opening),
     ],
     facts: [
       { label: "Program", value: programName },

@@ -49,7 +49,7 @@ import {
   applyShotsRestored,
   gameServer,
   isLabelGame,
-  liveShotsAfter,
+  shotsRemovedAfter,
   planAddedShot,
   ADD_SHOT_AT_START,
   planPointChecked,
@@ -386,7 +386,7 @@ export async function writeLabelShotsRemoveAfter(params: {
   if (read.row.status === "deleted") {
     return { error: "Restore this shot before removing the shots after it." };
   }
-  const after = liveShotsAfter(read.shots, shotId, read.ghosts);
+  const after = shotsRemovedAfter(read.shots, shotId, read.ghosts);
   if (after.length === 0) {
     return { error: "There is no live shot after this one to remove." };
   }

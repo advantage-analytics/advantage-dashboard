@@ -92,6 +92,10 @@ export const LABEL_ONLY_FLAGS = {
   FIRST_SERVE_FAULT_ALONE: "first_serve_fault_alone",
   /** A serve right after a serve that was in: a played let, or two points. */
   SERVE_AFTER_SERVE_IN: "serve_after_serve_in",
+  /** Strokes other than serves between a let or a faulted first serve and the next serve. */
+  HIT_BEFORE_SERVE: "hit_before_serve",
+  /** A second serve with no faulted serve before it, only a let: the replay is a first serve. */
+  FIRST_SERVE_AFTER_LET: "first_serve_after_let",
   /** Two serves by one player from different sides of the centre mark. */
   SERVES_FROM_BOTH_SIDES: "serves_from_both_sides",
   /** A stroke typed as a serve whose hitter is not the point's server. */
@@ -242,6 +246,8 @@ export const LABEL_MARK_META = {
   [LABEL_ONLY_FLAGS.SECOND_SERVE_AS_FIRST]: { tier: "hint", scope: "shot" },
   [LABEL_ONLY_FLAGS.LAST_LANDING_MISSING]: { tier: "hint", scope: "point" },
   [LABEL_ONLY_FLAGS.SERVE_AFTER_SERVE_IN]: { tier: "hint", scope: "shot" },
+  [LABEL_ONLY_FLAGS.HIT_BEFORE_SERVE]: { tier: "hint", scope: "shot" },
+  [LABEL_ONLY_FLAGS.FIRST_SERVE_AFTER_LET]: { tier: "hint", scope: "shot" },
   [LABEL_ONLY_FLAGS.SERVES_FROM_BOTH_SIDES]: { tier: "hint", scope: "shot" },
   [LABEL_ONLY_FLAGS.SERVE_IN_LANDING_OUT]: { tier: "hint", scope: "shot" },
   [LABEL_ONLY_FLAGS.PLACEMENT_MISSING]: { tier: "hint", scope: "shot" },
@@ -373,6 +379,13 @@ export interface LabelMarkParams {
   serve_in_landing_out: { shotId: string; landing: "out" | "net" };
   /** The serve that follows a serve in play — where "Split here" cuts. */
   serve_after_serve_in: { shotId: string };
+  /**
+   * The let or faulted first serve, and the live strokes after it hit before
+   * the server's next serve — what "Remove N" takes.
+   */
+  hit_before_serve: { shotId: string; strokes: string[] };
+  /** The serve typed as a second serve that follows only a let. */
+  first_serve_after_let: { shotId: string };
   /** The later of the two serves: where the second point starts. */
   serves_from_both_sides: { shotId: string };
   /** The stroke typed as a serve, who hit it, and the point's server. */

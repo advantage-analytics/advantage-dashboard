@@ -191,7 +191,11 @@ export const H2H_GROUP_SHAPE = [
  * draws 9 and grows by one row when it lands. The skeleton renders before the
  * data is known, and the two kinds are an even split of analysed matches
  * (48 judged, 47 not, 2026-11-09), so it is sized for the unjudged one: the
- * video-analysed matches, where new matches come from.
+ * video-analysed matches, where new matches come from. Those nearly all have
+ * a ball-paths file (57 of 64, 2026-11-23), so the 8 include Passed the net
+ * player; a view known to have no ball flight data — every SwingVision
+ * import, a share link — leaves that row off (`withoutUnmeasuredPassRow`)
+ * and settles one row shorter.
  */
 export const REPORT_OMITTED_POINT_ROWS = 2;
 

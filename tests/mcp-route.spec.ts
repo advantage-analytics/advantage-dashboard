@@ -2278,6 +2278,62 @@ test.describe("POST /api/mcp · open_visualization", () => {
   });
 });
 
+test.describe("POST /api/mcp · pressure points", () => {
+  test("open_visualization takes pressure_points and the tab reads it as its own Pressure points", async () => {
+    const { route } = loadRoute(world());
+    const result = await callTool(route, "open_visualization", {
+      match_id: MATCH_A,
+      cut: "serves",
+      pressure: ["pressure_points", "break_points", "set_and_match_points"],
+    });
+    expect(result.isError).toBeUndefined();
+    const url = new URL((result.structuredContent as { url: string }).url);
+    expect(url.searchParams.getAll("pressure")).toEqual([
+      "pressure",
+      "break",
+      "setMatch",
+    ]);
+  });
+
+  test("both tools state the rule, and neither calls pressure a break, set or match point", async () => {
+    const { route } = loadRoute(world());
+    const listed = await listTools(route);
+    const described = (tool: string, argument: string) => {
+      const found = listed.tools.find((t) => t.name === tool) as unknown as {
+        inputSchema: {
+          properties: Record<string, { description?: string }>;
+        };
+      };
+      return found.inputSchema.properties[argument].description ?? "";
+    };
+    const rule =
+      "every point played at 30-30, 30-40, 40-30, deuce or an advantage";
+    for (const text of [
+      described("open_visualization", "pressure"),
+      described("find_points", "situation"),
+    ]) {
+      expect(text).toContain(rule);
+      expect(text).toContain(
+        "not a break, set or match point at another score",
+      );
+      expect(text).not.toContain("is any break, set or match point");
+    }
+  });
+
+  test("find_points' pressure is the Video tab's Score › Pressure", async () => {
+    const { route } = loadRoute(world());
+    const result = await callTool(route, "find_points", {
+      match_id: MATCH_A,
+      situation: ["pressure"],
+    });
+    expect(result.isError).toBeUndefined();
+    const url = new URL((result.structuredContent as { url: string }).url);
+    expect(parseMatchFilters(url.searchParams.get("f")).scoreType).toEqual([
+      "pressure",
+    ]);
+  });
+});
+
 test.describe("POST /api/mcp · find_points", () => {
   /** The match row for the first query, the point numbers for the second. */
   function pointsWorld(numbers: number[], source: string | null = "video") {

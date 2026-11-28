@@ -5,6 +5,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
 import { loadConferenceTeams } from "@/lib/services/programs/admin-conference-actions";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
+import { isMissingFunction } from "@/lib/supabase/missing-function";
+import { isMissingTable } from "@/lib/data/season-points-cache";
+import {
+  isCollegePlanId,
+  isPlanTerm,
+  type CollegePlanId,
+  type PlanTerm,
+} from "@/lib/billing/plans";
 import { getMemberAvatarUrls } from "@/lib/data/member-avatars-server";
 import { crestUrl, type SeatUsage } from "@/lib/data/teams-server";
 import { onAdvantageStatus } from "@/lib/data/admin-teams-server";
@@ -37,7 +46,9 @@ import {
 } from "@/lib/data/admin-team-links";
 import type { ProgramUsage } from "@/lib/data/usage-server";
 import { currentBillingMonth } from "@/lib/services/splitstep/config";
-import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
+import { readProgramPlanRef } from "@/lib/billing/plan-fields";
+import { allowanceFor } from "@/lib/services/splitstep/allowance";
+import { scopeToAllowance } from "@/lib/services/splitstep/quota";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
 import type {
   EventsPolicy,
@@ -201,6 +212,32 @@ export interface AdminTeamPilot {
    * when it simply runs out on `endsOn`.
    */
   endedAt: string | null;
+}
+
+/**
+ * The season plan an admin assigned to the program — its `program_plans` row
+ * as `admin_get_program_plan` returns it, the invoice note and the setter's
+ * name included. `AdminTeamData.plan` is null for a team with no plan.
+ */
+export interface AdminTeamPlan {
+  planId: CollegePlanId;
+  planTerm: PlanTerm;
+  /** `starts_on` — first day of the season, inclusive. `YYYY-MM-DD`. */
+  planStartsOn: string;
+  /** `ends_on` — last day of the season, inclusive. `YYYY-MM-DD`. */
+  planEndsOn: string;
+  /**
+   * `hours_from` — when the plan was first saved, which the season pool
+   * counts from when it is later than `planStartsOn`. Null on a database
+   * without the column.
+   */
+  planHoursFrom: string | null;
+  /** The invoice or PO reference. The team never reads it. */
+  planNote: string | null;
+  /** When the plan was last set. */
+  planSetAt: string;
+  /** The admin who set it; null for a deleted or nameless account. */
+  planSetByName: string | null;
 }
 
 /**
@@ -377,6 +414,8 @@ interface AdminTeamData {
   seats: SeatUsage;
   /** Never null — see `AdminTeamPilot`. */
   pilot: AdminTeamPilot;
+  /** Null when no plan is assigned, and when the read failed. */
+  plan: AdminTeamPlan | null;
   /** Null when `programs.conference_id` is null. */
   conference: AdminTeamConference | null;
   /** The latest 20 audit rows, newest first. */
@@ -689,27 +728,40 @@ interface RawUsageRow {
  * thing deliberately dropped: it exists to stop a player reading the whole
  * program's ledger, and an admin is neither.
  *
- * The cap comes from `monthlyCapSecondsFor({ kind: 'team', ...tier })` rather
- * than `getMonthlyCapSeconds('program')` — a custom org files under the program
- * ledger but draws the individual figure until an admin grants
- * `pilot_eligible`, and printing 75 hours beside a spend that refuses at 2 is
- * the exact divergence `quotaTierFor()` exists to prevent.
+ * The cap and the rows it counts come from `allowanceFor()`, the resolver the
+ * reservation reads — printing 75 hours beside a spend that refuses at 2 (or,
+ * from January 1, 2027, at 0) is the exact divergence it exists to prevent.
  */
 async function readUsage(
   admin: SupabaseClient,
   programId: string,
   billingMonth: string,
-  tier: Pick<Workspace, "orgType" | "pilotEligible">,
+  tier: Pick<
+    Workspace,
+    "orgType" | "pilotEligible" | "pilotEndsOn" | "pilotEndedAt"
+  >,
 ): Promise<ProgramUsage> {
-  const capSeconds = monthlyCapSecondsFor({ kind: "team", ...tier });
+  // The season plan decides the cap and its window from January 1, 2027, so
+  // it is read first; no plan (or no table yet) is the fail-closed figure.
+  const allowance = allowanceFor({
+    kind: "team",
+    ...tier,
+    programPlan: await readProgramPlanRef(admin, programId),
+  });
+  const capSeconds = allowance.capSeconds;
 
-  const { data, error } = await admin
-    .from("processing_usage")
-    .select("created_by, reserved_seconds, actual_seconds, job_id")
-    .eq("account_id", programId)
-    .eq("account_type", "program")
-    .eq("billing_month", billingMonth)
-    .eq("released", false);
+  const { data, error } = await scopeToAllowance(
+    admin
+      .from("processing_usage")
+      .select("created_by, reserved_seconds, actual_seconds, job_id")
+      .eq("account_id", programId)
+      .eq("account_type", "program")
+      .eq("released", false),
+    // The caller's month when it is not the one the allowance is for.
+    billingMonth === allowance.billingMonth
+      ? allowance
+      : { ...allowance, windowed: false, billingMonth },
+  );
 
   if (error) {
     console.error("[admin team] could not read program usage", {
@@ -860,6 +912,72 @@ async function readPilot(
     approvedByName,
     approvedByIsViewer: approvedBy !== null && approvedBy === viewerId,
     endedAt: row.pilot_ended_at,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Plan — the program's `program_plans` row, through `admin_get_program_plan`
+// ---------------------------------------------------------------------------
+
+/**
+ * The program's plan, or null when it has none.
+ *
+ * Read through `admin_get_program_plan` on the SESSION client, as the
+ * signed-in admin: `note` and `set_by` carry no client grant, the function is
+ * the one read of them, and it checks `is_admin()` against `auth.uid()`, which
+ * is null through the service role.
+ *
+ * Never fatal, like `programPlansByProgram` in the workspace loader.
+ * `program_plans` and this function arrive with
+ * `20261126060000_plans_2027_plan_model`, a migration applied by hand, and
+ * this code can be deployed before it: a missing function or table then reads
+ * as "no plan", which is true until an admin can assign one, and is not worth
+ * a log line on every request. Any other failure is logged and degrades the
+ * same way. The missing-function branch can go once the migration is live.
+ */
+async function readPlan(programId: string): Promise<AdminTeamPlan | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("admin_get_program_plan", {
+    p_program_id: programId,
+  });
+
+  if (error) {
+    if (!isMissingFunction(error) && !isMissingTable(error)) {
+      console.error("[admin team] could not read plan", {
+        programId,
+        error: error.message,
+      });
+    }
+    return null;
+  }
+
+  const row = (
+    (Array.isArray(data) ? data : data ? [data] : []) as {
+      plan_id: string;
+      plan_term: string;
+      starts_on: string;
+      ends_on: string;
+      hours_from?: string | null;
+      note: string | null;
+      set_at: string;
+      set_by_name: string | null;
+    }[]
+  )[0];
+  // The CHECKs pin both value sets; a value this build does not know is a
+  // plan newer than this code, and reads as no plan rather than a guess.
+  if (!row || !isCollegePlanId(row.plan_id) || !isPlanTerm(row.plan_term)) {
+    return null;
+  }
+
+  return {
+    planId: row.plan_id,
+    planTerm: row.plan_term,
+    planStartsOn: row.starts_on,
+    planEndsOn: row.ends_on,
+    planHoursFrom: row.hours_from ?? null,
+    planNote: row.note,
+    planSetAt: row.set_at,
+    planSetByName: row.set_by_name,
   };
 }
 
@@ -1311,6 +1429,7 @@ export const getAdminTeam = cache(
       seats,
       usage,
       pilot,
+      plan,
       conference,
       activity,
       contactsResult,
@@ -1353,8 +1472,14 @@ export const getAdminTeam = cache(
         .eq("status", "open")
         .order("created_at", { ascending: true }),
       readSeatUsage(admin, programId, row.seats ?? 0),
-      readUsage(admin, programId, billingMonth, { orgType, pilotEligible }),
+      readUsage(admin, programId, billingMonth, {
+        orgType,
+        pilotEligible,
+        pilotEndsOn: row.pilot_ends_on,
+        pilotEndedAt: row.pilot_ended_at,
+      }),
       readPilot(admin, row, viewer.id),
+      readPlan(programId),
       readConference(admin, programId, row.conference_id),
       readActivity(admin, programId),
       // Service role: `program_contacts` has no policy and no grant on
@@ -1535,6 +1660,7 @@ export const getAdminTeam = cache(
       })),
       seats,
       pilot,
+      plan,
       conference,
       activity,
       usage,

@@ -23,7 +23,8 @@
  * | Analysis failed (internal) | `notifyAnalysisOutcome({ outcome: "failed" })`, same final failures as above, to `INTERNAL_ALERTS_ADDRESS` only — no pref, `claimSend("analysis_failed_internal:<job_id>")` — WIRED |
  * | Webhook unreadable (internal) | the SplitStep webhook route, a SIGNED delivery whose body is not JSON or names no job id or status (`unreadableWebhookReason()`), to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("webhook_unreadable:<reason>:<utc day>")` — WIRED |
  * | Upload paused           | `/api/cron/reap-stalled-uploads` (every 5 min, `pg_cron` → `pg_net`) — a job still `uploading` with no progress write for 20 minutes, to its `created_by` · pref `notifyAnalysisFailed`, `claimSend("upload_paused:<job_id>")` — WIRED once the schedule migration is applied |
- * | Usage alert (80% / spent) | `reserveQuota()` crosses a line, to owner + coaches · pref `notifyUsageAlerts` — WIRED |
+ * | Usage alert (80% / spent) | `reserveQuota()` crosses a line, to owner + coaches · pref `notifyUsageAlerts`, `claimSend("usage_<severity>:<program_id>:<billing month \| season start>")` — the season wording for a program on a season plan — WIRED |
+ * | Plan usage alert (80% / spent) | the same crossing on a player's Player / Player Pro hours (`notifyUsageThreshold()`), to the player · pref `notifyUsageAlerts`, `claimSend("usage_<severity>:<user_id>:<hours window start>")`, one per threshold per hours window — WIRED |
  * | Weekly team digest       | Monday schedule · pref `weeklyTeamDigest` — NOT WIRED, row hidden |
  * | Claim verify address     | signed-in `startClaim()` / `resendClaim()` — WIRED |
  * | Claim verify identity    | `sendClaimVerification()` — an admin, by hand, from the review queue — WIRED |
@@ -49,6 +50,7 @@
  * | Feedback (internal)      | same route: a `product_feedback` insert (the first-match prompt's answer, `submit_product_feedback()`), with the note in full, to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("feedback_internal:<feedback_id>")` — WIRED once Vault holds `cron_secret` |
  * | Player message (internal) | same route: a `support_messages` insert with `author_role = 'player'` (the in-app "Message Advantage" thread, `send_support_message()`, or a feedback note opening one), with the message in full and a link to `/admin/messages?id=<thread_id>`, to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("support_message_internal:<message_id>")` — WIRED once the `support_messages` trigger is applied |
  * | Player reply (staff)     | `sendStaffMessage()` (`src/app/admin/messages/actions.ts`) — a staff reply in the in-app support thread with "email a copy" on (the default), to the player only, never a receipt for their own message, `claimSend("support_reply:<message_id>")`, `email_copy_sent_at` stamped only after a successful send — WIRED |
+ * | Plans 2027 notice (×2) | `scripts/send-plans-2027-notice.ts`, run by hand by Cj only (dry run unless `--send --confirm <count>`) — every account, and the pilot teams' owners + coaches in their own wording (blocked until `PILOT_NOTICE_APPROVED`), `notification_sends` keys `plans_2027_notice:<user_id>` / `plans_2027_pilot_notice:<program_id>:<user_id>` — ONE-OFF, NOT EVENT-WIRED |
  *
  * The claim and invite-request rows fire from
  * `services/programs/{admin-actions,claim-actions}.ts`. None of them can fail
@@ -182,7 +184,17 @@ export {
 } from "./templates/member-left";
 
 export {
+  plans2027NoticeEmail,
+  plans2027PilotNoticeEmail,
+  PILOT_NOTICE_APPROVED,
+  type Plans2027NoticeInput,
+  type Plans2027PilotNoticeInput,
+} from "./templates/plans-2027-notice";
+
+export {
+  planUsageAlertEmail,
   usageAlertEmail,
+  type PlanUsageAlertInput,
   type UsageAlertInput,
   type UsageAlertSeverity,
 } from "./templates/usage-alert";

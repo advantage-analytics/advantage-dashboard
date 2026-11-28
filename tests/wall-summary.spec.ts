@@ -9,6 +9,8 @@ import {
   HAND_ASSUMED_NOTE,
   computeViz,
   computeVizStats,
+  courtEndsFor,
+  drawnCut,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
   lightboxCountLine,
@@ -17,6 +19,8 @@ import {
 } from "@/components/dashboard/matches/match-detail/shots/wall-summary";
 import {
   parseVizState,
+  sameView,
+  viewIdentityKey,
   vizStateQuery,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import { DEFAULT_BANDS, depthBandRows } from "@/lib/data/viz-bands";
@@ -94,6 +98,60 @@ test("twelve tiles, six per player, each with a summary when bands are passed", 
   expect(buildDefaultTiles(POINTS, SIDES, href).every((t) => !t.summary)).toBe(
     true,
   );
+});
+
+test("the Return contact card opens Returns in Contact, the Returns card in Placement", () => {
+  const tiles = buildDefaultTiles(POINTS, SIDES, href, undefined, BANDS);
+  for (const subject of ["you", "opponent"] as const) {
+    const contact = tiles.find((t) => t.key === `${subject}:returnContact`)!;
+    // The card is still the contact court…
+    expect(contact.name).toBe("Return contact");
+    expect(contact.cut).toBe("returnContact");
+    // …and what it opens is the one Returns chart, its view set to Contact.
+    expect(contact.state).toEqual({
+      cut: "returnPlacement",
+      chart: "scatter",
+      viewId: null,
+      filters: { ...EMPTY_VIZ_FILTERS, player: subject, ends: "contact" },
+    });
+    expect(courtEndsFor(contact.state.cut!, contact.state.filters)).toBe(
+      "contact",
+    );
+    const opened = parseVizState(new URLSearchParams(contact.href));
+    expect(opened).toEqual(contact.state);
+    expect(new URLSearchParams(contact.href).get("cut")).toBe(
+      "returnPlacement",
+    );
+    expect(new URLSearchParams(contact.href).get("vends")).toBe("contact");
+    // The open chart draws the card's own court, mark for mark.
+    expect(drawnCut(opened.cut!, opened.filters)).toBe("returnContact");
+
+    const returns = tiles.find((t) => t.key === `${subject}:returnPlacement`)!;
+    expect(returns.name).toBe("Returns");
+    expect(returns.state).toEqual({
+      cut: "returnPlacement",
+      chart: "scatter",
+      viewId: null,
+      filters: { ...EMPTY_VIZ_FILTERS, player: subject },
+    });
+    expect(courtEndsFor(returns.state.cut!, returns.state.filters)).toBe(
+      "placement",
+    );
+    expect(new URLSearchParams(returns.href).has("vends")).toBe(false);
+    expect(drawnCut(returns.state.cut!, returns.state.filters)).toBe(
+      "returnPlacement",
+    );
+
+    // Closing the lightbox looks for the card by this key: each card keeps
+    // its own, and only its own state is "the view open".
+    expect(viewIdentityKey(contact.state)).not.toBe(
+      viewIdentityKey(returns.state),
+    );
+    expect(sameView(opened, { ...contact.state, cut: opened.cut! })).toBe(true);
+    expect(sameView(opened, { ...returns.state, cut: opened.cut! })).toBe(
+      false,
+    );
+  }
 });
 
 test("every card's split bar sums to its count, and its count to computeViz/computeVizStats", () => {

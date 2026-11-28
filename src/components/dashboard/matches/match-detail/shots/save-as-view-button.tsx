@@ -25,6 +25,7 @@ export function SaveAsViewButton({
   workspaceName,
   onSaved,
   note,
+  matchScope,
 }: {
   cut: Cut;
   chart: Chart;
@@ -35,6 +36,9 @@ export function SaveAsViewButton({
   onSaved: (view: SavedView) => void;
   /** Handed to the dialog (`SaveViewDialog.note`). */
   note?: string;
+  /** Handed to the dialog (`SaveViewDialog.matchScope`): the player page's
+   *  match scope in words. Absent on a match report. */
+  matchScope?: readonly string[];
 }) {
   const anchorRef = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
@@ -62,6 +66,7 @@ export function SaveAsViewButton({
         align="end"
         onSaved={onSaved}
         note={note}
+        matchScope={matchScope}
       />
     </>
   );

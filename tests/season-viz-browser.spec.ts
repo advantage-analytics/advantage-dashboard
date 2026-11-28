@@ -231,9 +231,8 @@ test("a filter ticked inside the card keeps the court (optimistic); the card clo
   await serve.getByRole("button", { name: "Filters" }).click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
   await expect(panel).toBeVisible();
-  // Zone is a checklist: each option a checkbox named for the zone and its
-  // count ("T 8").
-  const zoneT = panel.getByRole("checkbox", { name: /^T\b/ });
+  // Zone is one lane at a time: a segmented row, Any · Wide · Body · T.
+  const zoneT = panel.getByRole("radio", { name: "T", exact: true });
   await expect(zoneT).toBeVisible();
   await zoneT.click();
   await expect(zoneT).toBeChecked();
@@ -265,40 +264,23 @@ test("a filter ticked inside the card keeps the court (optimistic); the card clo
   expect(errors).toEqual([]);
 });
 
-test("two options ticked against the option order still land: the store's click order and the server's sorted echo are the same court", async ({
+test("two options held against the option order still land: the store's order and the server's sorted echo are the same court", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1512, height: 982 });
-  await page.goto(`${origin}${PROFILE}?tab=visualizations&delay=600`);
-  const wall = page.getByRole("list", { name: "Default views" });
-  await wall.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
+  // Wide before T: the store holds [wide, t], the server echoes [t, wide].
+  // The Filters menu picks one lane at a time now, so two arrive the way a
+  // Statistics row or a shared link brings them: in the URL.
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&cut=serve&zone=wide&zone=t&delay=600`,
+  );
   const serve = page.getByRole("dialog", { name: "All serves" });
   await expect(serve).toBeVisible({ timeout: 8_000 });
-  const all = await marks(serve).count();
-  expect(all).toBeGreaterThan(0);
-
-  // Wide before T: the store holds [wide, t], the server echoes [t, wide].
-  await serve.getByRole("button", { name: "Filters" }).click();
-  const panel = page.getByRole("dialog", { name: "Filter the court" });
-  await expect(panel).toBeVisible();
-  const wide = panel.getByRole("checkbox", { name: /^Wide\b/ });
-  const zoneT = panel.getByRole("checkbox", { name: /^T\b/ });
-  await wide.click();
-  await expect(wide).toBeChecked();
-  await zoneT.click();
-  await expect(zoneT).toBeChecked();
-  await page.keyboard.press("Escape");
-  await expect(panel).toHaveCount(0);
 
   // The server's answer for both lands as this card's court: never stuck
-  // pending, the strip names both, and the URL carries them in option order.
-  await expect
-    .poll(() => new URL(page.url()).searchParams.getAll("zone").sort(), {
-      timeout: 8_000,
-    })
-    .toEqual(["t", "wide"]);
+  // pending, and the strip names both.
   await expect(serve.locator("[data-viz-filter-strip]")).toContainText("T", {
     timeout: 8_000,
   });
@@ -308,6 +290,19 @@ test("two options ticked against the option order still land: the store's click 
   await expect
     .poll(() => marks(serve).count(), { timeout: 8_000 })
     .toBeGreaterThan(0);
+  expect(new URL(page.url()).searchParams.getAll("zone").sort()).toEqual([
+    "t",
+    "wide",
+  ]);
+
+  // Two lanes are no one segment: Zone lights none of them, not even Any.
+  await serve.getByRole("button", { name: "Filters" }).click();
+  const panel = page.getByRole("dialog", { name: "Filter the court" });
+  const zone = panel.getByRole("radiogroup").first();
+  for (const name of ["Any", "Wide", "Body", "T"])
+    await expect(
+      zone.getByRole("radio", { name, exact: true }),
+    ).toHaveAttribute("aria-checked", "false");
 
   expect(errors).toEqual([]);
 });
@@ -672,17 +667,20 @@ test('a season mark names its match — "vs Jordan Lee · Nov 3" and where in it
   await expect(mark).toBeVisible();
   await mark.hover({ force: true });
   const readout = dialog.locator("[data-viz-readout]");
+  // The hover pill: no play badge without video.
+  await expect(readout.locator("[data-viz-readout-play]")).toHaveCount(0);
+  await mark.dispatchEvent("click");
+  await expect(mark).toHaveAttribute("aria-pressed", "true");
+  // The pinned card names the match and where in it.
   await expect(readout.locator("[data-viz-readout-match]")).toHaveText(
     "vs Jordan Lee · Nov 3",
   );
   await expect(readout).toContainText(
     /Set \d+ · Game \d+ · (Kim|Jordan Lee) serving/,
   );
-  await expect(readout.locator("[data-viz-readout-hint]")).toHaveText(
-    "Click to focus",
+  await expect(readout.locator("[data-viz-readout-no-video]")).toHaveText(
+    "No video for this point",
   );
-  await mark.dispatchEvent("click");
-  await expect(mark).toHaveAttribute("aria-pressed", "true");
   await mark.dispatchEvent("click");
   await expect(page).toHaveURL(new RegExp(`${PROFILE}\\?`));
   await expect(mark).toHaveAttribute("aria-pressed", "true");
@@ -694,14 +692,12 @@ test('a season mark names its match — "vs Jordan Lee · Nov 3" and where in it
   dialog = page.getByRole("dialog", { name: "All serves" });
   mark = marks(dialog).first();
   await mark.hover({ force: true });
-  await expect(readout.locator("[data-viz-readout-hint]")).toHaveText(
-    "Click to focus · Click again to watch",
-  );
+  await expect(readout.locator("[data-viz-readout-play]")).toHaveCount(1);
   await mark.dispatchEvent("click");
   await page.mouse.move(5, 5);
-  await expect(readout.locator("[data-viz-readout-hint]")).toHaveText(
-    "Click again to watch",
-  );
+  await expect(
+    readout.getByRole("button", { name: "Watch point" }),
+  ).toBeVisible();
   await page.screenshot({
     path: test.info().outputPath("season-readout.png"),
   });
@@ -764,7 +760,7 @@ test("the chart menu: Scatter · Heat · Zones in the season's card, no band row
   expect(errors).toEqual([]);
 });
 
-test("Matches: a row in Filters opens the Matches sheet; its Result, Opponent and Surface menus and ticks are a draft that Show applies, the strip names them, Clear filter lets go", async ({
+test("Matches: a row in Filters opens the Matches sheet; its Won, Opponent plays and Surface menus and ticks are a draft that Show applies, the strip names them, Clear filter lets go", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -817,9 +813,10 @@ test("Matches: a row in Filters opens the Matches sheet; its Result, Opponent an
   await expect(show).toHaveText(`Show ${all} serves`);
   await expect(show).toBeDisabled();
 
-  // Result: Won leaves two matches; its count says so before the pick.
-  await sheet.getByRole("button", { name: "Result" }).click();
-  const resultMenu = page.getByRole("menu", { name: "Result" });
+  // Won (the result menu): Won leaves two matches; its count says so
+  // before the pick.
+  await sheet.getByRole("button", { name: "Won", exact: true }).click();
+  const resultMenu = page.getByRole("menu", { name: "Won" });
   await expect(
     resultMenu.getByRole("menuitemradio", { name: /Won/ }),
   ).toContainText("2");
@@ -961,6 +958,181 @@ test("the Matches sheet throws its draft away on Esc, and its search only finds 
   await page.keyboard.press("Escape");
   await expect(sheet).toHaveCount(0);
   expect(new URL(page.url()).searchParams.getAll("vm")).toEqual([]);
+});
+
+test("the page's match scope (?sm=): the wall is drawn over the scoped matches, a card opens with its Matches row at that scope, and closing it leaves the scope in the URL", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  const wall = page.getByRole("list", { name: "Default views" });
+  const serveCard = wall.getByRole("link", { name: /^All serves, Avery Kim/ });
+  const serve = page.getByRole("dialog", { name: "All serves" });
+
+  // The whole season first: what the card and the court count unscoped.
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&hands=1&delay=100`);
+  const wholeCard = await serveCard.innerText();
+  await serveCard.click();
+  await expect(marks(serve).first()).toBeVisible({ timeout: 8_000 });
+  const all = await marks(serve).count();
+
+  // Two of the three matches picked on the page.
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&hands=1&delay=100&sm=m-1&sm=m-3`,
+  );
+  await expect(serveCard).toBeVisible({ timeout: 8_000 });
+  expect(await serveCard.innerText()).not.toBe(wholeCard);
+  // The card's link carries the scope as the opened card's own Matches row.
+  const href = new URL((await serveCard.getAttribute("href"))!, origin);
+  expect(href.searchParams.getAll("vm")).toEqual(["m-1", "m-3"]);
+  expect(href.searchParams.getAll("sm")).toEqual(["m-1", "m-3"]);
+
+  await serveCard.click();
+  await expect(marks(serve).first()).toBeVisible({ timeout: 8_000 });
+  await expect
+    .poll(() => {
+      const q = new URL(page.url()).searchParams;
+      return [q.getAll("vm").join(","), q.getAll("sm").join(",")];
+    })
+    .toEqual(["m-1,m-3", "m-1,m-3"]);
+  const scoped = await marks(serve).count();
+  expect(scoped).toBeLessThan(all);
+  await expect(serve.locator("[data-viz-filter-strip]")).toContainText(
+    "2 matches",
+  );
+  await serve.getByRole("button", { name: "Filters" }).click();
+  await expect(
+    page
+      .getByRole("dialog", { name: "Filter the court" })
+      .getByRole("button", { name: /^Matches/ }),
+  ).toContainText("2 of 3");
+  await page.keyboard.press("Escape");
+
+  // Closing: the card's own row leaves the URL, the page's scope stays, and
+  // the wall is still the scoped one.
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect
+    .poll(() => {
+      const q = new URL(page.url()).searchParams;
+      return [q.has("cut"), q.has("vm"), q.getAll("sm").join(",")];
+    })
+    .toEqual([false, false, "m-1,m-3"]);
+  const scopedHref = new URL((await serveCard.getAttribute("href"))!, origin);
+  expect(scopedHref.searchParams.getAll("vm")).toEqual(["m-1", "m-3"]);
+  expect(errors).toEqual([]);
+});
+
+test("Clear filter on a card under the page's match scope returns its Matches row to the PAGE scope, not the whole season", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  const wall = page.getByRole("list", { name: "Default views" });
+  const serveCard = wall.getByRole("link", { name: /^All serves, Avery Kim/ });
+  const serve = page.getByRole("dialog", { name: "All serves" });
+
+  // The page scoped to m-1 and m-3; the card narrowed further, to m-1 alone.
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&hands=1&delay=100&sm=m-1&sm=m-3`,
+  );
+  await expect(serveCard).toBeVisible({ timeout: 8_000 });
+  const href = new URL((await serveCard.getAttribute("href"))!, origin);
+  href.searchParams.delete("vm");
+  href.searchParams.append("vm", "m-1");
+  await page.goto(href.toString());
+  await expect(marks(serve).first()).toBeVisible({ timeout: 8_000 });
+  const strip = serve.locator("[data-viz-filter-strip]");
+  await expect(strip).toContainText("1 match");
+
+  await strip.getByRole("button", { name: "Clear filter" }).click();
+  await expect
+    .poll(() => {
+      const q = new URL(page.url()).searchParams;
+      return [q.getAll("vm").join(","), q.getAll("sm").join(",")];
+    })
+    .toEqual(["m-1,m-3", "m-1,m-3"]);
+  await expect(strip).toContainText("2 matches");
+  expect(errors).toEqual([]);
+});
+
+test("the title row's \"N of M matches\" picker: a dialog of the sheet's own draft, Show writes the page scope and closes, and the facts line's Show all clears it", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1280, height: 860 });
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&hands=1&picker=1&delay=100`,
+  );
+  const trigger = page.getByRole("button", { name: "3 of 3 matches" });
+  await expect(trigger).toBeVisible({ timeout: 8_000 });
+  await trigger.click();
+
+  const dialog = page.getByRole("dialog", { name: "Which matches" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "Matches" })).toBeVisible();
+  await expect(dialog).toContainText("For Statistics and Visualizations");
+  // The sheet's three menus, and its rows by month: "vs", score, date.
+  // The board's trigger words: Won · Opponent plays · Surface.
+  for (const name of ["Won", "Opponent plays", "Surface"])
+    await expect(
+      dialog.getByRole("button", { name, exact: true }),
+    ).toBeVisible();
+  const rows = dialog.getByRole("checkbox");
+  await expect(rows).toHaveCount(3);
+  await expect(rows.first()).toContainText("vs Jordan Lee");
+  await expect(rows.first()).toContainText("6–3, 6–4");
+  await expect(rows.first()).toContainText("Nov 3");
+  await expect(dialog).toContainText("October");
+  const show = dialog.getByRole("button", { name: /^Show \d+ match/ });
+  await expect(show).toBeDisabled();
+  await expect(
+    dialog.getByRole("button", { name: "Clear all" }),
+  ).toBeDisabled();
+
+  // A menu inside the popover keeps it open: Won leaves two.
+  await dialog.getByRole("button", { name: "Won", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: /^Won/ }).click();
+  await expect(dialog).toBeVisible();
+  await expect(rows).toHaveCount(2);
+  await expect(dialog).toContainText("2 of 3 matches");
+  await expect(show).toHaveText("Show 2 matches");
+  await show.click();
+
+  await expect(dialog).toHaveCount(0);
+  await expect
+    .poll(() => new URL(page.url()).searchParams.get("sres"))
+    .toBe("won");
+  await expect(
+    page.getByRole("button", { name: "2 of 3 matches" }),
+  ).toBeVisible();
+  const facts = page.locator("[data-match-scope-facts-line]");
+  await expect(facts).toContainText("Showing 2 of 3 analyzed matches");
+  await expect(facts).toContainText("· Won");
+
+  // Show all clears the scope; the tab and the rest of the URL stay.
+  await facts.getByRole("button", { name: "Show all" }).click();
+  await expect
+    .poll(() => {
+      const q = new URL(page.url()).searchParams;
+      return [q.has("sres"), q.get("tab")];
+    })
+    .toEqual([false, "visualizations"]);
+  await expect(
+    page.getByRole("button", { name: "3 of 3 matches" }),
+  ).toBeVisible();
+  await expect(facts).not.toContainText("Showing");
+
+  // Esc throws a draft away.
+  await page.getByRole("button", { name: "3 of 3 matches" }).click();
+  await dialog.getByRole("checkbox").first().click();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  expect(new URL(page.url()).searchParams.has("sm")).toBe(false);
+  expect(errors).toEqual([]);
 });
 
 test("a ?vm= naming no match of the season is ignored: the card opens on the whole season, not stuck loading", async ({
@@ -1147,4 +1319,78 @@ test("the season's opened Approaches court names the approaches it cannot draw: 
   });
   await expect(rally.locator("[data-viz-not-drawn]")).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+test("a season's Placement · Contact · Both switch writes vends in place and keeps focus; Clear keeps it; Serves has none", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&cut=rallyPlacement&delay=50`,
+  );
+  const dialog = page.getByRole("dialog").first();
+  await expect(marks(dialog).first()).toBeVisible({ timeout: 8_000 });
+  const view = dialog.getByRole("radiogroup", { name: "Court view" });
+  await expect(view.getByRole("radio")).toHaveCount(3);
+  await expect(view.getByRole("radio", { name: "Placement" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  // Its tooltip: the DS dark tooltip's 12/500 title over an 11px detail.
+  const contact = view.getByRole("radio", { name: "Contact" });
+  await contact.hover();
+  const tipLines = page.locator(
+    '[data-slot="tooltip-content"] > span:not([role])',
+  );
+  await expect(tipLines).toHaveText(["Contact", "Where it was hit"]);
+  await expect(tipLines.nth(0)).toHaveCSS("font-size", "12px");
+  await expect(tipLines.nth(0)).toHaveCSS("font-weight", "500");
+  await expect(tipLines.nth(1)).toHaveCSS("font-size", "11px");
+  await contact.click();
+  await expect(page).toHaveURL(/vends=contact/);
+  await expect(contact).toHaveAttribute("aria-checked", "true");
+  await expect(contact).toBeFocused();
+  // The same dialog, through the server's answer for the new court.
+  await expect(marks(dialog).first()).toBeVisible({ timeout: 8_000 });
+  await expect(contact).toBeFocused();
+
+  // A legend pick, then Clear: the view chosen stays.
+  await dialog
+    .getByRole("group", { name: "Filter by outcome" })
+    .getByRole("button")
+    .first()
+    .click();
+  await dialog
+    .locator("[data-viz-filter-strip]")
+    .getByRole("button", { name: "Clear filter" })
+    .click();
+  await expect(page).toHaveURL(/vends=contact/);
+  await expect(contact).toHaveAttribute("aria-checked", "true");
+
+  await page.goto(`${origin}${PROFILE}?tab=visualizations&cut=serve&delay=50`);
+  const serve = page.getByRole("dialog").first();
+  await expect(marks(serve).first()).toBeVisible({ timeout: 8_000 });
+  await expect(serve.getByRole("group", { name: "Zoom" })).toBeVisible();
+  await expect(
+    serve.getByRole("radiogroup", { name: "Court view" }),
+  ).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("a scope that keeps no match: the picker and the facts line both read 0 of 3", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 860 });
+  // m-1 is a win; "lost" drops it, and the ticked id keeps nothing else.
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&hands=1&picker=1&sm=m-1&sres=lost&delay=100`,
+  );
+  await expect(
+    page.getByRole("button", { name: "0 of 3 matches" }),
+  ).toBeVisible({ timeout: 8_000 });
+  await expect(page.locator("[data-match-scope-facts-line]")).toContainText(
+    "Showing 0 of 3 analyzed matches",
+  );
 });

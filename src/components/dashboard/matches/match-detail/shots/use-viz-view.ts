@@ -20,6 +20,7 @@ import {
   type VizBandZones,
   computeViz,
   computeVizStats,
+  drawnCut,
   subjectFor,
   type Cut,
   type VizResult,
@@ -55,6 +56,8 @@ import { activeFilterEntries } from "./viz-url";
  * between a URL commit and an unmount must not throw.
  */
 export interface VizView {
+  /** The court DRAWN (`drawnCut`): `returnContact` for Returns in Contact.
+   *  The chart itself is `useVizState().state.cut`. */
   cut: Cut | null;
   /** `computeViz(points, cut, filters, subjectIsPlayer1, chart)`. */
   result: VizResult | null;
@@ -121,7 +124,9 @@ export function useVizView(): VizView {
   const { bands, unit, contactHidden } = useVizBands();
   const context = useVizFilterContext();
 
-  const cut = state.cut;
+  // The court the chart draws: Returns in Contact is computed and drawn as
+  // the contact court (`drawnCut`), while `state.cut` stays the chart.
+  const cut = state.cut === null ? null : drawnCut(state.cut, state.filters);
   const subjectIsPlayer1 = subjectFor(state.filters, you.isPlayer1);
 
   const result = useMemo(

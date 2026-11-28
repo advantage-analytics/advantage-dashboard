@@ -219,6 +219,38 @@ export function isLetServe(shot: {
   return isServeStroke(shot.stroke) && shot.result === "let";
 }
 
+/**
+ * A serve the server hits again: a let, or a first serve that missed. Nothing
+ * is in play between it and the server's next serve.
+ */
+export function isReplayedServe(shot: {
+  stroke: LabelStroke | null;
+  result: string | null;
+}): boolean {
+  return (
+    isLetServe(shot) ||
+    (shot.stroke === "first_serve" && isMissedResult(shot.result))
+  );
+}
+
+/**
+ * The strokes in `after` (live, video order) before the next serve by
+ * `server` — any serve when the server is unknown — that are not serves:
+ * swings at a fault or a let. Empty when no such serve follows.
+ */
+export function strokesBeforeNextServe(
+  after: readonly LabelShot[],
+  server: LabelShot["hitter"],
+): LabelShot[] {
+  const next = after.findIndex(
+    (s) =>
+      isServeStroke(s.stroke) &&
+      (server === null || s.hitter === null || s.hitter === server),
+  );
+  if (next === -1) return [];
+  return after.slice(0, next).filter((s) => !isServeStroke(s.stroke));
+}
+
 export function opponent(side: LabelSide): LabelSide {
   return side === "p1" ? "p2" : "p1";
 }

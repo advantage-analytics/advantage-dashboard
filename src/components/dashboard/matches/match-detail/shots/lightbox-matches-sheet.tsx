@@ -110,7 +110,9 @@ interface MenuSpec<V extends string> {
 
 const RESULT_MENU: MenuSpec<SeasonResultFilter> = {
   key: "result",
-  label: "Result",
+  // The approved board's trigger words (Final-01 / Final-12): "Won ·
+  // Opponent plays · Surface". The rows are unchanged.
+  label: "Won",
   any: "Any result",
   options: [
     { value: "won", label: "Won" },
@@ -121,7 +123,7 @@ const RESULT_MENU: MenuSpec<SeasonResultFilter> = {
 
 const HAND_MENU: MenuSpec<OpponentHandFilter> = {
   key: "hand",
-  label: "Opponent",
+  label: "Opponent plays",
   any: "Any opponent",
   options: [
     { value: "right", label: "Right-handed" },
@@ -249,60 +251,20 @@ function MatchesMenu<V extends string>({
   );
 }
 
-/* ── The sheet ─────────────────────────────────────────────────────────── */
+/* ── The draft's state and parts ───────────────────────────────────────── */
 
 /**
- * The lightbox's Matches sheet — which of a season's matches the court is
- * drawn over. Opened from the Filters panel's "Matches" row, in the frame
- * the Advanced filters sheet uses (`lightbox-advanced-drawer.tsx`): 340px on
- * the window's right edge, the window dimmed behind it, Tab wrapping inside.
- *
- * It edits a draft. Result, Opponent and Surface (each a `FloatMenu`, each
- * option with the matches it would leave) narrow the list, and every match
- * the list keeps counts; ticking matches narrows further, "Use all shown"
- * lets the ticks go. Search only finds a row — it never changes what
- * counts. Show applies the draft and closes; X, Esc and the dimmed window
- * throw it away. Every number is the server's (`SeasonSheetMatch.count`),
- * summed here — this sheet never sees a point.
+ * A Matches draft over `matches`, seeded from `value` (what is applied) —
+ * everything the lightbox's Matches sheet and the player page's match picker
+ * (`profile-match-scope.tsx`) read off it, computed one way. The parts below
+ * draw it; each surface supplies only its own frame and what Show does.
  */
-export function LightboxMatchesSheet({
-  phase,
-  onClose,
-  onFinish,
-  season,
-  noun,
-}: {
-  phase: FilterRailPhase;
-  /** The X, Esc, Show and the dimmed window: start closing. */
-  onClose: () => void;
-  /** The out animation ended — the sheet leaves the DOM. */
-  onFinish: () => void;
-  season: LightboxSeasonFilters;
-  noun: CountNoun;
-}) {
-  const closing = phase === "closing";
-  const panelRef = useRef<HTMLDivElement>(null);
-  const titleId = useId();
-  const { matches } = season;
-  const [draft, setDraft] = useState<MatchesDraft>(() =>
-    draftFrom(season.value),
-  );
+export function useMatchesDraft(
+  matches: readonly SeasonSheetMatch[],
+  value: SeasonFilters | undefined,
+) {
+  const [draft, setDraft] = useState<MatchesDraft>(() => draftFrom(value));
   const [query, setQuery] = useState("");
-
-  // Focus in on open, a frame late: the Filters popover that opened it is
-  // closing in the same commit (as the Advanced filters sheet does).
-  useEffect(() => {
-    if (phase !== "open") return;
-    const frame = requestAnimationFrame(() =>
-      panelRef.current?.focus({ preventScroll: true }),
-    );
-    return () => cancelAnimationFrame(frame);
-  }, [phase]);
-
-  // `motion-reduce:animate-none` means no `animationend`: finish at once.
-  useEffect(() => {
-    if (closing && prefersReducedMotion()) onFinish();
-  }, [closing, onFinish]);
 
   const kept = useMemo(
     () => matches.filter((m) => keeps(draft, m)),
@@ -318,12 +280,12 @@ export function LightboxMatchesSheet({
   const sum = counting.reduce((n, m) => n + m.count, 0);
   const total = matches.reduce((n, m) => n + m.count, 0);
   const applied = seasonFiltersFrom(draft, matches);
-  // Against what is applied as this sheet would apply it, so a link's tick
+  // Against what is applied as this draft would apply it, so a link's tick
   // of a match outside the season (dropped on the server too) does not
   // leave Show armed with nothing to change.
   const unchanged =
     JSON.stringify(applied ?? null) ===
-    JSON.stringify(seasonFiltersFrom(draftFrom(season.value), matches) ?? null);
+    JSON.stringify(seasonFiltersFrom(draftFrom(value), matches) ?? null);
   const narrowed =
     draft.result !== null ||
     draft.hand !== null ||
@@ -359,6 +321,239 @@ export function LightboxMatchesSheet({
     month: monthOf(m.date),
     heading: i === 0 || monthOf(shown[i - 1].date) !== monthOf(m.date),
   }));
+
+  return {
+    matches,
+    draft,
+    setDraft,
+    query,
+    setQuery,
+    kept,
+    tickedKept,
+    counting,
+    sum,
+    total,
+    applied,
+    unchanged,
+    narrowed,
+    toggle,
+    statusLine,
+    rows,
+  };
+}
+
+export type MatchesDraftState = ReturnType<typeof useMatchesDraft>;
+
+/** "Search opponents" over the Won · Opponent plays · Surface menus. */
+export function MatchesDraftFilters({ d }: { d: MatchesDraftState }) {
+  return (
+    <div className="flex shrink-0 flex-col gap-2 px-5 pt-3">
+      <label className="relative block">
+        <span className="sr-only">Search opponents</span>
+        <Search
+          className="pointer-events-none absolute top-1/2 left-[11px] size-[13px] -translate-y-1/2 text-[var(--ink-400)]"
+          strokeWidth={1.5}
+          aria-hidden="true"
+        />
+        <input
+          type="search"
+          value={d.query}
+          onChange={(e) => d.setQuery(e.target.value)}
+          placeholder="Search opponents"
+          className="h-8 w-full rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)] pr-3 pl-[31px] text-[12px] text-[var(--ink-900)] placeholder:text-[var(--ink-400)]"
+        />
+      </label>
+      <div className="-mx-2 flex items-center gap-0.5">
+        <MatchesMenu
+          menu={RESULT_MENU}
+          draft={d.draft}
+          matches={d.matches}
+          onChoose={(v) => d.setDraft((x) => ({ ...x, result: v }))}
+        />
+        <MatchesMenu
+          menu={HAND_MENU}
+          draft={d.draft}
+          matches={d.matches}
+          onChoose={(v) => d.setDraft((x) => ({ ...x, hand: v }))}
+        />
+        <MatchesMenu
+          menu={SURFACE_MENU}
+          draft={d.draft}
+          matches={d.matches}
+          onChoose={(v) => d.setDraft((x) => ({ ...x, surface: v }))}
+        />
+      </div>
+    </div>
+  );
+}
+
+/** The status line ("8 of 24 picked") and "Use all shown". */
+export function MatchesDraftStatus({ d }: { d: MatchesDraftState }) {
+  return (
+    <div className="flex shrink-0 items-center gap-3 border-b border-[var(--border-hairline)] px-5 pt-1.5 pb-2">
+      <span
+        aria-live="polite"
+        className="text-[11px] text-[var(--ink-600)] tabular-nums"
+      >
+        {d.statusLine}
+      </span>
+      <span className="flex-1" />
+      {d.tickedKept.length > 0 && (
+        <button
+          type="button"
+          onClick={() => d.setDraft((x) => ({ ...x, ticked: [] }))}
+          className="cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
+        >
+          Use all shown
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** The matches as checkboxes, grouped by month: "vs <opponent>", score, date. */
+export function MatchesDraftList({ d }: { d: MatchesDraftState }) {
+  return (
+    <div
+      role="group"
+      aria-label="Matches, newest first"
+      className="min-h-0 flex-1 overflow-y-auto px-3 pt-1 pb-2"
+    >
+      {d.rows.length === 0 ? (
+        <p className="m-0 px-2 py-4 text-[12px] text-[var(--ink-600)]">
+          {d.kept.length === 0
+            ? "No match fits these filters."
+            : `No opponent matches “${d.query.trim()}”.`}
+        </p>
+      ) : (
+        d.rows.map(({ match: m, month, heading }) => {
+          const checked = d.draft.ticked.includes(m.id);
+          return (
+            <div key={m.id}>
+              {heading && (
+                <p className="m-0 px-2 pt-3.5 pb-1 text-[11px] text-[var(--ink-400)]">
+                  {month}
+                </p>
+              )}
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={checked}
+                onClick={() => d.toggle(m.id)}
+                className="grid h-9 w-full cursor-pointer grid-cols-[14px_minmax(0,1fr)_104px_44px] items-center gap-x-2.5 rounded-[var(--radius-element)] px-2 text-left transition-colors duration-150 hover:bg-[var(--surface-subtle)]"
+              >
+                <CheckboxMark checked={checked} />
+                <span className="truncate text-[12px] text-[var(--ink-900)]">
+                  vs {m.opponentName}
+                </span>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {m.won !== null && <ResultMark won={m.won} />}
+                  <span className="truncate text-[11px] text-[var(--ink-600)] tabular-nums">
+                    {m.score ?? "—"}
+                  </span>
+                </span>
+                <span className="text-right text-[11px] whitespace-nowrap text-[var(--ink-500)] tabular-nums">
+                  {m.date ? formatMatchDayShort(m.date) : "—"}
+                </span>
+              </button>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+/** "Clear all", the counted sum of the total, and the primary "Show N …"
+ *  that hands the draft (`d.applied`) to `onShow`. */
+export function MatchesDraftFooter({
+  d,
+  noun,
+  onShow,
+}: {
+  d: MatchesDraftState;
+  noun: CountNoun;
+  onShow: (applied: SeasonFilters | undefined) => void;
+}) {
+  return (
+    <div className="flex h-[60px] shrink-0 items-center gap-3 border-t border-[var(--border-hairline)] pr-4 pl-5">
+      <button
+        type="button"
+        onClick={() => d.setDraft(draftFrom(undefined))}
+        disabled={!d.narrowed}
+        className="shrink-0 cursor-pointer text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] disabled:cursor-default disabled:text-[var(--ink-300)]"
+      >
+        Clear all
+      </button>
+      <span
+        aria-live="polite"
+        className="min-w-0 flex-1 text-right text-[11px] whitespace-nowrap text-[var(--ink-500)] tabular-nums"
+      >
+        {d.sum} of {d.total} {d.total === 1 ? noun.one : noun.many}
+      </span>
+      <button
+        type="button"
+        disabled={d.unchanged || d.counting.length === 0}
+        onClick={() => onShow(d.applied)}
+        className={cn(advButton("primary", "sm"), "whitespace-nowrap")}
+      >
+        Show {d.sum} {d.sum === 1 ? noun.one : noun.many}
+      </button>
+    </div>
+  );
+}
+
+/* ── The sheet ─────────────────────────────────────────────────────────── */
+
+/**
+ * The lightbox's Matches sheet — which of a season's matches the court is
+ * drawn over. Opened from the Filters panel's "Matches" row, in the frame
+ * the Advanced filters sheet uses (`lightbox-advanced-drawer.tsx`): 340px on
+ * the window's right edge, the window dimmed behind it, Tab wrapping inside.
+ *
+ * It edits a draft (`useMatchesDraft`). Won, Opponent plays and Surface (each a
+ * `FloatMenu`, each option with the matches it would leave) narrow the list,
+ * and every match the list keeps counts; ticking matches narrows further,
+ * "Use all shown" lets the ticks go. Search only finds a row — it never
+ * changes what counts. Show applies the draft and closes; X, Esc and the
+ * dimmed window throw it away. Every number is the server's
+ * (`SeasonSheetMatch.count`), summed here — this sheet never sees a point.
+ * The player page's match picker draws the same parts in a popover.
+ */
+export function LightboxMatchesSheet({
+  phase,
+  onClose,
+  onFinish,
+  season,
+  noun,
+}: {
+  phase: FilterRailPhase;
+  /** The X, Esc, Show and the dimmed window: start closing. */
+  onClose: () => void;
+  /** The out animation ended — the sheet leaves the DOM. */
+  onFinish: () => void;
+  season: LightboxSeasonFilters;
+  noun: CountNoun;
+}) {
+  const closing = phase === "closing";
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  const d = useMatchesDraft(season.matches, season.value);
+
+  // Focus in on open, a frame late: the Filters popover that opened it is
+  // closing in the same commit (as the Advanced filters sheet does).
+  useEffect(() => {
+    if (phase !== "open") return;
+    const frame = requestAnimationFrame(() =>
+      panelRef.current?.focus({ preventScroll: true }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [phase]);
+
+  // `motion-reduce:animate-none` means no `animationend`: finish at once.
+  useEffect(() => {
+    if (closing && prefersReducedMotion()) onFinish();
+  }, [closing, onFinish]);
 
   return (
     <>
@@ -412,138 +607,17 @@ export function LightboxMatchesSheet({
             </ChromeTooltip>
           </div>
 
-          <div className="flex shrink-0 flex-col gap-2 px-5 pt-3">
-            <label className="relative block">
-              <span className="sr-only">Search opponents</span>
-              <Search
-                className="pointer-events-none absolute top-1/2 left-[11px] size-[13px] -translate-y-1/2 text-[var(--ink-400)]"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              <input
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search opponents"
-                className="h-8 w-full rounded-[var(--radius-button)] border border-[var(--border-field)] bg-[var(--surface-card)] pr-3 pl-[31px] text-[12px] text-[var(--ink-900)] placeholder:text-[var(--ink-400)]"
-              />
-            </label>
-            <div className="-mx-2 flex items-center gap-0.5">
-              <MatchesMenu
-                menu={RESULT_MENU}
-                draft={draft}
-                matches={matches}
-                onChoose={(v) => setDraft((d) => ({ ...d, result: v }))}
-              />
-              <MatchesMenu
-                menu={HAND_MENU}
-                draft={draft}
-                matches={matches}
-                onChoose={(v) => setDraft((d) => ({ ...d, hand: v }))}
-              />
-              <MatchesMenu
-                menu={SURFACE_MENU}
-                draft={draft}
-                matches={matches}
-                onChoose={(v) => setDraft((d) => ({ ...d, surface: v }))}
-              />
-            </div>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-3 border-b border-[var(--border-hairline)] px-5 pt-1.5 pb-2">
-            <span
-              aria-live="polite"
-              className="text-[11px] text-[var(--ink-600)] tabular-nums"
-            >
-              {statusLine}
-            </span>
-            <span className="flex-1" />
-            {tickedKept.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setDraft((d) => ({ ...d, ticked: [] }))}
-                className="cursor-pointer text-[11px] font-medium text-[var(--blue)] transition-colors duration-200 hover:text-[var(--blue-hover)]"
-              >
-                Use all shown
-              </button>
-            )}
-          </div>
-
-          <div
-            role="group"
-            aria-label="Matches, newest first"
-            className="min-h-0 flex-1 overflow-y-auto px-3 pt-1 pb-2"
-          >
-            {rows.length === 0 ? (
-              <p className="m-0 px-2 py-4 text-[12px] text-[var(--ink-600)]">
-                {kept.length === 0
-                  ? "No match fits these filters."
-                  : `No opponent matches “${query.trim()}”.`}
-              </p>
-            ) : (
-              rows.map(({ match: m, month, heading }) => {
-                const checked = draft.ticked.includes(m.id);
-                return (
-                  <div key={m.id}>
-                    {heading && (
-                      <p className="m-0 px-2 pt-3.5 pb-1 text-[11px] text-[var(--ink-400)]">
-                        {month}
-                      </p>
-                    )}
-                    <button
-                      type="button"
-                      role="checkbox"
-                      aria-checked={checked}
-                      onClick={() => toggle(m.id)}
-                      className="grid h-9 w-full cursor-pointer grid-cols-[14px_minmax(0,1fr)_104px_44px] items-center gap-x-2.5 rounded-[var(--radius-element)] px-2 text-left transition-colors duration-150 hover:bg-[var(--surface-subtle)]"
-                    >
-                      <CheckboxMark checked={checked} />
-                      <span className="truncate text-[12px] text-[var(--ink-900)]">
-                        vs {m.opponentName}
-                      </span>
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        {m.won !== null && <ResultMark won={m.won} />}
-                        <span className="truncate text-[11px] text-[var(--ink-600)] tabular-nums">
-                          {m.score ?? "—"}
-                        </span>
-                      </span>
-                      <span className="text-right text-[11px] whitespace-nowrap text-[var(--ink-500)] tabular-nums">
-                        {m.date ? formatMatchDayShort(m.date) : "—"}
-                      </span>
-                    </button>
-                  </div>
-                );
-              })
-            )}
-          </div>
-
-          <div className="flex h-[60px] shrink-0 items-center gap-3 border-t border-[var(--border-hairline)] pr-4 pl-5">
-            <button
-              type="button"
-              onClick={() => setDraft(draftFrom(undefined))}
-              disabled={!narrowed}
-              className="shrink-0 cursor-pointer text-[12px] font-medium whitespace-nowrap text-[var(--blue)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--blue-hover)] disabled:cursor-default disabled:text-[var(--ink-300)]"
-            >
-              Clear all
-            </button>
-            <span
-              aria-live="polite"
-              className="min-w-0 flex-1 text-right text-[11px] whitespace-nowrap text-[var(--ink-500)] tabular-nums"
-            >
-              {sum} of {total} {total === 1 ? noun.one : noun.many}
-            </span>
-            <button
-              type="button"
-              disabled={unchanged || counting.length === 0}
-              onClick={() => {
-                season.onChange(applied);
-                onClose();
-              }}
-              className={cn(advButton("primary", "sm"), "whitespace-nowrap")}
-            >
-              Show {sum} {sum === 1 ? noun.one : noun.many}
-            </button>
-          </div>
+          <MatchesDraftFilters d={d} />
+          <MatchesDraftStatus d={d} />
+          <MatchesDraftList d={d} />
+          <MatchesDraftFooter
+            d={d}
+            noun={noun}
+            onShow={(applied) => {
+              season.onChange(applied);
+              onClose();
+            }}
+          />
         </div>
       </aside>
     </>

@@ -52,7 +52,9 @@ test("a reader who is not the player sees two surnames, never You: the wall's ch
   await page.goto(`${origin}/?tab=shots&observer=1`);
   const wallChips = page.locator('[role="group"][aria-label="Player"] button');
   await expect(wallChips).toHaveText(["Kim", "Rivera"]);
-  await expect(page.getByRole("button", { name: "You" })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "You", exact: true }),
+  ).toHaveCount(0);
   await expect(wallChips.first()).toHaveAttribute("aria-pressed", "true");
 
   await page.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
@@ -61,7 +63,7 @@ test("a reader who is not the player sees two surnames, never You: the wall's ch
   await expect(
     dialog.locator('[role="group"][aria-label="Player"] button'),
   ).toHaveText(["Kim", "Rivera"]);
-  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
   await expect(page).toHaveURL(/player=opponent/);
   await expect(dialog).toContainText("Serve placement · Rivera ·");
 });
@@ -72,16 +74,15 @@ test("a player switched inside the lightbox does not leak onto the wall", async 
   await page.goto(`${origin}/?tab=shots&cut=serve&ball=first`);
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
   await expect(page).toHaveURL(/player=opponent/);
   await expect(dialog).toContainText("Serve placement · Rivera");
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page).not.toHaveURL(/player=opponent/);
-  await expect(page.getByRole("button", { name: "You" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(
+    page.getByRole("button", { name: "You", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
 });
 
 test("Watch these N points follows the marks and needs a playable video", async ({
@@ -127,7 +128,7 @@ test("a mark's readout appears on hover and stays inside the court", async ({
   }
 });
 
-test("click selects a mark: white ring, siblings at 40%, a control-free readout; Esc steps back", async ({
+test("click selects a mark: white ring, siblings at 40%, a pinned card with no control when there is no video; Esc steps back", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
@@ -229,16 +230,16 @@ test("the legend filters by outcome, one key at a time, and the strip says so", 
   const legend = dialog.getByRole("group", { name: "Filter by outcome" });
   const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
   const all = await marks.count();
-  const won = legend.getByRole("button", { name: /^Won/ });
+  const won = legend.getByRole("button", { name: / won\b/ }).first();
   const wonCount = Number((await won.textContent())!.replace(/\D/g, ""));
   await won.click();
   await expect(won).toHaveAttribute("aria-pressed", "true");
   await expect(marks).toHaveCount(wonCount);
-  await expect(legend.getByRole("button", { name: /^Lost/ })).toHaveClass(
-    /opacity-35/,
-  );
+  await expect(
+    legend.getByRole("button", { name: / won\b/ }).nth(1),
+  ).toHaveClass(/opacity-35/);
   const strip = dialog.locator("[data-viz-filter-strip]");
-  await expect(strip).toContainText("Won");
+  await expect(strip).toContainText(/\S+ won/);
   await expect(strip).toContainText(/\d+ of \d+ points?/);
   await expect(
     strip.getByRole("button", { name: "Clear filter" }),
@@ -276,9 +277,10 @@ test("the Filters panel is the Matches panel over the cut's own keys, and Clear 
   await dialog.getByRole("button", { name: "Filters" }).click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
   await expect(panel).toBeVisible();
-  await expect(panel).toContainText("Serve");
   await expect(panel).toContainText("Court");
   await expect(panel).toContainText("Zone");
+  // Serves choose 1st or 2nd in the toolbar's chips, not the menu.
+  await expect(panel.getByText("Serve", { exact: true })).toHaveCount(0);
   // The season's own groups are the profile's alone: one match has one
   // opponent.
   await expect(panel).not.toContainText("Opponent plays");
@@ -293,6 +295,461 @@ test("the Filters panel is the Matches panel over the cut's own keys, and Clear 
   await expect(strip).toHaveCount(0);
   await expect(page).toHaveURL(/cut=serve/);
   await expect(page).not.toHaveURL(/deuce/);
+});
+
+/** The Filters panel's section labels, top to bottom, and whether the
+ *  Advanced filters row sits after every one of them. */
+async function filterSections(page: Page, cut: string) {
+  await page.goto(`${origin}/?tab=shots&cut=${cut}`);
+  const dialog = page.getByRole("dialog").first();
+  await dialog.getByRole("button", { name: "Filters", exact: true }).click();
+  const panel = page.getByRole("dialog", { name: "Filter the court" });
+  await expect(panel).toBeVisible();
+  const labels = await panel
+    .locator("[data-filter-panel-sections] > div > p")
+    .allTextContents();
+  const advancedLast = await panel.evaluate((root) => {
+    const sections = root.querySelector("[data-filter-panel-sections]")!;
+    const advanced = [...root.querySelectorAll("button")].find((b) =>
+      b.textContent?.startsWith("Advanced filters"),
+    );
+    return (
+      advanced !== undefined &&
+      Boolean(
+        sections.compareDocumentPosition(advanced) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ) &&
+      !sections.contains(advanced)
+    );
+  });
+  return { panel, labels, advancedLast };
+}
+
+/** Set shows only for a match of two or more sets. No chart has a Serve
+ *  row: Returns and Serves carry it as toolbar chips; Rally shots, Errors
+ *  and Approaches reach it in Advanced filters › Serve › Type. */
+const withoutSet = (labels: string[]) => labels.filter((l) => l !== "Set");
+
+test("the Filters menu leads with the chart's own sections, then Rally length, Pressure, Court, Set, with Advanced filters last", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+
+  const serves = await filterSections(page, "serve");
+  // No Serve row: the toolbar's 1st serve · 2nd serve chips carry it.
+  expect(withoutSet(serves.labels)).toEqual([
+    "Zone",
+    "Rally length",
+    "Pressure",
+    "Court",
+  ]);
+  expect(serves.advancedLast).toBe(true);
+  // Zone is one lane at a time: Any · Wide · Body · T.
+  const zone = serves.panel.getByRole("radiogroup").first();
+  await expect(zone.getByRole("radio")).toHaveText([
+    "Any",
+    "Wide",
+    "Body",
+    "T",
+  ]);
+  await zone.getByRole("radio", { name: "Wide" }).click();
+  await expect(zone.getByRole("radio", { name: "Wide" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect(page).toHaveURL(/zone=wide/);
+  await zone.getByRole("radio", { name: "T" }).click();
+  await expect(page).toHaveURL(/zone=t\b/);
+  await expect(page).not.toHaveURL(/zone=wide/);
+  await page.keyboard.press("Escape");
+
+  // Returns carry the serve they answer as toolbar chips, not a Serve row.
+  for (const cut of ["returnPlacement", "returnContact"]) {
+    const returns = await filterSections(page, cut);
+    expect(withoutSet(returns.labels)).toEqual([
+      "Rally length",
+      "Pressure",
+      "Court",
+    ]);
+    expect(returns.advancedLast).toBe(true);
+    await page.keyboard.press("Escape");
+  }
+
+  // Errors' type is the toolbar's lead chips, not a section.
+  const errorsCut = await filterSections(page, "errors");
+  expect(withoutSet(errorsCut.labels)).toEqual([
+    "Rally length",
+    "Pressure",
+    "Court",
+  ]);
+  expect(errorsCut.advancedLast).toBe(true);
+  await page.keyboard.press("Escape");
+
+  // Rally shots carry Rally length as toolbar chips, not a Filters section,
+  // and no Serve row: 1st or 2nd serve is Advanced filters › Serve › Type.
+  for (const cut of ["rallyPlacement", "rallyPosition"]) {
+    const rally = await filterSections(page, cut);
+    expect(withoutSet(rally.labels)).toEqual(["Pressure", "Court"]);
+    expect(rally.advancedLast).toBe(true);
+    await page.keyboard.press("Escape");
+  }
+});
+
+test("Returns lead with Serve returned chips (All · vs 1st serve · vs 2nd serve) over the ball filter; vs 2nd serve narrows the court", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  for (const cut of ["returnPlacement", "returnContact"]) {
+    await page.goto(`${origin}/?tab=shots&cut=${cut}&fixture=returns`);
+    const dialog = page.getByRole("dialog").first();
+    const group = dialog.getByRole("group", { name: "Serve returned" });
+    const chips = group.getByRole("button");
+    await expect(chips).toHaveText(["All", "vs 1st serve", "vs 2nd serve"]);
+    const pressed = () =>
+      chips.evaluateAll((els) =>
+        els.map((el) => el.getAttribute("aria-pressed")),
+      );
+    expect(await pressed()).toEqual(["true", "false", "false"]);
+
+    const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
+    await expect(marks.first()).toBeAttached();
+    const before = await marks.count();
+    expect(before).toBeGreaterThan(0);
+
+    await group.getByRole("button", { name: "vs 2nd serve" }).click();
+    await expect(page).toHaveURL(/ball=second/);
+    expect(await pressed()).toEqual(["false", "false", "true"]);
+    await expect.poll(() => marks.count()).toBeLessThan(before);
+    const second = await marks.count();
+    expect(second).toBeGreaterThan(0);
+
+    // The other half: together the two are every return.
+    await group.getByRole("button", { name: "vs 1st serve" }).click();
+    await expect(page).toHaveURL(/ball=first/);
+    expect(await pressed()).toEqual(["false", "true", "false"]);
+    await expect.poll(() => marks.count()).toBe(before - second);
+
+    // The ball filter set elsewhere (a link) lights its chip.
+    await page.goto(
+      `${origin}/?tab=shots&cut=${cut}&fixture=returns&ball=second`,
+    );
+    await expect(
+      page
+        .getByRole("dialog")
+        .first()
+        .getByRole("group", { name: "Serve returned" })
+        .getByRole("button", { name: "vs 2nd serve" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    // All lets go of it.
+    await page
+      .getByRole("dialog")
+      .first()
+      .getByRole("group", { name: "Serve returned" })
+      .getByRole("button", { name: "All" })
+      .click();
+    await expect(page).not.toHaveURL(/ball=/);
+  }
+
+  // No other chart has these chips (Serves has its own, unnamed for returns).
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  await expect(
+    page.getByRole("dialog").first().getByRole("group", {
+      name: "Serve returned",
+    }),
+  ).toHaveCount(0);
+});
+
+/** A chip group's aria-pressed, in order. */
+const pressedOf = (chips: Locator) =>
+  chips.evaluateAll((els) => els.map((el) => el.getAttribute("aria-pressed")));
+
+test("Serves lead with Serve chips (All · 1st serve · 2nd serve) over the ball filter", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog").first();
+  const group = dialog.getByRole("group", { name: "Serve", exact: true });
+  const chips = group.getByRole("button");
+  await expect(chips).toHaveText(["All", "1st serve", "2nd serve"]);
+  expect(await pressedOf(chips)).toEqual(["true", "false", "false"]);
+
+  const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
+  await expect(marks.first()).toBeAttached();
+  const before = await marks.count();
+  await group.getByRole("button", { name: "2nd serve" }).click();
+  await expect(page).toHaveURL(/ball=second/);
+  expect(await pressedOf(chips)).toEqual(["false", "false", "true"]);
+  await expect.poll(() => marks.count()).toBeLessThan(before);
+
+  await group.getByRole("button", { name: "1st serve" }).click();
+  await expect(page).toHaveURL(/ball=first/);
+  await group.getByRole("button", { name: "All" }).click();
+  await expect(page).not.toHaveURL(/ball=/);
+});
+
+test("Rally shots and Rally position lead with Rally length chips (All · Short · Medium · Long) over the rally key", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  for (const cut of ["rallyPlacement", "rallyPosition"]) {
+    await page.goto(`${origin}/?tab=shots&cut=${cut}`);
+    const dialog = page.getByRole("dialog").first();
+    const group = dialog.getByRole("group", { name: "Rally length" });
+    const chips = group.getByRole("button");
+    await expect(chips).toHaveText(["All", "Short", "Medium", "Long"]);
+    expect(await pressedOf(chips)).toEqual(["true", "false", "false", "false"]);
+    await group.getByRole("button", { name: "Long" }).click();
+    await expect(page).toHaveURL(/rally=long/);
+    expect(await pressedOf(chips)).toEqual(["false", "false", "false", "true"]);
+    await group.getByRole("button", { name: "All" }).click();
+    await expect(page).not.toHaveURL(/rally=/);
+  }
+  // Serves keeps Rally length in its Filters menu and has no such chips.
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  await expect(
+    page.getByRole("dialog").first().getByRole("group", {
+      name: "Rally length",
+    }),
+  ).toHaveCount(0);
+});
+
+test("Rally shots, Errors and Approaches reach 1st or 2nd serve in Advanced filters › Serve › Type, since their menus have no Serve row", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  for (const cut of ["rallyPlacement", "errors", "approaches"]) {
+    await page.goto(`${origin}/?tab=shots&cut=${cut}`);
+    const dialog = page.getByRole("dialog").first();
+    const drawer = await openAdvancedDrawer(page, dialog);
+    await expect(drawer).toBeVisible();
+    await expect(
+      drawer.getByText("First serve", { exact: true }),
+    ).toBeAttached();
+    await expect(
+      drawer.getByText("Second serve", { exact: true }),
+    ).toBeAttached();
+  }
+});
+
+test("Errors lead with Error type chips over the error key: this unjudged match offers All · Rally errors · Double faults", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=errors`);
+  const dialog = page.getByRole("dialog").first();
+  const group = dialog.getByRole("group", { name: "Error type" });
+  const chips = group.getByRole("button");
+  // Nobody judged this match's errors forced or unforced: one Rally errors chip
+  // holds both kinds (`errorOptionsFor`), never a Forced that draws nothing.
+  await expect(chips).toHaveText(["All", "Rally errors", "Double faults"]);
+  expect(await pressedOf(chips)).toEqual(["true", "false", "false"]);
+
+  await group.getByRole("button", { name: "Double faults" }).click();
+  await expect(page).toHaveURL(/verr=double/);
+  expect(await pressedOf(chips)).toEqual(["false", "false", "true"]);
+
+  await group
+    .getByRole("button", { name: "Rally errors", exact: true })
+    .click();
+  await expect(page).not.toHaveURL(/verr=[^&]*double/);
+  await expect(page).toHaveURL(/verr=/);
+  expect(await pressedOf(chips)).toEqual(["false", "true", "false"]);
+
+  await group.getByRole("button", { name: "All", exact: true }).click();
+  await expect(page).not.toHaveURL(/verr=/);
+  expect(await pressedOf(chips)).toEqual(["true", "false", "false"]);
+});
+
+test("Approaches lead with Way to the net chips (All · Approach · Serve and volley · Drawn in) over the entry key, one at a time", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=approaches`);
+  const dialog = page.getByRole("dialog").first();
+  const group = dialog.getByRole("group", { name: "Way to the net" });
+  const chips = group.getByRole("button");
+  await expect(chips).toHaveText([
+    "All",
+    "Approach",
+    "Serve and volley",
+    "Drawn in",
+  ]);
+  // The card's baseline is approaches only.
+  expect(await pressedOf(chips)).toEqual(["false", "true", "false", "false"]);
+  await group.getByRole("button", { name: "Drawn in" }).click();
+  await expect(page).toHaveURL(/ventry=drawn-in/);
+  expect(await pressedOf(chips)).toEqual(["false", "false", "false", "true"]);
+  await group.getByRole("button", { name: "All" }).click();
+  await expect(page).toHaveURL(/ventry=any/);
+  expect(await pressedOf(chips)).toEqual(["true", "false", "false", "false"]);
+  // A list of two (a saved view, a Statistics row) lights no chip.
+  await page.goto(
+    `${origin}/?tab=shots&cut=approaches&ventry=approach&ventry=serve-volley`,
+  );
+  const mixed = page
+    .getByRole("dialog")
+    .first()
+    .getByRole("group", { name: "Way to the net" })
+    .getByRole("button");
+  await expect(mixed).toHaveCount(4);
+  expect(await pressedOf(mixed)).toEqual(["false", "false", "false", "false"]);
+});
+
+test("the toolbar runs player chips, a hairline, the lead chips, then the chart menu and Filters at its right end", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  for (const [cut, group] of [
+    ["serve", "Serve"],
+    ["returnPlacement", "Serve returned"],
+    ["errors", "Error type"],
+    ["approaches", "Way to the net"],
+    ["rallyPlacement", "Rally length"],
+  ] as const) {
+    await page.goto(`${origin}/?tab=shots&cut=${cut}`);
+    const dialog = page.getByRole("dialog").first();
+    const toolbar = dialog.locator("[data-lightbox-toolbar]");
+    const players = toolbar.getByRole("group", { name: "Player" });
+    const chips = toolbar.getByRole("group", { name: group, exact: true });
+    const chart = toolbar.getByRole("button", { name: "Scatter" });
+    const filtersButton = toolbar.getByRole("button", {
+      name: "Filters",
+      exact: true,
+    });
+    await expect(chips).toBeVisible();
+    // Chart menu and Filters are the toolbar's last two children, in order.
+    const tail = await toolbar.evaluate((root) =>
+      [...root.children].slice(-2).map((el) => {
+        const button =
+          el instanceof HTMLButtonElement ? el : el.querySelector("button");
+        return button?.textContent?.trim() ?? "";
+      }),
+    );
+    expect(tail[0]).toContain("Scatter");
+    expect(tail[1]).toContain("Filters");
+    const [tb, p, c, m, f] = await Promise.all(
+      [toolbar, players, chips, chart, filtersButton].map(
+        async (l) => (await l.boundingBox())!,
+      ),
+    );
+    // Left-packed: players, then the lead chips; right-aligned: the chart
+    // menu, then Filters flush with the column's right edge.
+    expect(p.x).toBeLessThan(c.x);
+    expect(c.x + c.width).toBeLessThan(m.x);
+    expect(m.x + m.width).toBeLessThanOrEqual(f.x);
+    expect(Math.abs(tb.x + tb.width - (f.x + f.width))).toBeLessThan(2);
+    // A gap between them: the spacer, not chips packed against the menu.
+    expect(m.x - (c.x + c.width)).toBeGreaterThan(24);
+    // One row.
+    expect(Math.abs(m.y + m.height / 2 - (c.y + c.height / 2))).toBeLessThan(4);
+  }
+});
+
+test("a draft keeps the chart's toolbar chips: Returns' Serve returned, Serves' Serve, Rally shots' Rally length, Errors' Error type, Approaches' Way to the net", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  for (const [cut, group] of [
+    ["returnPlacement", "Serve returned"],
+    ["serve", "Serve"],
+    ["rallyPlacement", "Rally length"],
+    ["errors", "Error type"],
+    ["approaches", "Way to the net"],
+  ] as const) {
+    await page.goto(`${origin}/?tab=shots&cut=${cut}&draft=1`);
+    const dialog = page.getByRole("dialog").first();
+    await expect(dialog.getByText("Pick what to plot")).toBeVisible();
+    // The Filters menu is a draft's to leave out; the chips are not.
+    await expect(
+      dialog.getByRole("button", { name: "Filters", exact: true }),
+    ).toHaveCount(0);
+    const chips = dialog.getByRole("group", { name: group, exact: true });
+    await expect(chips).toBeVisible();
+    if (cut === "returnPlacement") {
+      await chips.getByRole("button", { name: "vs 2nd serve" }).click();
+      await expect(page).toHaveURL(/ball=second/);
+      await expect(
+        chips.getByRole("button", { name: "vs 2nd serve" }),
+      ).toHaveAttribute("aria-pressed", "true");
+    }
+  }
+});
+
+test("opening Filters on Rally shots puts up no tooltip: the Pressure heading stays clear until Pressure points is pointed at", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  for (const cut of ["rallyPlacement", "rallyPosition"]) {
+    const { panel } = await filterSections(page, cut);
+    // Longer than the tooltip's 400ms open delay.
+    await page.waitForTimeout(700);
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+    await expect(panel.getByText("Pressure", { exact: true })).toBeVisible();
+    // Focus is the panel's own, not its first control's.
+    expect(
+      await panel.evaluate((root) => root.contains(document.activeElement)),
+    ).toBe(true);
+    await expect(
+      panel.getByRole("checkbox", { name: /^Pressure points\b/ }),
+    ).not.toBeFocused();
+    // Pointing at it still names its scores.
+    await panel.getByRole("checkbox", { name: /^Pressure points\b/ }).hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "30–30, 30–40, 40–30, deuce and ad points",
+    );
+    await page.keyboard.press("Escape");
+  }
+});
+
+test("Rally length is Any · Short · Medium · Long with no counts, writes the rally key, and names its shots on hover; Pressure points lists its scores", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  const { panel } = await filterSections(page, "serve");
+  const sections = panel.locator("[data-filter-panel-sections] > div");
+  const rally = sections.filter({
+    has: page.locator("p", { hasText: /^Rally length$/ }),
+  });
+  const radios = rally.getByRole("radio");
+  // Segmented buttons carry their label alone: no count.
+  await expect(radios).toHaveText(["Any", "Short", "Medium", "Long"]);
+  // No segmented button anywhere in the menu holds a count beside its label.
+  await expect(
+    panel.locator('[role="radiogroup"] [role="radio"] > *'),
+  ).toHaveCount(0);
+
+  const tooltip = page.getByRole("tooltip");
+  for (const [name, shots] of [
+    ["Short", "1–4 shots"],
+    ["Medium", "5–8 shots"],
+    ["Long", "9 or more shots"],
+  ] as const) {
+    await rally.getByRole("radio", { name }).hover();
+    await expect(tooltip).toHaveText(shots);
+    // Off the row, in steps: the tooltip's grace area lets go on a move.
+    await page.mouse.move(10, 10, { steps: 5 });
+    await expect(tooltip).toHaveCount(0);
+  }
+
+  await rally.getByRole("radio", { name: "Long" }).click();
+  await expect(page).toHaveURL(/rally=long/);
+  await expect(rally.getByRole("radio", { name: "Long" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await rally.getByRole("radio", { name: "Any" }).click();
+  await expect(page).not.toHaveURL(/rally=/);
+
+  const pressure = panel.getByRole("checkbox", { name: /^Pressure points\b/ });
+  await expect(pressure).toBeVisible();
+  await pressure.hover();
+  await expect(tooltip).toHaveText("30–30, 30–40, 40–30, deuce and ad points");
+  // Its siblings say what they are already: no tooltip trigger at all.
+  await expect(
+    panel.getByRole("checkbox", { name: /^Break points\b/ }),
+  ).not.toHaveAttribute("data-state", /.*/);
 });
 
 test("Statistics: rows over 4px bars, no average tick; hover outlines a zone, a click keeps only its marks", async ({
@@ -351,16 +808,17 @@ test("the legend's pick survives a You / Opponent switch but not a cut change", 
   await page.goto(`${origin}/?tab=shots&cut=serve`);
   const dialog = page.getByRole("dialog");
   const legend = dialog.getByRole("group", { name: "Filter by outcome" });
-  await legend.getByRole("button", { name: /^Won/ }).click();
-  await expect(legend.getByRole("button", { name: /^Won/ })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  await dialog.getByRole("button", { name: "Rivera" }).click();
-  await expect(legend.getByRole("button", { name: /^Won/ })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await legend
+    .getByRole("button", { name: / won\b/ })
+    .first()
+    .click();
+  await expect(
+    legend.getByRole("button", { name: / won\b/ }).first(),
+  ).toHaveAttribute("aria-pressed", "true");
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
+  await expect(
+    legend.getByRole("button", { name: / won\b/ }).first(),
+  ).toHaveAttribute("aria-pressed", "true");
   // A different cut under the same card (the chart menu's Placement →
   // Contact does this; a Back/Forward entry does too) lets go of it.
   await page.evaluate(() => {
@@ -368,10 +826,9 @@ test("the legend's pick survives a You / Opponent switch but not a cut change", 
     window.dispatchEvent(new PopStateEvent("popstate"));
   });
   await expect(dialog).toContainText("Rally placement");
-  await expect(legend.getByRole("button", { name: /^Won/ })).toHaveAttribute(
-    "aria-pressed",
-    "false",
-  );
+  await expect(
+    legend.getByRole("button", { name: / won\b/ }).first(),
+  ).toHaveAttribute("aria-pressed", "false");
   const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
   await expect(marks).toHaveCount(6);
 });
@@ -396,6 +853,29 @@ test("a read-only host leaves out Save as view and, without video, Watch — and
   ).toBeVisible();
 });
 
+test("Save as view opens Save this view with what the view keeps: chart, shots, matches and where it opens", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&ball=first&pressure=break`);
+  const lightbox = page.getByRole("dialog").first();
+  await lightbox.getByRole("button", { name: "Save as view" }).click();
+  const save = page.getByRole("dialog", { name: "Save this view" });
+  await expect(save).toBeVisible();
+  const keeps = save.getByRole("term");
+  await expect(save).toContainText("What this view keeps");
+  await expect(keeps).toHaveText(["Chart", "Shots", "Matches", "Opens on"]);
+  await expect(save.getByRole("definition")).toHaveText([
+    "Serve placement · Scatter",
+    "1st · Break points",
+    "This match",
+    // The harness is a personal workspace: no player profiles.
+    "Every match",
+  ]);
+  await page.waitForTimeout(300);
+  await save.screenshot({ path: test.info().outputPath("save-view.png") });
+});
+
 /* ── Gate fixes (PR #684 review, round 2) ─────────────────────────────── */
 
 test("1 · a filter edit or a player switch keeps the lightbox mounted: popover, picks, pane and focus return survive", async ({
@@ -408,7 +888,7 @@ test("1 · a filter edit or a player switch keeps the lightbox mounted: popover,
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog", { name: "All serves" });
   const legend = dialog.getByRole("group", { name: "Filter by outcome" });
-  const won = legend.getByRole("button", { name: /^Won/ });
+  const won = legend.getByRole("button", { name: / won\b/ }).first();
   await won.click();
   await dialog.getByRole("button", { name: "Filters" }).click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
@@ -418,7 +898,7 @@ test("1 · a filter edit or a player switch keeps the lightbox mounted: popover,
   await expect(won).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");
   await dialog.getByRole("button", { name: "Statistics" }).click();
-  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
   await expect(won).toHaveAttribute("aria-pressed", "true");
   await expect(
     dialog.getByRole("button", { name: "Statistics" }),
@@ -466,11 +946,11 @@ test("3 · narrowing the All serves card: the title stays the card's, the denomi
   const [n1, m1] = await read();
   // On the card, the denominator is the card's own points: all of them.
   expect(n1).toBe(m1);
-  await dialog.getByRole("button", { name: "Filters" }).click();
-  const panel = page.getByRole("dialog", { name: "Filter the court" });
-  const serve = panel.getByRole("radiogroup").first();
-  await serve.getByRole("radio", { name: "1st" }).click();
-  await page.keyboard.press("Escape");
+  // 1st or 2nd serve is the toolbar's Serve chips.
+  await dialog
+    .getByRole("group", { name: "Serve", exact: true })
+    .getByRole("button", { name: "1st serve" })
+    .click();
   await expect(page).toHaveURL(/ball=first/);
   // The card holds no filter of its own, so it is still the card, with the
   // first-serve filter named in the strip.
@@ -490,7 +970,7 @@ test("7 · a filter the panel doesn't edit (a link's Result) is named in the str
   await page.goto(`${origin}/?tab=shots&cut=serve&result=won`);
   const dialog = page.getByRole("dialog");
   const strip = dialog.locator("[data-viz-filter-strip]");
-  await expect(strip).toContainText("Won");
+  await expect(strip).toContainText(/\S+ won/);
   await strip.getByRole("button", { name: "Clear filter" }).click();
   await expect(strip).toHaveCount(0);
   await expect(page).not.toHaveURL(/result=won/);
@@ -503,7 +983,10 @@ test("4 · a legend or Statistics pick is dropped on a switch, not hidden until 
   await page.goto(`${origin}/?tab=shots&cut=serve`);
   const dialog = page.getByRole("dialog");
   const legend = dialog.getByRole("group", { name: "Filter by outcome" });
-  await legend.getByRole("button", { name: /^Won/ }).click();
+  await legend
+    .getByRole("button", { name: / won\b/ })
+    .first()
+    .click();
   const go = (q: string) =>
     page.evaluate((query) => {
       window.history.pushState(null, "", `/?tab=shots&${query}`);
@@ -513,10 +996,9 @@ test("4 · a legend or Statistics pick is dropped on a switch, not hidden until 
   await expect(dialog).toContainText("Rally placement");
   await go("cut=serve");
   await expect(dialog).toContainText("Serve placement");
-  await expect(legend.getByRole("button", { name: /^Won/ })).toHaveAttribute(
-    "aria-pressed",
-    "false",
-  );
+  await expect(
+    legend.getByRole("button", { name: / won\b/ }).first(),
+  ).toHaveAttribute("aria-pressed", "false");
   // A Statistics row, You → Opponent → You.
   await dialog.getByRole("button", { name: "Statistics" }).click();
   const row = dialog
@@ -524,8 +1006,8 @@ test("4 · a legend or Statistics pick is dropped on a switch, not hidden until 
     .first();
   await row.click();
   await expect(row).toHaveAttribute("aria-pressed", "true");
-  await dialog.getByRole("button", { name: "Rivera" }).click();
-  await dialog.getByRole("button", { name: "You" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
+  await dialog.getByRole("button", { name: "You", exact: true }).click();
   await expect(
     dialog.locator('button[aria-pressed="true"][aria-label$="points won"]'),
   ).toHaveCount(0);
@@ -542,7 +1024,8 @@ test("5 · a legend pick is let go on a switch to Heat, so nothing narrows the c
   const all = await marks.count();
   await dialog
     .getByRole("group", { name: "Filter by outcome" })
-    .getByRole("button", { name: /^Won/ })
+    .getByRole("button", { name: / won\b/ })
+    .first()
     .click();
   await dialog.getByRole("button", { name: "Scatter" }).click();
   await page.getByRole("menuitemradio", { name: /Heat/ }).click();
@@ -559,7 +1042,7 @@ test("6 · an edited saved view closes back onto the Saved collection", async ({
   const dialog = page.getByRole("dialog", { name: "Saved serve" });
   await expect(dialog).toBeVisible();
   // An edit writes viewId: null.
-  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
   await expect(page).not.toHaveURL(/view=sv1/);
   await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
   await expect(
@@ -630,18 +1113,15 @@ test("R3·1 · a selected point filtered off the court is let go: no ring when i
   await dialog.getByRole("button", { name: "Filters" }).click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
   let gone = false;
+  // Zone is one lane at a time: each pick replaces the last.
   for (const zone of ["T", "Body", "Wide"]) {
-    const box = panel.getByRole("checkbox", {
-      name: new RegExp(`^${zone}\\s*\\d*$`),
-    });
-    await box.click();
-    await expect(box).toHaveAttribute("aria-checked", "true");
+    const lane = panel.getByRole("radio", { name: zone, exact: true });
+    await lane.click();
+    await expect(lane).toHaveAttribute("aria-checked", "true");
     if ((await selected.count()) === 0) {
       gone = true;
       break;
     }
-    await box.click();
-    await expect(box).toHaveAttribute("aria-checked", "false");
   }
   expect(gone).toBe(true);
   await page.keyboard.press("Escape");
@@ -685,7 +1165,7 @@ test("R3·5 · Watch names the player in the Video strip when the points are the
 }) => {
   await page.goto(`${origin}/?tab=shots&cut=serve&ball=first&fixture=watchall`);
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
   await expect(page).toHaveURL(/player=opponent/);
   await dialog.getByRole("button", { name: /^Watch these/ }).click();
   await expect(page).toHaveURL(/tab=film/);
@@ -708,7 +1188,7 @@ test("R3·3 · Watch → Video → Back keeps the wall's player and collection",
   await page.goto(`${origin}/?tab=shots&fixture=watchall`);
   const dialog = page.getByRole("dialog");
   // The Opponent's wall, a card of theirs, and Watch.
-  await page.getByRole("button", { name: "Rivera" }).click();
+  await page.getByRole("button", { name: "Rivera", exact: true }).click();
   await page.getByRole("link", { name: /^All serves, Blake Rivera/ }).click();
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: /^Watch these/ }).click();
@@ -719,17 +1199,16 @@ test("R3·3 · Watch → Video → Back keeps the wall's player and collection",
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Rivera" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(
+    page.getByRole("button", { name: "Rivera", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   // An edited saved view (no `view=` left in its URL) still closes on Saved.
   await page.getByRole("button", { name: "Saved", exact: true }).click();
   // The Saved wall shows one player's views: "Saved serve" is one of yours.
   await page.getByRole("button", { name: "You", exact: true }).click();
   await page.getByRole("link", { name: /Saved serve/ }).click();
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
   await expect(page).not.toHaveURL(/view=sv1/);
   await dialog.getByRole("button", { name: /^Watch these/ }).click();
   await expect(page).toHaveURL(/tab=film/);
@@ -753,7 +1232,8 @@ test("R3·4 · Back/Forward between two saved views starts each fresh: pane, zoo
   // Everything that is the view's own: a pick, a zoom, the Points pane.
   await first
     .getByRole("group", { name: "Filter by outcome" })
-    .getByRole("button", { name: /^Won/ })
+    .getByRole("button", { name: / won\b/ })
+    .first()
     .click();
   await first.getByRole("button", { name: "Zoom in" }).click();
   await first.getByRole("button", { name: "Points", exact: true }).click();
@@ -784,7 +1264,8 @@ test("R3·4 · Back/Forward between two saved views starts each fresh: pane, zoo
   await expect(
     first
       .getByRole("group", { name: "Filter by outcome" })
-      .getByRole("button", { name: /^Won/ }),
+      .getByRole("button", { name: / won\b/ })
+      .first(),
   ).toHaveAttribute("aria-pressed", "false");
 });
 
@@ -816,7 +1297,8 @@ test("R3·7 · a saved view is its own baseline: nothing applied on open, and Cl
   // …and a legend pick on top. Clear lets go of both, back on the view.
   await dialog
     .getByRole("group", { name: "Filter by outcome" })
-    .getByRole("button", { name: /^Won/ })
+    .getByRole("button", { name: / won\b/ })
+    .first()
     .click();
   await strip.getByRole("button", { name: "Clear filter" }).click();
   await expect(strip).toHaveCount(0);
@@ -895,14 +1377,11 @@ test("R4·3 · loosening a view's own filter is named in the strip, and Clear pu
   const dialog = page.getByRole("dialog", { name: "Saved first serves" });
   const strip = dialog.locator("[data-viz-filter-strip]");
   await expect(strip).toHaveCount(0);
-  await dialog.getByRole("button", { name: "Filters" }).click();
-  const panel = page.getByRole("dialog", { name: "Filter the court" });
-  await panel
-    .getByRole("radiogroup")
-    .first()
-    .getByRole("radio", { name: "Any" })
+  // The view's 1st serve, let go in the toolbar's Serve chips.
+  await dialog
+    .getByRole("group", { name: "Serve", exact: true })
+    .getByRole("button", { name: "All" })
     .click();
-  await page.keyboard.press("Escape");
   await expect(page).not.toHaveURL(/ball=first/);
   await expect(strip).toContainText("Serve: any");
   await strip.getByRole("button", { name: "Clear filter" }).click();
@@ -1015,7 +1494,7 @@ test("R6·2 · Clear for the other player keeps the reader's chart: the view doe
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}/?tab=shots&cut=serve&view=sv1`);
   const dialog = page.getByRole("dialog", { name: "Saved serve" });
-  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
   await dialog.getByRole("button", { name: "Scatter" }).click();
   await page.getByRole("menuitemradio", { name: /Heat/ }).click();
   await expect(page).toHaveURL(/chart=heat/);
@@ -1058,6 +1537,382 @@ test("every chart row in the chart menu carries its leading icon", async ({
     labels.push((await row.getByText(name, { exact: true }).boundingBox())!.x);
   }
   expect(new Set(labels.map(Math.round)).size).toBe(1);
+});
+
+/* ── Plan 2026-11-25 §4: bands split out of the chart menu ────────────── */
+
+test("the chart menu holds Scatter, Heat and Zones only — no return rows, no bands rows", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=returnPlacement`);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Scatter" }).click();
+  const menu = page.getByRole("menu", { name: "Chart" });
+  await expect(menu).toBeVisible();
+  const rows = menu.getByRole("menuitemradio");
+  await expect(rows).toHaveCount(3);
+  for (const [i, name] of ["Scatter", "Heat", "Zones"].entries())
+    await expect(rows.nth(i)).toContainText(name);
+  await expect(menu.getByRole("menuitem")).toHaveCount(0); // no "Edit bands…"
+  await expect(menu.getByText(/bands$/)).toHaveCount(0); // no bands heading
+});
+
+test("the Bands menu beside the legend carries the depth rows a placement cut had", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=returnPlacement`);
+  const dialog = page.getByRole("dialog");
+  const trigger = dialog.getByRole("button", { name: "Bands · Thirds" });
+  await expect(trigger).toBeVisible();
+  // Beside the legend: on the Scatter legend's row, under the court.
+  const legend = dialog.getByRole("group", { name: "Filter by outcome" });
+  const [t, l] = [
+    (await trigger.boundingBox())!,
+    (await legend.boundingBox())!,
+  ];
+  expect(Math.abs(t.y + t.height / 2 - (l.y + l.height / 2))).toBeLessThan(4);
+  // At the row's far right end, the legend keys on its left.
+  const row = dialog.locator("[data-lightbox-legend-row]");
+  const r = (await row.boundingBox())!;
+  expect(l.x).toBeLessThan(t.x);
+  expect(Math.abs(r.x + r.width - (t.x + t.width))).toBeLessThan(2);
+  expect(t.x - (l.x + l.width)).toBeGreaterThan(24);
+  await trigger.click();
+  const menu = page.getByRole("menu", { name: "Depth bands" });
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole("menuitemradio")).toHaveText([
+    /^No bands/,
+    /^Thirds/,
+    /^Deep · Mid · Short/,
+  ]);
+  await expect(
+    menu.getByRole("menuitemradio", { name: /^Thirds/ }),
+  ).toHaveAttribute("aria-checked", "true");
+  // The harness viewer cannot edit bands: the row is there, disabled.
+  await expect(
+    menu.getByRole("menuitem", { name: "Edit bands…" }),
+  ).toHaveAttribute("aria-disabled", "true");
+});
+
+/* ── Plan 2026-11-25 §8: a band pins on a click ───────────────────────── */
+
+for (const [cut, kind, drawn] of [
+  ["rallyPlacement", "depth", "band"],
+  ["rallyPosition", "contact", "contact"],
+] as const) {
+  test(`a click on a ${kind} band pins its outline and lights its Statistics row until the next press, and changes no filter`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.setViewportSize({ width: 1512, height: 982 });
+    await page.goto(`${origin}/?tab=shots&cut=${cut}`);
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Statistics" }).click();
+    const stage = dialog.locator("[data-court-stage]");
+    await expect(stage.locator(`[data-viz-bands="${kind}"]`)).toHaveCount(1);
+    const marks = stage.locator("[data-viz-mark]");
+    const all = await marks.count();
+    expect(all).toBeGreaterThan(0);
+    const outline = stage.locator("[data-viz-outline]");
+    const lit = dialog.locator("button[data-highlighted]");
+    await expect(outline).toHaveCount(0);
+    await expect(lit).toHaveCount(0);
+
+    const hit = stage.locator("[data-viz-band-hit]").first();
+    const key = (await hit.getAttribute("data-viz-band-hit"))!;
+    const name = (await stage
+      .locator(`[data-viz-band="${key}"] [data-viz-band-label]`)
+      .textContent())!;
+    const before = page.url();
+    // On the apron at the stage's left edge, mid-band: clear of every mark,
+    // and the band's own words there are deaf to the pointer.
+    const band = (await hit.boundingBox())!;
+    const box = (await stage.boundingBox())!;
+    const top = Math.max(band.y, box.y);
+    const bottom = Math.min(band.y + band.height, box.y + box.height);
+    await page.mouse.click(box.x + 24, (top + bottom) / 2);
+
+    // Pinned: the band's dashed outline, held once the pointer has left.
+    await expect(hit).toHaveAttribute("data-pinned", "");
+    await page.mouse.move(box.x + box.width / 2, box.y - 40);
+    await expect(outline).toHaveCount(1);
+    await expect(outline).toHaveAttribute("data-viz-outline", drawn);
+    await page.screenshot({
+      path: test.info().outputPath(`band-pinned-${kind}.png`),
+    });
+    // Its Statistics row wears its hover look, and only it.
+    await expect(lit).toHaveCount(1);
+    await expect(lit).toHaveAttribute(
+      "aria-label",
+      new RegExp(`^${name.trim()}:`, "i"),
+    );
+    await expect(lit).toHaveAttribute("aria-pressed", "false");
+    // Not a filter: the same URL, every mark still drawn, no strip.
+    expect(page.url()).toBe(before);
+    await expect(marks).toHaveCount(all);
+    await expect(dialog.locator("[data-viz-filter-strip]")).toHaveCount(0);
+
+    // The next press anywhere lets it go.
+    await dialog.getByRole("heading").first().click();
+    await expect(outline).toHaveCount(0);
+    await expect(lit).toHaveCount(0);
+    await expect(hit).not.toHaveAttribute("data-pinned", /.*/);
+    expect(page.url()).toBe(before);
+    expect(errors).toEqual([]);
+  });
+}
+
+/* ── Plan 2026-11-25 §6: Returns is one chart ─────────────────────────── */
+
+test("Returns is one chart: the old contact link and vends=contact both open Returns on the contact court, a bare link on the placement court", async ({
+  page,
+}) => {
+  for (const query of [
+    "cut=returnContact",
+    "cut=returnPlacement&vends=contact",
+  ]) {
+    await page.goto(`${origin}/?tab=shots&${query}`);
+    const dialog = page.getByRole("dialog", { name: "Returns" });
+    await expect(
+      dialog.getByRole("heading", { name: "Returns" }),
+    ).toBeVisible();
+    await expect(dialog.locator('[data-viz-bands="contact"]')).toHaveCount(1);
+    await expect(dialog.locator('[data-viz-bands="depth"]')).toHaveCount(0);
+  }
+  await page.goto(`${origin}/?tab=shots&cut=returnPlacement`);
+  const dialog = page.getByRole("dialog", { name: "Returns" });
+  await expect(dialog.getByRole("heading", { name: "Returns" })).toBeVisible();
+  await expect(dialog.locator('[data-viz-bands="depth"]')).toHaveCount(1);
+  await expect(dialog.locator('[data-viz-bands="contact"]')).toHaveCount(0);
+});
+
+test("Placement · Contact · Both: one radio group beside the zoom; a press writes vends in place, checks it and keeps focus", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=errors`);
+  const dialog = page.getByRole("dialog", { name: "Errors" });
+  await expect(dialog).toBeVisible();
+  const view = dialog.getByRole("radiogroup", { name: "Court view" });
+  const radios = view.getByRole("radio");
+  await expect(radios).toHaveCount(3);
+  await expect(radios.nth(0)).toHaveAccessibleName("Placement");
+  await expect(radios.nth(1)).toHaveAccessibleName("Contact");
+  await expect(radios.nth(2)).toHaveAccessibleName("Both");
+  await expect(radios.nth(0)).toHaveAttribute("aria-checked", "true");
+  // The zoom control's own card: the switch, a hairline, then the zoom.
+  const zoom = dialog.getByRole("group", { name: "Zoom" });
+  const card = view.locator("xpath=..");
+  await expect(card.getByRole("group", { name: "Zoom" })).toHaveCount(1);
+  for (const radio of await radios.all())
+    expect((await radio.boundingBox())!.height).toBe(28);
+  expect((await view.boundingBox())!.x).toBeLessThan(
+    (await zoom.boundingBox())!.x,
+  );
+
+  // The tooltips, each on hover: the DS dark tooltip's 12/500 title over
+  // its 11px detail line.
+  for (const [i, [title, detail]] of [
+    ["Placement", "Where it landed"],
+    ["Contact", "Where it was hit"],
+    ["Both", "Where it was hit and where it landed"],
+  ].entries()) {
+    await radios.nth(i).hover();
+    await expectTwoLineTooltip(page, title, detail);
+    // Off the button, in steps: the tooltip's grace area lets go on a move.
+    await page.mouse.move(10, 10, { steps: 5 });
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+  }
+
+  const contact = view.getByRole("radio", { name: "Contact" });
+  await contact.click();
+  await expect(page).toHaveURL(/vends=contact/);
+  await expect(contact).toHaveAttribute("aria-checked", "true");
+  await expect(radios.nth(0)).toHaveAttribute("aria-checked", "false");
+  await expect(contact).toBeFocused();
+  await expect(dialog).toBeVisible();
+
+  await view.getByRole("radio", { name: "Both" }).click();
+  await expect(page).toHaveURL(/vends=both/);
+  await expect(view.getByRole("radio", { name: "Both" })).toBeFocused();
+  await page.waitForTimeout(300);
+  await page.screenshot({
+    path: test.info().outputPath("court-view-switch.png"),
+  });
+  // Placement is Errors' default: it leaves the URL.
+  await view.getByRole("radio", { name: "Placement" }).click();
+  await expect(page).not.toHaveURL(/vends=/);
+  await expect(view.getByRole("radio", { name: "Placement" })).toBeFocused();
+});
+
+test("Serves, Rally position and a Heat chart show no Placement · Contact · Both switch", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const serve = page.getByRole("dialog");
+  await expect(serve.getByRole("group", { name: "Zoom" })).toBeVisible();
+  await expect(
+    serve.getByRole("radiogroup", { name: "Court view" }),
+  ).toHaveCount(0);
+  await page.goto(`${origin}/?tab=shots&cut=rallyPosition`);
+  const position = page.getByRole("dialog");
+  await expect(position.getByRole("group", { name: "Zoom" })).toBeVisible();
+  await expect(
+    position.getByRole("radiogroup", { name: "Court view" }),
+  ).toHaveCount(0);
+  await page.goto(`${origin}/?tab=shots&cut=errors&chart=heat`);
+  const heat = page.getByRole("dialog");
+  await expect(heat.getByRole("group", { name: "Zoom" })).toBeVisible();
+  await expect(
+    heat.getByRole("radiogroup", { name: "Court view" }),
+  ).toHaveCount(0);
+});
+
+test("Contact recorded for X of Y shows only while contact is drawn and some shown shots have none; their readout says so", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  // Rally shots: one of the player's shots per point has no contact.
+  await page.goto(`${origin}/?tab=shots&fixture=nocontact&cut=rallyPlacement`);
+  const dialog = page.getByRole("dialog");
+  const line = dialog.locator("[data-viz-contact-recorded]");
+  const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
+  await expect(marks.first()).toBeVisible();
+  // Placement draws no contact: nothing to say.
+  await expect(line).toHaveCount(0);
+  // Placement draws no rings, but a selected shot whose contact was recorded
+  // still has both rows on its card; one without contact has neither (the
+  // view does not draw contact, so there is nothing to explain).
+  const recorded = dialog
+    .locator(
+      '[data-court-stage] [data-viz-mark]:not([data-viz-mark$="-p1-deep"])',
+    )
+    .first();
+  await recorded.dispatchEvent("click");
+  await page.mouse.move(5, 5);
+  const card = page.locator("[data-viz-readout-card]");
+  await expect(card.locator('[data-viz-readout-row="hit"]')).toContainText(
+    /^Hit from([\d.]+ (ft|m) (behind|inside) the baseline|On the baseline)$/,
+  );
+  await expect(card.locator('[data-viz-readout-row="landed"]')).toContainText(
+    /^Landed\S/,
+  );
+  await expect(card.locator("[data-viz-readout-contact]")).toHaveCount(0);
+  await dialog
+    .locator('[data-court-stage] [data-viz-mark$="-p1-deep"]')
+    .first()
+    .dispatchEvent("click");
+  await page.mouse.move(5, 5);
+  await expect(card.locator("[data-viz-readout-row]")).toHaveCount(0);
+  const view = dialog.getByRole("radiogroup", { name: "Court view" });
+  await view.getByRole("radio", { name: "Both" }).click();
+  await expect(line).toHaveText(/^Contact recorded for \d+ of \d+$/);
+  const [x, y] = (await line.textContent())!.match(/\d+/g)!.map(Number);
+  expect(x).toBeLessThan(y);
+  await expect(line).toHaveCSS("font-size", "11px");
+  // The shot with no contact draws its landing alone; its readout says why.
+  const missing = dialog.locator('[data-viz-mark$="-p1-deep"]').first();
+  await missing.dispatchEvent("click");
+  await page.mouse.move(5, 5);
+  // The selected mark's card: its Hit from row says why there is no ring.
+  const readout = page.locator("[data-viz-readout]");
+  await expect(readout.locator("[data-viz-readout-contact]")).toHaveText(
+    "Contact not recorded",
+  );
+  await view.getByRole("radio", { name: "Contact" }).click();
+  await expect(line).toHaveText(`Contact recorded for ${x} of ${y}`);
+
+  // Returns, where every shown return has its contact: no line in Both.
+  await page.goto(
+    `${origin}/?tab=shots&fixture=returns&cut=returnPlacement&vends=both`,
+  );
+  const returns = page.getByRole("dialog", { name: "Returns" });
+  await expect(
+    returns.locator("[data-court-stage] [data-viz-mark]").first(),
+  ).toBeVisible();
+  await expect(returns.getByRole("radio", { name: "Both" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect(returns.locator("[data-viz-contact-recorded]")).toHaveCount(0);
+});
+
+test("a view change edits an open saved view as a filter does, and Clear keeps the view chosen", async ({
+  page,
+}) => {
+  await page.goto(
+    `${origin}/?tab=shots&fixture=returns&cut=returnPlacement&view=sv2`,
+  );
+  const dialog = page.getByRole("dialog", { name: "Saved returns" });
+  await expect(dialog).toBeVisible();
+  const view = dialog.getByRole("radiogroup", { name: "Court view" });
+  await view.getByRole("radio", { name: "Both" }).click();
+  await expect(page).toHaveURL(/vends=both/);
+  // Edited: the view id gives way to the view it came from.
+  await expect(page).not.toHaveURL(/[?&]view=sv2/);
+  await expect(page).toHaveURL(/vfrom=sv2/);
+  // A filter on top, then Clear: the filter goes, the chosen view stays —
+  // and so the court is still an edit of the saved view, not the view.
+  await dialog
+    .getByRole("group", { name: "Filter by outcome" })
+    .getByRole("button")
+    .first()
+    .click();
+  const strip = dialog.locator("[data-viz-filter-strip]");
+  await strip.getByRole("button", { name: "Clear filter" }).click();
+  await expect(strip).toHaveCount(0);
+  await expect(page).toHaveURL(/vends=both/);
+  await expect(view.getByRole("radio", { name: "Both" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await expect(page).not.toHaveURL(/[?&]view=sv2/);
+  // Back to the view's own Placement, Clear lands on the view itself.
+  await view.getByRole("radio", { name: "Placement" }).click();
+  await dialog
+    .getByRole("group", { name: "Filter by outcome" })
+    .getByRole("button")
+    .first()
+    .click();
+  await strip.getByRole("button", { name: "Clear filter" }).click();
+  await expect(page).toHaveURL(/[?&]view=sv2/);
+});
+
+test("choosing No bands from the Contact bands menu takes the shading off the court, and back", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=returnContact`);
+  const dialog = page.getByRole("dialog");
+  const overlay = dialog.locator('[data-viz-bands="contact"]');
+  await expect(overlay).toHaveCount(1);
+  await dialog.getByRole("button", { name: /^Bands · / }).click();
+  const menu = page.getByRole("menu", { name: "Contact bands" });
+  await expect(menu.getByRole("menuitem", { name: "Edit bands…" })).toHaveCount(
+    1,
+  );
+  await menu.getByRole("menuitemradio", { name: /^No bands/ }).click();
+  await expect(menu).toHaveCount(0);
+  await expect(overlay).toHaveCount(0);
+  const off = dialog.getByRole("button", { name: "Bands · No bands" });
+  await expect(off).toBeVisible();
+  await off.click();
+  await page
+    .getByRole("menu", { name: "Contact bands" })
+    .getByRole("menuitemradio", { name: /^No bands/ })
+    .click();
+  await expect(overlay).toHaveCount(1);
+});
+
+test("a chart that never had bands rows shows no Bands trigger", async ({
+  page,
+}) => {
+  await page.goto(`${origin}/?tab=shots&cut=serve`);
+  const dialog = page.getByRole("dialog", { name: "All serves" });
+  await expect(
+    dialog.getByRole("group", { name: "Filter by outcome" }),
+  ).toBeVisible();
+  await expect(dialog.getByRole("button", { name: /^Bands/ })).toHaveCount(0);
 });
 
 /** Open the lightbox's Filters and pick its "Advanced filters" row. */
@@ -1481,37 +2336,68 @@ test("with reduced motion the glide is a jump; a Points row glides the court too
 
 /* ── Pass 3: the second click, the hint, the Statistics row's readout ──── */
 
-test("the readout's hint: focus then watch, the pinned readout's watch, and the focus alone without video", async ({
+test("the readout: a pill on hover (a play badge only with video), a pinned card on select ending in Watch point or No video for this point", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
-  const hint = page.locator("[data-viz-readout] [data-viz-readout-hint]");
+  const pill = page.locator("[data-viz-readout-pill]");
+  const card = page.locator("[data-viz-readout-card]");
 
-  // No playable video: the focus alone, before and after selecting.
+  // No playable video: a pill with no badge; the card says so.
   await page.goto(`${origin}/?tab=shots&cut=serve`);
   const stage = page.locator("[data-court-stage]");
   let mark = stage.locator("[data-viz-mark]").first();
   await mark.hover({ force: true });
-  await expect(hint).toHaveText("Click to focus");
+  await expect(pill).toBeVisible();
+  await expect(pill.locator("[data-viz-readout-play]")).toHaveCount(0);
   await mark.dispatchEvent("click");
   await expect(mark).toHaveAttribute("aria-pressed", "true");
-  await expect(hint).toHaveText("Click to focus");
+  await expect(card).toBeVisible();
+  await expect(card.locator("[data-viz-readout-no-video]")).toHaveText(
+    "No video for this point",
+  );
+  await expect(card.getByRole("button")).toHaveCount(0);
 
-  // Every point playable: focus then watch, then — pinned — watch.
+  // Every point playable: the pill ends in a play badge, the card in Watch
+  // point under a 1px hairline at 12% white — and the button watches.
   await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watchall`);
   mark = stage.locator("[data-viz-mark]").first();
   await mark.hover({ force: true });
-  await expect(hint).toHaveText("Click to focus · Click again to watch");
-  // The hint sits under a 1px hairline at 12% white.
-  const border = await hint.evaluate((el) => {
-    const cs = getComputedStyle(el);
-    return [cs.borderTopWidth, cs.borderTopColor, cs.paddingTop];
-  });
-  expect(border).toEqual(["1px", "rgba(255, 255, 255, 0.12)", "6px"]);
+  await expect(pill.locator("[data-viz-readout-play]")).toHaveCount(1);
   await mark.dispatchEvent("click");
   await expect(mark).toHaveAttribute("aria-pressed", "true");
   await page.mouse.move(5, 5);
-  await expect(hint).toHaveText("Click again to watch");
+  const action = card.locator("[data-viz-readout-action]");
+  const border = await action.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    return [cs.borderTopWidth, cs.borderTopColor];
+  });
+  expect(border).toEqual(["1px", "rgba(255, 255, 255, 0.12)"]);
+  const watchButton = card.getByRole("button", { name: "Watch point" });
+  await expect(watchButton).toBeVisible();
+  await watchButton.click();
+  await expect(page).toHaveURL(/tab=film/);
+});
+
+test("the Watch point button is reached and pressed from the keyboard", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1512, height: 982 });
+  await page.goto(`${origin}/?tab=shots&cut=serve&fixture=watchall`);
+  const stage = page.locator("[data-court-stage]");
+  const mark = stage.locator("[data-viz-mark]").first();
+  await mark.focus();
+  // A focused mark shows the pill; Enter selects it and pins the card.
+  await expect(page.locator("[data-viz-readout-pill]")).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(mark).toHaveAttribute("aria-pressed", "true");
+  const watchButton = page
+    .locator("[data-viz-readout-card]")
+    .getByRole("button", { name: "Watch point" });
+  await page.keyboard.press("Tab");
+  await expect(watchButton).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/tab=film/);
 });
 
 test("a second click on the selected mark watches that one point in the Video tab; Enter does too", async ({
@@ -1816,3 +2702,14 @@ test("Reset view puts a zoomed, dragged court back as it opened, and is spent th
   const back = await courtTransform(page);
   expect(back.z).toBeCloseTo(home.z, 4);
 });
+
+/** The open dark tooltip reads `title` (12px, 500) over `detail` (11px). */
+async function expectTwoLineTooltip(page: Page, title: string, detail: string) {
+  const lines = page.locator(
+    '[data-slot="tooltip-content"] > span:not([role])',
+  );
+  await expect(lines).toHaveText([title, detail]);
+  await expect(lines.nth(0)).toHaveCSS("font-size", "12px");
+  await expect(lines.nth(0)).toHaveCSS("font-weight", "500");
+  await expect(lines.nth(1)).toHaveCSS("font-size", "11px");
+}

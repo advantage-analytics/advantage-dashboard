@@ -10,6 +10,8 @@ import {
   figureVizFilters,
 } from "@/lib/services/ask/actions";
 import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
+import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/shots/viz-model";
+import { parseVizState } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 
 /**
  * `actions.ts` — the action catalogue under an answer (roadmap 6.4) and the
@@ -108,18 +110,16 @@ test.describe("askActionsFor", () => {
     ]);
   });
 
-  test("no block, no pin and no file; two matches, no film and no court", () => {
+  test("no block, no pin and no file; two matches, no film and no court: nothing", () => {
+    // The opponent's matches are not an action any more: the follow-up
+    // questions and the tags reach them, and the signature names the sources.
     const actions = askActionsFor({
       sources: [ONE, TWO],
       figures: [{ label: "Aces", value: "7", column: "aces" }],
       visual: null,
       scope: PERSONAL_ASK_SCOPE,
     });
-    expect(actions.map((action) => action.kind)).toEqual(["open_opponent"]);
-    expect(actions[0]).toMatchObject({
-      label: "Matches vs. Marcus Hale",
-      href: "/dashboard/matches?q=Marcus%20Hale",
-    });
+    expect(actions).toEqual([]);
   });
 
   test("a team answer offers the pin (the team Home draws them) and opens the tagged player", () => {
@@ -130,18 +130,17 @@ test.describe("askActionsFor", () => {
       scope: TEAM,
       tags: [{ kind: "player", id: "p1", label: "Ana Sokolov" }],
     });
-    // Five at most: the pin now takes the opponent's slot.
+    // The match itself is the signature's link, not an action.
     expect(actions.map((action) => action.kind)).toEqual([
       "pin",
       "export",
       "share",
-      "open_match",
       "open_player",
     ]);
     expect(actions[0]).toMatchObject({
       detail: "Keep this chart on the team Home",
     });
-    expect(actions[4]).toMatchObject({
+    expect(actions[3]).toMatchObject({
       label: "Open Ana Sokolov",
       href: "/dashboard/team/roster/p1",
     });
@@ -158,7 +157,7 @@ test.describe("askActionsFor", () => {
         visual: null,
         scope: PERSONAL_ASK_SCOPE,
       }).map((action) => action.kind),
-    ).toEqual(["share", "open_match"]);
+    ).toEqual(["share"]);
   });
 });
 
@@ -198,6 +197,21 @@ test.describe("figureVizFilters", () => {
         "/dashboard/matches/m1?tab=shots&cut=serve&pressure=break&vf=",
       ),
     ).toBe(true);
+    // Pressure points travel like the other two, and the tab reads the link
+    // back as its own option: the points at 30–30, 30–40, 40–30, deuce and
+    // every advantage, not the break points a break-point measure opens on.
+    const pressure = figureVisualizationsHref("m1", "serve", {
+      ...EMPTY_VIZ_FILTERS,
+      pressure: ["pressure", "setMatch"],
+    });
+    expect(pressure).toBe(
+      "/dashboard/matches/m1?tab=shots&cut=serve&pressure=pressure&pressure=setMatch",
+    );
+    expect(
+      parseVizState(new URLSearchParams(pressure.split("?")[1])).filters
+        .pressure,
+    ).toEqual(["pressure", "setMatch"]);
+    expect(viz.filters.pressure).toEqual(["break"]);
     const opponent = figureVizFilters("opp_second_serve_won_pct")!;
     expect(
       figureVisualizationsHref("m1", opponent.cut, opponent.filters),

@@ -3,6 +3,8 @@ import { expect, test } from "@playwright/test";
 import { hintLabel, markHover } from "@/lib/services/labels/marks-copy";
 import {
   endingStale,
+  firstServeAfterLet,
+  hitBeforeServe,
   groundstrokeAtNet,
   lastLandingMissing,
   lastShotUnresolved,
@@ -1311,5 +1313,85 @@ test.describe("groundstrokeAtNet", () => {
         true,
       ),
     ).toBeNull();
+  });
+});
+
+test.describe("hitBeforeServe", () => {
+  test("swings between a let or a fault and the next serve, named by the serve", () => {
+    const rows = (result: LabelShot["result"]) => [
+      serve("a", result, { videoTime: 1 }),
+      stroke("b", IN, { hitter: "p2", videoTime: 2 }),
+      stroke("c", IN, { hitter: "p1", videoTime: 3 }),
+      serve("d", "in", { videoTime: 20 }),
+      stroke("e", IN, { hitter: "p2", videoTime: 21 }),
+    ];
+    for (const result of ["let", "out", "net"] as const) {
+      expect(hitBeforeServe({ shots: rows(result) }, true)).toEqual({
+        code: "hit_before_serve",
+        tier: "hint",
+        scope: "shot",
+        params: { shotId: "a", strokes: ["b", "c"] },
+      });
+    }
+    expect(
+      markHover(hitBeforeServe({ shots: rows("let") }, true)!, NAMES),
+    ).toBe(
+      "2 shots were hit before the serve was played again. Nothing is in play until then: remove them unless the serve was really in.",
+    );
+    // A serve called in is "Serve after a serve in play"'s question, not this one.
+    expect(hitBeforeServe({ shots: rows("in") }, true)).toBeNull();
+    // Nothing between the let and the replay, or no replay yet: nothing.
+    expect(
+      hitBeforeServe(
+        {
+          shots: [
+            serve("a", "let", { videoTime: 1 }),
+            serve("b", "in", { videoTime: 2 }),
+          ],
+        },
+        true,
+      ),
+    ).toBeNull();
+    expect(hitBeforeServe({ shots: rows("let").slice(0, 3) }, true)).toBeNull();
+  });
+});
+
+test.describe("firstServeAfterLet", () => {
+  test("a second serve after only a first serve's let is the first serve", () => {
+    const rows = [
+      serve("a", "let", { videoTime: 1 }),
+      serve("b", "in", { videoTime: 2, stroke: "second_serve" }),
+    ];
+    expect(firstServeAfterLet({ shots: rows }, true)).toEqual({
+      code: "first_serve_after_let",
+      tier: "hint",
+      scope: "shot",
+      params: { shotId: "b" },
+    });
+    expect(markHover(firstServeAfterLet({ shots: rows }, true)!, NAMES)).toBe(
+      "Only a let comes before it, and a let is replayed with the same serve: this is the first serve.",
+    );
+    // A fault before it makes it the second serve after all.
+    expect(
+      firstServeAfterLet(
+        { shots: [serve("f", "out", { videoTime: 0 }), ...rows] },
+        true,
+      ),
+    ).toBeNull();
+    // A let on a second serve replays a second serve.
+    expect(
+      firstServeAfterLet(
+        {
+          shots: [
+            serve("a", "out", { videoTime: 0 }),
+            serve("b", "let", { videoTime: 1, stroke: "second_serve" }),
+            serve("c", "in", { videoTime: 2, stroke: "second_serve" }),
+          ],
+        },
+        true,
+      ),
+    ).toBeNull();
+    // No let: nothing.
+    expect(firstServeAfterLet({ shots: [rows[1]] }, true)).toBeNull();
   });
 });

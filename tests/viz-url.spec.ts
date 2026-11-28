@@ -1,5 +1,13 @@
 import { expect, test } from "@playwright/test";
-import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/shots/viz-model";
+import {
+  chartView,
+  courtEndsFor,
+  defaultCourtEnds,
+  drawnCut,
+  EMPTY_VIZ_FILTERS,
+  withCourtEnds,
+  type Cut,
+} from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import { isPlacementCut } from "@/components/dashboard/matches/match-detail/shots/cut-kinds";
 import {
   activeFilterEntries,
@@ -8,10 +16,14 @@ import {
   canonicalSetValues,
   carryFilters,
   clearedFilters,
+  COURT_ENDS_PARAM,
+  errorChipLabel,
   errorOptionsFor,
   filtersForCut,
   focusTargetAfterViewChange,
+  matchScopeQuery,
   OPTIONS,
+  parseMatchScope,
   parseVizState,
   reconcileVizState,
   sameView,
@@ -19,6 +31,7 @@ import {
   viewIdentityKey,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import { parseSeasonVizState } from "@/lib/data/player-season-viz";
+import { profileViewQuery } from "@/components/dashboard/team/player-profile/profile-view";
 import { validateVizInput } from "@/lib/data/saved-views-logic";
 
 test("no cut param is the wall", () => {
@@ -824,9 +837,9 @@ test.describe("Error type on a match whose errors are not judged", () => {
     expect(state.filters.error).toEqual(["unforced", "forced"]);
   });
 
-  test("Error type pills: Errors · Double faults unjudged, today's three judged — both from OPTIONS.error", () => {
+  test("Error type pills: Rally errors · Double faults unjudged, today's three judged — both from OPTIONS.error", () => {
     expect(errorOptionsFor(false)).toEqual([
-      { values: ["unforced", "forced"], label: "Errors" },
+      { values: ["unforced", "forced"], label: "Rally errors" },
       { values: ["doubleFault"], label: OPTIONS.error.doubleFault },
     ]);
     expect(errorOptionsFor(true)).toEqual([
@@ -837,6 +850,19 @@ test.describe("Error type on a match whose errors are not judged", () => {
     expect(errorOptionsFor(true).map((o) => o.label)).toEqual([
       "Unforced errors",
       "Forced errors",
+      "Double faults",
+    ]);
+  });
+
+  test("the Errors toolbar chips read short, as the Errors board does", () => {
+    expect(errorOptionsFor(true).map(errorChipLabel)).toEqual([
+      "Unforced",
+      "Forced",
+      "Double faults",
+    ]);
+    // Unjudged: the one option holding both kinds keeps its own word.
+    expect(errorOptionsFor(false).map(errorChipLabel)).toEqual([
+      "Rally errors",
       "Double faults",
     ]);
   });
@@ -920,6 +946,77 @@ test.describe("season filters", () => {
     expect(
       parseVizState(new URLSearchParams("vopp=left&vm=aa22"), SEASON_PARSE),
     ).not.toHaveProperty("season");
+  });
+
+  test("the player page's match scope (?sres= ?sopp= ?ssurf= ?sm=) is its own keys: parsed canonical, written canonical, and carried through every viz write and the tab switch", () => {
+    const scope = {
+      opponentHand: "left" as const,
+      result: "won" as const,
+      surface: "clay" as const,
+      matches: ["aa22", "bb11"],
+    };
+    const url = new URLSearchParams(
+      "sres=won&sopp=left&ssurf=clay&sm=bb11&sm=aa22&sm=bb11",
+    );
+    expect(parseMatchScope(url)).toEqual(scope);
+    // Nothing on, garbage, or the lightbox's own keys: no scope.
+    expect(parseMatchScope(new URLSearchParams(""))).toBeUndefined();
+    expect(
+      parseMatchScope(new URLSearchParams("sres=drew&sopp=both&sm=a/b")),
+    ).toBeUndefined();
+    expect(
+      parseMatchScope(new URLSearchParams("vres=won&vopp=left&vm=aa22")),
+    ).toBeUndefined();
+    // The scope is not the opened card's Matches row, and the reverse.
+    expect(parseVizState(url, SEASON_PARSE)).not.toHaveProperty("season");
+
+    // Written canonical, every other key kept; clearing leaves none.
+    expect(
+      matchScopeQuery(new URLSearchParams("tab=visualizations&sm=old"), scope),
+    ).toBe("tab=visualizations&sopp=left&sres=won&ssurf=clay&sm=aa22&sm=bb11");
+    expect(matchScopeQuery(url, undefined)).toBe("");
+    expect(
+      matchScopeQuery(new URLSearchParams("sm=bb11&sm=aa22"), {
+        opponentHand: null,
+        matches: ["bb11", "aa22"],
+      }),
+    ).toBe("sm=aa22&sm=bb11");
+
+    // A card opened, edited and closed: the store rewrites its own keys and
+    // leaves the page's scope alone.
+    const scoped = new URLSearchParams("tab=visualizations&sres=won&sm=aa22");
+    const opened = vizStateQuery(
+      scoped,
+      parseVizState(
+        new URLSearchParams("cut=serve&vres=won&vm=aa22"),
+        SEASON_PARSE,
+      ),
+    );
+    expect(parseMatchScope(new URLSearchParams(opened))).toEqual(
+      parseMatchScope(scoped),
+    );
+    expect(new URLSearchParams(opened).getAll("vm")).toEqual(["aa22"]);
+    const closed = vizStateQuery(
+      new URLSearchParams(opened),
+      parseVizState(new URLSearchParams("player=opponent"), SEASON_PARSE),
+    );
+    expect(closed).toBe("tab=visualizations&sres=won&sm=aa22&player=opponent");
+
+    // Statistics ⇄ Visualizations: the switch carries the scope both ways.
+    const toStatistics = profileViewQuery(
+      new URLSearchParams(closed),
+      "statistics",
+    );
+    expect(parseMatchScope(new URLSearchParams(toStatistics))).toEqual(
+      parseMatchScope(scoped),
+    );
+    expect(
+      parseMatchScope(
+        new URLSearchParams(
+          profileViewQuery(new URLSearchParams(toStatistics), "visualizations"),
+        ),
+      ),
+    ).toEqual(parseMatchScope(scoped));
   });
 
   test("untrusted values: an unknown hand reads as Any, a malformed id is dropped, nothing on is no season", async () => {
@@ -1408,4 +1505,414 @@ test.describe("approaches cut URL state", () => {
       ),
     ).toEqual(EMPTY_VIZ_FILTERS);
   });
+});
+
+/* ── Placement · Contact · Both (`VizFilters.ends`, `?vends=`) ───────────
+ * Which ends of a shot the court draws. Stored only as a choice away from
+ * the cut's default, so an unsaid value is the default — Both on Approaches,
+ * Placement on Errors, Returns and Rally shots — and Serves has none. */
+
+test.describe("court ends URL state", () => {
+  const PLACEMENT_CUTS: Cut[] = [
+    "errors",
+    "returnPlacement",
+    "rallyPosition",
+    "rallyPlacement",
+  ];
+
+  test("the param is vends, never view", () => {
+    expect(COURT_ENDS_PARAM).toBe("vends");
+  });
+
+  test("an absent value is Placement on Errors, Returns and Rally shots, Both on Approaches, nothing on Serves", () => {
+    for (const cut of PLACEMENT_CUTS) {
+      const s = parseVizState(new URLSearchParams(`cut=${cut}`));
+      expect(s.filters.ends, cut).toBeNull();
+      expect(courtEndsFor(cut, s.filters), cut).toBe("placement");
+      expect(defaultCourtEnds(cut), cut).toBe("placement");
+    }
+    const approaches = parseVizState(new URLSearchParams("cut=approaches"));
+    expect(approaches.filters.ends).toBeNull();
+    expect(courtEndsFor("approaches", approaches.filters)).toBe("both");
+
+    const serve = parseVizState(new URLSearchParams("cut=serve"));
+    expect(serve.filters.ends).toBeNull();
+    expect(courtEndsFor("serve", serve.filters)).toBeNull();
+    expect(defaultCourtEnds("serve")).toBeNull();
+  });
+
+  test("a filters object with no ends key at all resolves to the default", () => {
+    expect(courtEndsFor("errors", {})).toBe("placement");
+    expect(courtEndsFor("approaches", {})).toBe("both");
+    expect(courtEndsFor("serve", {})).toBeNull();
+  });
+
+  test("each value round-trips through parseVizState and vizStateQuery", () => {
+    for (const [cut, ends] of [
+      ["errors", "contact"],
+      ["errors", "both"],
+      ["returnPlacement", "contact"],
+      ["returnPlacement", "both"],
+      ["rallyPosition", "contact"],
+      ["rallyPlacement", "both"],
+      ["approaches", "placement"],
+      ["approaches", "contact"],
+    ] as const) {
+      const parsed = parseVizState(
+        new URLSearchParams(`tab=shots&cut=${cut}&vends=${ends}`),
+        { errorSplitJudged: true },
+      );
+      expect(parsed.filters.ends, `${cut} ${ends}`).toBe(ends);
+      expect(courtEndsFor(cut, parsed.filters)).toBe(ends);
+
+      const q = new URLSearchParams(
+        vizStateQuery(new URLSearchParams("tab=shots"), parsed),
+      );
+      expect(q.get("vends"), `${cut} ${ends}`).toBe(ends);
+      expect(q.get("tab")).toBe("shots");
+      expect(parseVizState(q, { errorSplitJudged: true })).toEqual(parsed);
+    }
+  });
+
+  test("parsed state is exactly the cut's state plus ends", () => {
+    expect(parseVizState(new URLSearchParams("cut=errors&vends=both"))).toEqual(
+      {
+        cut: "errors",
+        chart: "scatter",
+        viewId: null,
+        filters: { ...EMPTY_VIZ_FILTERS, ends: "both" },
+      },
+    );
+  });
+
+  test("the cut's default is never serialised, named or not", () => {
+    for (const cut of PLACEMENT_CUTS) {
+      const named = parseVizState(
+        new URLSearchParams(`cut=${cut}&vends=placement`),
+      );
+      expect(named.filters.ends, cut).toBeNull();
+      expect(named).toEqual(parseVizState(new URLSearchParams(`cut=${cut}`)));
+      expect(vizStateQuery(new URLSearchParams(), named)).toBe(`cut=${cut}`);
+      // A state holding the default outright (built by hand, not parsed).
+      expect(
+        vizStateQuery(new URLSearchParams(), {
+          cut,
+          chart: "scatter",
+          viewId: null,
+          filters: { ...EMPTY_VIZ_FILTERS, ends: "placement" },
+        }),
+      ).toBe(`cut=${cut}`);
+    }
+    const both = parseVizState(
+      new URLSearchParams("cut=approaches&vends=both"),
+      { errorSplitJudged: true },
+    );
+    expect(both.filters.ends).toBeNull();
+    expect(
+      new URLSearchParams(vizStateQuery(new URLSearchParams(), both)).has(
+        "vends",
+      ),
+    ).toBe(false);
+  });
+
+  test("Serves carries no value and never serialises one", () => {
+    const parsed = parseVizState(
+      new URLSearchParams("cut=serve&vends=contact"),
+    );
+    expect(parsed.filters.ends).toBeNull();
+    expect(vizStateQuery(new URLSearchParams(), parsed)).toBe("cut=serve");
+    expect(
+      vizStateQuery(new URLSearchParams(), {
+        cut: "serve",
+        chart: "scatter",
+        viewId: null,
+        filters: { ...EMPTY_VIZ_FILTERS, ends: "contact" },
+      }),
+    ).toBe("cut=serve");
+    expect(withCourtEnds(EMPTY_VIZ_FILTERS, "serve", "contact")).toBe(
+      EMPTY_VIZ_FILTERS,
+    );
+  });
+
+  test("the wall carries no value, and a garbage value parses away", () => {
+    const wall = parseVizState(new URLSearchParams("tab=shots&vends=contact"));
+    expect(wall.filters).toEqual(EMPTY_VIZ_FILTERS);
+    expect(vizStateQuery(new URLSearchParams("vends=contact"), wall)).toBe("");
+
+    const garbage = parseVizState(new URLSearchParams("cut=errors&vends=net"));
+    expect(garbage.filters.ends).toBeNull();
+  });
+
+  test("vends is a viz key: a stale one is cleaned off by the next write", () => {
+    const q = vizStateQuery(new URLSearchParams("tab=shots&vends=contact"), {
+      cut: "errors",
+      chart: "scatter",
+      viewId: null,
+      filters: EMPTY_VIZ_FILTERS,
+    });
+    expect(q).toBe("tab=shots&cut=errors");
+  });
+
+  test("withCourtEnds stores a choice and drops the cut's default", () => {
+    const contact = withCourtEnds(EMPTY_VIZ_FILTERS, "errors", "contact");
+    expect(contact).toEqual({ ...EMPTY_VIZ_FILTERS, ends: "contact" });
+    expect(withCourtEnds(contact, "errors", "placement").ends).toBeNull();
+    expect(withCourtEnds(contact, "errors", "contact")).toBe(contact);
+    expect(withCourtEnds(EMPTY_VIZ_FILTERS, "approaches", "both")).toBe(
+      EMPTY_VIZ_FILTERS,
+    );
+  });
+
+  test("sameView: two states that differ only in ends are different views", () => {
+    const base = {
+      cut: "errors" as const,
+      chart: "scatter" as const,
+      viewId: null,
+    };
+    const placement = { ...base, filters: EMPTY_VIZ_FILTERS };
+    const contact = {
+      ...base,
+      filters: { ...EMPTY_VIZ_FILTERS, ends: "contact" as const },
+    };
+    expect(sameView(placement, contact)).toBe(false);
+    expect(sameView(contact, placement)).toBe(false);
+    expect(sameView(contact, contact)).toBe(true);
+    // Unsaid and the default named outright are one view.
+    expect(
+      sameView(placement, {
+        ...base,
+        filters: { ...EMPTY_VIZ_FILTERS, ends: "placement" },
+      }),
+    ).toBe(true);
+    // A candidate stored before the key existed is its cut's default.
+    const { ends: _ends, ...legacy } = EMPTY_VIZ_FILTERS;
+    void _ends;
+    expect(
+      sameView(placement, {
+        ...base,
+        filters: legacy as typeof EMPTY_VIZ_FILTERS,
+      }),
+    ).toBe(true);
+    expect(
+      sameView(contact, {
+        ...base,
+        filters: legacy as typeof EMPTY_VIZ_FILTERS,
+      }),
+    ).toBe(false);
+  });
+
+  test("viewIdentityKey: two states that differ only in ends are different courts", () => {
+    const placement = parseVizState(new URLSearchParams("cut=returnPlacement"));
+    const contact = parseVizState(
+      new URLSearchParams("cut=returnPlacement&vends=contact"),
+    );
+    const both = parseVizState(
+      new URLSearchParams("cut=returnPlacement&vends=both"),
+    );
+    const keys = [placement, contact, both].map(viewIdentityKey);
+    expect(new Set(keys).size).toBe(3);
+    // Unsaid and the default named are the same court.
+    expect(
+      viewIdentityKey(
+        parseVizState(
+          new URLSearchParams("cut=returnPlacement&vends=placement"),
+        ),
+      ),
+    ).toBe(viewIdentityKey(placement));
+    // A filter edit under a chosen end is still the same court.
+    expect(
+      viewIdentityKey(
+        parseVizState(
+          new URLSearchParams("cut=returnPlacement&vends=contact&ball=first"),
+        ),
+      ),
+    ).toBe(viewIdentityKey(contact));
+  });
+
+  test("carryFilters re-reads the choice against the new cut", () => {
+    const contact = { ...EMPTY_VIZ_FILTERS, ends: "contact" as const };
+    expect(carryFilters(contact, "rallyPlacement").ends).toBe("contact");
+    expect(carryFilters(contact, "approaches").ends).toBe("contact");
+    expect(carryFilters(contact, "serve").ends).toBeNull();
+    // Both is Approaches' own default, so it stops being a stored choice.
+    const both = { ...EMPTY_VIZ_FILTERS, ends: "both" as const };
+    expect(carryFilters(both, "approaches").ends).toBeNull();
+    expect(carryFilters(both, "errors").ends).toBe("both");
+    // Unsaid stays unsaid: each cut's own default.
+    expect(carryFilters(EMPTY_VIZ_FILTERS, "approaches").ends).toBeNull();
+  });
+
+  test("clearedFilters keeps the ends: it is not a filter", () => {
+    const cleared = clearedFilters({
+      cut: "errors",
+      chart: "scatter",
+      viewId: "view-1",
+      filters: { ...EMPTY_VIZ_FILTERS, ball: ["first"], ends: "contact" },
+    });
+    expect(cleared.filters).toEqual({ ...EMPTY_VIZ_FILTERS, ends: "contact" });
+    expect(cleared.viewId).toBeNull();
+  });
+
+  test("ends is never an applied-filter token", () => {
+    expect(
+      activeFilterEntries({
+        cut: "errors",
+        chart: "scatter",
+        viewId: null,
+        filters: { ...EMPTY_VIZ_FILTERS, ends: "contact" },
+      }),
+    ).toEqual([]);
+  });
+});
+
+/* ── Returns is one chart ────────────────────────────────────────────────
+ * `returnPlacement` is the chart; Placement / Contact is its view
+ * (`VizFilters.ends`). `returnContact` stays a loadable id — old links,
+ * saved views, MCP links and Ask actions carry it — and opens Returns in
+ * Contact. */
+
+test.describe("Returns is one chart", () => {
+  const CONTACT = {
+    cut: "returnPlacement",
+    chart: "scatter",
+    viewId: null,
+    filters: { ...EMPTY_VIZ_FILTERS, ends: "contact" },
+  } as const;
+
+  test("cut=returnContact opens Returns with the view set to Contact", () => {
+    const parsed = parseVizState(new URLSearchParams("cut=returnContact"));
+    expect(parsed).toEqual(CONTACT);
+    expect(courtEndsFor(parsed.cut!, parsed.filters)).toBe("contact");
+    // One court, one query string: it is written back as Returns.
+    expect(vizStateQuery(new URLSearchParams(), parsed)).toBe(
+      "cut=returnPlacement&vends=contact",
+    );
+    expect(
+      parseVizState(new URLSearchParams("cut=returnPlacement&vends=contact")),
+    ).toEqual(CONTACT);
+  });
+
+  test("the old id keeps its chart type, player and filters", () => {
+    expect(
+      parseVizState(
+        new URLSearchParams(
+          "cut=returnContact&chart=heat&player=opponent&ball=second",
+        ),
+      ),
+    ).toEqual({
+      cut: "returnPlacement",
+      chart: "heat",
+      viewId: null,
+      filters: {
+        ...EMPTY_VIZ_FILTERS,
+        player: "opponent",
+        ball: ["second"],
+        ends: "contact",
+      },
+    });
+  });
+
+  test("the old id is Contact whatever vends says beside it", () => {
+    for (const vends of ["placement", "both", "nonsense"]) {
+      expect(
+        parseVizState(new URLSearchParams(`cut=returnContact&vends=${vends}`)),
+        vends,
+      ).toEqual(CONTACT);
+    }
+  });
+
+  test("a bare Returns link is Placement, its default", () => {
+    const parsed = parseVizState(new URLSearchParams("cut=returnPlacement"));
+    expect(parsed.cut).toBe("returnPlacement");
+    expect(parsed.filters.ends).toBeNull();
+    expect(courtEndsFor("returnPlacement", parsed.filters)).toBe("placement");
+  });
+
+  test("the season reads the old id the same way", () => {
+    const parsed = parseSeasonVizState({ cut: "returnContact" }, true);
+    expect(parsed.cut).toBe("returnPlacement");
+    expect(parsed.filters.ends).toBe("contact");
+  });
+
+  test("chartView rewrites the old id and nothing else", () => {
+    expect(chartView("returnContact", EMPTY_VIZ_FILTERS)).toEqual({
+      cut: "returnPlacement",
+      filters: { ...EMPTY_VIZ_FILTERS, ends: "contact" },
+    });
+    for (const cut of [
+      "serve",
+      "returnPlacement",
+      "rallyPlacement",
+      "rallyPosition",
+      "errors",
+      "approaches",
+    ] as const) {
+      const view = chartView(cut, EMPTY_VIZ_FILTERS);
+      expect(view.cut).toBe(cut);
+      expect(view.filters).toBe(EMPTY_VIZ_FILTERS);
+    }
+  });
+
+  test("drawnCut: Returns in Contact draws the contact court, every other view its own", () => {
+    expect(drawnCut("returnPlacement", { ends: "contact" })).toBe(
+      "returnContact",
+    );
+    expect(drawnCut("returnPlacement", {})).toBe("returnPlacement");
+    expect(drawnCut("returnPlacement", { ends: null })).toBe("returnPlacement");
+    // Both draws the placement court: its marks carry their contact.
+    expect(drawnCut("returnPlacement", { ends: "both" })).toBe(
+      "returnPlacement",
+    );
+    // A state still holding the old id draws what it always drew.
+    expect(drawnCut("returnContact", {})).toBe("returnContact");
+    for (const cut of ["errors", "rallyPlacement", "approaches"] as const) {
+      expect(drawnCut(cut, { ends: "contact" })).toBe(cut);
+    }
+    expect(drawnCut("serve", {})).toBe("serve");
+  });
+
+  test("Returns in Contact and in Placement are two views and two courts", () => {
+    const placement = parseVizState(new URLSearchParams("cut=returnPlacement"));
+    const contact = parseVizState(new URLSearchParams("cut=returnContact"));
+    expect(sameView(contact, { ...placement, cut: "returnPlacement" })).toBe(
+      false,
+    );
+    expect(sameView(contact, CONTACT)).toBe(true);
+    expect(viewIdentityKey(contact)).not.toBe(viewIdentityKey(placement));
+    // An old link and the new one name the same court.
+    expect(viewIdentityKey(contact)).toBe(
+      viewIdentityKey(
+        parseVizState(new URLSearchParams("cut=returnPlacement&vends=contact")),
+      ),
+    );
+  });
+});
+
+test("a Result token names who won in the chips' words, as the legend beside it does", () => {
+  const onOpponent = {
+    cut: "serve",
+    chart: "scatter",
+    filters: { ...EMPTY_VIZ_FILTERS, player: "opponent", result: ["won"] },
+    viewId: null,
+  } as const;
+  const full = { you: "Avery Zzseed", opponent: "Riley Park" };
+  const chips = { you: "Zzseed", opponent: "Park" };
+  const label = (opts: Parameters<typeof activeFilterEntries>[2]) =>
+    activeFilterEntries(onOpponent, full, opts).find((e) => e.key === "result")
+      ?.label;
+  // The charted player (the opponent) won: "Park won", never "Riley Park won".
+  expect(label({ winnerNames: chips })).toBe("Park won");
+  // Lost on the opponent's chart is the other player's win.
+  expect(
+    activeFilterEntries(
+      {
+        ...onOpponent,
+        filters: { ...onOpponent.filters, result: ["lost"] },
+      },
+      full,
+      { winnerNames: chips },
+    ).find((e) => e.key === "result")?.label,
+  ).toBe("Zzseed won");
+  // With no chip words, the phrase names fall back.
+  expect(label({})).toBe("Riley Park won");
 });

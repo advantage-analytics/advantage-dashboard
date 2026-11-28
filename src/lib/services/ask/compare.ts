@@ -43,6 +43,14 @@ export const ASK_COMPARE_KINDS: readonly AskCompareKind[] = [
   "baseline",
 ];
 
+/**
+ * `pressure` is the break-point measures, the only pressure figures
+ * `match_stats` holds. It is NOT the app's Pressure points filter — every
+ * point played at 30–30, 30–40, 40–30, deuce or an advantage
+ * (`isPressurePoint` in `match-filters/model.ts`) — which no measure counts:
+ * a card under this group opens the court on Break points
+ * (`vizCutFor` in `actions.ts`), never on Pressure points.
+ */
 export type AskCompareGroup =
   "serve" | "return" | "pressure" | "rallies" | "net" | "points";
 

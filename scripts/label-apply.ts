@@ -53,7 +53,7 @@ import { createAdminClient, type AdminClient } from "@/lib/supabase/admin";
 import { UUID_RE } from "@/lib/admin/validation";
 import {
   HAND_LABELLED_FLAG,
-  letsLeftOutLine,
+  letsAndDroppedLines,
   type AppliedPointRow,
   type SideStats,
   type expectedStats,
@@ -318,7 +318,7 @@ async function main() {
   console.log(
     `vendor facts: speed on ${builtShots.filter((s) => s.speed_mph !== null).length} shots · bounce time on ${builtShots.filter((s) => s.bounce_video_time !== null).length} of ${builtShots.length}`,
   );
-  console.log(letsLeftOutLine(built.letsLeftOut));
+  for (const line of letsAndDroppedLines(built)) console.log(line);
   console.log(`labelled final score: ${formatSets(sets) || "(none)"}`);
   console.log(
     `entered score: ${entered ? entered.map((s) => `${s[0]}–${s[1]}`).join(", ") : "(none)"}`,

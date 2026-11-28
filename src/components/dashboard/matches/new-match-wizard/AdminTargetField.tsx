@@ -33,6 +33,7 @@ import { formatHoursShort, isUnlimitedCap } from "@/lib/data/usage-format";
 import { searchAdminUploadTargetsAction } from "@/app/admin/uploads/new/target-actions";
 import type { AdminUploadTargetHit } from "@/lib/admin/uploads/targets";
 import type { AdminUploadBilling } from "@/lib/admin/uploads/types";
+import { plansHaveBegun } from "@/lib/billing/plans";
 import type { AdminWizardMode } from "./admin-mode";
 import {
   adminUploadHref,
@@ -299,7 +300,11 @@ export function AdminBillingField({ context, uploadKind }: AdminTargetProps) {
   const hint =
     owner.billing === "free"
       ? `Billed to nobody, like your own uploads. ${firstName}’s hours are untouched.`
-      : `${firstName}’s free hours first, then credits they bought · ${allowanceLine(playerLeft)}${owner.playerAllowance.creditSeconds > 0 ? ` (${formatHoursShort(owner.playerAllowance.creditSeconds)} h in credits)` : ""}`;
+      : // From January 1, 2027 a player's hours are their plan's, and what
+        // they bought on top is extra hours.
+        plansHaveBegun()
+        ? `${firstName}’s plan hours first, then their extra hours · ${allowanceLine(playerLeft)}${owner.playerAllowance.creditSeconds > 0 ? ` (${formatHoursShort(owner.playerAllowance.creditSeconds)} h extra)` : ""}`
+        : `${firstName}’s free hours first, then credits they bought · ${allowanceLine(playerLeft)}${owner.playerAllowance.creditSeconds > 0 ? ` (${formatHoursShort(owner.playerAllowance.creditSeconds)} h in credits)` : ""}`;
   return (
     <div className="flex flex-col gap-2.5">
       <FieldCaption label="Billing" />

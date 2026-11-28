@@ -176,12 +176,12 @@ test.describe("FiltersPanel markup", () => {
       "Landed in",
       "Result",
     ]);
-    // Outcome is from your side and Hit by is the last shot's hitter — two
-    // groups, since "Player" used to mean both. The Result row is "Shot"
-    // (the mockup's "Zone" was a typo).
+    // Who won the point and who hit the last shot — two groups, each named
+    // for a person, never Won | Lost (canvas "Won and lost: whose side?",
+    // option A). The Result row is "Shot" (the mockup's "Zone" was a typo).
     expect(groupLabels("result")).toEqual([
-      "Outcome",
-      "Hit by",
+      "Point won by",
+      "Last shot hit by",
       "Shot",
       "Ending",
       "Missed",
@@ -202,8 +202,10 @@ test.describe("FiltersPanel markup", () => {
       pillLabels(sectionHtml(html, "custom")),
     );
     expect(text(sectionHtml(html, "return"))).toContain("from the baseline");
-    expect(text(sectionHtml(html, "result"))).toContain("from your side");
-    expect(text(sectionHtml(html, "result"))).toContain("the last shot");
+    // Result names people, not sides: no "from your side" note any more.
+    expect(text(sectionHtml(html, "result"))).toContain("Point won by");
+    expect(text(sectionHtml(html, "result"))).toContain("Last shot hit by");
+    expect(text(sectionHtml(html, "result"))).not.toContain("from your side");
     expect(text(sectionHtml(html, "custom"))).toContain("1 = the serve");
 
     const score = pillLabels(sectionHtml(html, "score"));
@@ -229,8 +231,9 @@ test.describe("FiltersPanel markup", () => {
 
     const result = pillLabels(sectionHtml(html, "result"));
     expect(result).toEqual([
-      "Won",
-      "Lost",
+      // Point won by: the winner's name, then Last shot hit by.
+      "Rudy Quan",
+      "Federico Gomez",
       "Rudy Quan",
       "Federico Gomez",
       "Serve",
@@ -564,6 +567,28 @@ test.describe("FiltersPanel header, summaries and footer", () => {
         { you: "a", opponent: "b" },
       ),
     ).toBe("b · backhand · down the line");
+  });
+
+  test("Point won by names the winner — never Won | Lost — and its summary says who won", () => {
+    const names = { you: "Shi", opponent: "JR" };
+    const result = panelSections(fullAvailability(), names).find(
+      (sec) => sec.id === "result",
+    )!;
+    const outcome = result.groups.find((g) => g.group.key === "resultOutcome")!;
+    expect(outcome.group.label).toBe("Point won by");
+    expect(outcome.group.note).toBeUndefined();
+    // The stored values are unchanged: "won" is still your side's win.
+    expect(outcome.options).toEqual([
+      { value: "won", label: "Shi" },
+      { value: "lost", label: "JR" },
+    ]);
+    expect(
+      sectionSummary(
+        { ...EMPTY_MATCH_FILTERS, resultOutcome: ["lost"] },
+        "result",
+        names,
+      ),
+    ).toBe("JR won");
   });
 
   test("no Any pill; Points is a 5-column grid with Ad-40 right of 40-40 and 40-Ad beneath", () => {

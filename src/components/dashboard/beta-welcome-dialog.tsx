@@ -16,7 +16,9 @@ import {
   monthlyCapSecondsFor,
   quotaTierFor,
 } from "@/lib/services/splitstep/quota";
-import { PAID_PLANS_BEGIN, workspaceTier } from "@/lib/user/plan";
+import { plansApplyTo } from "@/lib/billing/plan-copy";
+import { plansBeginMonth } from "@/lib/billing/plans";
+import { workspaceTier } from "@/lib/user/plan";
 
 /**
  * One flag per account, not per browser. A single browser-wide key meant a
@@ -181,8 +183,8 @@ export function BetaWelcomeDialog({
             </dl>
 
             <ConfirmAside>
-              Paid plans start in {PAID_PLANS_BEGIN}. We&apos;ll give you plenty
-              of notice before anything changes.
+              Paid plans start in {plansBeginMonth()}. We&apos;ll give you
+              plenty of notice before anything changes.
             </ConfirmAside>
 
             <div className="flex items-center gap-2.5">
@@ -253,17 +255,23 @@ function readSeen(key: string): boolean {
 /**
  * The dialog, opened once per account on its first dashboard visit. The server
  * snapshot says "seen", so it never renders before storage has been read.
+ *
+ * It is the beta's welcome, so it stops with the beta: once plans apply to
+ * the active workspace (`plansApplyTo()` — January 1, 2027, or a player
+ * already on a paid plan) it never opens, and does not mark itself seen.
  */
 export function BetaWelcome() {
+  const { active, viewer } = useWorkspace();
   const terms = useBetaWelcomeTerms();
-  const key = seenKey(useWorkspace().viewer.id);
+  const key = seenKey(viewer.id);
+  const retired = plansApplyTo(active);
   const getSeen = useCallback(() => readSeen(key), [key]);
   const seen = useSyncExternalStore(subscribe, getSeen, () => true);
   const [closed, setClosed] = useState(false);
 
   return (
     <BetaWelcomeDialog
-      open={!seen && !closed}
+      open={!retired && !seen && !closed}
       onOpenChange={(open) => {
         if (open) return;
         setClosed(true);

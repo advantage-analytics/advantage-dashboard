@@ -155,6 +155,33 @@ test.describe("recordAskRun", () => {
     ]);
   });
 
+  test("a stage's model is the one the model says served it, else the configured one", async () => {
+    const { db } = fakeDb();
+    const runs: AskRunRecord[] = [];
+    // A plan stage that failed over to Gemini; an answer stage no call reached.
+    const served: AskModel = {
+      ...unconfigured,
+      servedModel: (stage) =>
+        stage === "plan" ? "gemini-3.5-flash-lite" : undefined,
+    };
+    await collect(
+      recordAskRun(input(db, served), {
+        onRun: (run) => {
+          runs.push(run);
+        },
+        planModel: "claude-opus-5-5",
+        answerModel: "claude-sonnet-5-5",
+      }),
+    );
+    expect(runs).toHaveLength(1);
+    expect(runs[0].planModel).toBe("gemini-3.5-flash-lite");
+    expect(runs[0].answerModel).toBe("claude-sonnet-5-5");
+    expect(askRunRow(runs[0])).toMatchObject({
+      plan_model: "gemini-3.5-flash-lite",
+      answer_model: "claude-sonnet-5-5",
+    });
+  });
+
   test("a reader that stops early records an abandoned run, once", async () => {
     const { db } = fakeDb();
     const runs: AskRunRecord[] = [];

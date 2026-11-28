@@ -536,10 +536,12 @@ export const NO_PASS_DATA_NOTE =
 
 /**
  * The groups with the Lob points and Passed rows set to what the match can
- * say: as
- * configured when the ball-paths file's lobs are known, otherwise with no cut
- * and a note — the dash it draws then says why, and nothing offers to open
- * points no predicate can find. Every other row passes through untouched.
+ * say: as configured when the ball-paths file's lobs are known, otherwise
+ * with no cut and a note — the dash it draws then says why, and nothing
+ * offers to open points no predicate can find. Every other row passes
+ * through untouched. On the match report the Passed note shows only while
+ * the file loads: once the view is known to have no ball flight data the
+ * row is left off (`withoutUnmeasuredPassRow`). The season table shows it.
  */
 export function withLobAvailability(
   groups: { title: string; configs: H2HRowConfig[] }[],
@@ -577,6 +579,29 @@ export function withoutShotKindRows(
       (config) =>
         config.fromPoints !== "lobPointsWon" &&
         config.fromPoints !== "dropShotPointsWon",
+    ),
+  }));
+}
+
+/**
+ * The match report's groups without the Passed row once the view is known to
+ * have no ball flight data (`useStatisticsLobDataAbsent`: not an Advantage
+ * Intelligence match, a mount that may not read the file, or no file came):
+ * both figures would only ever be a dash, so the row is left off rather than
+ * shown empty. `mayHaveLobs` stays true while the file is loading, so the row
+ * keeps its dash then instead of dropping out and coming back. The season
+ * table keeps the row — its pools line up with the row shape by position
+ * across matches, and one match with lobs gives it a figure.
+ */
+export function withoutUnmeasuredPassRow(
+  groups: { title: string; configs: H2HRowConfig[] }[],
+  mayHaveLobs: boolean,
+): { title: string; configs: H2HRowConfig[] }[] {
+  if (mayHaveLobs) return groups;
+  return groups.map((group) => ({
+    title: group.title,
+    configs: group.configs.filter(
+      (config) => config.fromPoints !== "passingShotsWon",
     ),
   }));
 }

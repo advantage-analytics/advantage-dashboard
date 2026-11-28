@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { LiveDots } from "@/components/ui/live-dots";
+import { plansBeginMonth } from "@/lib/billing/plans";
+import type { HomeCardView } from "@/lib/billing/plan-copy";
 import { PILOT_ENDS_AT } from "@/lib/services/splitstep/config";
 import { isUnlimitedCap } from "@/lib/data/usage-format";
 import { utcToday } from "@/lib/data/match-day";
@@ -104,7 +106,7 @@ export function PilotCard({
           )}
           {ending ? (
             <span className="text-[12px] leading-[1.5] text-white/90">
-              Paid plans start in January 2027, and we’ll tell you before
+              Paid plans start in {plansBeginMonth()}, and we’ll tell you before
               anything changes.
             </span>
           ) : null}
@@ -121,6 +123,74 @@ export function PilotCard({
           <span>
             {analyzed} {analyzed === 1 ? "match" : "matches"} analyzed
           </span>
+        </span>
+      </span>
+    </Link>
+  );
+}
+
+/**
+ * The same card once plans apply to the workspace (`plansApplyTo()`): the
+ * mesh, the figure and the fact line, with the plan's own words —
+ * `homeCardView()` decides every one of them, so each state can be read
+ * without mounting the card. The whole card opens Settings › Plan for a
+ * player and the team's own page for a team.
+ */
+export function PlanHomeCard({ view }: { view: HomeCardView }) {
+  return (
+    <Link
+      href={view.href}
+      aria-label={view.ariaLabel}
+      className="brand-mesh-gradient group @container relative flex h-full min-h-[214px] overflow-hidden rounded-[var(--radius-card)] text-white shadow-[0_1px_2px_rgba(59,130,246,0.35)] transition-shadow duration-[var(--duration-hover)] hover:shadow-[0_6px_18px_rgba(59,130,246,0.35)] focus-visible:shadow-[0_0_0_2px_rgba(59,130,246,0.6)] focus-visible:outline-none"
+    >
+      <LiveDots />
+      <span className="absolute top-5 right-6 z-[1] flex items-center gap-1 text-[12px] leading-4 font-medium underline-offset-[3px] group-hover:underline group-focus-visible:underline">
+        {view.cta}
+        <ChevronRight aria-hidden strokeWidth={1.5} className="size-3" />
+      </span>
+      <span className="relative flex w-full flex-col px-6 py-5">
+        <span className="text-[12px] leading-4 text-white/[0.88]">
+          {view.eyebrow}
+        </span>
+        <span className="mt-auto flex flex-col gap-3 pt-5">
+          {view.figure === null ? (
+            // No cap means no figure worth setting large: the headline is a
+            // whole sentence, and its one line follows.
+            <span className="flex flex-col gap-1.5">
+              <b className="text-[28px] leading-[1.1] font-light tracking-[-0.6px]">
+                {view.line1}
+              </b>
+              <span className="text-[13px] leading-[18px] text-white/[0.88]">
+                {view.line2}
+              </span>
+            </span>
+          ) : (
+            <span className="flex items-end gap-3">
+              <b className="tabular text-[56px] leading-[0.85] font-light tracking-[-2px]">
+                {view.figure}
+              </b>
+              <span className="pb-[3px] text-[13px] leading-[1.35] text-white/[0.88]">
+                {view.line1}
+                <br />
+                {view.line2}
+              </span>
+            </span>
+          )}
+          {view.sentence ? (
+            <span className="text-[12px] leading-[1.5] text-white/90">
+              {view.sentence}
+            </span>
+          ) : null}
+        </span>
+        <span className="mt-5 flex gap-5 border-t border-white/25 pt-3 text-[12px] leading-4 whitespace-nowrap text-white/90">
+          {view.facts.map((fact) => (
+            <span
+              key={fact.text}
+              className={fact.optional ? "@max-[380px]:hidden" : undefined}
+            >
+              {fact.text}
+            </span>
+          ))}
         </span>
       </span>
     </Link>

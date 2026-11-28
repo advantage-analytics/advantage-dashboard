@@ -9,6 +9,10 @@
  * byte offset — the MP4 writer back-patches earlier regions, so chunks must be
  * placed, never appended.
  *
+ * Only the primary video and audio tracks are converted (`CONVERSION_TRACKS`):
+ * the extra tracks a phone adds are not ours to keep, and one Mediabunny can't
+ * read would otherwise be discarded and fail the whole cut.
+ *
  * Copy only (`mode: 'forced'`) for a file that is already 1080p-or-less H.264:
  * a track that can't be copied is DISCARDED by Mediabunny, and a discarded
  * video or audio track is reported back as "unsupported" so the caller uploads
@@ -45,7 +49,12 @@ import {
   type NormaliseReason,
 } from "@/lib/match-video/playback-format";
 
-import { decideTrim, exceedsUploadLimit, type PreparedMode } from "./trim-plan";
+import {
+  CONVERSION_TRACKS,
+  decideTrim,
+  exceedsUploadLimit,
+  type PreparedMode,
+} from "./trim-plan";
 import type { TrimWorkerRequest, TrimWorkerResponse } from "./trim-protocol";
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
@@ -319,6 +328,7 @@ scope.onmessage = async (event: MessageEvent<TrimWorkerRequest>) => {
     conversion = await Conversion.init({
       input,
       output,
+      tracks: CONVERSION_TRACKS,
       trim: { start: decision.startSeconds, end: decision.endSeconds },
       ...how,
       showWarnings: false,
@@ -338,7 +348,15 @@ scope.onmessage = async (event: MessageEvent<TrimWorkerRequest>) => {
               d.reason === "undecodable_source_codec" ||
               d.reason === "no_encodable_target_codec",
           ));
-      post({ type: "skip", reason: noCodec ? "no-encoder" : "unsupported" });
+      post({
+        type: "skip",
+        reason: noCodec ? "no-encoder" : "unsupported",
+        discarded: lost.map((d) => ({
+          type: d.track.type,
+          codec: d.track.codec ?? null,
+          reason: d.reason,
+        })),
+      });
       return;
     }
 

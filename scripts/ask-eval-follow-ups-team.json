@@ -1,0 +1,546 @@
+[
+  {
+    "q": "Tell me how this player is playing so far?",
+    "players": ["Sokolov"],
+    "want": "Sokolov's season beside the team",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "How is Sokolov playing versus Reyes",
+    "after": 0,
+    "want": "Sokolov beside Reyes, a new comparison",
+    "expect": {
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: came back with the previous answer word for word. The test program has analysed matches for one player only, so a turn about Reyes cannot answer; it still must not repeat the previous answer."
+    }
+  },
+  {
+    "q": "How should Sokolov play against Okafor?",
+    "after": 1,
+    "want": "Sokolov's matches against Okafor: where points were won and lost",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered with stats, which is right; kept here as the step before the trend."
+    }
+  },
+  {
+    "q": "Give me a visualization of Reyes's serve over his last couple of matches",
+    "after": 2,
+    "want": "Reyes's serve measures by match, a trend",
+    "expect": {
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered. Sets up the reshape that follows. The test program has analysed matches for one player only, so a turn about Reyes cannot answer; it still must not repeat the previous answer."
+    }
+  },
+  {
+    "q": "how about first serves won? and can I see both side by side?",
+    "after": 3,
+    "want": "Reyes's first serves in and first-serve points won, by match, together",
+    "expect": {
+      "differs": true,
+      "sql": ["first_serve_points_won"],
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: dropped the trend and gave Reyes against opponents. The test program has analysed matches for one player only, so a turn about Reyes cannot answer; it still must not repeat the previous answer."
+    }
+  },
+  {
+    "q": "What are this player's losing plays?",
+    "players": ["Sokolov"],
+    "want": "Sokolov's losing plays",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "Can I see this player's losing patterns?",
+    "after": 5,
+    "want": "Sokolov's losing patterns: the plays that lose points",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered with most-missed shots; kept as the step before serve plus one."
+    }
+  },
+  {
+    "q": "What are Sokolov's winning plays? for serve plus 1 pattern plays",
+    "after": 6,
+    "want": "Sokolov's serve plus one plays that win points",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered. Sets up the table that follows."
+    }
+  },
+  {
+    "q": "Can I see a table of all the plays compared?",
+    "after": 7,
+    "want": "Sokolov's serve plus one plays in a table, won and lost",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b", "\\bopponents had more\\b"],
+      "note": "Live: lost the plays and gave the team against opponents."
+    }
+  },
+  {
+    "q": "No for Sokolov versus all his opponents. I want to see in detail serve plus 1 and specifically what stroke and the placement in a table",
+    "after": 8,
+    "want": "a correction: Sokolov's serve plus one by stroke and placement, across his matches",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["stroke", "direction|serve_zone"],
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: a correction read as a new question; answered one stroke."
+    }
+  },
+  {
+    "q": "No I want to see his serve plus 1's all patterns and what those winning and losing look like?",
+    "after": 9,
+    "want": "a second correction: every serve plus one pattern of Sokolov's, won and lost",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered with the opponent's missed shots."
+    }
+  },
+  {
+    "q": "How did we do against Okafor?",
+    "opponents": ["Okafor"],
+    "want": "the team against Okafor",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "bad answer",
+    "after": 11,
+    "want": "a complaint about the last answer: not the same answer again",
+    "expect": {
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: the same answer again."
+    }
+  },
+  {
+    "q": "Show me all the stats",
+    "after": 12,
+    "want": "every measure for the team against Okafor",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["match_id\\s+in"],
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: the same answer a third time."
+    }
+  },
+  {
+    "q": "show me how his first serve percentage was throughout the match",
+    "after": 13,
+    "want": "Okafor's (or the team player's) first serve percentage through the match, by set or game",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["first_serve", "set_number|game"],
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: a match total instead of over the match."
+    }
+  },
+  {
+    "q": "What is each player's record?",
+    "want": "wins and losses per roster player",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "How does that compare across all the program's matches?",
+    "after": 15,
+    "want": "the records beside the program's overall record",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: dropped the records for a team-against-opponents comparison."
+    }
+  },
+  {
+    "q": "Give me videos of Sokolov's aces",
+    "want": "Sokolov's aces",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "Show me all the aces from here",
+    "after": 17,
+    "want": "every ace in the matches in scope, not the earlier line again",
+    "expect": {
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: narrowed to one opponent and repeated that there were none."
+    }
+  },
+  {
+    "q": "How did we do against Okafor?",
+    "opponents": ["Okafor"],
+    "want": "the team against Okafor",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "How did Sokolov beat him",
+    "after": 19,
+    "want": "Sokolov against Okafor: what won the match",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["match_id\\s+in"],
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered, but against the team's averages rather than Okafor."
+    }
+  },
+  {
+    "q": "How does that compare across all the program's matches?",
+    "after": 20,
+    "want": "Sokolov against Okafor beside Sokolov's other matches",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered with missed shots instead."
+    }
+  },
+  {
+    "q": "What were the winning and losing plays",
+    "after": 21,
+    "want": "Sokolov's winning AND losing plays against Okafor",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: losing plays only."
+    }
+  },
+  {
+    "q": "What were the winning and losing plays",
+    "after": 22,
+    "want": "the same question again: winning plays this time as well",
+    "expect": {
+      "error": "none",
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "body": ["\\bwon\\b|winning|best"],
+      "note": "Live: the losing plays again, still no winning ones."
+    }
+  },
+  {
+    "q": "How about the win rate",
+    "after": 23,
+    "want": "Sokolov's win rate against Okafor",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "How to beat Okafor",
+    "opponents": ["Okafor"],
+    "after": 24,
+    "want": "what the data shows about winning points against Okafor",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: went back to the first answer of the thread."
+    }
+  },
+  {
+    "q": "What were the winning plays",
+    "after": 25,
+    "want": "winning plays against Okafor",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "Can I see the best plays and a playlist for each",
+    "after": 26,
+    "want": "the best plays, each with a way into its points on film",
+    "expect": {
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: the previous answer word for word."
+    }
+  },
+  {
+    "q": "How should Sokolov play against Lindqvist?",
+    "players": ["Sokolov"],
+    "opponents": ["Lindqvist"],
+    "want": "Sokolov against Lindqvist",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "Who is our most consistent player?",
+    "after": 28,
+    "want": "a per-player ranking on errors",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "Who is the best player",
+    "after": 29,
+    "want": "a per-player ranking on points won",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "Who is the worst player",
+    "after": 30,
+    "want": "the same ranking, bottom first",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: switched the measure to first serves in."
+    }
+  },
+  {
+    "q": "can I see return points in? comparison?",
+    "after": 31,
+    "want": "return points won per player",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "And against first serves?",
+    "after": 32,
+    "want": "return points won against first serves, per player",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["first_return"],
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: repeated an earlier first-serves-in answer."
+    }
+  },
+  {
+    "q": "And how about against lefties?",
+    "after": 33,
+    "want": "the same, against left-handed opponents",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["opponent_hand"],
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "How should we beat lefty players? what is the best pattern of play?",
+    "after": 34,
+    "want": "the team's winning plays against left-handed opponents",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["opponent_hand"],
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered in the second person on a team page, and dropped the lefties."
+    }
+  },
+  {
+    "q": "I want to see overall team first serve and first serve won charted",
+    "want": "team first serves in and first-serve points won, by match",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "How about first serve won",
+    "after": 36,
+    "want": "first-serve points won on its own, by match",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered.",
+      "headline": ["first[- ]serve points won"]
+    }
+  },
+  {
+    "q": "And on second serves?",
+    "after": 37,
+    "want": "second-serve points won, by match",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["second_serve"],
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "What is each player's record?",
+    "want": "wins and losses per roster player",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "Is the team better on hard courts or clay?",
+    "after": 39,
+    "want": "the team's record by surface",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["court_type|surface"],
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "How can we improve for our next match?",
+    "after": 40,
+    "want": "the review: measures furthest behind",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "How does that compare across all the program's matches?",
+    "after": 41,
+    "want": "the recent measures beside the program's whole record",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: a generic team-against-opponents comparison."
+    }
+  },
+  {
+    "q": "What is Sokolov's best pattern of plays?",
+    "after": 42,
+    "want": "Sokolov's winning plays",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "What are his best patterns of play for short rallies?",
+    "after": 43,
+    "want": "Sokolov's winning plays in short rallies only",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["rally_length|rally_band"],
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: the previous answer word for word."
+    }
+  },
+  {
+    "q": "No I meant for only rallies that went up to 4 shots",
+    "after": 44,
+    "want": "a correction: the same plays, rallies of 4 shots or fewer",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["rally_length"],
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: a correction read as a new question; answered nothing usable."
+    }
+  },
+  {
+    "q": "How did we do against Lindqvist?",
+    "opponents": ["Lindqvist"],
+    "want": "the team against Lindqvist",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "What are the losing plays in those matches?",
+    "after": 46,
+    "want": "losing plays in the matches against Lindqvist",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["match_id\\s+in"],
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "What are this player's best plays from all his matches so far for serve and plus 1",
+    "players": ["Sokolov"],
+    "want": "Sokolov's serve plus one plays",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "Can I see all of Sokolov's aces in video",
+    "after": 48,
+    "want": "Sokolov's aces, with a way into the film",
+    "expect": {
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: the previous answer word for word."
+    }
+  },
+  {
+    "q": "what is Sokolov's record currently",
+    "after": 49,
+    "want": "Sokolov's wins and losses",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered without the numbers in the headline."
+    }
+  },
+  {
+    "q": "what are all of his winners categorized by stroke",
+    "after": 50,
+    "want": "Sokolov's winners by stroke",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "absent": ["\\byou\\b|\\byour\\b"],
+      "note": "Live: answered. On a program with no shot data the honest answer is that strokes are not recorded, so this checks only that it answers and does not repeat."
+    }
+  }
+]

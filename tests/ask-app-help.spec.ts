@@ -50,6 +50,9 @@ test.describe("asksToUpload", () => {
     "Hi, I want to upload a new match please",
     "add my match video",
     "how to import a swingvision export",
+    "How do I upload a match for Maya?",
+    "upload a match for Maya Chen please",
+    "can I add a video for my team",
   ]) {
     test(`reads "${question}" as an upload`, () => {
       expect(asksToUpload(question)).toBe(true);
@@ -69,6 +72,7 @@ test.describe("asksToUpload", () => {
     "Can I see the best plays and a playlist for each",
     "How do I beat Aidan?",
     "upload a match and tell me my first serve percentage",
+    "upload a match for maya and tell me her first serve",
   ]) {
     test(`leaves "${question}" to the planner`, () => {
       expect(asksToUpload(question)).toBe(false);

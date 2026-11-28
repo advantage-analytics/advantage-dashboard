@@ -78,6 +78,13 @@ export interface AskEvalExpect {
    * row per match, or the player beside the opponent across them).
    */
   shape?: AskEvalShape | AskEvalShape[];
+  /**
+   * A follow-up must not come back with the previous answer: its headline
+   * may not be the headline of the exchange it follows (`after`), once
+   * case and spacing are set aside. A run with no previous headline (no
+   * `after`, or the earlier question did not answer) passes, and says so.
+   */
+  differs?: boolean;
   /** Why the block checks what it checks, for the reader; not graded. */
   note?: string;
 }
@@ -101,6 +108,8 @@ export interface AskEvalTranscript {
   /** The error event's code, `THROWN` when the pipeline threw, null for an answer. */
   error: string | null;
   notice: boolean;
+  /** The headline of the exchange this question follows, when it follows one that answered. */
+  previousHeadline?: string | null;
 }
 
 export interface AskEvalCheck {
@@ -126,6 +135,7 @@ const EXPECT_KEYS: readonly (keyof AskEvalExpect)[] = [
   "absent",
   "sql",
   "shape",
+  "differs",
   "note",
 ];
 
@@ -170,6 +180,9 @@ export function expectProblems(expect: unknown): string[] {
   }
   if (notice !== undefined && typeof notice !== "boolean") {
     problems.push("notice must be true or false");
+  }
+  if (block.differs !== undefined && typeof block.differs !== "boolean") {
+    problems.push("differs must be true or false");
   }
   if (
     shape !== undefined &&
@@ -317,6 +330,27 @@ export function gradeTranscript(
         pass
           ? `shape ${actual}`
           : `shape: expected ${allowed.join(" or ")}, got ${actual ?? "none (no reply parsed as a plan)"}`,
+      ),
+    );
+  }
+
+  if (expect.differs === true) {
+    const previous = transcript.previousHeadline ?? null;
+    const same = (text: string) =>
+      text.toLowerCase().replace(/\s+/g, " ").trim();
+    const repeated =
+      previous !== null &&
+      transcript.headline !== null &&
+      same(previous) === same(transcript.headline);
+    checks.push(
+      check(
+        "differs",
+        !repeated,
+        previous === null
+          ? "differs: no previous answer to compare"
+          : repeated
+            ? `differs: repeated the previous headline "${previous}"`
+            : "differs from the previous answer",
       ),
     );
   }

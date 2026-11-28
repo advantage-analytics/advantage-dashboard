@@ -20,7 +20,7 @@ Match-report insights are **not** this adapter: they come from the
 
 | `LLM_PROVIDER` | SDK                 | Key env var         | Model                   |
 | -------------- | ------------------- | ------------------- | ----------------------- |
-| `anthropic`    | `@anthropic-ai/sdk` | `ANTHROPIC_API_KEY` | `claude-opus-4-6`       |
+| `anthropic`    | `@anthropic-ai/sdk` | `ANTHROPIC_API_KEY` | `claude-opus-5-5`       |
 | `openai`       | `openai`            | `OPENAI_API_KEY`    | `gemini-3.5-flash-lite` |
 
 `openai` is a misnomer kept for compatibility: the branch drives the OpenAI
@@ -98,12 +98,14 @@ What one call sends, measured 2026-10-14 (`docs/ask-improvement-roadmap.md`):
 | Ask plan (SQL) | ~9,000 tokens | ~300 tokens |
 | Ask answer     | ~4,500 tokens | ~400 tokens |
 
-List prices per million tokens on that date:
+List prices per million tokens (Claude rows updated 2026-11-24):
 
 | Model                   | Input | Output | ≈ per Ask question | ≈ per insight |
 | ----------------------- | ----- | ------ | ------------------ | ------------- |
 | `gemini-3.5-flash-lite` | $0.30 | $2.50  | $0.006             | under $0.001  |
-| `claude-opus-4-6`       | $5    | $25    | $0.09              | $0.003        |
+| `claude-opus-5-5`       | $4    | $20    | $0.08              | $0.003        |
+| `claude-sonnet-5-5`     | $2    | $10    | $0.04              | $0.001        |
+| `claude-haiku-5-5`      | $0.10 | $0.50  | $0.002             | under $0.001  |
 
 Prices change; the roadmap's §1.1 compares the current alternatives. The
 actual spend is in PostHog (§7).
@@ -124,10 +126,13 @@ What the adapter adds so the events can be read:
   once per request and shared by every call in it, so an Ask question's plan,
   pattern and answer calls (and retries) sit under one `$ai_trace_id`.
 - **What a call asks for** travels in `getLLMStream()`'s options too:
-  `temperature` and `maxTokens` (Anthropic path only: Gemini answers sampling
-  parameters with a 400 and counts thinking tokens against a cap, so
-  `geminiRequestBody()` sends neither), a `jsonSchema` the reply must hold to
-  (`response_format` on the Gemini path, a forced tool on the Anthropic one),
+  `maxTokens` and `effort` (Anthropic path only: Gemini counts thinking
+  tokens against a cap, so `geminiRequestBody()` sends no cap; on Claude
+  `maxTokens` is a floor under a 16,000-token ceiling, since thinking counts
+  against it too), `temperature` (sent to neither: Gemini and every current
+  Claude model answer sampling parameters with a 400), a `jsonSchema` the
+  reply must hold to (`response_format` on the Gemini path, structured
+  outputs — `output_config.format` — on the Anthropic one),
   a `staticPrefixLength` marking the fixed part of the system prompt for the
   Anthropic prompt cache, and the request's `signal` so a closed tab aborts
   the provider call. Ask's plan step uses all of them; its prompts put the
@@ -136,6 +141,30 @@ What the adapter adds so the events can be read:
   chunk, which Gemini sends only when asked (the request's
   `stream_options.include_usage`). Before 2026-10-15 every event from this
   path recorded zero tokens and zero cost.
+- **`llm_provider_failover`** is captured once per call whose configured
+  provider threw and that was retried on the other provider's key (both
+  `getLLMStream()` and `getLLMToolTurn()`, through
+  `runWithProviderFailover()`). Without it a broken Claude setup — a bad key,
+  a key without the workspace scope, a 400 from a parameter the model
+  refuses — runs silently on Gemini. Properties: `primary_provider` /
+  `secondary_provider` (`anthropic` or `google`, as `$ai_provider`),
+  `primary_model`, `secondary_model`, `requested_model` (the caller's
+  `options.model`, or null), `call` (`stream` or `tool_turn`),
+  `$ai_span_name`, `$ai_trace_id` and `$ai_session_id` (so it sits beside the
+  call's `$ai_generation` events), and `error_status`, `error_type`,
+  `error_code`, `error_name` (the HTTP status, the provider's error type and
+  code, and the error's own name or else its SDK class — short identifiers
+  only). Never the prompt, the reply or the error message, which can quote
+  the request; the server log (`console.warn`) keeps the message. An aborted
+  call, or one with no second key, is not retried and sends nothing.
+- **The model that answered.** `options.onServed` hears the provider and
+  model each call ended on, with `failover: true` after a retry — reported
+  even when the retry fails too, so the run names the model the failover
+  event does. Ask
+  (`askAdapterModel()`) keeps it per stage, and `ask_runs.plan_model` /
+  `answer_model` and the `ask_run` event record that model rather than the
+  configured one (`askStageModels()`, still the fallback for a stage no
+  call answered).
 
 Nothing is sent when the PostHog server config is absent.
 

@@ -19,6 +19,7 @@ import {
   tallySide,
   withLobAvailability,
   withoutShotKindRows,
+  withoutUnmeasuredPassRow,
   withPointRows,
   type H2HRow,
   type H2HValue,
@@ -34,7 +35,10 @@ import {
 } from "@/components/dashboard/matches/match-detail/head-to-head-table";
 import { STRETCHED } from "@/lib/ui/stretched-link";
 import { useMatchFilters } from "@/components/dashboard/matches/match-detail/match-filters/provider";
-import { useStatisticsLobKeys } from "@/components/dashboard/matches/match-detail/statistics-lob-keys";
+import {
+  useStatisticsLobDataAbsent,
+  useStatisticsLobKeys,
+} from "@/components/dashboard/matches/match-detail/statistics-lob-keys";
 import { useFingerTap, useTouchReadout } from "@/hooks/use-touch-readout";
 import { surnameLabels } from "@/lib/data/match-utils";
 import { cn } from "@/lib/utils";
@@ -418,6 +422,7 @@ export function HeadToHeadCard() {
   // context the counts below run on, so the Lob row's "Watch all N" and the
   // Video tab it lands in read the same lobs.
   const lobKeys = useStatisticsLobKeys();
+  const lobDataAbsent = useStatisticsLobDataAbsent();
   const context = useMemo(
     () => (lobKeys ? { ...sharedContext, lobKeys } : sharedContext),
     [sharedContext, lobKeys],
@@ -447,11 +452,20 @@ export function HeadToHeadCard() {
   const groups = useMemo(
     () =>
       // Lob points and Drop shot points are left off the match report
-      // (`withoutShotKindRows`).
-      withoutShotKindRows(
-        withLobAvailability(groupsFor(isDerived, errorSplitJudged), !!lobKeys),
+      // (`withoutShotKindRows`), and so is Passed once the view is known to
+      // have no ball flight data to tell a pass from a lob
+      // (`withoutUnmeasuredPassRow`). While the file loads it keeps its dash,
+      // so the row does not drop out and come back.
+      withoutUnmeasuredPassRow(
+        withoutShotKindRows(
+          withLobAvailability(
+            groupsFor(isDerived, errorSplitJudged),
+            !!lobKeys,
+          ),
+        ),
+        !lobDataAbsent,
       ),
-    [isDerived, errorSplitJudged, lobKeys],
+    [isDerived, errorSplitJudged, lobKeys, lobDataAbsent],
   );
 
   const sections = useMemo(() => {

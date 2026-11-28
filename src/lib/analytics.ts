@@ -3,6 +3,8 @@ import { isPostHogConfigured } from "@/lib/posthog-client";
 import type { VideoRejectionReason } from "@/lib/services/upload/types";
 import type { ClaimRoleValue } from "@/lib/services/programs/claim-roles";
 import type { ConnectorApp } from "@/lib/auth/oauth-consent";
+import type { TrimSkipReason } from "@/lib/video/trim-plan";
+import type { TrimDiscardedTrack } from "@/lib/video/trim-protocol";
 import type {
   AcquisitionSource,
   RosterSizeBand,
@@ -107,6 +109,22 @@ export interface AnalyticsEvents {
     file_size_mb: number | null;
   } & VideoFacts;
   upload_completed: { file_size_mb: number; upload_duration_sec: number };
+  // The browser could not cut/convert the picked video, so the ORIGINAL is
+  // being uploaded whole — the one record of why, which otherwise reached only
+  // the uploader's console (see trim-telemetry.ts). A whole-clip window is the
+  // normal no-cut case and is never sent.
+  video_cut_skipped: {
+    /** Which upload path: the match wizard, or adding/replacing on a match. */
+    surface: "wizard" | "attachment";
+    reason: Exclude<TrimSkipReason, "whole-clip">;
+    match_id: string | null;
+    job_id: string | null;
+    file_size_mb: number;
+    /** Tracks Mediabunny would have dropped; empty when that wasn't why. */
+    discarded_tracks: TrimDiscardedTrack[];
+    /** `type:codec:reason` per discarded track, for a flat breakdown. */
+    discarded_summary: string | null;
+  };
   match_created: {
     match_id: string | null;
     time_since_upload_started_sec: number | null;

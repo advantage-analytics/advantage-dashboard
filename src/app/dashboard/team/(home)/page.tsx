@@ -18,8 +18,15 @@ import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { HomeTitle } from "@/components/dashboard/home-feed/home-title";
 import {
   PilotCard,
+  PlanHomeCard,
   pilotDaysLeft,
 } from "@/components/dashboard/home-feed/pilot-card";
+import {
+  homeCardView,
+  planStandingFor,
+  plansApplyTo,
+} from "@/lib/billing/plan-copy";
+import { utcToday } from "@/lib/data/match-day";
 import {
   StartCards,
   type StartCard,
@@ -139,14 +146,16 @@ export default async function TeamHomePage() {
         },
       ];
   const greeting = timeOfDayGreeting(new Date().getHours());
-  // Once the pilot is over there is no card, and the cards take the row.
+  // From January 1 the card is the team's plan and hours: its season, its
+  // pilot, or that it has neither. Until then it is the pilot's card.
+  const plans = plansApplyTo(active);
   const pilot =
-    pilotDaysLeft() < 0
+    !plans && pilotDaysLeft() < 0
       ? null
       : region(
-          "Pilot",
+          plans ? "Plan" : "Pilot",
           <PilotPending />,
-          <Banner feed={feed} usage={usage} active={active} />,
+          <Banner feed={feed} usage={usage} active={active} plans={plans} />,
         );
 
   return (
@@ -258,12 +267,30 @@ async function Banner({
   feed,
   usage,
   active,
+  plans,
 }: {
   feed: Feed;
   usage: ReturnType<typeof getProgramUsage>;
   active: Workspace;
+  /** Plans apply to this team: draw the plan's card, not the pilot's. */
+  plans: boolean;
 }) {
   const [{ analyzed }, used] = await Promise.all([feed, usage]);
+  if (plans) {
+    return (
+      <PlanHomeCard
+        view={homeCardView({
+          standing: planStandingFor(active),
+          owner: active.name,
+          programId: active.id,
+          usedSeconds: used.usedSeconds,
+          capSeconds: used.capSeconds,
+          analyzed,
+          today: utcToday(),
+        })}
+      />
+    );
+  }
   return (
     <PilotCard
       eyebrow={`${active.name} · Pilot`}

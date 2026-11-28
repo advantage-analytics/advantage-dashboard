@@ -14,6 +14,7 @@ import { netPathX } from "../net-crossing";
 import {
   countedShots,
   isFeedShotType,
+  isLetResult,
   isServeShotType,
   pickRallyShots,
   pickServeShotBy,
@@ -49,6 +50,7 @@ import {
   shotMatchesThen,
   finalShotOf,
   handOf,
+  isPressurePoint,
   lastShotOf,
   type MatchFilterContext,
   type MatchFilterKey,
@@ -67,7 +69,7 @@ import {
 } from "../match-filters/approach";
 import type { NetEnding, NetEntry } from "../match-filters/net-game";
 import { hitterHalf, type Hand } from "../match-filters/shot-geometry";
-import { bandKindFor, marksAreShots } from "./cut-kinds";
+import { bandKindFor, isPlacementCut, marksAreShots } from "./cut-kinds";
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
 
@@ -82,6 +84,132 @@ export type Cut =
 export type Chart = "scatter" | "zones" | "heat";
 export type PlayerFilter = "you" | "opponent";
 
+/**
+ * Which end of each shot a court draws: where it landed (`placement`), where
+ * it was hit from (`contact`), or the two as a pair (`both`). Not a filter —
+ * it never narrows which shots are plotted — but it lives on `VizFilters`
+ * (`ends`) so a saved view stores it inside its `filters` JSON with no
+ * column of its own.
+ */
+export type CourtEnds = "placement" | "contact" | "both";
+
+export const COURT_ENDS: readonly CourtEnds[] = [
+  "placement",
+  "contact",
+  "both",
+];
+
+/**
+ * The ends `cut` draws when nothing says otherwise: Both for Approaches,
+ * Placement for Errors, Returns and Rally shots. `null` for Serves, which
+ * has no such choice (a serve's contact is the baseline).
+ */
+export function defaultCourtEnds(cut: Cut): CourtEnds | null {
+  if (cut === "serve") return null;
+  return cut === "approaches" ? "both" : "placement";
+}
+
+/**
+ * `ends` as `VizFilters.ends` holds it for `cut`: the value when it is a
+ * real choice away from the cut's default, otherwise `null` — on Serves,
+ * for the default itself, and for anything that is not a `CourtEnds`. One
+ * stored form per drawn court, so equal courts are equal states and a
+ * default never reaches the URL or a saved row.
+ */
+export function storedCourtEnds(
+  cut: Cut,
+  ends: CourtEnds | null | undefined,
+): CourtEnds | null {
+  const fallback = defaultCourtEnds(cut);
+  if (fallback === null || ends == null || ends === fallback) return null;
+  return COURT_ENDS.includes(ends) ? ends : null;
+}
+
+/**
+ * The ends `cut`'s court draws under `filters`: the stored choice, else the
+ * cut's default. `null` only for Serves. Read the value through this, never
+ * `filters.ends` directly — an absent value (an old saved row, a link built
+ * before the switch existed) means the default, which differs by cut.
+ */
+export function courtEndsFor(
+  cut: Cut,
+  filters: { ends?: CourtEnds | null },
+): CourtEnds | null {
+  return storedCourtEnds(cut, filters.ends) ?? defaultCourtEnds(cut);
+}
+
+/**
+ * Returns is ONE chart. Its id is `returnPlacement`, and which end it draws
+ * is `ends`: Placement (its default) is where the return landed, Contact
+ * where it was struck. `returnContact` stays a loadable id — an old link, a
+ * saved view stored before the merge, an MCP link or an Ask action — and
+ * means Returns in Contact: this is the one rewrite, run wherever a cut and
+ * its filters come in from outside (`parseVizState`, the wall's cards).
+ * Every other cut is returned as given.
+ */
+export function chartView(
+  cut: Cut,
+  filters: VizFilters,
+): { cut: Cut; filters: VizFilters } {
+  if (cut !== "returnContact") return { cut, filters };
+  return {
+    cut: "returnPlacement",
+    filters: withCourtEnds(filters, "returnPlacement", "contact"),
+  };
+}
+
+/**
+ * The cut a chart's court is computed and drawn as: `cut` itself, except
+ * Returns in Contact, which is the contact court (`returnContact` — the id
+ * `computeViz`, the stats, the bands and the court art still read). Returns
+ * in Both stays the placement court, whose marks carry their contact as
+ * `VizDot.pair`; Rally shots, Errors and Approaches have no court switch at
+ * all — theirs draws either end, or both, off the same marks.
+ */
+export function drawnCut(cut: Cut, filters: { ends?: CourtEnds | null }): Cut {
+  return cut === "returnPlacement" && courtEndsFor(cut, filters) === "contact"
+    ? "returnContact"
+    : cut;
+}
+
+/** `filters` drawing `ends` on `cut`, kept in stored form (`storedCourtEnds`). */
+export function withCourtEnds(
+  filters: VizFilters,
+  cut: Cut,
+  ends: CourtEnds | null,
+): VizFilters {
+  const stored = storedCourtEnds(cut, ends);
+  return stored === (filters.ends ?? null)
+    ? filters
+    : { ...filters, ends: stored };
+}
+
+/**
+ * The court's Placement · Contact · Both control for `chartCut` (the CHART
+ * cut: Returns, never the contact court it may be drawn as), or `undefined`
+ * on a chart with one end. `ends` is saved with a view, so a change edits an
+ * open view exactly as a filter does (`viewId` dropped).
+ */
+export function courtEndsControl<
+  S extends { filters: VizFilters; viewId: string | null },
+>(
+  chartCut: Cut,
+  filters: VizFilters,
+  setState: (update: (prev: S) => S) => void,
+): { value: CourtEnds; onChange: (ends: CourtEnds) => void } | undefined {
+  if (!isPlacementCut(chartCut)) return undefined;
+  return {
+    value: courtEndsFor(chartCut, filters) ?? "placement",
+    onChange: (ends) =>
+      setState((prev) => {
+        const next = withCourtEnds(prev.filters, chartCut, ends);
+        return next === prev.filters
+          ? prev
+          : { ...prev, filters: next, viewId: null };
+      }),
+  };
+}
+
 // Every dimension below is multi-select: an empty list means "any" (no
 // narrowing), and a non-empty list is OR'd — a point matches the group when
 // it matches ANY selected value. `player` is the one exception and stays a
@@ -90,7 +218,12 @@ export type GameValue = "serving" | "returning";
 export type BallValue = "first" | "second";
 export type CourtSideValue = "deuce" | "ad";
 export type ZoneValue = "t" | "body" | "wide";
-export type PressureValue = "break" | "setMatch";
+/**
+ * `pressure` is the score a point was played at (`isPressurePoint`: 30–30,
+ * 30–40, 40–30, deuce and every advantage); `break` and `setMatch` read the
+ * point's own flags, at whatever score.
+ */
+export type PressureValue = "pressure" | "break" | "setMatch";
 export type ResultValue = "won" | "lost" | "ace";
 export type RallyValue = "short" | "medium" | "long";
 /** The errors cut's error kinds, read off the point's free-text result type. */
@@ -136,6 +269,13 @@ export interface VizFilters extends ShotFilterState {
    * players are you/opponent-relative — never the court's subject.
    */
   match: MatchFilters;
+  /**
+   * Which end of each shot the court draws, when it is not the cut's default
+   * (`null`). Not a filter: no `filterKeysFor` list holds it and it never
+   * counts as applied. Read it with `courtEndsFor`, write it with
+   * `withCourtEnds`.
+   */
+  ends: CourtEnds | null;
 }
 
 export const EMPTY_VIZ_FILTERS: VizFilters = {
@@ -153,6 +293,7 @@ export const EMPTY_VIZ_FILTERS: VizFilters = {
   approachTo: [],
   approachDir: [],
   match: EMPTY_MATCH_FILTERS,
+  ends: null,
 };
 
 export type Outcome = "won" | "lost" | "miss";
@@ -195,6 +336,13 @@ export interface VizDotMeta {
    * always agree on a point. Absent everywhere else.
    */
   stroke?: string;
+  /**
+   * Errors cut only: the kind of error, for the readout's title
+   * ("Forehand unforced error"). Read as stored on a match whose errors are
+   * judged; on one that is not, only a double fault has a kind — calling
+   * the rest "unforced" would claim a judgement nobody made.
+   */
+  errorKind?: ErrorValue | null;
   /** Approaches cut only: how the subject came in (`netEntryOf`). */
   entry?: NetEntry;
   /** Approaches cut only: the opponent's wing the approach went to. */
@@ -265,10 +413,11 @@ export interface VizDot {
   depthM: number;
   atNet: boolean;
   /**
-   * Approaches cut only: where the approach shot was struck, in
-   * `contactMetrics`' frame. The dot's own `lateralM`/`depthM` stay the
-   * placement, so code that reads one position per dot is unaffected. Absent
-   * when the contact is unmeasured.
+   * The placement cuts' landing marks (Returns, Rally shots, Errors,
+   * Approaches): where that shot was struck, in `contactMetrics`' frame. The
+   * dot's own `lateralM`/`depthM` stay the placement, so code that reads one
+   * position per dot is unaffected. Absent when the contact is unmeasured,
+   * and on Serves and the contact cuts, whose mark is one end alone.
    */
   pair?: { lateralM: number; depthM: number };
   /** Optional (every existing fixture that hand-builds a `VizDot`
@@ -506,7 +655,10 @@ function resolvedServe(p: MatchPoint) {
  * played serve was the second.
  */
 function firstServeStruck(p: MatchPoint) {
-  const serves = (p.shots ?? []).filter((s) => isServeShotType(s.shotType));
+  // A let is no serve struck: it is replayed, and draws on no court.
+  const serves = (p.shots ?? []).filter(
+    (s) => isServeShotType(s.shotType) && !isLetResult(s.result),
+  );
   if (serves.length === 0) {
     // No serve rows: the flattened fields are the played serve, which is
     // the first serve only when it is labelled one.
@@ -902,13 +1054,36 @@ export function pointToReturnDots(
 }
 
 /**
+ * One Pressure option over a point. "pressure" is the score it was played
+ * at — the Video tab's Score › Pressure, one predicate (`isPressurePoint`) —
+ * and never a break, set or match point at another score; those are `break`
+ * and `setMatch`, which read the point's flags.
+ */
+export function pointMatchesPressure(
+  p: Pick<
+    MatchPoint,
+    | "pointScoreRaw"
+    | "gameScore"
+    | "isBreakPoint"
+    | "isSetPoint"
+    | "isMatchPoint"
+  >,
+  value: PressureValue,
+): boolean {
+  if (value === "pressure") return isPressurePoint(p);
+  if (value === "break") return p.isBreakPoint;
+  return p.isSetPoint || p.isMatchPoint;
+}
+
+/**
  * Every group below is OR'd within itself (an empty list means "any", a
  * non-empty list matches when the point satisfies AT LEAST ONE selected
  * value) and the groups are AND'd against each other — a point must clear
  * every non-empty group to match. `pressure` and `result` aren't a single
  * derived value compared against the list (unlike `game`/`ball`/`court`/
  * `zone`/`rally`): each selected value is its own predicate over the point,
- * and any one of them being true is enough (`break` OR `setMatch`; `won`/
+ * and any one of them being true is enough (`pressure` OR `break` OR
+ * `setMatch` — see `pointMatchesPressure`; `won`/
  * `lost` relative to the subject OR the orthogonal `ace` check).
  */
 export function pointMatchesFilters(
@@ -963,9 +1138,7 @@ export function pointMatchesFilters(
   }
 
   if (filters.pressure.length) {
-    const matches = filters.pressure.some((v) =>
-      v === "break" ? p.isBreakPoint : p.isSetPoint || p.isMatchPoint,
-    );
+    const matches = filters.pressure.some((v) => pointMatchesPressure(p, v));
     if (!matches) return false;
   }
 
@@ -1151,9 +1324,11 @@ export function foldedMatchFilters(
     "scoreType",
     base.scoreType,
     filters.pressure.flatMap((v) =>
-      v === "break"
-        ? (["breakpoint"] as const)
-        : (["setPoint", "matchPoint"] as const),
+      v === "pressure"
+        ? (["pressure"] as const)
+        : v === "break"
+          ? (["breakpoint"] as const)
+          : (["setPoint", "matchPoint"] as const),
     ),
     (v) => (match.scoreType = v),
   );
@@ -1366,6 +1541,10 @@ function computeRallyViz(
       if (matchPass?.rallyShot && !matchPass.rallyShot(shot, p)) continue;
       count++;
 
+      // A landing mark carries where it was struck (`VizDot.pair`).
+      const contact = placement
+        ? contactMetrics(shot.contactX, shot.contactY)
+        : null;
       dots.push({
         id: shot.id,
         lateralM: metrics.lateralM,
@@ -1373,6 +1552,7 @@ function computeRallyViz(
         outcome: landing?.miss ? "miss" : subjectWon ? "won" : "lost",
         shape: shapeFromShotType(shot.shotType),
         atNet: landing?.atNet ?? false,
+        ...(contact ? { pair: contact } : {}),
         meta: pointDotMeta(p, subjectIsPlayer1, shot),
       });
     }
@@ -1446,6 +1626,8 @@ function computeErrorsViz(
     }
     count++;
 
+    const contact = contactMetrics(shot.contactX, shot.contactY);
+    const storedKind = errorKindOf(p, true);
     dots.push({
       id: p.id,
       lateralM: landing.lateralM,
@@ -1453,9 +1635,12 @@ function computeErrorsViz(
       outcome: "lost",
       shape: shapeFromShotType(shot.shotType),
       atNet: landing.atNet,
+      ...(contact ? { pair: contact } : {}),
       meta: {
         ...pointDotMeta(p, subjectIsPlayer1, shot),
         stroke: finalShotOf(p)?.kind ?? "Other",
+        errorKind:
+          storedKind === "doubleFault" || errorSplitJudged ? storedKind : null,
       },
     });
   }
@@ -1835,6 +2020,11 @@ export function computeViz(
         shotType: returnShot?.shotType ?? p.secondShotType ?? null,
         result: returnShot?.result ?? p.secondShotResult ?? null,
       };
+      // A landing mark carries where the return was struck (`VizDot.pair`).
+      const contact =
+        want === "landing"
+          ? contactMetrics(p.secondShotContactX, p.secondShotContactY)
+          : null;
       for (const d of mine) {
         dots.push({
           id: d.id,
@@ -1843,6 +2033,7 @@ export function computeViz(
           outcome: o === "outnet" ? "miss" : o,
           shape: d.shape,
           atNet: d.atNet,
+          ...(contact ? { pair: contact } : {}),
           meta: pointDotMeta(p, subjectIsPlayer1, returnMetaShot),
         });
       }

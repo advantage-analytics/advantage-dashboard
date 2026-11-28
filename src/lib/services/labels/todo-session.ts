@@ -8,13 +8,17 @@
  * deletes only a To do row nobody holds. A claim landing between Remove's
  * read and its delete leaves the session held; it stays on the board as
  * work past To do, so nothing a labeller started is lost.
+ *
+ * From `PLANS_BEGIN` Add is also where human review is gated: the source it
+ * re-reads (`readTodoSource`) carries which matches were paid for, and a
+ * match that was not is no candidate, whatever id the page sent.
  */
 
 import { isUuid } from "@/lib/admin/validation";
 import {
   buildTodoCandidates,
   readLabelQueue,
-  readLabelSource,
+  readTodoSource,
   type LabelQueueEntry,
   type LabelQueueSource,
 } from "@/lib/data/label-queue-server";
@@ -75,7 +79,7 @@ export async function addToLabelTodo(
   if ("error" in parsed) return parsed;
   try {
     const db = deps.createAdminClient();
-    const source = await (deps.readSource ?? readLabelSource)(db);
+    const source = await (deps.readSource ?? readTodoSource)(db);
     const wanted = new Set(parsed.ids);
     const rows = buildTodoCandidates(source)
       .filter((candidate) => wanted.has(candidate.jobId))

@@ -13,10 +13,14 @@
 import { MAX_DEAD_TAIL } from "../splitstep/derivation/flags";
 import {
   endsPointWhenMissed,
+  isLetServe,
   isLiveShot,
+  isReplayedServe,
   isMissedResult,
+  isServeStroke,
   opponent,
   orderLabelShots,
+  strokesBeforeNextServe,
   type LabelPoint,
   type LabelPointStatus,
   type LabelShot,
@@ -261,10 +265,14 @@ export function liveShotsAfter(
  * read. A second serve counts: out or in the net it is a double fault, and
  * the return after it was a swing at a dead ball. Nothing when the patch
  * carries no `result` (a court click with one end still missing), when the
- * ball was a miss already, when the stroke is a first serve (the second
- * serve follows that fault), or with three or more strokes after — unless the
+ * ball was a miss already, or with three or more strokes after — unless the
  * patch is the labeller's own call (`result_called`), which takes every
  * stroke after it however many there are.
+ *
+ * A first serve marked out or in the net, or any serve marked a let, takes
+ * the strokes between it and the same server's next serve instead
+ * (`strokesBeforeNextServe`): nothing is in play until the serve is hit
+ * again. Nothing when no serve follows — the replay may not be labelled yet.
  */
 export function deadBallsAfterMiss(
   shots: readonly LabelShot[],
@@ -273,11 +281,21 @@ export function deadBallsAfterMiss(
   patch: LabelShotPatch,
   ghosts: boolean,
 ): LabelShot[] {
+  const shot = shots.find((s) => s.id === shotId);
+  if (!shot) return [];
+  const replayedNow =
+    isReplayedServe({ ...shot, result: patch.result ?? null }) &&
+    !isReplayedServe({ ...shot, result: before.result });
+  if ("result" in patch && replayedNow) {
+    return strokesBeforeNextServe(
+      liveShotsAfter(shots, shotId, ghosts),
+      shot.hitter,
+    );
+  }
   if (!isMissedResult(patch.result) || isMissedResult(before.result)) {
     return [];
   }
-  const shot = shots.find((s) => s.id === shotId);
-  if (!shot || !endsPointWhenMissed(shot.stroke)) return [];
+  if (!endsPointWhenMissed(shot.stroke)) return [];
   const after = liveShotsAfter(shots, shotId, ghosts);
   // A call the labeller made outright (N, the Result menu's override, a
   // hint's yes) says the point ended on this ball: everything after it goes.
@@ -289,8 +307,27 @@ export function deadBallsAfterMiss(
 }
 
 /**
- * Why the strokes after a missed ball go: hit after a double fault when the
- * miss was a second serve, else hit after the point ended.
+ * The live strokes "Remove N" takes after `shotId`: every one after it,
+ * except after a let or a faulted first serve (`isReplayedServe`), where it
+ * takes only those before the server's next serve (`strokesBeforeNextServe`)
+ * — the serve hit again and the rally after it stay. Empty when the stroke
+ * is not among the rows.
+ */
+export function shotsRemovedAfter(
+  shots: readonly LabelShot[],
+  shotId: string,
+  ghosts: boolean,
+): LabelShot[] {
+  const after = liveShotsAfter(shots, shotId, ghosts);
+  const anchor = shots.find((s) => s.id === shotId);
+  return anchor && isReplayedServe(anchor)
+    ? strokesBeforeNextServe(after, anchor.hitter)
+    : after;
+}
+
+/**
+ * Why the strokes after a missed ball go: hit after a fault when the miss
+ * (or the let) was a serve, else hit after the point ended.
  */
 export function deadBallReason(
   stroke: LabelShot["stroke"] | undefined,
@@ -298,7 +335,7 @@ export function deadBallReason(
   LabelDeleteReason,
   "dead_ball_after_fault" | "dead_ball_after_point"
 > {
-  return stroke === "second_serve"
+  return isServeStroke(stroke)
     ? "dead_ball_after_fault"
     : "dead_ball_after_point";
 }
@@ -335,7 +372,9 @@ export function suggestedDeleteReason(
       ? previous
       : before.find((s) => endedPoint(s) && labellerCall(s));
   if (ended) return deadBallReason(ended.stroke);
-  return previous?.stroke === "first_serve" && isMissedResult(previous.result)
+  return previous &&
+    ((previous.stroke === "first_serve" && isMissedResult(previous.result)) ||
+      isLetServe(previous))
     ? "dead_ball_after_fault"
     : null;
 }
@@ -347,6 +386,12 @@ export function suggestedDeleteReason(
  * behind a double fault). Empty when a live stroke or a tombstone with
  * another reason follows: then what came after was not that call's alone.
  * `ghosts` is the console's own flag (`isLiveShot`).
+ *
+ * After a let or a faulted first serve as stored (`isReplayedServe`) the
+ * call took only the strokes before the server's next serve
+ * (`deadBallsAfterMiss`), so the run stops at the next live serve: the
+ * replay and its rally were never the call's. Every stroke before it must
+ * still be a `dead_ball_after_fault` tombstone.
  */
 export function deadBallRun(
   shots: readonly LabelShot[],
@@ -358,14 +403,27 @@ export function deadBallRun(
   if (at === -1) return [];
   // A ghost the site removed is no stroke while the session draws ghosts:
   // it neither counts as following the ball nor is it put back.
-  const after = ordered
+  let after = ordered
     .slice(at + 1)
     .filter((shot) => shot.status === "deleted" || isLiveShot(shot, ghosts));
+  const anchor = ordered[at];
+  const replayed = isReplayedServe(anchor);
+  if (replayed) {
+    const replay = after.findIndex(
+      (shot) =>
+        shot.status !== "deleted" &&
+        isServeStroke(shot.stroke) &&
+        (anchor.hitter === null ||
+          shot.hitter === null ||
+          shot.hitter === anchor.hitter),
+    );
+    if (replay !== -1) after = after.slice(0, replay);
+  }
   const dead = after.every(
     (shot) =>
       shot.status === "deleted" &&
-      (shot.deleteReason === "dead_ball_after_point" ||
-        shot.deleteReason === "dead_ball_after_fault"),
+      (shot.deleteReason === "dead_ball_after_fault" ||
+        (!replayed && shot.deleteReason === "dead_ball_after_point")),
   );
   return dead ? after.map((shot) => shot.id) : [];
 }

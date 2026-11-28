@@ -437,7 +437,7 @@ test("a landed '1st serve points won' cell presses exactly its pills in the draw
     "serve › Player › Rudy Quan",
     "serve › Type › First serve",
     "return › Player › Federico Gomez",
-    "result › Outcome › Won",
+    "result › Point won by › Rudy Quan",
   ]);
   expect(html.match(/aria-pressed="true"/g)).toHaveLength(4);
 });

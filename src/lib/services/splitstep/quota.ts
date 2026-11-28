@@ -16,14 +16,15 @@
  * (`program_members`), and `accountTypeFor()` reads it via the workspace. Two
  * different questions hang off it, split across two functions below: which
  * LEDGER a submission files under (`accountTypeFor` — every team workspace is
- * `'program'`, keyed by program id) and which FIGURE caps it (`quotaTierFor` —
- * only a verified collegiate program draws the 75 hours; a self-serve custom
- * org draws the individual figure). Collapsing them into one answer is exactly
- * how a custom org would either vanish from Settings › Usage or mint a
- * 75-hour allowance, depending on which half won.
+ * `'program'`, keyed by program id) and which FIGURE caps it (`allowanceFor`
+ * in `./allowance` — the beta's tiers until January 1, 2027, the plan after).
+ * Collapsing them into one answer is exactly how a custom org would either
+ * vanish from Settings › Usage or mint a 75-hour allowance, depending on
+ * which half won.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { PAST_DUE_SENTENCE } from "@/lib/billing/checkout-view";
 import {
   formatHoursLong,
   secondsLeft,
@@ -34,13 +35,18 @@ import {
   pendingReviewRefusal,
   type Workspace,
 } from "@/lib/workspace/types";
+import { withMonthFallback } from "@/lib/supabase/missing-function";
 import {
-  currentBillingMonth,
-  freeHoursReturnOn,
-  getMonthlyCapSeconds,
-  getPilotIndividualCapSeconds,
-  type AccountType,
-} from "./config";
+  allowanceFor,
+  allowanceResetsOn,
+  type AllowanceKind,
+  type AllowanceScope,
+  type AllowanceWorkspace,
+  type VideoAllowance,
+} from "./allowance";
+import { freeHoursReturnOn, type AccountType } from "./config";
+
+export { quotaTierFor } from "./allowance";
 
 /**
  * Which allowance a submission draws against.
@@ -62,87 +68,98 @@ export function accountTypeFor(
 }
 
 /**
- * Which monthly FIGURE that allowance is capped at — a different question from
- * `accountTypeFor()`, and deliberately a separate function.
+ * The cap for a workspace's current window, in seconds. The one spelling of
+ * `allowanceFor(…).capSeconds`, because the surfaces that show a cap (the
+ * wizard meter, Settings › Usage, Team home, the header pill) and the one
+ * that enforces it (`reserveQuota`) must all name the same number.
  *
- * `accountTypeFor()` names the ledger: every team workspace files under
- * `account_type = 'program'` keyed by program id, because that is the row
- * shape `program_usage_total()`, Settings › Usage, and the wizard's
- * remaining-quota read all filter on. That stays true for a custom org.
+ * Until January 1, 2027 that is the beta's monthly figure: a pilot
+ * individual's PERSONAL workspace draws the pilot figure
+ * (`Workspace.individualPilot`), a college or a team on the pilot the program
+ * figure, everyone else the individual one. From then it is the plan's — see
+ * `allowanceFor()` in `./allowance`, which also says over which window.
  *
- * The cap does not. A VERIFIED collegiate program — org_type 'college',
- * entered through the claim flow's review — draws the 75-hour program figure
- * on its own. A self-serve custom org (club / high school / academy / other)
- * has no verification behind it and `create_custom_program` will mint one for
- * any signed-in account, so handing each the program figure would let one
- * account stack 75-hour allowances against the paid vendor. Custom orgs
- * therefore start on the INDIVIDUAL figure, and move to the program figure
- * only when an admin grants `programs.pilot_eligible` (`Workspace.pilotEligible`,
- * set through `admin_set_pilot_eligible` from Admin › Teams; the audit log
- * names who did it). The same predicate — `org_type = 'college' or
- * pilot_eligible` — is spelled in SQL by `admin_reserve_video_quota`,
- * `individual_tier_usage` and `individual_pool_usage`; change one, change all.
- *
- * NOTE: this supersedes the Stage 7 design's "same 75h" line — author
- * decision on the T2 re-run. PAID-PLAN MARKER: when the pricing-tier plan
- * lands (see memory: Pro gating intentionally unenforced today), a paid
- * custom org's tier is raised HERE, from whatever entitlement that plan
- * records — this function is the single seam.
+ * On both sides an admin-set allowance (`Workspace.videoHoursOverride`)
+ * replaces every personal figure, and an admin's PERSONAL workspace
+ * (`Workspace.unlimitedVideo`) has no cap at all: `UNLIMITED_CAP_SECONDS`,
+ * which the reserve RPCs never reach, so plan hours cover every upload and
+ * credits are never spent. A team the admin uploads into keeps its own cap —
+ * that budget is the program's, not theirs.
  */
-export function quotaTierFor(
-  workspace: Pick<Workspace, "kind" | "orgType" | "pilotEligible">,
-): AccountType {
-  if (workspace.kind !== "team") return "individual";
-  if (workspace.orgType === "college") return "program";
-  return workspace.pilotEligible === true ? "program" : "individual";
+export function monthlyCapSecondsFor(
+  workspace: AllowanceWorkspace,
+  now: Date = new Date(),
+): number {
+  return allowanceFor(workspace, now).capSeconds;
+}
+
+/** The filters `scopeToAllowance()` needs of a PostgREST query. */
+interface WindowFilterable {
+  eq(column: string, value: string): WindowFilterable;
+  gte(column: string, value: string): WindowFilterable;
+  lt(column: string, value: string): WindowFilterable;
 }
 
 /**
- * The monthly cap for a workspace, in seconds. The one spelling of
- * `getMonthlyCapSeconds(quotaTierFor(…))`, because the three surfaces that
- * show a cap (the wizard meter, Settings › Usage, Team home) and the one that
- * enforces it (`reserveQuota`) must all name the same number.
+ * Narrow a `processing_usage` read to the rows an allowance counts: the
+ * calendar `billing_month` before January 1, 2027, the rows created inside
+ * the window after — the same two sums the month-keyed and window-keyed
+ * reserve RPCs make. Every ledger read that feeds a meter goes through here.
  *
- * A pilot individual's PERSONAL workspace draws the pilot figure instead
- * (`Workspace.individualPilot`); every other workspace — including a team the
- * pilot belongs to — is unchanged.
- *
- * An admin-set allowance (`Workspace.videoHoursOverride`) replaces all of the
- * personal figures below.
- *
- * An admin's PERSONAL workspace (`Workspace.unlimitedVideo`) has no cap at
- * all: `UNLIMITED_CAP_SECONDS`, which the reserve RPCs never reach, so free
- * hours cover every upload and credits are never spent. A team the admin
- * uploads into keeps its own cap — that budget is the program's, not theirs.
+ * The query keeps its own type: PostgREST's filters return the builder they
+ * were called on, and asking TypeScript to prove that generically sends it
+ * through the builder's whole recursive type.
  */
-export function monthlyCapSecondsFor(
-  workspace: Pick<
-    Workspace,
-    | "kind"
-    | "orgType"
-    | "individualPilot"
-    | "pilotEligible"
-    | "unlimitedVideo"
-    | "videoHoursOverride"
-  >,
-): number {
-  // An admin-set allowance wins over every other personal figure — the
-  // database (`reserve_personal_quota`) applies the same rule, so the meter
-  // and the refusal always name one number.
-  if (
-    workspace.kind === "personal" &&
-    workspace.videoHoursOverride != null &&
-    Number.isFinite(workspace.videoHoursOverride)
-  ) {
-    return Math.round(workspace.videoHoursOverride * 3600);
-  }
-  if (workspace.kind === "personal" && workspace.unlimitedVideo) {
-    return UNLIMITED_CAP_SECONDS;
-  }
-  if (workspace.kind === "personal" && workspace.individualPilot) {
-    return getPilotIndividualCapSeconds();
-  }
-  return getMonthlyCapSeconds(quotaTierFor(workspace));
+export function scopeToAllowance<Q>(query: Q, allowance: AllowanceScope): Q {
+  const filterable = query as unknown as WindowFilterable;
+  return (allowance.windowed
+    ? filterable
+        .gte("created_at", allowance.windowStart.toISOString())
+        .lt("created_at", allowance.windowEnd.toISOString())
+    : filterable.eq("billing_month", allowance.billingMonth)) as unknown as Q;
+}
+
+/** The window arguments every window-keyed RPC takes. */
+export function windowArgs(
+  allowance: Pick<VideoAllowance, "windowStart" | "windowEnd">,
+): { p_window_start: string; p_window_end: string } {
+  return {
+    p_window_start: allowance.windowStart.toISOString(),
+    p_window_end: allowance.windowEnd.toISOString(),
+  };
+}
+
+/**
+ * A team's used seconds for its allowance, read as a MEMBER (the RPCs carry
+ * the membership check; `processing_usage` RLS shows a member only their own
+ * rows). `program_usage_total` before January 1, 2027, its window sibling
+ * after — and the month read again if that sibling is not on this database
+ * yet, so a meter degrades to the month's figure rather than to an error.
+ */
+export async function readProgramUsedSeconds(
+  supabase: SupabaseClient,
+  programId: string,
+  allowance: AllowanceScope,
+): Promise<{ usedSeconds: number; error: { message: string } | null }> {
+  const byMonth = () =>
+    supabase.rpc("program_usage_total", {
+      p_program_id: programId,
+      p_billing_month: allowance.billingMonth,
+    });
+  const result = allowance.windowed
+    ? await withMonthFallback(
+        () =>
+          supabase.rpc("program_usage_total_between", {
+            p_program_id: programId,
+            ...windowArgs(allowance),
+          }),
+        byMonth,
+      )
+    : await byMonth();
+  return {
+    usedSeconds: Number(result.data ?? 0),
+    error: result.error,
+  };
 }
 
 export type QuotaReservation =
@@ -263,9 +280,11 @@ export async function reserveQuota(params: {
   }
 
   const accountType = accountTypeFor(workspace);
-  // The cap is tiered by verification, not by ledger: a custom org files under
-  // the program ledger but draws the individual figure. See quotaTierFor().
-  const capSeconds = monthlyCapSecondsFor(workspace);
+  // The cap and its window come from the one resolver, not from the ledger: a
+  // custom org files under the program ledger but does not draw a program's
+  // hours. See allowanceFor().
+  const allowance = allowanceFor(workspace, now);
+  const capSeconds = allowance.capSeconds;
 
   // A personal workspace spends its free hours and then the player's own
   // credits, in one transaction. Credits are personal: a team workspace —
@@ -277,25 +296,37 @@ export async function reserveQuota(params: {
       jobId,
       userId,
       workspace,
-      capSeconds,
+      allowance,
       seconds,
       now,
     });
   }
 
-  const { data, error } = await supabase
-    .rpc("reserve_processing_quota", {
-      p_job_id: jobId,
-      // The workspace's own id: the user for a personal workspace, the program
-      // for a team one. Two workspaces, one ledger.
-      p_account_id: workspace.id,
-      p_account_type: accountType,
-      p_created_by: userId,
-      p_billing_month: currentBillingMonth(now),
-      p_seconds: Math.ceil(seconds),
-      p_cap_seconds: capSeconds,
-    })
-    .single();
+  // The window-keyed function from January 1, 2027: a season is one pool, so
+  // the sum cannot be a calendar month's. No fallback if it is missing — a
+  // reservation against the wrong window is worse than a refused upload.
+  const { data, error } = await (
+    allowance.windowed
+      ? supabase.rpc("reserve_plan_program_quota", {
+          p_job_id: jobId,
+          p_account_id: workspace.id,
+          p_created_by: userId,
+          ...windowArgs(allowance),
+          p_seconds: Math.ceil(seconds),
+          p_cap_seconds: capSeconds,
+        })
+      : supabase.rpc("reserve_processing_quota", {
+          p_job_id: jobId,
+          // The workspace's own id: the user for a personal workspace, the
+          // program for a team one. Two workspaces, one ledger.
+          p_account_id: workspace.id,
+          p_account_type: accountType,
+          p_created_by: userId,
+          p_billing_month: allowance.billingMonth,
+          p_seconds: Math.ceil(seconds),
+          p_cap_seconds: capSeconds,
+        })
+  ).single();
 
   if (error || !data) throw reserveFailure(error);
 
@@ -323,6 +354,8 @@ export async function reserveQuota(params: {
       neededSeconds: seconds,
       remainingSeconds: remaining,
       capSeconds: row.cap_seconds,
+      resetsOn: allowanceResetsOn(allowance),
+      kind: allowance.kind,
     }),
   };
 }
@@ -332,11 +365,11 @@ async function reservePersonal(params: {
   jobId: string;
   userId: string;
   workspace: Workspace;
-  capSeconds: number;
+  allowance: VideoAllowance;
   seconds: number;
   now?: Date;
 }): Promise<QuotaReservation> {
-  const { supabase, jobId, userId, workspace, capSeconds, seconds, now } =
+  const { supabase, jobId, userId, workspace, allowance, seconds, now } =
     params;
 
   // The personal workspace's id IS the user's id; the SQL keys both the free
@@ -348,17 +381,26 @@ async function reservePersonal(params: {
     );
   }
 
-  // Atomic: free hours first, then credits oldest-expiring first, under the
-  // same account+month lock reserve_processing_quota takes.
-  const { data, error } = await supabase
-    .rpc("reserve_personal_quota", {
-      p_job_id: jobId,
-      p_user_id: userId,
-      p_billing_month: currentBillingMonth(now),
-      p_seconds: Math.ceil(seconds),
-      p_cap_seconds: capSeconds,
-    })
-    .single();
+  // Atomic: plan (or free) hours first, then credits soonest-expiring first,
+  // under the same account+month lock reserve_processing_quota takes. The
+  // window-keyed function from January 1, 2027 — see reserveQuota().
+  const { data, error } = await (
+    allowance.windowed
+      ? supabase.rpc("reserve_plan_personal_quota", {
+          p_job_id: jobId,
+          p_user_id: userId,
+          ...windowArgs(allowance),
+          p_seconds: Math.ceil(seconds),
+          p_cap_seconds: allowance.capSeconds,
+        })
+      : supabase.rpc("reserve_personal_quota", {
+          p_job_id: jobId,
+          p_user_id: userId,
+          p_billing_month: allowance.billingMonth,
+          p_seconds: Math.ceil(seconds),
+          p_cap_seconds: allowance.capSeconds,
+        })
+  ).single();
 
   if (error || !data) throw reserveFailure(error);
 
@@ -387,6 +429,7 @@ async function reservePersonal(params: {
       remainingSeconds:
         secondsLeft(row.used_seconds, row.cap_seconds) + row.credit_seconds,
       now,
+      pastDue: allowance.pastDue === true,
     }),
   };
 }
@@ -396,11 +439,17 @@ async function reservePersonal(params: {
  * credits), and the next step — add hours, shorten the trim, or wait for the
  * 1st. In December there is no 1st to wait for (free hours end Dec 31), so
  * the wait drops out. Never says "allowance": the player owns these hours.
+ *
+ * A subscriber whose last payment failed (`pastDue`) is told that instead of
+ * the next step: this month's plan hours are waiting on the card, and adding
+ * hours is not the first thing to say to someone already paying for some.
  */
 export function personalRefusalMessage(params: {
   neededSeconds: number;
   remainingSeconds: number;
   now?: Date;
+  /** `VideoAllowance.pastDue` for the allowance refused against. */
+  pastDue?: boolean;
 }): string {
   const { neededSeconds, remainingSeconds, now } = params;
   const back = freeHoursReturnOn(now);
@@ -409,6 +458,7 @@ export function personalRefusalMessage(params: {
       ? "You're out of video hours."
       : `This video needs ${formatHoursLong(neededSeconds)}. You have ` +
         `${formatHoursLong(remainingSeconds)} left.`;
+  if (params.pastDue) return `${lead} ${PAST_DUE_SENTENCE}`;
   const next = back
     ? `Add hours on Settings › Plan to send it now, shorten the trim, or ` +
       `wait for your free hours on ${back}.`
@@ -425,14 +475,43 @@ export function capRefusalMessage(params: {
   neededSeconds: number;
   remainingSeconds: number;
   capSeconds: number;
+  /**
+   * `allowanceResetsOn()` for the allowance refused against: the day its
+   * window turns over, or null when nothing comes back. Omitted, the line
+   * says "the start of next month", which is true of every beta allowance.
+   */
+  resetsOn?: string | null;
+  /**
+   * The allowance's kind. A `season` is one pool for the season: it is
+   * named as that, and nothing resets. A team on `none` has no plan and no
+   * pilot, so there is no allowance to have run out. Omitted, the monthly
+   * wording.
+   */
+  kind?: AllowanceKind;
 }): string {
-  const { neededSeconds, remainingSeconds, capSeconds } = params;
-  return (
+  const { neededSeconds, remainingSeconds, capSeconds, resetsOn, kind } =
+    params;
+  if (kind === "none" && capSeconds <= 0) {
+    return (
+      "Your team has no plan or video hours yet. Its page in Settings › " +
+      "Teams says how to set one up."
+    );
+  }
+  if (kind === "season") {
+    return (
+      `This match needs ${formatMinutes(neededSeconds)} of analysis but only ` +
+      `${formatMinutes(remainingSeconds)} is left of your team's hours this ` +
+      `season (${formatMinutes(capSeconds)}). A shorter trim will fit sooner.`
+    );
+  }
+  const lead =
     `This match needs ${formatMinutes(neededSeconds)} of analysis but only ` +
     `${formatMinutes(remainingSeconds)} is left in your monthly allowance ` +
-    `(${formatMinutes(capSeconds)}). It resets at the start of next month; ` +
-    `a shorter trim will fit sooner.`
-  );
+    `(${formatMinutes(capSeconds)}).`;
+  if (resetsOn === null) return lead;
+  const when =
+    resetsOn === undefined ? "at the start of next month" : `on ${resetsOn}`;
+  return `${lead} It resets ${when}; a shorter trim will fit sooner.`;
 }
 
 /** The two columns of `processing_usage` a month's total is summed from. */
@@ -477,6 +556,16 @@ export interface QuotaPeek {
   nextCreditExpiresAt: string | null;
   /** What the next upload can spend: free hours left plus credits. */
   remainingSeconds: number;
+  /**
+   * `allowanceResetsOn()` for the allowance the peek read: the day the window
+   * turns over, or null when nothing comes back. Set by `peekQuota()`; absent
+   * on a peek a meter built from bare figures.
+   */
+  resetsOn?: string | null;
+  /** The kind of that allowance, set with `resetsOn` — a refusal's wording. */
+  allowanceKind?: AllowanceKind;
+  /** `VideoAllowance.pastDue`: the plan's hours are waiting on a payment. */
+  pastDue?: boolean;
 }
 
 /**
@@ -496,6 +585,17 @@ export interface HoursLeft {
   grantedSeconds: number;
   /** ISO instant the oldest usable credit lot expires, or null with none. */
   nextCreditExpiresAt: string | null;
+  /**
+   * The day a TEAM's allowance window turns over (`allowanceResetsOn()`), or
+   * null when nothing comes back. Absent from an older answer.
+   */
+  resetsOn?: string | null;
+  /**
+   * `QuotaPeek.pastDue`, always a boolean: a subscriber's plan hours are
+   * waiting on a failed payment. Absent from an older answer, which says
+   * nothing either way.
+   */
+  pastDue?: boolean;
 }
 
 /**
@@ -514,12 +614,15 @@ export function peekRefusalMessage(
     return personalRefusalMessage({
       neededSeconds,
       remainingSeconds: peek.remainingSeconds,
+      pastDue: peek.pastDue === true,
     });
   }
   return capRefusalMessage({
     neededSeconds,
     remainingSeconds: peek.remainingSeconds,
     capSeconds: peek.capSeconds,
+    resetsOn: peek.resetsOn,
+    kind: peek.allowanceKind,
   });
 }
 
@@ -579,13 +682,14 @@ export async function readCreditBalance(
 }
 
 /**
- * READ the month's ledger for a workspace. Reserves nothing.
+ * READ the ledger for a workspace's current allowance. Reserves nothing.
  *
  * For `/api/splitstep/upload-url`, which wants to refuse an upload that cannot
  * fit BEFORE the browser pushes gigabytes. Not the authority — it is a plain
  * read, so two uploads racing can both pass it; `reserveQuota()` at
  * `/api/splitstep/jobs` is atomic and still decides. Keyed exactly as that
- * reservation is (`accountTypeFor`, `workspace.id`, `currentBillingMonth`) and
+ * reservation is (`accountTypeFor`, `workspace.id`, and the month or window
+ * `allowanceFor()` names) and
  * summed the way the reserve functions sum: the vendor's actual figure where
  * one has landed, the reservation otherwise, released rows excluded. A
  * personal workspace adds the player's credits on top.
@@ -601,19 +705,23 @@ export async function readCreditBalance(
 export async function peekQuota(
   supabase: SupabaseClient,
   workspace: Workspace,
+  now: Date = new Date(),
 ): Promise<QuotaPeek> {
-  const capSeconds = monthlyCapSecondsFor(workspace);
+  const allowance = allowanceFor(workspace, now);
+  const capSeconds = allowance.capSeconds;
 
   const [usage, credits] = await Promise.all([
-    supabase
-      .from("processing_usage")
-      .select("reserved_seconds, actual_seconds")
-      .eq("account_id", workspace.id)
-      .eq("account_type", accountTypeFor(workspace))
-      .eq("billing_month", currentBillingMonth())
-      .eq("released", false),
+    scopeToAllowance(
+      supabase
+        .from("processing_usage")
+        .select("reserved_seconds, actual_seconds")
+        .eq("account_id", workspace.id)
+        .eq("account_type", accountTypeFor(workspace))
+        .eq("released", false),
+      allowance,
+    ),
     workspace.kind === "personal"
-      ? readCreditBalance(supabase, workspace.id)
+      ? readCreditBalance(supabase, workspace.id, now)
       : Promise.resolve<CreditBalance>(NO_CREDITS),
   ]);
 
@@ -622,7 +730,12 @@ export async function peekQuota(
   }
 
   const usedSeconds = sumUsedSeconds((usage.data ?? []) as UsageRow[]);
-  return buildPeek(usedSeconds, capSeconds, credits.seconds, credits);
+  return {
+    ...buildPeek(usedSeconds, capSeconds, credits.seconds, credits),
+    resetsOn: allowanceResetsOn(allowance),
+    allowanceKind: allowance.kind,
+    ...(allowance.pastDue ? { pastDue: true } : {}),
+  };
 }
 
 /**

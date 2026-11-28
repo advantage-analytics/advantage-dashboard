@@ -19,6 +19,7 @@
 import { squadLabel, type Squad } from "@/lib/data/squad";
 import type { ProgramStatus } from "@/lib/services/programs/claim-state";
 import type { RecordingSource } from "@/app/onboarding/answers";
+import type { ProgramPlanRef } from "@/lib/billing/plans";
 
 /** A member's standing inside a team workspace. Personal is always `owner`. */
 export type ProgramRole = "owner" | "coach" | "staff" | "player";
@@ -208,6 +209,55 @@ export interface Workspace {
    */
   pilotEligible?: boolean;
   /**
+   * The season plan an admin assigned to this team (Admin › Teams, through
+   * `admin_set_program_plan`): this program's row in `program_plans`, less
+   * the note and who set it, which no client can read. Null for a team with
+   * no plan; absent or null for a personal workspace, whose plan is the
+   * viewer's own (`Viewer.plan`).
+   *
+   * It is what was assigned, not whether today is inside the window. Read it
+   * through `programPlanFor()` in `lib/billing/plans.ts`, which adds the
+   * plan's name, hours and price.
+   *
+   * Optional, like `pilotEligible`, so a constructor that does not read the
+   * table fails CLOSED to "no plan".
+   */
+  programPlan?: ProgramPlanRef | null;
+  /**
+   * `programs.pilot_ends_on` — the pilot's last free day, inclusive,
+   * `YYYY-MM-DD`. With `pilotEligible` and `pilotEndedAt` it decides whether
+   * a team's pilot is still running from January 1, 2027 — see
+   * `pilotIsRunning()` in `services/splitstep/allowance.ts`.
+   *
+   * Optional and fail-closed: a constructor that does not read the column
+   * leaves the team off the pilot. Absent for a personal workspace.
+   */
+  pilotEndsOn?: string | null;
+  /** `programs.pilot_ended_at` — set when an admin ended the pilot early. */
+  pilotEndedAt?: string | null;
+  /**
+   * `users.plan` of the PERSONAL workspace's owner — the plan whose hours
+   * this workspace draws from January 1, 2027. Carried here, not only on
+   * `Viewer`, because the admin console builds a personal workspace for
+   * someone else and the hours are the owner's. Read it through `planFor()`.
+   *
+   * Absent or null reads as Free, and always for a team workspace.
+   */
+  plan?: string | null;
+  /**
+   * `users.plan_period_start` of the personal workspace's owner, an ISO
+   * instant — the anchor of the month-long window a paid plan's hours cover
+   * (`hoursWindow()`). Null or absent falls back to the calendar month.
+   */
+  planPeriodStart?: string | null;
+  /**
+   * `users.plan_status` of the personal workspace's owner: `active`,
+   * `past_due`, `canceled`, or null for never subscribed. Only `past_due`
+   * changes anything: the plan stays but its unpaid window carries no plan
+   * hours (`allowanceFor()`). Absent reads as paid.
+   */
+  planStatus?: string | null;
+  /**
    * `programs.status` as the server read it — the column `canSubmitVideo` is
    * derived from, carried raw. Null for a personal workspace, which has no
    * program row.
@@ -352,7 +402,11 @@ export interface Viewer {
    * `users.avatar_path` at read time; the row never stores a URL.
    */
   avatarUrl: string | null;
-  /** `users.plan` — 'free' | 'pro'. The paid entitlement, and only that. */
+  /**
+   * `users.plan` — 'free' | 'player' | 'player-pro', plus the legacy 'pro'. The
+   * paid entitlement, and only that. Read it through `planFor()` in
+   * `lib/user/plan.ts`, which is where legacy and unknown values become Free.
+   */
   plan: string;
   /**
    * An admin or an address in `POSTHOG_INTERNAL_EMAILS`, resolved on the

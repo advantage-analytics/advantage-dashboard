@@ -13,6 +13,7 @@ import {
   ProfileStatisticsPanePending,
   ProfileVisualizationsPanePending,
 } from "@/components/dashboard/loading/player-profile-pending";
+import { MATCH_SCOPE_KEYS } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import { PROFILE_VIEW_PARAM, type ProfileView } from "./profile-view";
 import { ProfileViewWhen, useProfileView } from "./profile-frame";
 
@@ -125,7 +126,8 @@ export function ProfileBodyCache({ children }: { children: ReactNode }) {
  * and `WorkspaceSync` refreshes in place when another tab switches the
  * workspace, so without it the other view could show the last team's season
  * under the new team's header. Beyond that, Statistics reads the season
- * alone, so its body holds for any URL; the Visualizations body is the one
+ * and the page's match scope (`?sm=` …, `MATCH_SCOPE_KEYS`), so its body
+ * holds for any URL with the same scope; the Visualizations body is the one
  * for the viz state in the URL at the time it arrived (`?player=`, `?cut=`
  * and its filters), so it is reused only while the URL's query — `tab` aside
  * — is the same. Back or Forward onto a different viz state draws the
@@ -204,22 +206,29 @@ export function ProfileBodySlot({
 const REVALIDATE_AFTER_MS = 30_000;
 
 /**
- * What a view's body was rendered for: the program, and for Visualizations
- * the URL's query without `tab`, in a stable order — a key, not a URL.
+ * What a view's body was rendered for: the program and the page's match
+ * scope (`?sm=` … — both bodies are computed under it), and for
+ * Visualizations the URL's query without `tab`, in a stable order — a key,
+ * not a URL. With no match scope a Statistics body is keyed by the program
+ * alone.
  */
 function bodyKey(
   view: ProfileView,
-  scope: string,
+  program: string,
   params: URLSearchParams,
 ): string {
-  if (view !== "visualizations") return scope;
-  const rest = [...params.entries()].filter(
-    ([name]) => name !== PROFILE_VIEW_PARAM,
-  );
-  rest.sort(([a, x], [b, y]) =>
+  const entries = [...params.entries()].sort(([a, x], [b, y]) =>
     a === b ? x.localeCompare(y) : a.localeCompare(b),
   );
-  return `${scope}?${rest.map(([name, value]) => `${name}=${value}`).join("&")}`;
+  const pair = ([name, value]: [string, string]) => `${name}=${value}`;
+  // The program, then the match scope the bodies were computed under.
+  const scope = [
+    program,
+    ...entries.filter(([name]) => MATCH_SCOPE_KEYS.includes(name)).map(pair),
+  ].join("&");
+  if (view !== "visualizations") return scope;
+  const rest = entries.filter(([name]) => name !== PROFILE_VIEW_PARAM);
+  return `${scope}?${rest.map(pair).join("&")}`;
 }
 
 function ProfileBodyDeferred({

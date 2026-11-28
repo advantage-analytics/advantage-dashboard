@@ -1,4 +1,4 @@
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
 import {
   MatchesFilterPanel,
   type FilterPanelSection,
@@ -12,16 +12,20 @@ import {
 } from "../match-filters/model";
 import type { CountNoun } from "../match-filters/panel-draft";
 import { cn } from "@/lib/utils";
+import { isReturnCut, marksAreShots } from "./cut-kinds";
 import { LegendMark } from "./legend-mark";
+import { LifecycleChip } from "./lifecycle-chip";
 import { LEGEND_PICKS, type LegendPick } from "./lightbox-points";
 import type { LegendItem } from "./viz-labels";
 import {
   filterKeysFor,
   type Cut,
+  type PressureValue,
   type VizFilters,
   type VizResult,
 } from "./viz-model";
 import {
+  errorChipLabel,
   errorOptionsFor,
   OPTIONS,
   seasonMatchKept,
@@ -34,17 +38,29 @@ import { matchesMenuValueLabel } from "./lightbox-matches-sheet";
 /* ── Filters panel ─────────────────────────────────────────────────────── */
 
 type PanelKey =
-  | "ball"
   | "court"
   | "set"
   | "zone"
   | "pressure"
-  | "error"
-  | "entry"
+  | "rally"
   | "approachTo"
   | "approachDir";
 
-type EntryValue = keyof typeof OPTIONS.entry;
+/** Rally length's segments and what each one counts (board Final-03). */
+const RALLY_SEGMENTS = [
+  { value: "short", label: "Short", tooltip: "1–4 shots" },
+  { value: "medium", label: "Medium", tooltip: "5–8 shots" },
+  { value: "long", label: "Long", tooltip: "9 or more shots" },
+] as const;
+
+const PRESSURE_VALUES: PressureValue[] = ["pressure", "break", "setMatch"];
+
+/** The scores "Pressure points" means (`isPressurePoint`). */
+const PRESSURE_POINTS_SCORES = "30–30, 30–40, 40–30, deuce and ad points";
+
+/** A segmented row's value when the key holds several: matches no option. */
+const MIXED_SEGMENT = "__mixed__";
+
 type ApproachToValue = keyof typeof OPTIONS.approachTo;
 type ApproachDirValue = keyof typeof OPTIONS.approachDir;
 
@@ -141,15 +157,22 @@ export interface LightboxAdvancedFilters {
 }
 
 /**
- * The lightbox's Filters (canvas S15): the Matches list's own panel
- * (`MatchesFilterPanel`, Data Table rule 6) over the cut's existing
- * `VizFilters` keys only — Serve, Court and Set as segmented rows, Zone,
- * Score and Error type as checklists with the count each option alone would
- * leave, and on the Approaches cut its own three groups (Way to the net,
- * Approach to, Direction) as checklists too (plan decision Q7: the model's
- * groups are multi-select, so they are drawn as Zone is) — applied live, with Clear and the live count in the footer. Only
- * the keys `filterKeysFor(cut)` allows appear, so a pick can never be one the
- * court then ignores.
+ * The lightbox's Filters (canvas S15; sections per chart, boards Final-03…09):
+ * the Matches list's own panel (`MatchesFilterPanel`, Data Table rule 6) over
+ * the cut's existing `VizFilters` keys only. The chart's own lead sections
+ * come first — Serves' Zone (Any · Wide · Body · T), Approaches' Approach to
+ * and Direction (checklists: the model's groups are multi-select, plan
+ * decision Q7) — then Rally length (Any · Short · Medium · Long; not on
+ * Rally shots, whose toolbar carries it as `toolbarChipsFor`), Pressure,
+ * Court and Set, with Advanced filters last. Errors' type and Approaches'
+ * way to the net are toolbar chips (`toolbarChipsFor`), not
+ * sections. No chart has a Serve row: the serve is a
+ * toolbar chip or Advanced filters › Serve › Type. Segmented
+ * rows carry no counts; a checklist option carries the count it alone would
+ * leave. Applied live,
+ * with Clear and the live count in the footer. Only the keys
+ * `filterKeysFor(cut)` allows appear, so a pick can never be one the court
+ * then ignores.
  */
 export function LightboxFilterPanel({
   cut,
@@ -160,7 +183,6 @@ export function LightboxFilterPanel({
   engaged,
   result,
   sets,
-  errorSplitJudged,
   countWith,
   advanced,
   onOpenAdvanced,
@@ -180,9 +202,6 @@ export function LightboxFilterPanel({
   result: Pick<VizResult, "count" | "total" | "noun">;
   /** The sets there are to pick (the Set row shows only with two or more). */
   sets: readonly number[];
-  /** The match's errors are judged: Error type offers Unforced and Forced
-   *  apart, not one "Errors" option (`errorOptionsFor`). */
-  errorSplitJudged: boolean;
   /** How many marks the court would hold with `patch` applied over the live
    *  filters — each checklist option's count. The match report runs
    *  `computeViz`; a host with no points in the browser answers its own way. */
@@ -201,19 +220,28 @@ export function LightboxFilterPanel({
   onOpenMatches?: () => void;
 }) {
   const keys = new Set(filterKeysFor(cut));
-  const errorOptions = errorOptionsFor(errorSplitJudged);
 
   const sections: FilterPanelSection<PanelKey>[] = [];
-  // The Approaches cut's own groups lead: they say what the court is.
-  if (keys.has("entry"))
+  // The chart's own lead sections first — they say what the court is:
+  // Serves' Zone, Approaches' target and direction. (Errors' type and
+  // Approaches' way to the net are the toolbar's lead chips.)
+  if (keys.has("zone"))
+    // One lane at a time (board Final-03). The key stays a list, as the
+    // Statistics rows and saved views write it; a pick here replaces it with
+    // the one lane, and a list of two leaves no segment lit.
     sections.push({
-      label: "Way to the net",
-      checklist: {
-        key: "entry",
-        values: Object.keys(OPTIONS.entry),
-        displayValue: (v) => OPTIONS.entry[v as EntryValue],
-        count: (v) => countWith({ entry: [v as EntryValue] }),
-      },
+      label: "Zone",
+      segmented: [
+        {
+          key: "zone",
+          options: [
+            { value: null, label: "Any" },
+            { value: "wide", label: OPTIONS.zone.wide },
+            { value: "body", label: OPTIONS.zone.body },
+            { value: "t", label: OPTIONS.zone.t },
+          ],
+        },
+      ],
     });
   if (keys.has("approachTo"))
     sections.push({
@@ -235,19 +263,28 @@ export function LightboxFilterPanel({
         count: (v) => countWith({ approachDir: [v as ApproachDirValue] }),
       },
     });
-  if (keys.has("ball"))
+  // Then the shared run: Rally length, Pressure, Court, Set. Rally shots
+  // carry Rally length as toolbar chips instead (board Final-07).
+  if (keys.has("rally") && !marksAreShots(cut))
     sections.push({
-      label: "Serve",
+      label: "Rally length",
       segmented: [
         {
-          key: "ball",
-          options: [
-            { value: null, label: "Any" },
-            { value: "first", label: OPTIONS.ball.first },
-            { value: "second", label: OPTIONS.ball.second },
-          ],
+          key: "rally",
+          options: [{ value: null, label: "Any" }, ...RALLY_SEGMENTS],
         },
       ],
+    });
+  if (keys.has("pressure"))
+    sections.push({
+      label: "Pressure",
+      checklist: {
+        key: "pressure",
+        values: PRESSURE_VALUES,
+        displayValue: (v) => OPTIONS.pressure[v as PressureValue],
+        count: (v) => countWith({ pressure: [v as PressureValue] }),
+        tooltip: (v) => (v === "pressure" ? PRESSURE_POINTS_SCORES : undefined),
+      },
     });
   if (keys.has("court"))
     sections.push({
@@ -276,57 +313,13 @@ export function LightboxFilterPanel({
         },
       ],
     });
-  if (keys.has("zone"))
-    sections.push({
-      label: "Zone",
-      checklist: {
-        key: "zone",
-        values: ["t", "body", "wide"],
-        displayValue: (v) => OPTIONS.zone[v as "t" | "body" | "wide"],
-        count: (v) => countWith({ zone: [v as "t" | "body" | "wide"] }),
-      },
-    });
-  if (keys.has("pressure"))
-    sections.push({
-      label: "Score",
-      checklist: {
-        key: "pressure",
-        values: ["break", "setMatch"],
-        displayValue: (v) => OPTIONS.pressure[v as "break" | "setMatch"],
-        count: (v) => countWith({ pressure: [v as "break" | "setMatch"] }),
-      },
-    });
-  if (keys.has("error"))
-    sections.push({
-      label: "Error type",
-      checklist: {
-        key: "error",
-        values: errorOptions.map((_, i) => String(i)),
-        displayValue: (v) => errorOptions[Number(v)].label,
-        count: (v) => countWith({ error: [...errorOptions[Number(v)].values] }),
-      },
-    });
-
   function isChecklistActive(key: PanelKey, value: string): boolean {
-    if (key === "error") {
-      const option = errorOptions[Number(value)];
-      return option.values.every((v) => filters.error.includes(v));
-    }
     return (filters[key as keyof VizFilters] as readonly string[]).includes(
       value,
     );
   }
 
   function toggleChecklist(key: PanelKey, value: string) {
-    if (key === "error") {
-      const option = errorOptions[Number(value)];
-      const on = isChecklistActive(key, value);
-      const next = on
-        ? filters.error.filter((v) => !option.values.includes(v))
-        : [...filters.error, ...option.values];
-      setFilters({ ...filters, error: [...new Set(next)] });
-      return;
-    }
     const current = filters[key as keyof VizFilters] as readonly string[];
     const next = current.includes(value)
       ? current.filter((v) => v !== value)
@@ -338,6 +331,9 @@ export function LightboxFilterPanel({
     const current = filters[key as keyof VizFilters] as readonly (
       string | number
     )[];
+    // A list of two or more (a Statistics row, a saved view) is no single
+    // segment: none is lit, not "Any", which would say nothing is applied.
+    if (current.length > 1) return MIXED_SEGMENT;
     return current.length === 1 ? String(current[0]) : null;
   }
 
@@ -384,6 +380,192 @@ export function LightboxFilterPanel({
           : []),
       ]}
     />
+  );
+}
+
+/* ── Toolbar chips ─────────────────────────────────────────────────────── */
+
+/** One chip group's options: `null` is "All", which empties the key. */
+type ChipOption<V extends string> = { value: V | null; label: string };
+
+/**
+ * A toolbar's lead chips (board Final-04): one key's options as
+ * `LifecycleChip`s, one at a time. A pick replaces the key with that one
+ * value; All empties it. A list of two or more (a saved view, a Statistics
+ * row) lights none, as the panel's segmented rows do.
+ */
+function FilterChips<K extends "ball" | "rally" | "entry">({
+  label,
+  filterKey,
+  options,
+  filters,
+  setFilters,
+}: {
+  label: string;
+  filterKey: K;
+  options: readonly ChipOption<VizFilters[K][number]>[];
+  filters: VizFilters;
+  setFilters: (next: VizFilters) => void;
+}) {
+  const values = filters[filterKey] as readonly string[];
+  const current =
+    values.length === 0
+      ? null
+      : values.length === 1
+        ? values[0]
+        : MIXED_SEGMENT;
+  return (
+    <div className="flex gap-1.5" role="group" aria-label={label}>
+      {options.map((option) => (
+        <LifecycleChip
+          key={option.label}
+          pressed={current === option.value}
+          onClick={() =>
+            setFilters({
+              ...filters,
+              [filterKey]: option.value === null ? [] : [option.value],
+            })
+          }
+        >
+          {option.label}
+        </LifecycleChip>
+      ))}
+    </div>
+  );
+}
+
+const SERVE_RETURNED = [
+  { value: null, label: "All" },
+  { value: "first", label: "vs 1st serve" },
+  { value: "second", label: "vs 2nd serve" },
+] as const;
+
+const SERVE_CHIPS = [
+  { value: null, label: "All" },
+  { value: "first", label: "1st serve" },
+  { value: "second", label: "2nd serve" },
+] as const;
+
+const RALLY_CHIPS = [
+  { value: null, label: "All" },
+  ...RALLY_SEGMENTS.map(({ value, label }) => ({ value, label })),
+] as const;
+
+const ENTRY_CHIPS = [
+  { value: null, label: "All" },
+  ...(Object.keys(OPTIONS.entry) as (keyof typeof OPTIONS.entry)[]).map(
+    (value) => ({ value, label: OPTIONS.entry[value] }),
+  ),
+];
+
+/**
+ * A chart's toolbar lead chips (boards Final-04…09), or none: Returns'
+ * "Serve returned" (All · vs 1st serve · vs 2nd serve over the `ball` key,
+ * which on a return cut already reads the serve being returned), Serves'
+ * 1st/2nd serve, Rally shots' Rally length, Approaches' Way to the net (a
+ * list of two lights no chip, as the Zone row does) and Errors' type. Their
+ * Filters menus carry no such row: this is where each is chosen.
+ */
+export function toolbarChipsFor({
+  cut,
+  filters,
+  setFilters,
+  errorSplitJudged,
+}: {
+  cut: Cut;
+  filters: VizFilters;
+  setFilters: (next: VizFilters) => void;
+  errorSplitJudged: boolean;
+}): ReactNode {
+  if (cut === "errors")
+    return (
+      <ErrorTypeChips
+        filters={filters}
+        setFilters={setFilters}
+        errorSplitJudged={errorSplitJudged}
+      />
+    );
+  const chipProps = { filters, setFilters };
+  if (isReturnCut(cut))
+    return (
+      <FilterChips
+        label="Serve returned"
+        filterKey="ball"
+        options={SERVE_RETURNED}
+        {...chipProps}
+      />
+    );
+  if (cut === "serve")
+    return (
+      <FilterChips
+        label="Serve"
+        filterKey="ball"
+        options={SERVE_CHIPS}
+        {...chipProps}
+      />
+    );
+  if (marksAreShots(cut))
+    return (
+      <FilterChips
+        label="Rally length"
+        filterKey="rally"
+        options={RALLY_CHIPS}
+        {...chipProps}
+      />
+    );
+  if (cut === "approaches")
+    return (
+      <FilterChips
+        label="Way to the net"
+        filterKey="entry"
+        options={ENTRY_CHIPS}
+        {...chipProps}
+      />
+    );
+  return null;
+}
+
+/**
+ * Errors' toolbar chips (the Final boards): All, then the Error type options
+ * the menu used to offer (`errorOptionsFor`) — Unforced · Forced · Double
+ * faults on a match whose errors are judged; on one whose are not, the one
+ * "Errors" option that holds both kinds, then Double faults, so no chip can
+ * draw a court nobody judged. A pick replaces the `error` key with that
+ * option's values; All empties it. A chip is lit only when the key holds
+ * exactly its values, so a list no single chip stands for lights none.
+ */
+function ErrorTypeChips({
+  filters,
+  setFilters,
+  errorSplitJudged,
+}: {
+  filters: VizFilters;
+  setFilters: (next: VizFilters) => void;
+  errorSplitJudged: boolean;
+}) {
+  const options = errorOptionsFor(errorSplitJudged);
+  const current = new Set<string>(filters.error);
+
+  const holdsExactly = (values: readonly string[]) =>
+    values.length === current.size && values.every((v) => current.has(v));
+  return (
+    <div className="flex gap-1.5" role="group" aria-label="Error type">
+      <LifecycleChip
+        pressed={current.size === 0}
+        onClick={() => setFilters({ ...filters, error: [] })}
+      >
+        All
+      </LifecycleChip>
+      {options.map((option) => (
+        <LifecycleChip
+          key={option.label}
+          pressed={holdsExactly(option.values)}
+          onClick={() => setFilters({ ...filters, error: [...option.values] })}
+        >
+          {errorChipLabel(option)}
+        </LifecycleChip>
+      ))}
+    </div>
   );
 }
 
@@ -451,7 +633,9 @@ export function LegendFilter({
             </span>
           );
         }
-        const label = LEGEND_PICKS.find((p) => p.key === key)!.label;
+        // The item's own word: Won | Lost arrive named for the winner
+        // (`withOutcomeNames`), the rest as `LEGEND_PICKS` says them.
+        const label = item.label;
         const on = pick === key;
         return (
           <button

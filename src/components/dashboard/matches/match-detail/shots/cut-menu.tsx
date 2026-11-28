@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { isReturnCut } from "./cut-kinds";
 import { Bookmark, BookmarkPlus, Crosshair, ScatterChart } from "lucide-react";
 import {
   FloatMenu,
@@ -158,17 +159,13 @@ export function CutMenu({
         chosen={state.cut === "serve"}
         onSelect={() => selectCut("serve")}
       />
+      {/* One Returns chart: Placement / Contact is its view
+          (`VizFilters.ends`), not a second chart. */}
       <FloatMenuItem
-        label="Return placement"
-        description="Where the return lands"
-        chosen={state.cut === "returnPlacement"}
+        label="Returns"
+        description="Where the return lands or is struck"
+        chosen={isReturnCut(state.cut)}
         onSelect={() => selectCut("returnPlacement")}
-      />
-      <FloatMenuItem
-        label="Return contact"
-        description="Where the return is struck"
-        chosen={state.cut === "returnContact"}
-        onSelect={() => selectCut("returnContact")}
       />
       <FloatMenuItem
         label="Rally placement"

@@ -9,6 +9,14 @@
  *
  * The retired $4.99 Pro checkout that used to live here stays retired: any
  * other `kind` is refused.
+ *
+ * RETIRED with the 2027 plans: once plans and extra hours are on sale
+ * (`plansOnSale()` — January 1, or the day `NEXT_PUBLIC_PLANS_ON_SALE` is
+ * set), this refuses every request with `code: "packs_retired"` (410) and
+ * hours are bought by the hour through `/api/billing/checkout`. Until then
+ * the packs are the only way to buy hours, so they stay open. A pack session
+ * already paid still confirms (`/api/credits/confirm`) and still records from
+ * the webhook; the pack constants stay for reading old credits.
  */
 
 import { stripe } from "@/lib/stripe/client";
@@ -24,6 +32,8 @@ import { createCreditCheckoutSession } from "@/lib/services/credits/checkout";
 import { creditsRefusal } from "@/lib/services/credits/http";
 import { isCreditPackId } from "@/lib/services/credits/packs";
 import { siteUrl } from "@/lib/site-url";
+import { plansOnSale } from "@/lib/billing/plans";
+import { asHttpError, billingRefusal } from "@/lib/services/billing/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,6 +41,19 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request): Promise<Response> {
   const origin = checkSameOrigin(request, [siteUrl()]);
   if (origin) return errorResponse(origin);
+
+  if (plansOnSale()) {
+    return errorResponse(
+      asHttpError(
+        billingRefusal(
+          "packs_retired",
+          410,
+          "Hour packs are no longer sold. Add hours from Settings, Plan.",
+          "plans_on_sale",
+        ),
+      ),
+    );
+  }
 
   const supabase = await createClient();
   const {

@@ -6,9 +6,13 @@ import { useMatchReport } from "@/components/dashboard/matches/match-detail/matc
 import { advButton } from "@/lib/ui/adv-button";
 import { MAX_POINT_SET } from "@/lib/match-video/point-set";
 import { depthBandRows } from "@/lib/data/viz-bands";
-import { canManageSavedView } from "@/lib/data/saved-views-logic";
+import {
+  canManageSavedView,
+  sharedViewTag,
+} from "@/lib/data/saved-views-logic";
 
 import { ChartMenu } from "./chart-menu";
+import { VizBandsMenu } from "./viz-bands-menu";
 import { CutMenu } from "./cut-menu";
 import { defaultCutsFor } from "./default-cuts";
 import { isPlayable, pointsBehind, resultMarks } from "./lightbox-points";
@@ -17,6 +21,7 @@ import { SaveAsViewButton } from "./save-as-view-button";
 import {
   SavedViewTitleMenu,
   type SavedViewAction,
+  type SavedViewActionFailure,
 } from "./saved-view-title-menu";
 import { shotsWriteAccess } from "./shots-write-access";
 import { serveRowDotIds, statPickDotIds, type StatPick } from "./stat-cut";
@@ -32,10 +37,12 @@ import {
   EMPTY_VIZ_FILTERS,
   collapseErrorFilter,
   computeViz,
+  courtEndsFor,
   errorsJudgedIn,
   filterKeysFor,
   HAND_ASSUMED_NOTE,
   LOOSENED_LABEL,
+  courtEndsControl,
   type PlayerFilter,
   type VizMark,
   type VizFilters,
@@ -85,7 +92,7 @@ export function VizLightbox({
    *  Saved wall's band. Omitted, there is no ⋯ beside the name. */
   onViewAction?: (action: SavedViewAction) => void;
   /** The last `onViewAction` the server refused (numbered per ask). */
-  viewActionFailure?: { n: number; message: string } | null;
+  viewActionFailure?: SavedViewActionFailure | null;
 }) {
   const { state, setState } = useVizState();
   const { meta } = useMatchReport();
@@ -120,12 +127,21 @@ export function VizLightbox({
   // said under the title (the wall's own line is behind the scrim), and a
   // rename it refused is taken back. Render-phase, as the wall's player is.
   const [failureSeen, setFailureSeen] = useState(viewActionFailure?.n ?? 0);
-  const [failureShown, setFailureShown] = useState<string | null>(null);
+  const [failureShown, setFailureShown] = useState<{
+    message: string;
+    renameFirst: boolean;
+  } | null>(null);
   if (viewActionFailure && viewActionFailure.n !== failureSeen) {
     setFailureSeen(viewActionFailure.n);
-    setFailureShown(viewActionFailure.message);
+    setFailureShown({
+      message: viewActionFailure.message,
+      renameFirst: viewActionFailure.renameFirst === true,
+    });
     setRenamed(null);
   }
+  // The open view's Rename popover, held here so the share clash's "Rename"
+  // under the title can open it as the ⋯ menu's row does.
+  const [renameOpen, setRenameOpen] = useState(false);
 
   const errorSplitJudged = useErrorSplitJudged();
   // The court's filters as the URL would read them: a store pick (a saved
@@ -257,6 +273,8 @@ export function VizLightbox({
             ).filter(
               (key) =>
                 key !== "player" &&
+                // Which ends the court draws is not a filter of the view.
+                key !== "ends" &&
                 !sameFilterValue(key, filters, EMPTY_VIZ_FILTERS),
             ),
             view: {
@@ -436,12 +454,12 @@ export function VizLightbox({
         : baseline.name
       : savedView !== null
         ? nameOf(savedView)
-        : CUT_LABEL[cut];
+        : CUT_LABEL[state.cut ?? cut];
   const subjectWord =
     state.filters.player === "you" ? chipLabels.you : chipLabels.opponent;
   const subtitle = isDraft
     ? "Pick a chart and filters, then save it to reuse on any match."
-    : `${CUT_LABEL[cut]} · ${subjectWord} · ${lightboxCountLine(
+    : `${CUT_LABEL[state.cut ?? cut]} · ${subjectWord} · ${lightboxCountLine(
         cut,
         result,
         stats,
@@ -460,14 +478,24 @@ export function VizLightbox({
   // goes back to the view; the card's while the title still names the card;
   // otherwise nothing but the player and the card's floor (Approaches is
   // approach shots again). Exactly the filters the strip names are removed.
-  const clearTarget: VizFilters =
-    baseline !== null && (onCard || baseline.view !== null)
+  // Which ends the court draws is not a filter: Clear keeps the reader's
+  // Placement · Contact · Both, as `clearedFilters` does.
+  const clearTarget: VizFilters = {
+    ...(baseline !== null && (onCard || baseline.view !== null)
       ? baseline.filters
-      : floorFilters;
+      : floorFilters),
+    ends: state.filters.ends ?? null,
+  };
   // Back on the view's filters for the view's own player, the court IS the
-  // view again: keep its id, so its title, Saved highlight and link return.
+  // view again: keep its id, so its title, Saved highlight and link return —
+  // but only when it also draws the view's own ends; otherwise it is still
+  // an edit of the view.
   const clearViewId =
-    baseline?.view != null && baseline.view.player === state.filters.player
+    baseline?.view != null &&
+    baseline.view.player === state.filters.player &&
+    state.cut !== null &&
+    courtEndsFor(state.cut, state.filters) ===
+      courtEndsFor(state.cut, baseline.filters)
       ? baseline.view.id
       : null;
 
@@ -490,6 +518,13 @@ export function VizLightbox({
   function setFilters(next: VizFilters) {
     setState((prev) => ({ ...prev, filters: next, viewId: null }));
   }
+
+  // The court's Placement · Contact · Both, on a chart with both ends. Set
+  // against the CHART cut (`state.cut`: Returns, never the contact court it
+  // may be drawn as). It is saved with a view, so a change edits an open
+  // view exactly as a filter does (`viewId` dropped, `editedFrom` kept).
+  const chartCut = state.cut ?? cut;
+  const courtEnds = courtEndsControl(chartCut, state.filters, setState);
 
   // Any filter the court is under beyond what "Clear filter" leaves —
   // including the advanced (`match`), Result, Rally and Game groups a saved
@@ -516,6 +551,8 @@ export function VizLightbox({
   const phrases = activeFilterEntries(state, names, {
     errorSplitJudged,
     bandLabels: bandLabelsOf(matchCtx),
+    // "Park won", as the legend and the chips say it.
+    winnerNames: chipLabels,
   })
     .filter((e) => e.key !== "player" && !unchangedBaseKey(e.key))
     .map((e) => e.label);
@@ -571,7 +608,15 @@ export function VizLightbox({
         },
       }}
       title={title}
-      notice={failureShown ?? undefined}
+      titleTag={
+        savedView !== null ? (sharedViewTag(savedView) ?? undefined) : undefined
+      }
+      notice={failureShown?.message}
+      noticeAction={
+        failureShown?.renameFirst && canManageOpenView
+          ? { label: "Rename", onClick: () => setRenameOpen(true) }
+          : undefined
+      }
       headerAction={
         canManageOpenView && savedView !== null
           ? ({ onTooltipEscape }) => (
@@ -583,6 +628,8 @@ export function VizLightbox({
                 workspaceKind={meta.workspaceKind}
                 workspaceRole={meta.workspaceRole}
                 onAction={handleViewAction}
+                renameOpen={renameOpen}
+                onRenameOpenChange={setRenameOpen}
               />
             )
           : undefined
@@ -613,7 +660,7 @@ export function VizLightbox({
           ).count,
         advanced,
       }}
-      controls={({ enterBandEdit }) => (
+      controls={() => (
         <>
           {isDraft && (
             <CutMenu
@@ -621,12 +668,17 @@ export function VizLightbox({
               triggerRef={cutMenuTriggerRef}
             />
           )}
-          <ChartMenu
-            showBands={!isDraft}
-            onEditBands={meta.readOnly ? undefined : enterBandEdit}
-          />
+          <ChartMenu />
         </>
       )}
+      bandsMenu={({ enterBandEdit }) =>
+        isDraft ? null : (
+          <VizBandsMenu
+            cut={cut}
+            onEditBands={meta.readOnly ? undefined : enterBandEdit}
+          />
+        )
+      }
       bandEditor={{ canEdit, bands, applyBands, receipt }}
       pointList={{
         all: points,
@@ -651,7 +703,9 @@ export function VizLightbox({
             <>
               {canSaveViews && (
                 <SaveAsViewButton
-                  cut={cut}
+                  // The chart, not the court drawn: Returns in Contact
+                  // saves as Returns with its ends.
+                  cut={state.cut ?? cut}
                   chart={state.chart}
                   filters={state.filters}
                   savedViews={meta.savedViews}
@@ -685,6 +739,7 @@ export function VizLightbox({
           ),
         };
       }}
+      courtEnds={isDraft ? undefined : courtEnds}
       draft={
         isDraft
           ? {

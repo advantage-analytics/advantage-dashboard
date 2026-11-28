@@ -1,6 +1,7 @@
 import { PointEndingsBody } from "@/components/dashboard/matches/match-detail/point-endings-body";
 import { SEASON_OPPONENTS_LABEL } from "@/components/dashboard/team/player-profile/season-head-to-head-card";
 import { surname } from "@/lib/data/match-utils";
+import { matchReadiness } from "./season-empty";
 import type { SeasonOutcomes } from "@/lib/data/player-season";
 
 /**
@@ -35,21 +36,26 @@ import type { SeasonOutcomes } from "@/lib/data/player-season";
 export function seasonEndingsEmptySentence(
   playerName: string,
   analyzed: number,
+  scopeEmpty = false,
 ): string {
   return analyzed === 0
-    ? `Winners, aces and errors add up here once one of ${surname(playerName)}'s matches is analyzed.`
+    ? `Winners, aces and errors add up here once one of ${surname(playerName)}'s matches ${matchReadiness(scopeEmpty)}.`
     : "No point in these matches records how it ended.";
 }
 
 export function SeasonPointEndingsCard({
   playerName,
   analyzed,
+  scopeEmpty = false,
   outcomes,
 }: {
   /** The player's full name; the first row shows their surname. */
   playerName: string;
   /** Matches with points — what `outcomes` was summed from. */
   analyzed: number;
+  /** The page's match scope keeps no match: the empty sentence says so
+   *  (`analyzed` is 0 then, as on day zero). */
+  scopeEmpty?: boolean;
   /** `seasonOutcomes()` — both sides' tallies and the split they were taken with. */
   outcomes: SeasonOutcomes;
 }) {
@@ -62,7 +68,11 @@ export function SeasonPointEndingsCard({
       oppName={SEASON_OPPONENTS_LABEL}
       errorSplitJudged={outcomes.errorSplitJudged}
       emptyLegend
-      emptySentence={seasonEndingsEmptySentence(playerName, analyzed)}
+      emptySentence={seasonEndingsEmptySentence(
+        playerName,
+        analyzed,
+        scopeEmpty,
+      )}
     />
   );
 }

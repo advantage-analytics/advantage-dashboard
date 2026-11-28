@@ -34,6 +34,8 @@ import {
   reviewFlag,
   reviewItemQuestion,
   secondServeAsFirst,
+  firstServeAfterLet,
+  hitBeforeServe,
   serveAfterServeIn,
   servesFromBothSides,
   withoutRepeatedLastCall,
@@ -348,8 +350,10 @@ export function pointHints(
     endingStale(point, ghosts),
     endingContradiction(point, ghosts),
     secondServeAsFirst(point, ghosts),
+    firstServeAfterLet(point, ghosts),
     lastLandingMissing(point, ghosts),
     serveAfterServeIn(point, ghosts),
+    hitBeforeServe(point, ghosts),
     servesFromBothSides(point, ghosts),
     serveLandingHint(point, ghosts),
     placementMissing(point, ghosts),
@@ -446,6 +450,8 @@ function hintShotId(
     case "last_ball_against_game":
       return mark.params.shotId;
     case "second_serve_as_first":
+    case "first_serve_after_let":
+    case "hit_before_serve":
     case "serve_after_serve_in":
     case "serves_from_both_sides":
     case "serve_in_landing_out":
@@ -574,6 +580,28 @@ function hintActions(
         {
           label: HINT_ACTION_LABEL.second_serve_as_first,
           run: () => onPatchShot(shotId, { stroke: "second_serve" }),
+        },
+      ];
+    }
+    case "first_serve_after_let": {
+      if (!onPatchShot) return [];
+      const { shotId } = mark.params;
+      return [
+        {
+          label: HINT_ACTION_LABEL.first_serve_after_let,
+          run: () => onPatchShot(shotId, { stroke: "first_serve" }),
+        },
+      ];
+    }
+    case "hit_before_serve": {
+      if (!onRemoveShotsAfter) return [];
+      const { shotId, strokes } = mark.params;
+      return [
+        {
+          label: removeAfterLabel(strokes.length),
+          // After a let or a fault, "after" stops at the next serve
+          // (operations.ts `shotsRemovedAfter`): the replay stays.
+          run: () => onRemoveShotsAfter(point.id, shotId),
         },
       ];
     }

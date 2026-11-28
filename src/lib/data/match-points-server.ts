@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchAllPages } from "@/lib/data/paged-query";
 import { gameNumbersInSet } from "@/lib/data/game-in-set";
 import { pickServeShot, pickReturnShot } from "@/lib/data/serve-return-shots";
+import { isLetPointFlags } from "@/lib/data/let-points";
 
 /** One shot inside a point, in rally order — the film room's shot feed. */
 export interface MatchShot {
@@ -69,6 +70,12 @@ export interface MatchPoint {
   winnerGuessed?: boolean;
   /** The vendor's score reading was stuck on this point (`score_frozen`). */
   scoreFrozen?: boolean;
+  /**
+   * A replayed let (`let_replayed`, let-points.ts): shown in the Video tab's
+   * list, never counted. `wonByPlayer1` on it is a placeholder. Only ever
+   * true on a point read with `includeLetReplayed`.
+   */
+  letReplayed?: boolean;
   resultType: string;
   eventType: string;
   description: string;
@@ -320,10 +327,20 @@ export async function getMatchPointsFromSupabase(
      * (`match-detail-server.ts`), so the bookmarks' names skip a re-read.
      */
     programId?: string | null;
+    /**
+     * Keep replayed lets (`letReplayed`, let-points.ts). Off by default, so
+     * no statistic can count one: only the Video tab's list asks for them,
+     * through `loadMatchDetail`, which hands them on apart.
+     */
+    includeLetReplayed?: boolean;
   } = {},
 ): Promise<MatchPoint[] | null> {
   const supabase = client ?? (await createClient());
-  const { includeBookmarks = true, programId } = options;
+  const {
+    includeBookmarks = true,
+    programId,
+    includeLetReplayed = false,
+  } = options;
 
   // The match's shots, in pages, started alongside the points: they are read
   // by `shots.match_id` (trigger-kept from the shot's point,
@@ -348,6 +365,9 @@ export async function getMatchPointsFromSupabase(
       .eq("match_id", matchId)
       .order("point_id", { ascending: true })
       .order("shot_number", { ascending: true })
+      // Several rows share shot 0 (a fault, a let, a feed): in the order
+      // they were hit, not by uuid. `id` last keeps the paging order total.
+      .order("video_time", { ascending: true, nullsFirst: false })
       .order("id", { ascending: true })
       .range(from, to);
     // The helper stops at the first error, so this logs exactly once.
@@ -373,7 +393,12 @@ export async function getMatchPointsFromSupabase(
     return [];
   }
 
-  const points = pointsData as DbPoint[];
+  // A replayed let is no point (let-points.ts): out unless asked for. Its
+  // shots stay in the shots read and are never looked up.
+  const points = (pointsData as DbPoint[]).filter(
+    (point) => includeLetReplayed || !isLetPointFlags(point.flags),
+  );
+  if (points.length === 0) return [];
   const pointIds = points.map((p) => p.id);
 
   // Who bookmarked each point, workspace-wide (see fetchSavedByPointId),
@@ -437,6 +462,7 @@ export async function getMatchPointsFromSupabase(
       gameScoreRaw: point.game_score,
       winnerGuessed: point.flags?.includes("winner_guessed") ?? false,
       scoreFrozen: point.flags?.includes("score_frozen") ?? false,
+      ...(isLetPointFlags(point.flags) ? { letReplayed: true } : {}),
       resultType,
       eventType: buildEventType(resultType),
       description: buildDescription(resultType, firstShot, lastShot, point),

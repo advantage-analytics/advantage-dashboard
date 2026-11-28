@@ -76,6 +76,8 @@ const SAMPLES: { [C in LabelMarkCode]: LabelMarkParams[C] } = {
   first_serve_fault_alone: {},
   serve_in_landing_out: { shotId: "s-1", landing: "out" },
   serve_after_serve_in: { shotId: "s-2" },
+  hit_before_serve: { shotId: "s-1", strokes: ["s-2"] },
+  first_serve_after_let: { shotId: "s-2" },
   serves_from_both_sides: { shotId: "s-2" },
   serve_by_receiver: { shotId: "s-8", hitter: "p1", server: "p2" },
   placement_missing: { shotId: "s-1", stroke: "serve", missing: "landing" },
@@ -151,6 +153,8 @@ test.describe("mark copy", () => {
       first_serve_fault_alone: "Fault, no second serve",
       serve_in_landing_out: "Serve in, landing outside the box",
       serve_after_serve_in: "Serve after a serve in play",
+      hit_before_serve: "Hit before the serve?",
+      first_serve_after_let: "First serve after a let?",
       serves_from_both_sides: "Serves from both sides",
       serve_by_receiver: "Serve by the receiver",
       placement_missing: "No placement",
@@ -195,7 +199,10 @@ test.describe("mark copy", () => {
       "The vendor called this ball out, but Ace played the next shot, so it’s stored as in.",
     );
     expect(markHover(sample("serve_fault"), names)).toBe(
-      "The first serve was called out and only one or two shots followed, with no second serve. It may be a fault the returner hit anyway.",
+      "The vendor called the first serve out, but the returner hit it back and there was no second serve. It may be a fault the returner played anyway.",
+    );
+    expect(markHover(sample("second_serve_called_out"), names)).toBe(
+      "The vendor called the second serve out, but the returner hit it back, so it’s stored as in. Check whether it was a double fault.",
     );
     expect(markHover(sample("winner_to_error_by_bounce"), names)).toBe(
       "The vendor’s tracking had the ball before this winner landing out. The point may be an error by Ace instead.",
@@ -255,6 +262,7 @@ test.describe("mark copy", () => {
       second_serve_as_first: "Make it a second serve",
       shot_after_point_end: "Split here",
       serve_after_serve_in: "Split here",
+      first_serve_after_let: "Make it a first serve",
       serves_from_both_sides: "Split here",
       groundstroke_at_net: "Make it a volley",
     });

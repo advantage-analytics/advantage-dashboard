@@ -6,7 +6,7 @@ import { useMatchData } from "@/components/dashboard/matches/match-data-provider
 import { useMatchReport } from "@/components/dashboard/matches/match-detail/match-report-context";
 import {
   useBallPathsRoute,
-  useLobShotKeys,
+  useLobShotKeysLoad,
 } from "@/components/dashboard/matches/match-detail/film/use-ball-paths";
 
 /**
@@ -28,6 +28,14 @@ import {
  */
 const LobKeysContext = createContext<ReadonlySet<number> | null>(null);
 
+/**
+ * Whether this view is known to have no lobs to read (`useLobShotKeysLoad`'s
+ * `absent`): not an Advantage Intelligence match, a mount that may not read
+ * the file, or a file that never came. `false` while the file is loading and
+ * with no provider, so nothing is hidden on a guess.
+ */
+const LobDataAbsentContext = createContext(false);
+
 export function StatisticsLobKeysProvider({
   children,
 }: {
@@ -36,15 +44,24 @@ export function StatisticsLobKeysProvider({
   const { match } = useMatchData();
   const { meta } = useMatchReport();
   const route = useBallPathsRoute(meta.readOnly);
-  const lobKeys = useLobShotKeys({
+  const { keys, absent } = useLobShotKeysLoad({
     matchId: match.id,
     enabled: meta.isDerived && route.allowed,
     endpoint: route.endpoint,
   });
-  return <LobKeysContext value={lobKeys}>{children}</LobKeysContext>;
+  return (
+    <LobKeysContext value={keys}>
+      <LobDataAbsentContext value={absent}>{children}</LobDataAbsentContext>
+    </LobKeysContext>
+  );
 }
 
 /** The Statistics view's lob keys, or `null` (see the header). */
 export function useStatisticsLobKeys(): ReadonlySet<number> | null {
   return use(LobKeysContext);
+}
+
+/** Whether this view is known to have no lob data (see the context). */
+export function useStatisticsLobDataAbsent(): boolean {
+  return use(LobDataAbsentContext);
 }

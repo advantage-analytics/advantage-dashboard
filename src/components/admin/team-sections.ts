@@ -4,8 +4,8 @@
  * The page is one full-width column (`TeamDetail.dc.html`, 2026-11-12):
  * header, Details, People, Latest matches, then the Activity log (T21 — on the
  * page itself, no longer a view of its own). There is no pill row and no rail
- * any more. The cards the artboard has no place for — Schedule, the Pilot and
- * per-member Usage cards, Contacts — are kept behind `?view=` rather than
+ * any more. The cards the artboard has no place for — Schedule, the Pilot,
+ * Plan and per-member Usage cards, Contacts — are kept behind `?view=` rather than
  * deleted (`Add hours` → usage).
  *
  * `next.config.ts` still redirects the five old sub-routes
@@ -17,7 +17,8 @@
  */
 
 /** A card the page can render on its own behind a `?view=`. */
-export type TeamCardId = "people" | "contacts" | "schedule" | "pilot" | "usage";
+export type TeamCardId =
+  "people" | "contacts" | "schedule" | "pilot" | "plan" | "usage";
 
 export type TeamViewId = "overview" | "people" | "schedule" | "usage";
 
@@ -42,7 +43,9 @@ export const TEAM_VIEWS: readonly TeamView[] = [
     cards: ["people", "contacts"],
   },
   { id: "schedule", label: "Schedule & results", cards: ["schedule"] },
-  { id: "usage", label: "Usage", cards: ["pilot", "usage"] },
+  // The season plan sits beside the pilot it replaces: plan, pilot and hours
+  // are managed in this one view.
+  { id: "usage", label: "Usage", cards: ["pilot", "plan", "usage"] },
 ];
 
 /** `?view=` → a known view, or the default for anything missing or unknown. */

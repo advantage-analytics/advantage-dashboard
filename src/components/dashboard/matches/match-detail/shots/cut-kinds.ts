@@ -36,6 +36,11 @@ export function marksAreShots(cut: Cut): boolean {
   return cut === "rallyPlacement" || cut === "rallyPosition";
 }
 
+/** The return cuts: Returns is one chart drawn as Placement or Contact. */
+export function isReturnCut(cut: Cut | null): boolean {
+  return cut === "returnPlacement" || cut === "returnContact";
+}
+
 /** Which half a cut's bands describe — `null` for Serve (service boxes, no
  * bands) and Errors (shares of the errors, not points won per band). */
 export function bandKindFor(cut: Cut): "depth" | "contact" | null {

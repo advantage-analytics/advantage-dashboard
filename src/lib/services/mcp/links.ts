@@ -61,7 +61,13 @@ export const VISUALIZATION_CUT_NAMES = keysOf(VISUALIZATION_CUTS);
 
 export const VISUALIZATION_CHARTS = ["scatter", "zones", "heat"] as const;
 
+/**
+ * `pressure_points` is the score a point was played at (30–30, 30–40, 40–30,
+ * deuce or an advantage: `isPressurePoint`), not a break, set or match point
+ * at another score.
+ */
 const PRESSURE = {
+  pressure_points: "pressure",
   break_points: "break",
   set_and_match_points: "setMatch",
 } as const;

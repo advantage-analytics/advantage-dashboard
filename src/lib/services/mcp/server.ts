@@ -475,6 +475,13 @@ const UUID_PATTERN =
  */
 const UUID = () => z.string().regex(UUID_PATTERN, "must be a uuid");
 
+/**
+ * What "pressure" means in `open_visualization` and `find_points`: the score
+ * the point was played at (`isPressurePoint`, the app's one definition).
+ */
+const PRESSURE_POINTS_RULE =
+  "every point played at 30-30, 30-40, 40-30, deuce or an advantage, in either player's service game; no tiebreak point, and not a break, set or match point at another score.";
+
 const PROGRAM_ID = UUID()
   .optional()
   .describe(
@@ -1465,7 +1472,13 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           .max(3)
           .optional()
           .describe("serves only."),
-        pressure: z.array(z.enum(VISUALIZATION_PRESSURE)).max(2).optional(),
+        pressure: z
+          .array(z.enum(VISUALIZATION_PRESSURE))
+          .max(VISUALIZATION_PRESSURE.length)
+          .optional()
+          .describe(
+            `pressure_points is ${PRESSURE_POINTS_RULE} break_points and set_and_match_points are those points at whatever score. Either/or within the list.`,
+          ),
         result: z
           .array(z.enum(["won", "lost", "ace"]))
           .max(3)
@@ -1587,7 +1600,7 @@ export function createAskMcpServer(context: AskMcpContext): McpServer {
           .max(POINT_SITUATIONS.length)
           .optional()
           .describe(
-            "pressure is any break, set or match point. Either/or within the list.",
+            `pressure is ${PRESSURE_POINTS_RULE} break_point, set_point and match_point are those points at whatever score. Either/or within the list.`,
           ),
         server: z.enum(["me", "opponent"]).optional().describe("Who served."),
         court: z.enum(["deuce", "ad"]).optional(),

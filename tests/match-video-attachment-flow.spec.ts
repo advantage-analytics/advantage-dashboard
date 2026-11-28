@@ -130,6 +130,12 @@ test.beforeAll(async () => {
         resolve: {
           extensions: [".tsx", ".ts", ".jsx", ".js"],
           alias: {
+            // `track()` (src/lib/analytics.ts, via the cut's skip report)
+            // reads this; the real one reads `process.env`, which a plain
+            // bundle has no object for.
+            "@/lib/posthog-client$": resolve(
+              "tests/fixtures/posthog-client-off-mock.ts",
+            ),
             "@": resolve("src"),
             // The shell's Cancel is a `next/link`; the browser only needs an
             // anchor, and the real module drags the router in.
@@ -963,6 +969,55 @@ test("a cut that cannot be made uploads the original at the marked time", async 
   );
   expect((await savedEvents(page))[0].offsetSeconds).toBeCloseTo(0.5, 6);
   expect(state.discardCalls).toEqual([]);
+});
+
+test("a cut the browser cannot make records why the original went up", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=unsupported`,
+  });
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+
+  const skipEvents = await page.evaluate(
+    () => (window as unknown as AttachmentFlowHarnessWindow).skipEvents,
+  );
+  expect(skipEvents).toEqual([
+    {
+      event: "video_cut_skipped",
+      properties: {
+        surface: "attachment",
+        reason: "unsupported",
+        match_id: matchId,
+        job_id: null,
+        file_size_mb: expect.any(Number),
+        discarded_tracks: [
+          { type: "audio", codec: null, reason: "unknown_source_codec" },
+        ],
+        discarded_summary: "audio:unknown:unknown_source_codec",
+      },
+    },
+  ]);
+  // Ids, enums and a size: never the picked file's name.
+  expect(JSON.stringify(skipEvents)).not.toContain("h264-faststart");
+});
+
+test("a whole-clip window is the normal no-cut case and sends nothing", async ({
+  page,
+}) => {
+  const matchId = matchIdFor("ok");
+  await armAdd(page, matchId, "00:00:00.500", {
+    query: `${CUT_QUERY}&prepare=skip`,
+  });
+  await continueButton(page).click();
+  await expect(page.getByTestId("attachment-saved")).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => (window as unknown as AttachmentFlowHarnessWindow).skipEvents,
+    ),
+  ).toEqual([]);
 });
 
 test("a refused completion still discards the cut", async ({ page }) => {

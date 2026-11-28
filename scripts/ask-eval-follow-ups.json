@@ -1,0 +1,234 @@
+[
+  {
+    "q": "What am I doing right",
+    "want": "the measures furthest ahead of my averages",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "So what patterns should I keep going",
+    "after": 0,
+    "want": "my winning plays",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "note": "Live: the previous answer word for word."
+    }
+  },
+  {
+    "q": "I meant patterns of play",
+    "after": 1,
+    "want": "a correction: winning plays by stroke and direction",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "note": "Live: rally lengths instead."
+    }
+  },
+  {
+    "q": "I meant patterns of play like placement and direction",
+    "after": 2,
+    "want": "a second correction: plays by direction and placement",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["direction|serve_zone"],
+      "note": "Live: serve placement counts only."
+    }
+  },
+  {
+    "q": "Can I see it by first and second",
+    "after": 3,
+    "want": "the same placements split by first and second serve",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["direction|serve_zone"],
+      "note": "Live: a generic comparison of my matches."
+    }
+  },
+  {
+    "q": "I meant the graph by first and second serves placements",
+    "after": 4,
+    "want": "a correction: serve placement by first and second serve",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["direction|serve_zone"],
+      "note": "Live: answered on the second try."
+    }
+  },
+  {
+    "q": "Suggest what to work on based on my results from my match against Timofey Stepanov",
+    "matches": ["Timofey Stepanov"],
+    "want": "the review of that one match",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "How many errors did I have?",
+    "after": 6,
+    "want": "my errors in that match",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["match_id"],
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "What do I need to work on?",
+    "want": "the review",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "How about on average for each full set?",
+    "after": 8,
+    "want": "the same measures averaged per set",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["set_number"],
+      "note": "Live: a generic comparison."
+    }
+  },
+  {
+    "q": "What is my best play?",
+    "after": 9,
+    "want": "my winning plays",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "How about based on how many attempts?",
+    "after": 10,
+    "want": "the plays ranked by how often I hit them",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "What is my best serve placement",
+    "after": 11,
+    "want": "serve placements by points won",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["direction|serve_zone"],
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "And for each side?",
+    "after": 12,
+    "want": "the same, Deuce and Ad apart",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["court"],
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "What is the win percentage of each serve placement on each side?",
+    "after": 13,
+    "want": "points won by placement and side",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["court"],
+      "note": "Live: answered with no figures in the headline."
+    }
+  },
+  {
+    "q": "Make sure to show the placement",
+    "after": 14,
+    "want": "a correction: the same table with the placement named",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["direction|serve_zone"],
+      "note": "Live: a vague headline again."
+    }
+  },
+  {
+    "q": "What did I do right in this match?",
+    "matches": ["Riley Marsh"],
+    "want": "that match's strongest measures",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "How does this compare to my other matches",
+    "after": 16,
+    "want": "that match beside my others",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "How did my match against Timofey Stepanov go?",
+    "opponents": ["Timofey Stepanov"],
+    "want": "me against Timofey",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "What are my losing plays against them?",
+    "after": 18,
+    "want": "my losing plays against Timofey",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "sql": ["match_id\\s+in"],
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "Tell me how to beat this opponent",
+    "opponents": ["Timofey Stepanov"],
+    "want": "where points were won and lost against him",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "what did I do to win this match?",
+    "after": 20,
+    "want": "what won the match against him",
+    "expect": {
+      "error": "none",
+      "differs": true,
+      "note": "Live: answered."
+    }
+  },
+  {
+    "q": "What is my best strength",
+    "want": "my strongest measure",
+    "expect": {
+      "note": "Opens the conversation; scored only so the list stays well-formed."
+    }
+  },
+  {
+    "q": "What is my best strength",
+    "after": 22,
+    "want": "the same question again",
+    "expect": {
+      "error": "none",
+      "note": "Live: answered differently the second time."
+    }
+  }
+]

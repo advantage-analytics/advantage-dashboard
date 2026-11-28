@@ -76,6 +76,12 @@ export interface FileStepContentProps {
    * in place of "Nothing is uploading yet" — it says when, too.
    */
   notices?: string[];
+  /**
+   * The step's one-line hours note (`FileHoursNote`), or null when hours are
+   * not the news. It takes the grey strip's slot under the drop zone / file
+   * row, in place of "Nothing is uploading yet" — one grey strip per place.
+   */
+  hoursNote?: React.ReactNode;
   /** Probing a video, validating or reading an export. */
   busy: boolean;
   /** Why the file was refused. */
@@ -289,6 +295,7 @@ function FileStepContentImpl({
   warnings,
   notes = [],
   notices = [],
+  hoursNote = null,
   busy,
   error,
   parsingState,
@@ -464,6 +471,8 @@ function FileStepContentImpl({
               )}
             </div>
           )}
+
+          {hoursNote}
         </div>
       ) : (
         <div className="flex flex-col gap-3.5">
@@ -555,20 +564,23 @@ function FileStepContentImpl({
             </div>
           ))}
 
-          {isVideo && warnings.length === 0 && notices.length === 0 && (
-            /* The honest thing about timing: nothing has left the machine. */
-            <div className={noteStripCls}>
-              <Info
-                className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              <span>
-                Nothing is uploading yet. The upload starts when the match is
-                saved — trimming and details come first.
-              </span>
-            </div>
-          )}
+          {/* The step's one grey-strip slot: the hours note when hours are
+              the news, otherwise the idle note. */}
+          {hoursNote ??
+            (isVideo && warnings.length === 0 && notices.length === 0 && (
+              /* The honest thing about timing: nothing has left the machine. */
+              <div className={noteStripCls}>
+                <Info
+                  className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+                <span>
+                  Nothing is uploading yet. The upload starts when the match is
+                  saved — trimming and details come first.
+                </span>
+              </div>
+            ))}
 
           {parsingState.parseWarnings.map((w) => (
             <div key={w} className={warningStripCls}>

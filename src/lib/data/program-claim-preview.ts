@@ -11,11 +11,18 @@
  * link.
  */
 
+import { claimPreviewDescription } from "@/lib/billing/claim-copy";
+
 export interface ClaimPreviewInput {
   schoolName: string;
   /** "Men's" / "Women's", already through `teamLabel`. */
   teamLabel: string;
   status: "unclaimed" | "claim_pending" | "active" | "suspended";
+  /**
+   * `claimOnPlans()` for this program: plans have begun and it is on no
+   * running pilot. Absent reads as the pilot's wording, as before.
+   */
+  onPlans?: boolean;
 }
 
 export interface ClaimPreview {
@@ -40,7 +47,7 @@ export function claimPreview(input: ClaimPreviewInput): ClaimPreview {
       program,
       eyebrow: "Set up your program",
       title: `Set up ${program}`,
-      description: `Claim ${program} on Advantage: manage staff and roster access, control who sends video, and share a monthly analysis budget. Free through December 31, 2026.`,
+      description: claimPreviewDescription(program, input.onPlans === true),
     };
   }
 

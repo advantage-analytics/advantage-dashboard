@@ -10,13 +10,15 @@ import {
   useState,
   type LazyExoticComponent,
 } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { LightboxChunkPending } from "@/components/dashboard/loading/lightbox-pending";
 import { useVizState } from "@/components/dashboard/matches/match-detail/shots/use-viz-state";
 import { CUT_LABEL } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
 import {
   EMPTY_VIZ_FILTERS,
+  courtEndsControl,
+  drawnCut,
   type Chart,
   type Cut,
   type PlayerFilter,
@@ -27,12 +29,16 @@ import {
 import {
   courtFor,
   normalizeSeasonFilters,
+  parseMatchScope,
   withoutSeasonFilters,
   type SeasonFilters,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 import { ChartMenu } from "@/components/dashboard/matches/match-detail/shots/chart-menu";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
-import { canManageSavedView } from "@/lib/data/saved-views-logic";
+import {
+  canManageSavedView,
+  sharedViewTag,
+} from "@/lib/data/saved-views-logic";
 import type { ProgramRole } from "@/lib/workspace/types";
 import type { SeasonSavedViewActions } from "./use-season-saved-views";
 import type { LightboxSeasonFilters } from "@/components/dashboard/matches/match-detail/shots/lightbox-filters";
@@ -42,6 +48,7 @@ import {
   courtSignature,
   cutNoun,
   decodeStatRowDots,
+  matchScopeWords,
   optionCountKey,
   seasonAdvancedOptions,
   statPickKey,
@@ -303,6 +310,13 @@ export function SeasonVizLightbox({
   const { state, setState } = useVizState();
   const mounted = useMounted();
   const router = useRouter();
+  // The page's match scope (`?sres=` …), which a view opened on this page
+  // reads its matches under — the Save popover's Matches row names it.
+  const searchParams = useSearchParams();
+  const pageScope = useMemo(
+    () => parseMatchScope(new URLSearchParams(searchParams.toString())),
+    [searchParams],
+  );
 
   // Each mark's match and point, by mark id and by point id (a point id is
   // unique across matches, as a mark id is).
@@ -417,6 +431,9 @@ export function SeasonVizLightbox({
           errorSplitJudged,
           state.season,
         );
+  // The open view's Rename popover, held here so the share clash's "Rename"
+  // under the title can open it too.
+  const [renameOpen, setRenameOpen] = useState(false);
   const [opening, setOpening] = useState(() => ({
     // Which opening this is — the shell's `key`, so a chart or return-half
     // switch inside the card keeps the one dialog.
@@ -464,7 +481,13 @@ export function SeasonVizLightbox({
       ),
     )
       ? data
-      : emptyCourt(cut, state.chart, state.filters, data);
+      : // The court the chart draws, as the server will answer (`drawnCut`).
+        emptyCourt(
+          drawnCut(cut, state.filters),
+          state.chart,
+          state.filters,
+          data,
+        );
   const pending = court !== data;
 
   // The saved view the court IS (not one it was edited from), when the
@@ -478,13 +501,27 @@ export function SeasonVizLightbox({
         ) ?? null)
       : null;
 
+  // The saved view the court IS, whoever may manage it: its "Shared with
+  // team" / "Shared by …" tag shows to every reader.
+  const shownView =
+    state.viewId !== null
+      ? (saveView?.savedViews.find((v) => v.id === state.viewId) ?? null)
+      : null;
+
   const countWith = (patch: Partial<VizFilters>): number =>
     court.optionCounts[optionCountKey(patch)] ?? 0;
 
   function clearFilters() {
+    // The card's Matches row goes back to where it started — the PAGE's
+    // scope (`?sres=` / `?sopp=` / `?ssurf=` / `?sm=`, read from the URL
+    // now), which a card opened from the wall carries in — never to the
+    // whole season under a scoped page. No scope: the whole season.
     setState((prev) => ({
       ...withoutSeasonFilters(prev),
-      filters: court.clearFilters,
+      ...(pageScope ? { season: pageScope } : {}),
+      // Which ends the court draws is not a filter: Clear keeps the
+      // reader's Placement · Contact · Both, as `clearedFilters` does.
+      filters: { ...court.clearFilters, ends: prev.filters.ends ?? null },
       viewId: null,
     }));
   }
@@ -508,6 +545,11 @@ export function SeasonVizLightbox({
     setState((prev) => ({ ...prev, filters: next, viewId: null }));
   }
 
+  // The court's Placement · Contact · Both, on a chart with both ends: set
+  // against the chart cut, saved with a view, so a change edits an open view
+  // as a filter does.
+  const courtEnds = courtEndsControl(cut, state.filters, setState);
+
   function choosePlayer(player: PlayerFilter) {
     setState((prev) => ({
       ...prev,
@@ -527,6 +569,7 @@ export function SeasonVizLightbox({
         pending={pending}
         cut={court.cut}
         chart={court.chart}
+        courtEnds={courtEnds}
         filters={state.filters}
         result={court.result}
         stats={court.stats}
@@ -580,6 +623,8 @@ export function SeasonVizLightbox({
                       if (action.kind === "delete") close();
                       manage.run(action, openView);
                     }}
+                    renameOpen={renameOpen}
+                    onRenameOpenChange={setRenameOpen}
                   />
                 </Suspense>
               )
@@ -587,9 +632,23 @@ export function SeasonVizLightbox({
         }
         // A change to the open view the server refused: the wall's own line
         // is behind the scrim, so it is said here.
+        titleTag={
+          shownView !== null
+            ? (sharedViewTag(shownView) ?? undefined)
+            : undefined
+        }
         notice={
           openView !== null && manage?.status?.failed
             ? manage.status.text
+            : undefined
+        }
+        // Sharing met a shared view with the same name: Rename opens the
+        // popover under the title, as the ⋯ menu's row does.
+        noticeAction={
+          openView !== null &&
+          manage?.status?.failed &&
+          manage.status.renameFirst
+            ? { label: "Rename", onClick: () => setRenameOpen(true) }
             : undefined
         }
         subtitle={court.subtitle}
@@ -618,7 +677,9 @@ export function SeasonVizLightbox({
                 end: (
                   <Suspense fallback={<SaveAsViewPending />}>
                     <LazySaveAsViewButton
-                      cut={court.cut}
+                      // The chart, not the court drawn: Returns in
+                      // Contact saves as Returns with its ends.
+                      cut={cut}
                       chart={court.chart}
                       filters={state.filters}
                       savedViews={saveView.savedViews}
@@ -635,6 +696,10 @@ export function SeasonVizLightbox({
                           ? "The Matches filters are not part of a view."
                           : undefined
                       }
+                      matchScope={matchScopeWords(
+                        court.seasonOptions.matches,
+                        pageScope,
+                      )}
                     />
                   </Suspense>
                 ),

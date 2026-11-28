@@ -332,7 +332,9 @@ export async function restoreGhostRow(
  * two live strokes still after it were hit after the point, and go as
  * tombstones in this same call, with no click of their own (the other
  * exception in the console's file comment). Three or more are left for the
- * hint line's Remove or Split — more likely a second point in the rally. Read
+ * hint line's Remove or Split — more likely a second point in the rally. A
+ * first serve marked a fault, or a serve marked a let, takes the swings
+ * between it and the server's next serve the same way. Read
  * off the labeller's rows (`after`): with marks off a ghost is a stroke like
  * any other. Answers the rows with them gone, and what went.
  */

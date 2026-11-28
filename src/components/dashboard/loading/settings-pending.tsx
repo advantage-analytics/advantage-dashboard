@@ -16,7 +16,14 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { MATCH_VIDEOS_FOOTNOTE } from "@/components/dashboard/settings/match-videos-usage-card";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 import { MATCH_VIDEO_ACTIVE_LIMIT } from "@/lib/match-video/limits";
-import { planFacts } from "@/lib/user/plan";
+import { plansHaveBegun, plansOnSale } from "@/lib/billing/plans";
+import {
+  planHoursView,
+  planStandingFor,
+  plansApplyTo,
+} from "@/lib/billing/plan-copy";
+import { isUnlimitedCap } from "@/lib/data/usage-format";
+import { isPaidPlan, planFacts, planFor } from "@/lib/user/plan";
 import { capitalize, cn } from "@/lib/utils";
 import { teamLabel, uploadPolicyLabel } from "@/lib/workspace/types";
 
@@ -506,6 +513,60 @@ export function SettingsPlanPending() {
   const { active, viewer } = useWorkspace();
   const facts = planFacts(active, viewer);
 
+  // Plans on sale, or an account already on one: the two cards of
+  // `PlanSettings`, in every workspace. The plan is in the workspace context,
+  // so the Plan card draws the rows that plan gets before any request.
+  if (plansOnSale() || isPaidPlan(viewer.plan)) {
+    const paid = isPaidPlan(viewer.plan);
+    return (
+      <Column label="plan">
+        <SettingsCard className="gap-2">
+          <SettingsCardTitle
+            trailing={<Text className="text-[12px]">See usage ↗</Text>}
+          >
+            Video hours
+          </SettingsCardTitle>
+          <Text className="text-title-lg">4h 12m left this month</Text>
+          <Text className="text-[12px]">
+            {paid
+              ? "3h 12m of Player this month · Resets Feb 14"
+              : "No plan hours or extra hours yet"}
+          </Text>
+        </SettingsCard>
+        <SettingsCard>
+          <SettingsCardTitle className="mb-3">Plan</SettingsCardTitle>
+          <CardRow
+            label={planFor(viewer.plan).name}
+            description={
+              paid
+                ? "About 3 verified matches a month · 5 hours of match video"
+                : "Free for SwingVision users · 20 Ask questions a month"
+            }
+            control={
+              planFor(viewer.plan).id === "player-pro" ? null : (
+                <Button>
+                  {paid ? "Upgrade to Player Pro" : "Choose a plan"}
+                </Button>
+              )
+            }
+          />
+          <CardRow
+            label="Extra hours"
+            description="$35 an hour (about $60 per extra match) · Last 12 months · No plan needed"
+            control={<Button>Buy hours</Button>}
+          />
+          {paid && (
+            <CardRow
+              label="Billing"
+              description="Renews Feb 14 at $150"
+              control={<Button>Manage billing ↗</Button>}
+            />
+          )}
+        </SettingsCard>
+      </Column>
+    );
+  }
+
   if (active.kind !== "team") {
     return (
       <Column label="plan">
@@ -650,28 +711,83 @@ export function SettingsPreferencesPending() {
   );
 }
 
-/** Usage: your own meter, then one card per program you belong to. */
+/**
+ * Usage: your own meter, then — until January 1, 2027 — one card per program
+ * you belong to. Once plans apply to the viewer the personal card is the
+ * plan's: the same frame with the "This month" list, whose heading is known
+ * and whose rows are a typical two for a subscriber and none for Free.
+ */
 export function SettingsUsagePending() {
   const { active, available } = useWorkspace();
-  const teams = available
+  const personal =
+    available.find((workspace) => workspace.kind === "personal") ?? active;
+  const plans = plansApplyTo(personal);
+  const standing = plans ? planStandingFor(personal) : null;
+  const paid = isPaidPlan(personal.plan);
+  // After January 1 a team's hours are on its own page, not here.
+  const teams = (plansHaveBegun() ? [] : available)
     .filter((workspace) => workspace.kind === "team")
     .sort((a, b) => Number(b.id === active.id) - Number(a.id === active.id));
 
   return (
     <Column label="usage">
-      <SettingsCard className="gap-3 py-5">
-        <SettingsCardTitle
-          trailing={<Text className="mono text-[11px]">{SAMPLE.clock}</Text>}
-        >
-          Your analysis time
-        </SettingsCardTitle>
-        <Box className="h-1.5 w-full rounded-[3px]" />
-        <Text className="text-[11px]">Credits: none · Manage on Plan</Text>
-        <Text className="mt-0.5 border-t border-[var(--border-hairline)] pt-3 text-[11px]">
-          Personal uploads only · Free hours reset Nov 1 · Free through Dec 31,
-          2026
-        </Text>
-      </SettingsCard>
+      {standing ? (
+        <SettingsCard className="gap-3 py-5">
+          <SettingsCardTitle
+            trailing={<Text className="mono text-[11px]">4h 12m left</Text>}
+          >
+            Your analysis time
+          </SettingsCardTitle>
+          {!isUnlimitedCap(standing.capSeconds) && (
+            <Box className="h-1.5 w-full rounded-[3px]" />
+          )}
+          <Text className="text-[11px]">
+            {paid
+              ? `${standing.name}: 3h 12m of 5h this month · Extra: none · Manage on Plan`
+              : "Plan: none · Extra: none · Choose a plan on Plan"}
+          </Text>
+          <div className="flex flex-col border-t border-[var(--border-hairline)] pt-3">
+            <div className="flex items-baseline justify-between pb-1">
+              <span className="text-[12px] font-medium text-[var(--ink-900)]">
+                This month
+              </span>
+              <Text className="text-[11px]">
+                {paid ? "2 matches" : "Nothing analyzed yet"}
+              </Text>
+            </div>
+            {paid &&
+              [0, 1].map((i) => (
+                <div
+                  key={i}
+                  className="flex items-center border-b border-[var(--border-hairline)] py-2 last:border-b-0"
+                >
+                  <Text className="text-[12px]">v. {SAMPLE.shortName}</Text>
+                  <Text className="ml-2 text-[11px]">Jan 18</Text>
+                  <Text className="mono ml-auto text-[11px]">1:03</Text>
+                </div>
+              ))}
+          </div>
+          <Text className="mt-3.5 border-t border-[var(--border-hairline)] pt-3.5 text-[11px] leading-[1.5]">
+            {paid
+              ? `Personal uploads only · ${standing.name} hours reset Feb 14 · Extra hours are used after plan hours`
+              : `Personal uploads only · ${standing.name} plan`}
+          </Text>
+        </SettingsCard>
+      ) : (
+        <SettingsCard className="gap-3 py-5">
+          <SettingsCardTitle
+            trailing={<Text className="mono text-[11px]">{SAMPLE.clock}</Text>}
+          >
+            Your analysis time
+          </SettingsCardTitle>
+          <Box className="h-1.5 w-full rounded-[3px]" />
+          <Text className="text-[11px]">Credits: none · Manage on Plan</Text>
+          <Text className="mt-0.5 border-t border-[var(--border-hairline)] pt-3 text-[11px]">
+            Personal uploads only · Free hours reset Nov 1 · Free through Dec
+            31, 2026
+          </Text>
+        </SettingsCard>
+      )}
 
       {teams.map((team) => {
         const squad = teamLabel(team.team);
@@ -855,28 +971,76 @@ export function SettingsTeamDetailPending() {
   // A college owner picks Conference from the directory (a 34px select); a
   // club or high school, with no directory, types it (a 32px input).
   const conferenceIsSelect = isOwner && program?.orgType === "college";
+  // Figures wait on the ledger; which card it is does not.
+  const planHours =
+    program && plansHaveBegun()
+      ? planHoursView({
+          standing: planStandingFor(program),
+          usedSeconds: 0,
+          capSeconds: 0,
+        })
+      : null;
 
   return (
     <Column label="team">
-      {/* Program hours */}
-      <SettingsCard className="gap-3.5">
-        <div className="flex items-baseline gap-2.5">
-          <CardTitle>Program hours</CardTitle>
-          <span className="flex-1" />
-          <Text className="text-[11px]">Resets Oct 1 · in 18 days</Text>
-        </div>
-        <div className="flex flex-wrap items-baseline gap-2">
-          <Text className="text-title-lg">{SAMPLE.hours}</Text>
-          <Text className="text-[12px]">left of {SAMPLE.hours}</Text>
-        </div>
-        <Box className="h-1.5 w-full rounded-[3px]" />
-        <div className="flex items-center gap-2.5">
-          <Text className="text-[11px]">3h used · 4 matches · 3 people</Text>
-          <span className="flex-1" />
-          <Text className="text-[11px] font-medium">Breakdown by person</Text>
-          <Box className="size-[11px] rounded-[3px]" />
-        </div>
-      </SettingsCard>
+      {/* The program's hours: Plan & hours from January 1, 2027 — the state
+          is the workspace's own, so the card that will load is known. */}
+      {planHours ? (
+        <SettingsCard className="gap-3 bg-[var(--surface-card)]">
+          <SettingsCardTitle
+            trailing={<Text className="text-[11px]">{planHours.trailing}</Text>}
+          >
+            Plan &amp; hours
+          </SettingsCardTitle>
+          <div className="flex flex-wrap items-baseline gap-2">
+            <Text className="text-title-lg">
+              {planHours.kind === "none" ? planHours.figure : SAMPLE.hours}
+            </Text>
+            <Text className="text-[12px]">
+              {planHours.kind === "none"
+                ? planHours.sub
+                : `left of ${SAMPLE.hours} this month`}
+            </Text>
+          </div>
+          {planHours.kind === "none" ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button>{planHours.action}</Button>
+              <Text className="text-[11px]">{planHours.offer}</Text>
+            </div>
+          ) : (
+            <>
+              <Box className="h-1.5 w-full rounded-[3px]" />
+              <Text className="self-start text-[12px]">
+                Breakdown by person ›
+              </Text>
+            </>
+          )}
+          <Text className="mt-3.5 border-t border-[var(--border-hairline)] pt-3.5 text-[11px] leading-[1.5]">
+            {planHours.kind === "none"
+              ? planHours.footnote
+              : `${planHours.footnoteLead}${SUPPORT_EMAIL}.`}
+          </Text>
+        </SettingsCard>
+      ) : (
+        <SettingsCard className="gap-3.5">
+          <div className="flex items-baseline gap-2.5">
+            <CardTitle>Program hours</CardTitle>
+            <span className="flex-1" />
+            <Text className="text-[11px]">Resets Oct 1 · in 18 days</Text>
+          </div>
+          <div className="flex flex-wrap items-baseline gap-2">
+            <Text className="text-title-lg">{SAMPLE.hours}</Text>
+            <Text className="text-[12px]">left of {SAMPLE.hours}</Text>
+          </div>
+          <Box className="h-1.5 w-full rounded-[3px]" />
+          <div className="flex items-center gap-2.5">
+            <Text className="text-[11px]">3h used · 4 matches · 3 people</Text>
+            <span className="flex-1" />
+            <Text className="text-[11px] font-medium">Breakdown by person</Text>
+            <Box className="size-[11px] rounded-[3px]" />
+          </div>
+        </SettingsCard>
+      )}
 
       {/* Team identity */}
       {isStaff ? (

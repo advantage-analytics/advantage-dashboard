@@ -17,6 +17,7 @@ import {
   SavedViewsBand,
   type SavedViewRequest,
 } from "@/components/dashboard/matches/match-detail/shots/saved-views-band";
+import type { SavedViewActionFailure } from "@/components/dashboard/matches/match-detail/shots/saved-view-title-menu";
 import { VizBandsProvider } from "@/components/dashboard/matches/match-detail/shots/viz-bands-context";
 import { VizLobKeysProvider } from "@/components/dashboard/matches/match-detail/shots/viz-lob-keys";
 import { shotsWriteAccess } from "@/components/dashboard/matches/match-detail/shots/shots-write-access";
@@ -169,10 +170,9 @@ function ShotsTabBody() {
   const [viewRequest, setViewRequest] = useState<SavedViewRequest | null>(null);
 
   // A request the server refused: the open view says so itself.
-  const [viewFailure, setViewFailure] = useState<{
-    n: number;
-    message: string;
-  } | null>(null);
+  const [viewFailure, setViewFailure] = useState<SavedViewActionFailure | null>(
+    null,
+  );
 
   // Before anything else, so no URL can reach an empty court.
   if (points.length === 0) return <VizEmpty />;

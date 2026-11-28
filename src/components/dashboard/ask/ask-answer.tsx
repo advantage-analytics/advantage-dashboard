@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useId, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight, ChevronRight, Upload } from "lucide-react";
 import type { AskErrorCode } from "@/lib/services/ask/events";
@@ -11,7 +11,7 @@ import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
 import { PERSONAL_ASK_COPY, askCopy, type AskCopy } from "./ask-copy";
 import { sentences } from "./ask-sentences";
 import { AskFeedbackControl } from "./ask-feedback";
-import { AskSources } from "./ask-sources";
+import { AskSourceNote, AskSources } from "./ask-sources";
 import { AskShowMe } from "./ask-show";
 import type { AskAnswerState, AskFigure } from "./use-ask-stream";
 import { AskVisualBlock } from "./visuals/ask-visual";
@@ -314,10 +314,26 @@ function AnswerBody({
     .map((paragraph) => paragraph.trim())
     .filter(Boolean);
   const figures = answer.figures.slice(0, ASK_FIGURE_TILES);
+  // What the answer was computed from rides in the signature line; over
+  // several matches it opens the list below the line.
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const sourcesListId = useId();
+  const sources = answer.sources ?? [];
   const signature = (
     <p data-ask-signature="" className="text-micro max-w-[60ch]">
       {/* `text-micro` is unlayered and would beat a colour utility. */}
       <span style={{ color: "var(--ink-700)" }}>{ASK_SIGNATURE}</span>
+      {sources.length > 0 && (
+        <>
+          {" · "}
+          <AskSourceNote
+            matches={sources}
+            open={sourcesOpen}
+            onToggle={() => setSourcesOpen((open) => !open)}
+            listId={sourcesListId}
+          />
+        </>
+      )}
       {answer.noAdvice && ` · ${copy.noAdvice}`}
       {answer.coach && ` · ${copy.coach}`}
     </p>
@@ -439,29 +455,33 @@ function AnswerBody({
         </p>
       )}
 
-      {(answer.sources || answer.status === "done") && (
+      {answer.status === "done" && (
         <div data-ask-part="" style={part(3)} className="flex flex-col gap-3">
-          {answer.sources && <AskSources matches={answer.sources} />}
-          {answer.status === "done" && answer.answerId && (
+          {/* The one next step in view: into the film on these points. */}
+          {answer.answerId && (
             <AskShowMe answerId={answer.answerId} sources={answer.sources} />
           )}
-          {/* What to do with the answer, before who signed it: the sign-off
-              closes the answer, so the next steps never float under it. */}
-          {answer.status === "done" && actions}
-          {/* Provenance: who signed it and how it landed, one tight pair,
-              so the signature reads as the rating's caption rather than a
-              stray line between the sources and the thumbs. */}
-          {answer.status === "done" && (
-            <div data-ask-provenance="">
-              {onRate ? (
-                <AskFeedbackControl
-                  feedback={answer.feedback}
-                  onRate={onRate}
-                  lead={signature}
-                />
-              ) : (
-                signature
-              )}
+          {/* Provenance and everything else on one line: who signed it, what
+              it was computed from, the rating, and the ⋯ menu that holds the
+              rest of what can be done with the answer. */}
+          <div data-ask-provenance="">
+            {onRate ? (
+              <AskFeedbackControl
+                feedback={answer.feedback}
+                onRate={onRate}
+                lead={signature}
+                trailing={actions}
+              />
+            ) : (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {signature}
+                {actions}
+              </div>
+            )}
+          </div>
+          {sources.length > 1 && (
+            <div id={sourcesListId} hidden={!sourcesOpen}>
+              <AskSources matches={sources} />
             </div>
           )}
         </div>
