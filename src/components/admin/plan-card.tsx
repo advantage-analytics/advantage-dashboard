@@ -26,6 +26,7 @@ import {
   planOptions,
   rosterCapValue,
   savedPlanLabel,
+  seatsAfterClear,
   seasonWindowLabel,
   withTerm,
   type PlanDraft,
@@ -33,6 +34,7 @@ import {
 } from "@/lib/billing/plan-draft";
 import {
   PLAN_TERM_LABELS,
+  rosterCapLabel,
   seasonAllowance,
   usd,
   type PlanTerm,
@@ -337,6 +339,11 @@ function PlanForm({
             programId={programId}
             programName={programName}
             planLabel={savedPlanLabel(saved)}
+            seatsAfter={
+              seatsAfterClear(saved.planId, seats) === seats
+                ? null
+                : seatsAfterClear(saved.planId, seats)
+            }
             disabled={pending}
             onRemoved={() => router.refresh()}
           />
@@ -359,11 +366,14 @@ function PlanForm({
  * `admin_clear_program_plan` deletes the row and logs what it was. It does
  * not move the pilot's end date back, and the dialog says so, because an
  * admin removing a plan saved by mistake will expect the pilot to return.
+ * It does take back the seats the plan gave (Elite's 35 go back to 25), and
+ * the dialog says that too, only when they will move.
  */
 function RemovePlan({
   programId,
   programName,
   planLabel,
+  seatsAfter,
   disabled,
   onRemoved,
 }: {
@@ -371,6 +381,8 @@ function RemovePlan({
   programName: string;
   /** `Program · Spring 2027` — what is being removed. */
   planLabel: string;
+  /** `seatsAfterClear()` when removing the plan moves the team's seats; else null. */
+  seatsAfter: number | null;
   disabled: boolean;
   onRemoved: () => void;
 }) {
@@ -423,7 +435,10 @@ function RemovePlan({
           <p>
             <Em>{programName}</Em> comes off <Em>{planLabel}</Em>, along with
             its dates and the invoice or PO written here. Its matches and
-            members are not touched.
+            members are not touched
+            {seatsAfter !== null &&
+              `, and its roster limit goes back to ${rosterCapLabel(seatsAfter)}`}
+            .
           </p>
           <p>
             The pilot does not come back. Its end date stays where saving the

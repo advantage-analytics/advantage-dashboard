@@ -13,6 +13,7 @@ import {
   savedPlanLabel,
   seasonDatesFor,
   seasonWindowLabel,
+  seatsAfterClear,
   seatsAfterPlan,
   setProgramPlanArgs,
   withTerm,
@@ -288,6 +289,22 @@ test.describe("what the card prints", () => {
     expect(seatsAfterPlan("starter", "elite", 40)).toBe(40);
     expect(seatsAfterPlan("elite", "elite", 25)).toBe(25);
     expect(seatsAfterPlan("elite", "starter", 30)).toBe(30);
+  });
+
+  test("seats after the plan is removed: the default, unless they were set by hand", () => {
+    // Seats the plan gave go back to the column default.
+    expect(seatsAfterClear("elite", 35)).toBe(25);
+    expect(seatsAfterClear("starter", 25)).toBe(25);
+    expect(seatsAfterClear("program", 25)).toBe(25);
+    // Set by hand, above the cap or below it: kept.
+    expect(seatsAfterClear("elite", 40)).toBe(40);
+    expect(seatsAfterClear("elite", 25)).toBe(25);
+    expect(seatsAfterClear("starter", 35)).toBe(35);
+    expect(seatsAfterClear("program", 12)).toBe(12);
+    // And what a save then does: an ex-Elite team follows its next plan.
+    expect(seatsAfterPlan("starter", null, seatsAfterClear("elite", 35))).toBe(
+      25,
+    );
   });
 
   test("the Roster row: the chosen plan's cap, and seats a save will leave alone", () => {

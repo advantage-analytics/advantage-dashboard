@@ -18,14 +18,18 @@
  *  - on a plan with seats at that plan's cap: the new cap, raising 25 to 35
  *    and lowering 35 to 25;
  *  - on a plan with seats set by hand: kept, through every later save;
- *  - clearing a plan leaves seats alone, and the next save measures them
- *    against the default again;
- *  - a team with more players than the cap takes the cap and keeps everyone;
+ *  - clearing a plan takes back the seats it gave: seats at the cleared
+ *    plan's cap go back to the default 25 (so the next save follows its plan
+ *    again), seats set by hand are kept, and the move rides on the
+ *    `plan.cleared` audit row as `details.seats = {from, to}`, only when
+ *    seats moved;
+ *  - a team with more players than the cap takes the cap and keeps everyone,
+ *    on a save and on a clear;
  *  - the change rides on the save's `plan.set` audit row as
  *    `details.seats = {from, to}`, only when seats moved; no `seats.changed`
  *    row is written; a save that changes nothing logs nothing;
  *  - a team nobody saves a plan for is not touched by the migration;
- *  - only an admin can call it, and nobody signed out can.
+ *  - only an admin can call either function, and nobody signed out can.
  *
  * Not proven: that a full team's next add is refused (that is
  * `add_program_player` and its siblings on live, which this fixture does not
@@ -322,23 +326,90 @@ test("on a plan, seats set by hand: kept through every later save", async () => 
 
 // ── clearing ────────────────────────────────────────────────────────────────
 
-test("clearing a plan leaves seats as they are", async () => {
+/** Each `plan.cleared` row's `details`, oldest first. */
+const clearTrail = async (db, programId) =>
+  (
+    await db.query(
+      `select details from public.program_audit_log
+        where program_id = $1 and action = 'plan.cleared' order by id`,
+      [programId],
+    )
+  ).rows.map((row) => row.details);
+
+test("clearing Elite takes its 35 seats back to 25, and the next plan is followed again", async () => {
   const db = await boot();
   await setPlan(db, FRESH, "elite");
-  await clearPlan(db, FRESH);
   assert.equal(await seatsOf(db, FRESH), 35);
-  const { rows } = await db.query(
-    `select details ? 'seats' as has_seats from public.program_audit_log
-      where program_id = $1 and action = 'plan.cleared'`,
+  await clearPlan(db, FRESH);
+  assert.equal(await seatsOf(db, FRESH), 25);
+
+  // The move is on the clear's own audit row, beside what it already carried.
+  const trail = await clearTrail(db, FRESH);
+  assert.equal(trail.length, 1);
+  assert.deepEqual(trail[0].seats, { from: 35, to: 25 });
+  assert.equal(trail[0].from.plan_id, "elite");
+  assert.equal(trail[0].from.rush_included, 0);
+  assert.equal(trail[0].to, null);
+  assert.equal(trail[0].by_admin, true);
+  const other = await db.query(
+    `select count(*)::int as n from public.program_audit_log
+      where program_id = $1 and action not in ('plan.set', 'plan.cleared')`,
     [FRESH],
   );
-  assert.deepEqual(rows, [{ has_seats: false }]);
+  assert.equal(other.rows[0].n, 0);
 
-  // With no plan again, 35 is not the default: the next save reads it as set
-  // by hand and keeps it.
+  // Back at the default, the team is not read as hand-set: Starter gives 25
+  // (it used to keep 35 for good), and Elite would give 35 again.
   await setPlan(db, FRESH, "starter");
+  assert.equal(await seatsOf(db, FRESH), 25);
+  await setPlan(db, FRESH, "elite");
   assert.equal(await seatsOf(db, FRESH), 35);
+
+  // Clearing a team with no plan changes nothing and logs nothing.
+  await clearPlan(db, FRESH);
+  await clearPlan(db, FRESH);
+  assert.equal(await seatsOf(db, FRESH), 25);
+  assert.equal((await clearTrail(db, FRESH)).length, 2);
   await db.close();
+});
+
+test("clearing a plan keeps seats that were set by hand", async () => {
+  const db = await boot();
+  // Elite, then a negotiated 40.
+  await setPlan(db, FRESH, "elite");
+  await handSet(db, FRESH, 40);
+  await clearPlan(db, FRESH);
+  assert.equal(await seatsOf(db, FRESH), 40);
+
+  // Hand-set below the cap, and hand-set before the plan was ever saved.
+  await setPlan(db, PILOT, "elite");
+  await handSet(db, PILOT, 30);
+  await clearPlan(db, PILOT);
+  assert.equal(await seatsOf(db, PILOT), 30);
+  await setPlan(db, SMALL, "starter");
+  await clearPlan(db, SMALL);
+  assert.equal(await seatsOf(db, SMALL), 12);
+
+  for (const id of [FRESH, PILOT, SMALL]) {
+    const trail = await clearTrail(db, id);
+    assert.equal(trail.length, 1);
+    assert.equal("seats" in trail[0], false);
+  }
+  await db.close();
+});
+
+test("clearing Starter or Program at 25 leaves 25, with no seats entry on the audit row", async () => {
+  for (const plan of ["starter", "program"]) {
+    const db = await boot();
+    await setPlan(db, FRESH, plan);
+    await clearPlan(db, FRESH);
+    assert.equal(await seatsOf(db, FRESH), 25, plan);
+    const trail = await clearTrail(db, FRESH);
+    assert.equal(trail.length, 1);
+    assert.equal("seats" in trail[0], false);
+    assert.equal(trail[0].from.plan_id, plan);
+    await db.close();
+  }
 });
 
 // ── a team already over the cap ─────────────────────────────────────────────
@@ -361,6 +432,15 @@ test("more players than the cap: seats take the cap and nobody is removed", asyn
   // is what seats below usage already mean (only the next add is refused).
   assert.equal(await seatsOf(db, FULL), 25);
   assert.equal(await players(), 30);
+
+  // The same on a clear: Elite's 35 go back to 25 under thirty players, and
+  // every one of them stays.
+  await setPlan(db, FULL, "elite");
+  assert.equal(await seatsOf(db, FULL), 35);
+  await clearPlan(db, FULL);
+  assert.equal(await seatsOf(db, FULL), 25);
+  assert.equal(await players(), 30);
+  assert.deepEqual((await clearTrail(db, FULL))[0].seats, { from: 35, to: 25 });
   await db.close();
 });
 
@@ -437,17 +517,27 @@ test("grants are unchanged: admins only, and nobody signed out", async () => {
   const db = await boot();
   const fn =
     "public.admin_set_program_plan(uuid, text, text, date, date, text)";
-  const { rows } = await db.query(
-    `select has_function_privilege('anon', $1, 'EXECUTE') as anon,
-            has_function_privilege('authenticated', $1, 'EXECUTE') as authenticated,
-            has_function_privilege('service_role', $1, 'EXECUTE') as service_role`,
-    [fn],
-  );
-  assert.deepEqual(rows[0], {
-    anon: false,
-    authenticated: true,
-    service_role: true,
-  });
+  for (const name of [fn, "public.admin_clear_program_plan(uuid)"]) {
+    const { rows } = await db.query(
+      `select has_function_privilege('anon', $1, 'EXECUTE') as anon,
+              has_function_privilege('authenticated', $1, 'EXECUTE') as authenticated,
+              has_function_privilege('service_role', $1, 'EXECUTE') as service_role,
+              p.prosecdef as definer, p.proconfig as config
+         from pg_proc p where p.oid = $1::regprocedure`,
+      [name],
+    );
+    assert.deepEqual(
+      rows[0],
+      {
+        anon: false,
+        authenticated: true,
+        service_role: true,
+        definer: true,
+        config: ['search_path=""'],
+      },
+      name,
+    );
+  }
 
   // A coach is signed in and still not an admin: refused, seats untouched.
   await rejectsWith(
@@ -469,6 +559,22 @@ test("grants are unchanged: admins only, and nobody signed out", async () => {
     "42501",
   );
   assert.equal(await seatsOf(db, FRESH), 25);
+
+  // The same gate on a clear: the plan stays, and so do its seats.
+  await setPlan(db, FRESH, "elite");
+  for (const [role, userId] of [
+    ["authenticated", COACH],
+    ["anon", null],
+  ]) {
+    await rejectsWith(
+      as(db, role, userId, () =>
+        db.query("select public.admin_clear_program_plan($1)", [FRESH]),
+      ),
+      "42501",
+    );
+  }
+  assert.equal(await seatsOf(db, FRESH), 35);
+  assert.equal((await clearTrail(db, FRESH)).length, 0);
 
   // No client can write the column itself.
   await rejectsWith(

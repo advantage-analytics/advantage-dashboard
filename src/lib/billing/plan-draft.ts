@@ -250,6 +250,22 @@ export function seatsAfterPlan(
 }
 
 /**
+ * The seats a team holds once its plan is removed: `admin_clear_program_plan`'s
+ * rule, held here so the Remove plan dialog can say when the roster shrinks.
+ *
+ * Seats the plan gave (seats equal to its cap) go back to the column default;
+ * seats set by hand are left alone. So only Elite at 35 moves.
+ */
+export function seatsAfterClear(
+  savedPlanId: CollegePlanId,
+  seats: number,
+): number {
+  return seats === collegePlan(savedPlanId).rosterCap
+    ? DEFAULT_ROSTER_SEATS
+    : seats;
+}
+
+/**
  * The Plan card's Roster row for the plan chosen in the menu: `35 people`,
  * or `35 people · this team is set to 40` when the team's seats were set by
  * hand and saving will leave them where they are. `seats` is null when the

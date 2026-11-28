@@ -3,12 +3,17 @@
 -- NOT YET APPLIED TO THE LIVE DATABASE. Apply it AFTER
 -- 20261127060000_plans_2027_final_pricing (it replaces that migration's
 -- `admin_set_program_plan`; the first block below refuses to run without what
--- that body stands on), and BEFORE the first team is put on Elite: see
+-- that body stands on; it also replaces the plan-model migration's
+-- `admin_clear_program_plan`), and BEFORE the first team is put on Elite: see
 -- "Teams already on a plan" below.
 --
 -- PROVENANCE. Read from the LIVE database on 2026-11-27 (`pg_get_functiondef`,
 -- `information_schema.columns`, `pg_constraint`), not from this folder:
 --   - `admin_set_program_plan` is byte-for-byte the final-pricing body;
+--   - `admin_clear_program_plan` is byte-for-byte the body of
+--     20261126060000_plans_2027_plan_model (no later migration replaced it):
+--     security definer, `search_path = ''`, gated on `is_admin()`, executable
+--     by `authenticated` and `service_role` and not by `anon`;
 --   - `programs.seats` is `integer not null default 25`, checked `seats >= 1`.
 --     All 1,958 programs hold 25. Only `service_role` and the owner may write
 --     the column: NO function writes it, so no admin screen changes seats
@@ -53,16 +58,36 @@
 --           way `details.pilot_ends_on` already rides on that row). No
 --           `seats.changed` row is written.
 --
---   Nothing else. `admin_clear_program_plan` is not touched: clearing a plan
---   leaves seats as they are. A pilot team, and a team with no plan, keeps
---   its seats until a plan is saved for it.
+--   admin_clear_program_plan
+--           The plan-model body with one addition: clearing a plan takes back
+--           the seats that plan gave, in the same transaction and under the
+--           row lock the function already takes.
+--
+--           THE RULE. When the team's seats EQUAL the cap of the plan being
+--           cleared, they go back to the column default, 25. Seats that
+--           differ from that cap were set by hand and are left alone. So:
+--             Elite, seats 35             -> 25
+--             Elite, seats hand-set to 40 -> kept
+--             Starter or Program, seats 25 -> 25 (nothing moves)
+--           Without this a team that came off Elite kept 35 seats with no
+--           plan, and the next save, measuring 35 against the default 25,
+--           read them as hand-set and kept them: Starter with 35 seats for
+--           good. As on a save, nobody is removed: a team with more players
+--           than 25 keeps them all and only the next add is refused.
+--
+--           The change is recorded on the clear's own `plan.cleared` audit
+--           row as `details.seats = {from, to}`, present only when seats
+--           moved. No `seats.changed` row is written.
+--
+--   Nothing else. A pilot team, and a team with no plan, keeps its seats
+--   until a plan is saved for it.
 --
 -- TEAMS ALREADY ON A PLAN. This migration moves no row. A team put on Elite
 -- BEFORE it is applied sits on Elite with 25 seats, which the rule reads as
 -- hand-set and keeps. Live has no plan rows today; if one exists by the time
 -- this is applied, set that team's seats once by hand.
 --
--- RE-RUNNABLE. One `create or replace`, idempotent grants, and assertions
+-- RE-RUNNABLE. Two `create or replace`, idempotent grants, and assertions
 -- that only read. No DROP.
 
 -- ── this stands on the final-pricing migration and the seat model ──────────
@@ -281,13 +306,113 @@ begin
 end;
 $function$;
 
+-- ── admin_clear_program_plan: seats the plan gave go back ──────────────────
+--
+-- The body of 20261126060000_plans_2027_plan_model (as live holds it), plus
+-- the roster cap: three declarations, `p.seats` read in the lock the function
+-- already took (was `perform 1`), the cap lookup and rule, `details.seats`,
+-- and the last UPDATE.
+
+create or replace function public.admin_clear_program_plan(
+  p_program_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_cur     record;
+  v_details jsonb;
+  v_cap     integer;
+  v_seats   integer;
+  v_to      integer;
+begin
+  if not public.is_admin() then
+    raise exception 'not authorized' using errcode = '42501';
+  end if;
+
+  if p_program_id is null then
+    raise exception 'Program id is required.' using errcode = '22023';
+  end if;
+
+  select p.seats
+    into v_seats
+    from public.programs p
+   where p.id = p_program_id
+     for no key update;
+
+  if not found then
+    raise exception 'Program % not found', p_program_id using errcode = 'P0002';
+  end if;
+
+  select pp.plan_id, pp.plan_term, pp.starts_on, pp.ends_on,
+         pp.rush_included, pp.note
+    into v_cur
+    from public.program_plans pp
+   where pp.program_id = p_program_id;
+
+  if not found then
+    return;
+  end if;
+
+  -- The roster caps src/lib/billing/plans.ts holds as `rosterCap`, the list
+  -- `admin_set_program_plan` carries. tests/billing-plans.spec.ts fails when
+  -- either disagrees with the module.
+  select max(c.cap) filter (where c.plan_id = v_cur.plan_id)
+    into v_cap
+    from (values ('starter', 25), ('program', 25), ('elite', 35)) as c (plan_id, cap);
+
+  -- Seats the plan gave go back to the `programs.seats` column default (25).
+  -- Seats that are not the cleared plan's cap were set by hand: left alone.
+  v_to := case when v_seats = v_cap then 25 else v_seats end;
+
+  v_details := jsonb_build_object(
+    'from', jsonb_build_object(
+      'plan_id',       v_cur.plan_id,
+      'term',          v_cur.plan_term,
+      'starts_on',     v_cur.starts_on,
+      'ends_on',       v_cur.ends_on,
+      'rush_included', v_cur.rush_included,
+      'note',          v_cur.note
+    ),
+    'to',       null,
+    'by_admin', true
+  );
+
+  if v_to <> v_seats then
+    v_details := v_details || jsonb_build_object(
+      'seats',
+      jsonb_build_object('from', v_seats, 'to', v_to)
+    );
+  end if;
+
+  insert into public.program_audit_log (program_id, actor_user_id, action, subject_id, details)
+  values (p_program_id, (select auth.uid()), 'plan.cleared', null, v_details);
+
+  delete from public.program_plans pp where pp.program_id = p_program_id;
+
+  -- Nobody is removed: a team with more players than the default keeps
+  -- everyone, and only the next add, invite or join is refused.
+  if v_to <> v_seats then
+    update public.programs
+       set seats      = v_to,
+           updated_at = now()
+     where id = p_program_id;
+  end if;
+end;
+$function$;
+
 -- ── grants ─────────────────────────────────────────────────────────────────
 --
--- `create or replace` keeps the grants the function has; they are spelled
+-- `create or replace` keeps the grants each function has; they are spelled
 -- again so this file is right on its own.
 
 revoke execute on function public.admin_set_program_plan(uuid, text, text, date, date, text) from public, anon;
 grant  execute on function public.admin_set_program_plan(uuid, text, text, date, date, text) to authenticated, service_role;
+
+revoke execute on function public.admin_clear_program_plan(uuid) from public, anon;
+grant  execute on function public.admin_clear_program_plan(uuid) to authenticated, service_role;
 
 -- ── Assertions: fail the migration rather than leave it half true ──────────
 
@@ -295,6 +420,10 @@ do $$
 declare
   v_fn  text := 'public.admin_set_program_plan(uuid, text, text, date, date, text)';
   v_src text;
+  v_clear     text := 'public.admin_clear_program_plan(uuid)';
+  v_clear_src text;
+  v_clear_def boolean;
+  v_clear_cfg text[];
 begin
   select p.prosrc into v_src from pg_proc p where p.oid = v_fn::regprocedure;
 
@@ -315,6 +444,32 @@ begin
   end if;
   if not has_function_privilege('authenticated', v_fn, 'EXECUTE') then
     raise exception '% is not executable by a signed-in admin', v_fn;
+  end if;
+
+  -- admin_clear_program_plan: the same caps, the same default, seats written,
+  -- and the security model live has (definer, empty search_path, admin gate).
+  select p.prosrc, p.prosecdef, p.proconfig
+    into v_clear_src, v_clear_def, v_clear_cfg
+    from pg_proc p where p.oid = v_clear::regprocedure;
+
+  if strpos(v_clear_src, '(''starter'', 25), (''program'', 25), (''elite'', 35)') = 0
+     or strpos(v_clear_src, 'case when v_seats = v_cap then 25 else v_seats end') = 0
+     or strpos(v_clear_src, 'set seats      = v_to') = 0 then
+    raise exception 'plans_2027_roster_caps: admin_clear_program_plan does not take back the plan''s seats';
+  end if;
+
+  if not v_clear_def
+     or v_clear_cfg is distinct from array['search_path=""']
+     or strpos(v_clear_src, 'if not public.is_admin() then') = 0 then
+    raise exception 'plans_2027_roster_caps: admin_clear_program_plan lost its security model';
+  end if;
+
+  if has_function_privilege('anon', v_clear, 'EXECUTE') then
+    raise exception '% is executable signed out', v_clear;
+  end if;
+  if not has_function_privilege('authenticated', v_clear, 'EXECUTE')
+     or not has_function_privilege('service_role', v_clear, 'EXECUTE') then
+    raise exception '% is not executable by a signed-in admin', v_clear;
   end if;
 end;
 $$;

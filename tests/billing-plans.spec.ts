@@ -288,7 +288,8 @@ test.describe("college programs", () => {
   });
 
   test("the migration sets the same roster caps the module holds", () => {
-    // The latest definition of `admin_set_program_plan`.
+    // The latest definition of `admin_set_program_plan` and of
+    // `admin_clear_program_plan`.
     const sql = readFileSync(
       path.join(
         process.cwd(),
@@ -296,20 +297,28 @@ test.describe("college programs", () => {
       ),
       "utf8",
     );
-    // The function's own cap list: one `('plan', n)` pair per plan, no more.
-    const list = sql.match(/from \(values ([^\n]+)\) as c \(plan_id, cap\);/);
-    expect(list, "the cap list in admin_set_program_plan").not.toBeNull();
-    const pairs = [...list![1].matchAll(/\('([a-z_]+)', (\d+)\)/g)].map(
-      ([, id, cap]) => [id, Number(cap)],
-    );
-    expect(pairs).toEqual(
-      COLLEGE_PLANS.map((plan) => [plan.id, plan.rosterCap]),
-    );
+    // Each function's own cap list: one `('plan', n)` pair per plan, no more.
+    const lists = [
+      ...sql.matchAll(/from \(values ([^\n]+)\) as c \(plan_id, cap\);/g),
+    ];
+    expect(lists, "one cap list in each of the two functions").toHaveLength(2);
+    for (const list of lists) {
+      const pairs = [...list[1].matchAll(/\('([a-z_]+)', (\d+)\)/g)].map(
+        ([, id, cap]) => [id, Number(cap)],
+      );
+      expect(pairs).toEqual(
+        COLLEGE_PLANS.map((plan) => [plan.id, plan.rosterCap]),
+      );
+    }
     // A team with no plan is measured against the column default.
     expect(sql).toContain(
       `coalesce(max(c.cap) filter (where v_has_plan and c.plan_id = v_cur.plan_id), ${DEFAULT_ROSTER_SEATS})`,
     );
     expect(sql).toContain(`and column_default = '${DEFAULT_ROSTER_SEATS}'`);
+    // Clearing a plan sends the seats it gave back to that same default.
+    expect(sql).toContain(
+      `v_to := case when v_seats = v_cap then ${DEFAULT_ROSTER_SEATS} else v_seats end;`,
+    );
     // And it still stamps the rush counts, as the final-pricing body does.
     for (const plan of COLLEGE_PLANS) {
       expect(sql).toMatch(
