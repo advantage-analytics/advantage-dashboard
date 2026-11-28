@@ -24,6 +24,7 @@ import {
   planDraftFrom,
   planDraftProblem,
   planOptions,
+  rosterCapValue,
   savedPlanLabel,
   seasonWindowLabel,
   withTerm,
@@ -86,12 +87,15 @@ export function PlanCard({
   programId,
   programName,
   plan,
+  seats,
 }: {
   programId: string;
   /** Named in the Remove plan confirm, so the question has an object. */
   programName: string;
   /** Null when the team is not on a plan. */
   plan: AdminTeamPlan | null;
+  /** `programs.seats`: the roster cap the team holds today. */
+  seats: number;
 }) {
   const recordKey = plan
     ? [
@@ -110,6 +114,7 @@ export function PlanCard({
       programId={programId}
       programName={programName}
       plan={plan}
+      seats={seats}
     />
   );
 }
@@ -118,10 +123,12 @@ function PlanForm({
   programId,
   programName,
   plan,
+  seats,
 }: {
   programId: string;
   programName: string;
   plan: AdminTeamPlan | null;
+  seats: number;
 }) {
   const router = useRouter();
   // Read once: the defaults and the dirty check must agree on what "today"
@@ -278,6 +285,16 @@ function PlanForm({
           label="Price"
           value={
             allowance ? `${usd(allowance.price)} · billed by invoice` : "—"
+          }
+        />
+        {/* What Save does to the team's seats (`admin_set_program_plan`): they
+            take the plan's cap, unless an admin set them by hand. */}
+        <Kv
+          label="Roster"
+          value={
+            draft.planId
+              ? rosterCapValue(draft.planId, saved?.planId ?? null, seats)
+              : "—"
           }
         />
         {plan && (

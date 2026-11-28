@@ -159,6 +159,7 @@ export default async function AdminTeamPage({
             programId={programId}
             programName={data.program.schoolName}
             plan={data.plan}
+            seats={data.seats.seats}
           />
         );
       case "usage":
