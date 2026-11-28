@@ -1,5 +1,10 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { DROPPED_CONNECTION, SERVER_FAILED } from "@/lib/ui/action-rejected";
+import { PLANS_BEGIN } from "@/lib/billing/plans";
+import {
+  formatPilotEnd,
+  getMonthlyCapHours,
+} from "@/lib/services/splitstep/config";
 import {
   boundaryErrors,
   capturedExceptions,
@@ -203,3 +208,79 @@ test.describe("the admin error screen", () => {
     expect(await capturedExceptions(page)).toEqual([]);
   });
 });
+
+// ── The site-wide pilot end, either side of PLANS_BEGIN ─────────────────────
+//
+// Approving a claim and creating a team with "Start the pilot" stamp no pilot
+// dates, so the beta's `formatPilotEnd()` is true only while the beta runs.
+// From `plansHaveBegun()` the popover's Ends reads "Not set" and the create
+// dialog names no end. The browser's clock is pinned either side of the day.
+
+const BEFORE_PLANS = new Date("2026-12-15T12:00:00Z");
+const AFTER_PLANS = new Date(`${PLANS_BEGIN}T12:00:00Z`);
+
+for (const { when, at, ends } of [
+  { when: "before", at: BEFORE_PLANS, ends: formatPilotEnd() },
+  { when: "after", at: AFTER_PLANS, ends: "Not set" },
+]) {
+  test(`the Approve popover's Ends reads "${ends}" ${when} plans begin`, async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(at);
+    await openHarness(page, harness.origin, [], "/?surface=approve");
+    const popover = page.getByRole("dialog", {
+      name:
+        when === "before"
+          ? "Start the pilot for Centennial?"
+          : "Open the workspace for Centennial?",
+    });
+    await expect(popover).toContainText(`Ends${ends}`);
+    if (when === "after") await expect(popover).not.toContainText("2026");
+  });
+
+  test(`the Approve popover's title and hours rows ${when} plans begin`, async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(at);
+    await openHarness(page, harness.origin, [], "/?surface=approve");
+    const popover = page.getByRole("dialog");
+    const program = `${getMonthlyCapHours("program")} h every month`;
+    if (when === "before") {
+      await expect(popover).toContainText("Start the pilot for Centennial?");
+      await expect(popover).toContainText(`Team pool${program}`);
+      await expect(popover).toContainText(
+        `Each member${getMonthlyCapHours("individual")} h`,
+      );
+      await expect(popover).not.toContainText("Video hours");
+    } else {
+      await expect(popover).toContainText("Open the workspace for Centennial?");
+      await expect(popover).not.toContainText("Start the pilot");
+      await expect(popover).toContainText(
+        "Video hoursNone until a plan or pilot",
+      );
+      await expect(popover).toContainText(
+        "PilotGrant from the team's Usage view",
+      );
+      await expect(popover).not.toContainText("Team pool");
+      await expect(popover).not.toContainText("Each member");
+      await expect(popover).not.toContainText(program);
+    }
+  });
+
+  test(`Create team's Start the pilot ${when === "before" ? "names" : "does not name"} the pilot end ${when} plans begin`, async ({
+    page,
+  }) => {
+    await page.clock.setFixedTime(at);
+    await openHarness(page, harness.origin, [], "/?surface=teams");
+    await page.getByRole("button", { name: "Create team" }).click();
+    const dialog = dialogOf(page);
+    await expect(
+      dialog.getByText("Opens the workspace without a review step."),
+    ).toBeVisible();
+    if (when === "before") {
+      await expect(dialog).toContainText(`Pilot ends ${formatPilotEnd()}.`);
+    } else {
+      await expect(dialog).not.toContainText("Pilot ends");
+    }
+  });
+}

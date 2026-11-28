@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import { type SupabaseClient } from "@supabase/supabase-js";
 
+import { PILOT_LATEST_END } from "@/lib/billing/plans";
+
 import {
   HAVE_ENV,
   INSUFFICIENT_PRIVILEGE,
@@ -29,11 +31,15 @@ import {
  *     actions the unmerged admin-console branch added live
  *     (`console.result_added`), and still rejects an unknown action — so the
  *     constraint was replaced, not dropped.
- *  4. `admin_set_pilot_eligible` (`20261007142230_program_pilot_eligible.sql`)
- *     refuses a non-admin and a college, grants a custom org the program pool
- *     while stamping approver + end date, is idempotent, logs one
- *     `pilot.eligibility_changed` row per effective call, and on revoke flips
- *     only the flag.
+ *  4. `admin_set_pilot_eligible` as
+ *     `20261128070000_plans_2027_pilot_grant.sql` leaves it: refuses a
+ *     non-admin, grants a college (keeping a future end date), grants a custom
+ *     org the program pool while stamping approver + `PILOT_LATEST_END`
+ *     (2027-05-31) and recording it as the audit row's `ends_on`, is
+ *     idempotent, logs one `pilot.eligibility_changed` row per effective call,
+ *     and on revoke flips only the flag. Until that migration is applied live,
+ *     the college and stamped-date tests fail: live still refuses a college
+ *     and stamps 2026-12-31.
  *
  * Two pool logins (`fixtures/live-db-pool`), never deleted: `afterAll`
  * deletes this run's program by id and demotes the admin through the service
@@ -289,21 +295,38 @@ test.describe("Admin pilot RPC gates (live)", () => {
     expect((await clubAudit()).data).toHaveLength(0);
   });
 
-  test("a college is refused with 22023: it draws the pool from org_type alone", async () => {
+  // `programId` is a college (`org_type` defaults to 'college') whose pilot
+  // runs to NEW_END after the tests above, so the grant keeps that date.
+  test("a college can be granted, keeps its future end date, and logs no ends_on", async () => {
     const result = await adminSession.client.rpc("admin_set_pilot_eligible", {
       p_program_id: programId,
       p_eligible: true,
     });
-    expect(result.error?.code).toBe("22023");
+    expect(result.error).toBeNull();
+
     const row = await admin
       .from("programs")
-      .select("pilot_eligible")
+      .select("org_type, pilot_eligible, pilot_ends_on, pilot_ended_at")
       .eq("id", programId)
       .single();
-    expect(row.data?.pilot_eligible).toBe(false);
+    expect(row.data).toEqual({
+      org_type: "college",
+      pilot_eligible: true,
+      pilot_ends_on: NEW_END,
+      pilot_ended_at: null,
+    });
+
+    const audit = await auditRows("pilot.eligibility_changed");
+    expect(audit.data).toHaveLength(1);
+    expect(audit.data![0]).toMatchObject({
+      actor_user_id: adminSession.userId,
+      details: { from: false, to: true, by_admin: true, stamped: true },
+    });
+    // Approver stamped (none was recorded), dates not: no ends_on.
+    expect(audit.data![0].details).not.toHaveProperty("ends_on");
   });
 
-  test("granting a custom org sets the flag, stamps approver and the collegiate end date, logs one row", async () => {
+  test("granting a custom org sets the flag, stamps approver and PILOT_LATEST_END, logs one row with ends_on", async () => {
     const result = await adminSession.client.rpc("admin_set_pilot_eligible", {
       p_program_id: clubId,
       p_eligible: true,
@@ -312,7 +335,7 @@ test.describe("Admin pilot RPC gates (live)", () => {
 
     const row = await clubRow();
     expect(row.data?.pilot_eligible).toBe(true);
-    expect(row.data?.pilot_ends_on).toBe("2026-12-31");
+    expect(row.data?.pilot_ends_on).toBe(PILOT_LATEST_END);
     expect(row.data?.pilot_ended_at).toBeNull();
     expect(row.data?.pilot_approved_by).toBe(adminSession.userId);
     expect(row.data?.pilot_approved_at).not.toBeNull();
@@ -321,7 +344,13 @@ test.describe("Admin pilot RPC gates (live)", () => {
     expect(audit.data).toHaveLength(1);
     expect(audit.data![0]).toMatchObject({
       actor_user_id: adminSession.userId,
-      details: { from: false, to: true, by_admin: true, stamped: true },
+      details: {
+        from: false,
+        to: true,
+        by_admin: true,
+        stamped: true,
+        ends_on: PILOT_LATEST_END,
+      },
     });
   });
 
@@ -356,6 +385,7 @@ test.describe("Admin pilot RPC gates (live)", () => {
       actor_user_id: adminSession.userId,
       details: { from: true, to: false, by_admin: true, stamped: false },
     });
+    expect(audit.data![1].details).not.toHaveProperty("ends_on");
   });
 
   test("re-granting with a record already in place does not re-stamp", async () => {
@@ -374,6 +404,7 @@ test.describe("Admin pilot RPC gates (live)", () => {
     const audit = await clubAudit();
     expect(audit.data).toHaveLength(3);
     expect(audit.data![2].details).toMatchObject({ stamped: false });
+    expect(audit.data![2].details).not.toHaveProperty("ends_on");
   });
 
   // ── Audit vocabulary ──────────────────────────────────────────────────────

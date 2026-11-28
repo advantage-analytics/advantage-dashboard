@@ -13,6 +13,7 @@ import {
   approveClaim,
   rejectClaim,
 } from "@/lib/services/programs/admin-actions";
+import { plansHaveBegun } from "@/lib/billing/plans";
 import {
   formatPilotEnd,
   getMonthlyCapHours,
@@ -82,6 +83,13 @@ export function ApprovePilotPopover({
 
   if (!target) return null;
 
+  // Read at render: the popover only draws once an admin opens it, never on
+  // the server, so it cannot mismatch hydration.
+  const begun = plansHaveBegun();
+  const title = begun
+    ? `Open the workspace for ${target.teamName}?`
+    : `Start the pilot for ${target.teamName}?`;
+
   const decide = (kind: "approve" | "decline") => {
     if (isPending) return;
     setError(null);
@@ -128,26 +136,37 @@ export function ApprovePilotPopover({
         align="start"
         sideOffset={8}
         collisionPadding={12}
-        aria-label={`Start the pilot for ${target.teamName}?`}
+        aria-label={title}
         className="flex w-[292px] flex-col gap-3"
       >
-        <p className="text-[13px] font-medium text-[var(--ink-900)]">
-          Start the pilot for {target.teamName}?
-        </p>
+        <p className="text-[13px] font-medium text-[var(--ink-900)]">{title}</p>
 
         {/* The three facts, in the order they matter: what the program gets,
             what one person gets, when it stops. Values from config, never
-            written out here. */}
+            written out here. From `PLANS_BEGIN` an approval opens the
+            workspace but starts no running pilot (nothing stamps pilot dates
+            on approval, and a team draws hours only from a season plan or a
+            running pilot), so the same three rows say that instead. */}
         <dl className="flex flex-col gap-1.5">
-          <Fact
-            label="Team pool"
-            value={`${getMonthlyCapHours("program")} h every month`}
-          />
-          <Fact
-            label="Each member"
-            value={`${getMonthlyCapHours("individual")} h`}
-          />
-          <Fact label="Ends" value={formatPilotEnd()} />
+          {begun ? (
+            <>
+              <Fact label="Video hours" value="None until a plan or pilot" />
+              <Fact label="Pilot" value="Grant from the team's Usage view" />
+              <Fact label="Ends" value="Not set" />
+            </>
+          ) : (
+            <>
+              <Fact
+                label="Team pool"
+                value={`${getMonthlyCapHours("program")} h every month`}
+              />
+              <Fact
+                label="Each member"
+                value={`${getMonthlyCapHours("individual")} h`}
+              />
+              <Fact label="Ends" value={formatPilotEnd()} />
+            </>
+          )}
         </dl>
 
         <DialogProblem message={error} />

@@ -818,15 +818,18 @@ export async function adminEndPilot(
 }
 
 /**
- * Put a NON-college team on the pilot's program processing pool, or take it
- * off — `programs.pilot_eligible`, the admin-granted half of `quotaTierFor()`.
+ * Put a team on the pilot's program processing pool, or take it off —
+ * `programs.pilot_eligible`, the admin-granted half of `quotaTierFor()` and,
+ * from `PLANS_BEGIN`, half of `pilotIsRunning()`.
  *
- * `admin_set_pilot_eligible` refuses a college (`22023`: it draws the pool
- * from `org_type` alone), is a no-op when the flag already holds the value,
- * and on a grant also stamps the pilot record — approver = the caller when
- * none is recorded, end date = the collegiate default when none is set or it
- * has passed — so the Pilot card reads like a college's. Revoking leaves the
- * dates as history. One `pilot.eligibility_changed` audit row per effective
+ * `admin_set_pilot_eligible` takes any kind of team, a college included
+ * (`20261128070000_plans_2027_pilot_grant`: before 2027 a college already
+ * draws the pool from `org_type`, from 2027 only a plan or a running pilot
+ * gives it hours). It is a no-op when the flag already holds the value, and on
+ * a grant also stamps the pilot record — approver = the caller when none is
+ * recorded, end date = `PILOT_LATEST_END` (2027-05-31) when none is set, the
+ * pilot was ended by hand, or the date has passed. Revoking leaves the dates
+ * as history. One `pilot.eligibility_changed` audit row per effective
  * call, naming the admin: SESSION client, like every write in this module.
  */
 export async function adminSetPilotEligible(input: {

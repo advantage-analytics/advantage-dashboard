@@ -28,6 +28,7 @@ import type {
 import { actionRejected } from "@/lib/ui/action-rejected";
 import { advButton } from "@/lib/ui/adv-button";
 import { advField } from "@/lib/ui/adv-field";
+import { plansHaveBegun } from "@/lib/billing/plans";
 import { formatPilotEnd } from "@/lib/services/splitstep/config";
 import { cn } from "@/lib/utils";
 
@@ -506,8 +507,14 @@ export function CreateTeamDialog({
                     Start the pilot
                   </div>
                   <div className="mt-[3px] text-[11px] leading-[1.5] text-[var(--ink-500)]">
-                    Opens the workspace without a review step. Pilot ends{" "}
-                    {formatPilotEnd()}.
+                    Opens the workspace without a review step.
+                    {/* The site-wide beta end, true only before plans begin:
+                        from then nothing stamps pilot dates for a new team,
+                        so the sentence names no end. The form only draws
+                        once the dialog is open, never on the server. */}
+                    {plansHaveBegun()
+                      ? null
+                      : ` Pilot ends ${formatPilotEnd()}.`}
                   </div>
                 </div>
                 <AdvSwitch
