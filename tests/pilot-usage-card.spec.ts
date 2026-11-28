@@ -1,4 +1,7 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
+import { PILOT_LATEST_END, PLANS_BEGIN } from "@/lib/billing/plans";
 import { DROPPED_CONNECTION } from "@/lib/ui/action-rejected";
 import {
   boundaryErrors,
@@ -184,3 +187,176 @@ for (const failure of ["redirect", "notFound"] as const) {
     expect(await capturedExceptions(page)).toEqual([]);
   });
 }
+
+// ── The Grant dialog's copy (20261128070000_plans_2027_pilot_grant) ─────────
+//
+// `admin_set_pilot_eligible` takes a college now, and a grant that stamps
+// dates stamps `PILOT_LATEST_END`. The dialog states that date, computed from
+// the constant, wherever the RPC will stamp it: no end date, a pilot ended by
+// hand, or one whose date has passed.
+
+const asDay = (iso: string) =>
+  new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
+const STAMPED = `The pilot end date is set to ${asDay(PILOT_LATEST_END)}, the latest a pilot may run`;
+
+async function openGrant(page: Page, query: string) {
+  await openHarness(page, harness.origin, [], `/?${query}`);
+  await page.getByRole("button", { name: "Grant team pool" }).click();
+  return dialogOf(page);
+}
+
+for (const pilot of ["none", "ended", "lapsed"] as const) {
+  for (const begun of ["0", "1"] as const) {
+    test(`a grant on a pilot that is ${pilot} states the stamped ${PILOT_LATEST_END} (plans begun: ${begun})`, async ({
+      page,
+    }) => {
+      const dialog = await openGrant(page, `pilot=${pilot}&begun=${begun}`);
+      await expect(dialog.getByText(STAMPED)).toBeVisible();
+      await expect(dialog).not.toContainText("keeps its end date");
+      // The old workaround: set a date by hand after granting.
+      await expect(dialog).not.toContainText("afterwards:");
+      await expect(dialog).not.toContainText("Dec 31, 2026");
+    });
+  }
+}
+
+test("a grant on a pilot with a future end date says it keeps that date", async ({
+  page,
+}) => {
+  const dialog = await openGrant(page, "pilot=future");
+  await expect(dialog).toContainText(
+    `The pilot keeps its end date, ${asDay(`${new Date().getUTCFullYear() + 1}-12-31`)}.`,
+  );
+  await expect(dialog.getByText(STAMPED)).toHaveCount(0);
+});
+
+test("a college can be granted: before plans begin the dialog says nothing changes yet", async ({
+  page,
+}) => {
+  const dialog = await openGrant(page, "org=college&pilot=none");
+  await expect(dialog).toContainText(
+    `so nothing changes before ${asDay(PLANS_BEGIN)}`,
+  );
+  await expect(dialog).not.toContainText("instead of the individual");
+  await expect(dialog.getByText(STAMPED)).toBeVisible();
+});
+
+test("a college granted once plans have begun reads like any other team", async ({
+  page,
+}) => {
+  const dialog = await openGrant(page, "org=college&pilot=none&begun=1");
+  await expect(dialog).toContainText(
+    "the team has no video hours unless it is on a plan",
+  );
+  await expect(dialog).not.toContainText("nothing changes before");
+  await expect(dialog.getByText(STAMPED)).toBeVisible();
+});
+
+// ── What a team draws without the pool, either side of PLANS_BEGIN ─────────
+//
+// In the beta a team off the pool shares the individual figure. From
+// `plansHaveBegun()` a team draws hours only from a season plan or a running
+// pilot (`allowanceFor`), so the dialogs say it has none without one.
+
+const NO_HOURS = "no video hours";
+
+async function openRevoke(page: Page, query: string) {
+  await openHarness(page, harness.origin, [], `/?eligible=1&${query}`);
+  await page.getByRole("button", { name: "Revoke team pool" }).click();
+  return dialogOf(page);
+}
+
+test("before plans begin, Grant names the individual figure it replaces", async ({
+  page,
+}) => {
+  const dialog = await openGrant(page, "pilot=none");
+  await expect(dialog).toContainText("instead of the individual");
+  await expect(dialog).toContainText("from now on");
+  await expect(dialog).not.toContainText(NO_HOURS);
+});
+
+test("once plans begin, Grant says the team has no video hours without the pilot", async ({
+  page,
+}) => {
+  const dialog = await openGrant(page, "pilot=none&begun=1");
+  await expect(dialog).toContainText("as a team while its pilot runs");
+  await expect(dialog).toContainText(
+    "the team has no video hours unless it is on a plan",
+  );
+  await expect(dialog).not.toContainText("individual");
+});
+
+test("before plans begin, Revoke says the team goes back to the individual figure", async ({
+  page,
+}) => {
+  const dialog = await openRevoke(page, "pilot=future");
+  await expect(dialog).toContainText(
+    "The team goes back to the individual figure",
+  );
+  await expect(dialog).toContainText("will draw the individual");
+  await expect(dialog).not.toContainText(NO_HOURS);
+  // Revoking leaves the pilot as it is, and granting again restores the figure.
+  await expect(dialog).toContainText("not whether it is on the pilot");
+  await expect(dialog).toContainText(
+    "Granting the pool again restores the figure.",
+  );
+  await expect(dialog).not.toContainText("stops drawing hours");
+});
+
+test("once plans begin, Revoke says the pilot stops drawing hours and a grant restarts it", async ({
+  page,
+}) => {
+  const dialog = await openRevoke(page, "pilot=future&begun=1");
+  await expect(dialog).toContainText(
+    "approver and end date stay as they are, but the pilot stops drawing hours.",
+  );
+  await expect(dialog).toContainText(
+    `Granting the pool again restarts the pilot, ending ${asDay(PILOT_LATEST_END)} if its end date has passed.`,
+  );
+  await expect(dialog).not.toContainText("not whether it is on the pilot");
+  await expect(dialog).not.toContainText("restores the figure");
+});
+
+test("once plans begin, Revoke says the team has no video hours unless it is on a plan", async ({
+  page,
+}) => {
+  const dialog = await openRevoke(page, "pilot=future&begun=1");
+  await expect(dialog).toContainText(
+    "The team has no video hours unless it is on a plan",
+  );
+  await expect(dialog).toContainText(
+    "has no video hours from its next upload unless it is on a plan",
+  );
+  await expect(dialog).not.toContainText("individual");
+});
+
+test("a college's Revoke before plans begin keeps its college wording", async ({
+  page,
+}) => {
+  const dialog = await openRevoke(page, "org=college&pilot=future");
+  await expect(dialog).toContainText(
+    `Nothing changes for the team before ${asDay(PLANS_BEGIN)}`,
+  );
+  await expect(dialog).not.toContainText("individual");
+});
+
+test("the card carries no literal pilot end date and no hand-set workaround", () => {
+  const source = readFileSync(
+    resolve(__dirname, "..", "src/components/admin/pilot-usage-card.tsx"),
+    "utf8",
+  );
+  expect(source).not.toContain("2026-12-31");
+  expect(source).not.toContain("2027-05-31");
+  expect(source).not.toMatch(/(Dec|December) 31/);
+  expect(source).not.toMatch(/May 31/);
+  expect(source).not.toContain("formatPilotEnd");
+  expect(source).not.toContain("end date from this card afterwards");
+  // The grant is no longer hidden from a college.
+  expect(source).not.toContain('orgType !== "college"');
+});

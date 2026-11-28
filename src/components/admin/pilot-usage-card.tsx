@@ -37,12 +37,9 @@ import {
   adminSetPilotEligible,
   adminSetPilotEnd,
 } from "@/lib/services/programs/admin-team-actions";
-import { PILOT_LATEST_END } from "@/lib/billing/plans";
+import { PILOT_LATEST_END, PLANS_BEGIN } from "@/lib/billing/plans";
 import { pilotIsRunning } from "@/lib/services/splitstep/allowance";
-import {
-  formatPilotEnd,
-  getMonthlyCapSeconds,
-} from "@/lib/services/splitstep/config";
+import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
 import { advButton } from "@/lib/ui/adv-button";
 import { actionRejected } from "@/lib/ui/action-rejected";
 import type { AdminTeamPilot } from "@/lib/data/admin-team-server";
@@ -64,10 +61,9 @@ import type { ProgramOrgType } from "@/lib/workspace/types";
  * comes from `data.pilot` — T1's four `programs.pilot_*` columns — and never
  * from the old site-wide `PILOT_ENDS_AT`: printing that beside a program whose
  * row says something else would state a date the database does not hold. The
- * one use of `formatPilotEnd()` is the Grant dialog's sentence about the date
- * `admin_set_pilot_eligible` itself stamps when the program has none, which
- * is that constant; from January 1, 2027 the sentence says to set a date
- * instead, because the stamped one has passed.
+ * one date not read from the row is the Grant dialog's sentence about the date
+ * `admin_set_pilot_eligible` itself stamps when the program has none (or its
+ * pilot ended or lapsed): `PILOT_LATEST_END`, the latest a pilot may run.
  *
  * Severity rides the fill exactly as it does on the staff-facing card — blue,
  * amber from 80%, red at the cap — with a word beside the figure, never colour
@@ -89,8 +85,9 @@ export function PilotUsageCard({
   usage: ProgramUsage;
   pilot: AdminTeamPilot;
   /**
-   * `programs.org_type`. A college draws the program pool on its own and
-   * shows no pool control; every other kind shows Grant / Revoke.
+   * `programs.org_type`. Every kind shows Grant / Revoke; a college's
+   * dialog says that before `PLANS_BEGIN` it already draws the program pool
+   * from its org type, so the grant only matters from then.
    */
   orgType: ProgramOrgType | null;
   /** `programs.pilot_eligible` — whether an admin already granted the pool. */
@@ -239,28 +236,30 @@ export function PilotUsageCard({
         )}
       </div>
 
-      {/* The pool itself is a decision only for a non-college team: a college
-          draws it from `org_type` alone (`quotaTierFor`), so offering to grant
-          or revoke there would be a button the RPC refuses. Its own row rather
-          than a third button in the one above — at the rail's width three
-          labels would wrap, and this one changes what the team can spend,
-          which the date controls do not. */}
-      {orgType !== "college" && (
-        <div className="mt-2 flex">
-          <PoolAccess
-            programId={programId}
-            programName={programName}
-            eligible={pilotEligible}
-            endsOn={
-              pilot.endsOn !== null && pilot.endsOn >= today
-                ? pilot.endsOn
-                : null
-            }
-            plansBegun={plansBegun}
-            onChanged={() => router.refresh()}
-          />
-        </div>
-      )}
+      {/* The pool, for every kind of team. A college too: in the beta it
+          draws the pool from `org_type` alone (`quotaTierFor`), but from
+          `PLANS_BEGIN` only a season plan or a running pilot gives it hours,
+          so it has to be grantable. Its own row rather than a third button in
+          the one above — at the rail's width three labels would wrap, and
+          this one changes what the team can spend, which the date controls
+          do not. */}
+      <div className="mt-2 flex">
+        <PoolAccess
+          programId={programId}
+          programName={programName}
+          eligible={pilotEligible}
+          college={orgType === "college"}
+          // The date a grant keeps — `admin_set_pilot_eligible` re-stamps one
+          // that has passed or whose pilot was ended by hand.
+          endsOn={
+            !ended && pilot.endsOn !== null && pilot.endsOn >= today
+              ? pilot.endsOn
+              : null
+          }
+          plansBegun={plansBegun}
+          onChanged={() => router.refresh()}
+        />
+      </div>
     </SettingsCard>
   );
 }
@@ -281,7 +280,7 @@ export function Kv({ label, value }: { label: string; value: string }) {
 // Values
 // ---------------------------------------------------------------------------
 
-/** `2026-12-31` → `Dec 31, 2026`, in UTC — the column is a zone-free date. */
+/** `2027-03-15` → `Mar 15, 2027`, in UTC — the column is a zone-free date. */
 function formatDay(isoDate: string): string {
   return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString("en-US", {
     month: "short",
@@ -576,11 +575,12 @@ function EndPilot({
 }
 
 /**
- * Grant a non-college team the pilot's program pool, or take it back —
+ * Grant a team the pilot's program pool, or take it back —
  * `adminSetPilotEligible`. One button whose label is the other state, and a
  * confirm that says what changes in prose: the figure the team draws from
  * next, and (on a grant) the approver and end date the record gains. The
- * figures come from `config.ts`, never literals, so they move with the tier.
+ * figures come from `config.ts` and the dates from `plans.ts`, never
+ * literals, so they move with the tier and the pilot's last day.
  *
  * Grant is the primary tone: it is consequential (paid vendor hours) but
  * creates, not destroys. Revoke is the danger tone — it takes spend away from
@@ -591,6 +591,7 @@ function PoolAccess({
   programId,
   programName,
   eligible,
+  college,
   endsOn,
   plansBegun,
   onChanged,
@@ -598,7 +599,12 @@ function PoolAccess({
   programId: string;
   programName: string;
   eligible: boolean;
-  /** The program's own pilot end date when it has not passed, else null. */
+  /** `org_type = 'college'`: draws the pool from its org type until plans begin. */
+  college: boolean;
+  /**
+   * The program's own pilot end date when it has not passed and the pilot was
+   * not ended by hand — the date a grant keeps — else null.
+   */
   endsOn: string | null;
   plansBegun: boolean;
   onChanged: () => void;
@@ -609,6 +615,13 @@ function PoolAccess({
 
   const programHours = formatHoursShort(getMonthlyCapSeconds("program"));
   const individualHours = formatHoursShort(getMonthlyCapSeconds("individual"));
+  // Before plans begin a college already draws the program figure for being
+  // one, so neither a grant nor a revoke changes what it can spend yet. Once
+  // they have begun, every kind of team draws hours only from a season plan
+  // or a running pilot (`allowanceFor`): without either it has none, so the
+  // dialogs stop naming the individual figure.
+  const collegeInBeta = college && !plansBegun;
+  const plansBeginDay = formatDay(PLANS_BEGIN);
 
   const change = () => {
     if (pending) return;
@@ -649,7 +662,13 @@ function PoolAccess({
           onOpenChange={onOpenChange}
           tone="danger"
           title={`Take ${programName} off the team pool?`}
-          description="The team goes back to the individual figure, and the change is recorded in the program's history."
+          description={
+            collegeInBeta
+              ? `Nothing changes for the team before ${plansBeginDay}, and the change is recorded in the program's history.`
+              : plansBegun
+                ? "The team has no video hours unless it is on a plan, and the change is recorded in the program's history."
+                : "The team goes back to the individual figure, and the change is recorded in the program's history."
+          }
           confirmLabel="Revoke pool"
           pendingLabel="Revoking…"
           pending={pending}
@@ -657,18 +676,41 @@ function PoolAccess({
           onConfirm={change}
         >
           <ConfirmProse>
-            <p>
-              <Em>{programName}</Em> will draw the individual {individualHours}{" "}
-              h a month, shared by every member, from its next upload. Analysis
-              already running is not affected.
-            </p>
-            <p>
-              The pilot&rsquo;s approver and end date stay as they are — this
-              changes what the team can spend, not whether it is on the pilot.
-            </p>
+            {collegeInBeta ? (
+              <p>
+                <Em>{programName}</Em> keeps its {programHours} h a month as a
+                college until {plansBeginDay}; from then it no longer draws the
+                team pool.
+              </p>
+            ) : plansBegun ? (
+              <p>
+                <Em>{programName}</Em> has no video hours from its next upload
+                unless it is on a plan. Analysis already running is not
+                affected.
+              </p>
+            ) : (
+              <p>
+                <Em>{programName}</Em> will draw the individual{" "}
+                {individualHours} h a month, shared by every member, from its
+                next upload. Analysis already running is not affected.
+              </p>
+            )}
+            {plansBegun ? (
+              <p>
+                The pilot&rsquo;s approver and end date stay as they are, but
+                the pilot stops drawing hours.
+              </p>
+            ) : (
+              <p>
+                The pilot&rsquo;s approver and end date stay as they are — this
+                changes what the team can spend, not whether it is on the pilot.
+              </p>
+            )}
           </ConfirmProse>
           <ConfirmAside>
-            Granting the pool again restores the figure.
+            {plansBegun
+              ? `Granting the pool again restarts the pilot, ending ${formatDay(PILOT_LATEST_END)} if its end date has passed.`
+              : "Granting the pool again restores the figure."}
           </ConfirmAside>
         </ConfirmDialog>
       ) : (
@@ -676,7 +718,13 @@ function PoolAccess({
           open={open}
           onOpenChange={onOpenChange}
           title={`Put ${programName} on the team pool?`}
-          description="The team draws the program figure from now on, and the change is recorded in the program's history."
+          description={
+            collegeInBeta
+              ? `The team draws the program figure while its pilot runs from ${plansBeginDay}, and the change is recorded in the program's history.`
+              : plansBegun
+                ? "The team draws the program figure while its pilot runs, and the change is recorded in the program's history."
+                : "The team draws the program figure from now on, and the change is recorded in the program's history."
+          }
           confirmLabel="Grant pool"
           pendingLabel="Granting…"
           pending={pending}
@@ -684,18 +732,30 @@ function PoolAccess({
           onConfirm={change}
         >
           <ConfirmProse>
-            <p>
-              <Em>{programName}</Em> will draw {programHours} h of analysis a
-              month as a team, instead of the individual {individualHours} h
-              figure it shares today.
-            </p>
+            {collegeInBeta ? (
+              <p>
+                <Em>{programName}</Em> already draws {programHours} h a month as
+                a college, so nothing changes before {plansBeginDay}. From then
+                it draws the team pool while the pilot runs.
+              </p>
+            ) : plansBegun ? (
+              <p>
+                <Em>{programName}</Em> will draw {programHours} h of analysis a
+                month as a team while its pilot runs. Without one, the team has
+                no video hours unless it is on a plan.
+              </p>
+            ) : (
+              <p>
+                <Em>{programName}</Em> will draw {programHours} h of analysis a
+                month as a team, instead of the individual {individualHours} h
+                figure it shares today.
+              </p>
+            )}
             <p>
               You are recorded as the approver if nobody is yet.{" "}
               {endsOn
                 ? `The pilot keeps its end date, ${formatDay(endsOn)}.`
-                : plansBegun
-                  ? `Set the pilot's end date from this card afterwards: the pool counts only while the pilot is running, and no pilot runs past ${formatDay(PILOT_LATEST_END)}.`
-                  : `The pilot end date is set to ${formatPilotEnd()}, since none is set or it has passed.`}
+                : `The pilot end date is set to ${formatDay(PILOT_LATEST_END)}, the latest a pilot may run, since none is set or it has passed.`}
             </p>
           </ConfirmProse>
           <ConfirmAside>

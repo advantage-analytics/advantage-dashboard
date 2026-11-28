@@ -197,11 +197,12 @@ export interface Workspace {
    */
   videoHoursOverride?: number | null;
   /**
-   * `programs.pilot_eligible` — an admin put this NON-college team on the
-   * pilot's program processing pool (Admin › Teams › Pilot card, through
-   * `admin_set_pilot_eligible`). Raises `quotaTierFor()` to the program figure
-   * for a custom org exactly as `org_type = 'college'` does for a verified
-   * program. Absent or false for everyone else; a college never carries it.
+   * `programs.pilot_eligible` — an admin put this team on the pilot's
+   * program processing pool (Admin › Teams › Pilot card, through
+   * `admin_set_pilot_eligible`). In the beta it raises `quotaTierFor()` to the
+   * program figure for a custom org exactly as `org_type = 'college'` does for
+   * a verified program; from `PLANS_BEGIN` it is half of `pilotIsRunning()`
+   * for every kind of team, a college included. Absent or false otherwise.
    *
    * Optional, like `individualPilot`, so a constructor that does not read the
    * column fails CLOSED to the individual figure — the right direction for a
