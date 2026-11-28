@@ -325,6 +325,18 @@ test.describe("rules across plans", () => {
     expect(matchesPhrase(0)).toBeNull();
     expect(matchesPhrase(-H)).toBeNull();
   });
+
+  test("a row that sells hours counts matches from one whole match up", () => {
+    const H = 3600;
+    const sold = (hours: number) =>
+      matchesPhrase(hours * H, { fromWholeMatch: true });
+    // One hour at $35 as "half a match" would say $70 a match, not $60.
+    expect(sold(1)).toBeNull();
+    expect(sold(2)).toBe("about 1 match");
+    expect(sold(5)).toBe("about 3 matches");
+    expect(sold(10)).toBe("about 6 matches");
+    expect(sold(0)).toBeNull();
+  });
 });
 
 test.describe("dates", () => {

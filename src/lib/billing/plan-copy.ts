@@ -834,7 +834,7 @@ export function teamMeterSuffix(standing: PlanStanding): string | null {
 /**
  * `about half a match`, `about 1 match`, `about 3 matches` — what a balance
  * covers, for a sentence that always says something. The arithmetic is
- * `matchesPhrase()`'s, which the extra-hours row reads too.
+ * `matchesPhrase()`'s; the extra-hours row reads it from one whole match up.
  */
 export function aboutMatchesPhrase(seconds: number): string {
   return matchesPhrase(seconds) ?? "less than half a match";

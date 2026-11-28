@@ -230,6 +230,31 @@ export function hoursLeftLabel(seconds: number): string {
   return seconds <= 0 ? "0h" : formatHoursLong(seconds);
 }
 
+/**
+ * `4h 12m` — everything the account can still spend this month: what is left
+ * of the plan's hours plus unexpired extra hours. The one figure "N left this
+ * month" means, on Settings › Plan's headline and in the dialog's header row
+ * alike (the header pill adds the same two). A sentence that counts the
+ * plan's hours alone (an upgrade's credit) says "plan hours".
+ */
+export function totalLeftLabel(
+  planLeftSeconds: number,
+  extraSeconds: number,
+): string {
+  return hoursLeftLabel(
+    Math.max(0, planLeftSeconds) + Math.max(0, extraSeconds),
+  );
+}
+
+/**
+ * A duration inside an aside's sentence, which wraps as prose: `3h 12m` and
+ * `15 days` keep their parts on one line (a no-break space). Only where an
+ * aside is built; rows and every other caller keep the plain space.
+ */
+function unbroken(duration: string): string {
+  return duration.replace(/ /g, "\u00A0");
+}
+
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
@@ -393,11 +418,12 @@ function hoursName(hours: number): string {
 }
 
 /**
- * `About half a match · Last 12 months`: what the extra hours cover, in the
- * usage email's own words. Under half a match the line is the validity alone.
+ * `About 1 match · Last 12 months`: what the extra hours cover, from one
+ * whole match up. One hour is the validity alone: "half a match" at one
+ * hour's price would contradict the per-match price printed above it.
  */
 function hoursCoverLine(hours: number): string {
-  const about = matchesPhrase(hours * 3600);
+  const about = matchesPhrase(hours * 3600, { fromWholeMatch: true });
   return about
     ? `${about.charAt(0).toUpperCase()}${about.slice(1)} · ${HOURS_LAST}`
     : HOURS_LAST;
@@ -435,7 +461,11 @@ function planRow(
   };
 }
 
-/** What the credit is "for": the share that set it. */
+/**
+ * What the credit is "for": the share that set it. The hours are the plan's
+ * own, not the header's total; the row has no room to say "of plan hours"
+ * on one line (measured), so the aside under it does.
+ */
 function creditFor(preview: UpgradePreviewView): string {
   return preview.creditBasis === "days"
     ? `your ${plural(preview.daysLeft, "day", "days")} left`
@@ -521,7 +551,7 @@ export function buildCheckoutView(input: {
       : "Not now";
   const current = isPaid(account.plan) ? personalPlan(account.plan) : null;
   const subscriberOffer = {
-    offer: `${current?.name ?? "Free"} · ${hoursLeftLabel(account.planLeftSeconds)} left this month`,
+    offer: `${current?.name ?? "Free"} · ${totalLeftLabel(account.planLeftSeconds, account.extraSeconds)} left this month`,
     offerDetail: account.pastDue
       ? "Payment failed"
       : account.resetsOn
@@ -587,7 +617,6 @@ export function buildCheckoutView(input: {
   }
 
   if (scene === "hours") {
-    const left = account.planLeftSeconds + account.extraSeconds;
     return {
       scene,
       band: {
@@ -600,7 +629,7 @@ export function buildCheckoutView(input: {
         ...(current
           ? subscriberOffer
           : {
-              offer: `Free · ${hoursLeftLabel(left)} left`,
+              offer: `Free · ${totalLeftLabel(account.planLeftSeconds, account.extraSeconds)} left`,
               offerDetail: HOUR_RATE,
             }),
       },
@@ -666,8 +695,8 @@ export function buildCheckoutView(input: {
     if (chosen === "hours") {
       aside =
         afterHours >= needed
-          ? `Covers it, ${formatHoursLong(afterHours - needed)} to spare. ${SALES_FINAL}`
-          : `Covers ${formatHoursLong(afterHours)} of this match; shorten the trim to fit. ${SALES_FINAL}`;
+          ? `Covers it, ${unbroken(formatHoursLong(afterHours - needed))} to spare. ${SALES_FINAL}`
+          : `Covers ${unbroken(formatHoursLong(afterHours))} of this match; shorten the trim to fit. ${SALES_FINAL}`;
       action = { kind: "hours", hours, amountCents: hoursCents };
     } else {
       const plan = personalPlan(chosen);
@@ -675,8 +704,8 @@ export function buildCheckoutView(input: {
       const after = planHoursSeconds(chosen) + account.extraSeconds;
       const covers =
         after >= needed
-          ? `${plan.name} covers this match with ${formatHoursLong(after - needed)} to spare.`
-          : `${plan.name} covers ${formatHoursLong(after)} of this match; shorten the trim to fit.`;
+          ? `${plan.name} covers this match with ${unbroken(formatHoursLong(after - needed))} to spare.`
+          : `${plan.name} covers ${unbroken(formatHoursLong(after))} of this match; shorten the trim to fit.`;
       aside = `${covers} Prefer yearly? ${usd(plan.yearly)}, one month free.`;
       action = {
         kind: "plan",
@@ -813,7 +842,7 @@ export function buildCheckoutView(input: {
     const quote = preview.preview;
     const extra =
       account.extraSeconds > 0
-        ? `, and your ${formatHoursLong(account.extraSeconds)} of extra hours stays`
+        ? `, and your ${unbroken(formatHoursLong(account.extraSeconds))} of extra hours stays`
         : "";
     // A discount cut what was paid: say what the two shares are of.
     const paidNote =
@@ -822,8 +851,8 @@ export function buildCheckoutView(input: {
         : "";
     aside =
       `Your credit is the smaller of what's left of your ${player.name} ${yearly ? "year" : "month"}: ` +
-      `${plural(quote.daysLeft, "day", "days")} (${formatUsdCents(quote.daysCreditCents)}) or ` +
-      `${hoursLeftLabel(quote.periodHoursLeftSeconds)} of hours (${formatUsdCents(quote.hoursCreditCents)})${paidNote}. ` +
+      `${unbroken(plural(quote.daysLeft, "day", "days"))} (${formatUsdCents(quote.daysCreditCents)}) or ` +
+      `${unbroken(hoursLeftLabel(quote.periodHoursLeftSeconds))} of plan hours (${formatUsdCents(quote.hoursCreditCents)})${paidNote}. ` +
       `${billedFrom(quote)}${extra}.`;
     action = { kind: "upgrade", payTodayCents: quote.payTodayCents };
     primary = payLabel(quote.payTodayCents, false);
@@ -914,7 +943,7 @@ function payYearlyView(input: {
     });
     const extra =
       account.extraSeconds > 0
-        ? `, and your ${formatHoursLong(account.extraSeconds)} of extra hours stays`
+        ? `, and your ${unbroken(formatHoursLong(account.extraSeconds))} of extra hours stays`
         : "";
     const paidNote =
       quote.creditBaseCents < quote.oldPeriodPriceCents
@@ -923,8 +952,8 @@ function payYearlyView(input: {
     const next = utcDayLabel(quote.nextBillingDay, true);
     aside =
       `Your credit is the smaller of what's left of your ${current.name} month: ` +
-      `${plural(quote.daysLeft, "day", "days")} (${formatUsdCents(quote.daysCreditCents)}) or ` +
-      `${hoursLeftLabel(quote.periodHoursLeftSeconds)} of hours (${formatUsdCents(quote.hoursCreditCents)})${paidNote}. ` +
+      `${unbroken(plural(quote.daysLeft, "day", "days"))} (${formatUsdCents(quote.daysCreditCents)}) or ` +
+      `${unbroken(hoursLeftLabel(quote.periodHoursLeftSeconds))} of plan hours (${formatUsdCents(quote.hoursCreditCents)})${paidNote}. ` +
       `Then ${usd(current.yearly)} a year${next ? `, next on ${next}` : ""}${extra}.`;
     action = {
       kind: "upgrade",
@@ -952,7 +981,7 @@ function payYearlyView(input: {
       figure: "yearly",
       trail: ".",
       body: `${current.name} for ${usd(current.yearly)} a year: one month free. Your year starts today with a fresh ${hours} hours, and ${hours} more each month.`,
-      offer: `${current.name} · ${hoursLeftLabel(account.planLeftSeconds)} left this month`,
+      offer: `${current.name} · ${totalLeftLabel(account.planLeftSeconds, account.extraSeconds)} left this month`,
       offerDetail: account.resetsOn ? `Hours reset ${account.resetsOn}` : "",
     },
     periodPills: false,
@@ -994,7 +1023,7 @@ function scheduledChangeView(input: {
   const periodOnly = change.to.plan === current.id;
   const currentHours = current.hours ?? 0;
   const offer = {
-    offer: `${current.name} · ${hoursLeftLabel(account.planLeftSeconds)} left this month`,
+    offer: `${current.name} · ${totalLeftLabel(account.planLeftSeconds, account.extraSeconds)} left this month`,
     offerDetail: account.resetsOn ? `Hours reset ${account.resetsOn}` : "",
   };
 

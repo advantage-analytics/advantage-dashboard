@@ -257,7 +257,7 @@ test("Upgrade: Player Pro chosen, the current plan beneath it and not selectable
   expect(html).toContain('aria-checked="true"');
   expect(html).toMatch(/Player<span[^>]*>Your plan<\/span>/);
   expect(html).toContain(
-    "15 days ($75) or 3h 12m of hours ($96). From today you're billed $300 on the 29th of each month, and your 1h of extra hours stays.",
+    "15\u00A0days ($75) or 3h\u00A012m of plan hours ($96). From today you're billed $300 on the 29th of each month, and your 1h of extra hours stays.",
   );
   expect(html).not.toContain("Yearly");
   expect(primary(html)).toEqual(["Continue to pay $225"]);

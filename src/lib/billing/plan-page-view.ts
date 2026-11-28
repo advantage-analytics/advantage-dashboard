@@ -18,6 +18,7 @@
 import { formatHoursLong, isUnlimitedCap } from "@/lib/data/usage-format";
 import {
   hoursLeftLabel,
+  totalLeftLabel,
   utcDayLabel,
   type CheckoutMode,
   type ScheduledChange,
@@ -113,7 +114,7 @@ function hoursCard(input: PlanPageInput): PlanPageView["hours"] {
       line: "Admin accounts have no monthly cap.",
     };
   }
-  const figure = hoursLeftLabel(left + extra);
+  const figure = totalLeftLabel(left, extra);
   const plusExtra = extra > 0 ? ` + ${formatHoursLong(extra)} extra` : "";
   const resets = resetsOn ? ` · Resets ${resetsOn}` : "";
 

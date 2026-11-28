@@ -125,13 +125,24 @@ export function aboutMatches(hours: number): number {
  * hours covers in a sentence, from `HOURS_PER_MATCH`: a half, or the nearest
  * whole match. Null under half a match, where a row says nothing. The one
  * place a match count is put in words: the usage email and the extra-hours
- * row both read it, so 1 hour is "about half a match" in each.
+ * row both read it.
+ *
+ * `fromWholeMatch` is for a row that SELLS hours: it answers null until the
+ * hours round to a whole match, so one hour prints no count. "About half a
+ * match" beside one hour's price would imply a dearer match than
+ * `EXTRA_MATCH_PRICE`, which the same dialog prints. The usage email says
+ * what a remaining hour covers, sells nothing, and keeps the half.
  */
-export function matchesPhrase(seconds: number): string | null {
+export function matchesPhrase(
+  seconds: number,
+  options: { fromWholeMatch?: boolean } = {},
+): string | null {
   const matches = Math.max(0, seconds) / 3600 / HOURS_PER_MATCH;
   const halves = Math.round(matches * 2);
   if (halves <= 0) return null;
-  if (halves === 1) return "about half a match";
+  if (halves === 1) {
+    return options.fromWholeMatch ? null : "about half a match";
+  }
   const whole = Math.max(1, Math.round(matches));
   return `about ${whole} ${whole === 1 ? "match" : "matches"}`;
 }

@@ -15,12 +15,14 @@ import {
   ordinal,
   planPricing,
   purchaseNote,
+  totalLeftLabel,
   upgradeRequestFor,
   type CheckoutAccount,
   type CheckoutMode,
   type PreviewState,
   type ScheduledChange,
 } from "@/lib/billing/checkout-view";
+import { buildPlanPage } from "@/lib/billing/plan-page-view";
 import { formatUsdCents, planHoursSeconds } from "@/lib/billing/plans";
 import { quoteUpgrade } from "@/lib/billing/upgrade";
 import {
@@ -273,7 +275,7 @@ test.describe("Upload paywall, a Free player", () => {
     expect(v.rows[0].line).toBe("About 3 verified matches a month · 5 hours");
     expect(v.rows[2].line).toBe("$35 an hour · No plan · Last 12 months");
     expect(v.aside).toBe(
-      "Player covers this match with 3h 08m to spare. Prefer yearly? $1,650, one month free.",
+      "Player covers this match with 3h\u00A008m to spare. Prefer yearly? $1,650, one month free.",
     );
     expect(v.secondary).toBe("Shorten the trim instead");
     expect(v.primary).toBe("Pay $105 and send");
@@ -421,7 +423,7 @@ test.describe("Upgrade", () => {
       lead: "Move up to",
       figure: "Player Pro",
       trail: ".",
-      offer: "Player · 3h 12m left this month",
+      offer: "Player · 4h 12m left this month",
       offerDetail: "Hours reset May 14",
     });
     expect(v.periodPills).toBe(false);
@@ -450,7 +452,7 @@ test.describe("Upgrade", () => {
       [false, false],
     ]);
     expect(v.aside).toBe(
-      "Your credit is the smaller of what's left of your Player month: 15 days ($75) or 3h 12m of hours ($96). From today you're billed $300 on the 29th of each month, and your 1h of extra hours stays.",
+      "Your credit is the smaller of what's left of your Player month: 15\u00A0days ($75) or 3h\u00A012m of plan hours ($96). From today you're billed $300 on the 29th of each month, and your 1h of extra hours stays.",
     );
     expect(v.secondary).toBe("Not now");
     expect(v.primary).toBe("Continue to pay $225");
@@ -465,7 +467,9 @@ test.describe("Upgrade", () => {
       "10 fresh hours today · $11.50 credit for your 23m",
     );
     expect(v.rows[0].price).toBe("$288.50");
-    expect(v.aside).toContain("15 days ($75) or 23m of hours ($11.50).");
+    expect(v.aside).toContain(
+      "15\u00A0days ($75) or 23m of plan hours ($11.50).",
+    );
     // No extra hours held: the sentence does not mention any.
     expect(v.aside).not.toContain("extra hours");
     expect(v.primary).toBe("Continue to pay $288.50");
@@ -485,7 +489,7 @@ test.describe("Upgrade", () => {
       },
     });
     expect(discounted.aside).toContain(
-      "15 days ($75) or 23m of hours ($11.50), of the $105 you paid this month. From today",
+      "15\u00A0days ($75) or 23m of plan hours ($11.50), of the $105 you paid this month. From today",
     );
 
     const atList = view({ kind: "upgrade" }, PLAYER_SPENT, {
@@ -602,7 +606,7 @@ test.describe("Extra hours", () => {
     expect(v.band).toMatchObject({
       lead: "Add",
       figure: "extra hours",
-      offer: "Player · 3h 12m left this month",
+      offer: "Player · 4h 12m left this month",
       offerDetail: "Hours reset May 14",
     });
     expect(v.rows).toHaveLength(1);
@@ -623,9 +627,10 @@ test.describe("Extra hours", () => {
         selection: { choice: "hours", period: "monthly", hours },
       });
     expect(pick(5).rows[0].name).toBe("5 extra hours");
-    // A match is about 1.8 hours, in the usage email's own words.
+    // A match is about 1.8 hours. A count is printed from one whole match
+    // up: "half a match" at $35 would say $70 a match beside "about $60".
     expect([1, 2, 5, 10].map((hours) => pick(hours).rows[0].line)).toEqual([
-      "About half a match · Last 12 months",
+      "Last 12 months",
       "About 1 match · Last 12 months",
       "About 3 matches · Last 12 months",
       "About 6 matches · Last 12 months",
@@ -658,6 +663,51 @@ test.describe("small words", () => {
     expect(hoursLeftLabel(-5)).toBe("0h");
     expect(hoursLeftLabel(23 * M)).toBe("23m");
     expect(hoursLeftLabel(4 * H + 12 * M)).toBe("4h 12m");
+  });
+
+  test("'left this month' is one figure: plan hours and extra hours together", () => {
+    expect(totalLeftLabel(3 * H + 12 * M, 1 * H)).toBe("4h 12m");
+    expect(totalLeftLabel(0, 0)).toBe("0h");
+    expect(totalLeftLabel(-5, 30 * M)).toBe("30m");
+
+    // What Settings › Plan's headline says for the same account.
+    const page = buildPlanPage({
+      plan: "player",
+      billing: {
+        plan: "player",
+        periodStart: "2027-04-14T00:00:00Z",
+        period: "monthly",
+        status: "active",
+        periodEnd: "2027-05-14T00:00:00Z",
+        everSubscribed: true,
+      },
+      allowanceKind: "plan",
+      capSeconds: planHoursSeconds("player"),
+      planLeftSeconds: PLAYER.planLeftSeconds,
+      extraSeconds: PLAYER.extraSeconds,
+      nextExtraExpiresAt: null,
+      resetsOn: "May 14",
+      freeEnds: "Dec 31, 2026",
+    }).hours;
+    expect(page).toMatchObject({ figure: "4h 12m", unit: "left this month" });
+
+    // Every scene a subscriber holding extra hours can open says the same.
+    const yearly: PreviewState = { status: "loading" };
+    const change: ScheduledChange = {
+      to: { plan: "player", period: "monthly" },
+      effectiveOn: "2028-01-14",
+    };
+    const offers = [
+      view({ kind: "upgrade" }, PLAYER, { preview: preview(3 * H + 12 * M) }),
+      view({ kind: "choose" }, PLAYER, { preview: { status: "loading" } }),
+      view({ kind: "yearly" }, PLAYER, { preview: yearly }),
+      view({ kind: "hours" }, PLAYER),
+      view({ kind: "paywall", neededSeconds: 6 * H }, PLAYER),
+      view({ kind: "change", change }, { ...PLAYER, period: "yearly" }),
+    ].map((v) => v.band.offer);
+    expect(offers).toEqual(
+      offers.map(() => `Player · ${page.figure} ${page.unit}`),
+    );
   });
 
   test("ordinals", () => {
@@ -864,7 +914,7 @@ test.describe("Pay yearly", () => {
     ]);
     // The rule, both numbers, and when the year next bills.
     expect(v.aside).toBe(
-      "Your credit is the smaller of what's left of your Player month: 15 days ($75) or 3h 12m of hours ($96). Then $1,650 a year, next on Apr 29, 2028, and your 1h of extra hours stays.",
+      "Your credit is the smaller of what's left of your Player month: 15\u00A0days ($75) or 3h\u00A012m of plan hours ($96). Then $1,650 a year, next on Apr 29, 2028, and your 1h of extra hours stays.",
     );
     expect(v.primary).toBe("Continue to pay $1,575");
     expect(v.secondary).toBe("Not now");
@@ -885,7 +935,7 @@ test.describe("Pay yearly", () => {
       price: "$1,638.50",
     });
     expect(v.aside).toBe(
-      "Your credit is the smaller of what's left of your Player month: 15 days ($75) or 23m of hours ($11.50). Then $1,650 a year, next on Apr 29, 2028.",
+      "Your credit is the smaller of what's left of your Player month: 15\u00A0days ($75) or 23m of plan hours ($11.50). Then $1,650 a year, next on Apr 29, 2028.",
     );
     expect(v.primary).toBe("Continue to pay $1,638.50");
   });
@@ -899,7 +949,7 @@ test.describe("Pay yearly", () => {
       price: "$1,597.50",
     });
     expect(v.aside).toContain(
-      "15 days ($52.50) or 3h 12m of hours ($67.20), of the $105 you paid this month.",
+      "15\u00A0days ($52.50) or 3h\u00A012m of plan hours ($67.20), of the $105 you paid this month.",
     );
   });
 
