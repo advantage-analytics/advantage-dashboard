@@ -9,7 +9,8 @@ import { useSyncExternalStore } from "react";
  * two ways: turned sideways (every recent iPhone is 844–956px wide in
  * landscape) or in "Request desktop site" mode (a ~980px layout viewport).
  * Neither changes the device's physical screen, so this asks about that
- * instead: a finger for a pointer and a screen whose short side is under
+ * instead: a touchscreen (any pointer coarse, so a paired mouse does not hide
+ * the finger) and a screen whose short side is under
  * 600 CSS px. Every phone is ≤ ~440 there; the smallest iPad (mini, 744) and
  * an unfolded foldable stay above it, so tablets still pass.
  *
@@ -17,7 +18,7 @@ import { useSyncExternalStore } from "react";
  * Android desktop-site modes. False on the server and on the first client
  * render, so markup never depends on it during hydration.
  */
-const COARSE = "(pointer: coarse)";
+const COARSE = "(any-pointer: coarse)";
 const PHONE_SHORT_SIDE_MAX = 600;
 
 function subscribe(onChange: () => void): () => void {

@@ -36,13 +36,17 @@ async function gateVisible(
   browser: Browser,
   options: {
     viewport: { width: number; height: number };
-    screen: { width: number; height: number };
+    /** Physical screen; defaults to the viewport (a device that is not zoomed out). */
+    screen?: { width: number; height: number };
     hasTouch: boolean;
     isMobile: boolean;
   },
   path = "/dashboard/matches/abc",
 ) {
-  const context = await browser.newContext(options);
+  const context = await browser.newContext({
+    screen: options.viewport,
+    ...options,
+  });
   const page = await context.newPage();
   await page.goto(`${origin}${path}`);
   await expect(page.getByText("Match report behind the gate")).toBeAttached();
@@ -72,7 +76,6 @@ test("a phone in landscape sees the gate", async ({ browser }) => {
   expect(
     await gateVisible(browser, {
       viewport: { width: 932, height: 430 },
-      screen: { width: 932, height: 430 },
       hasTouch: true,
       isMobile: true,
     }),
@@ -100,7 +103,6 @@ test("a tablet passes, portrait and landscape", async ({ browser }) => {
     expect(
       await gateVisible(browser, {
         viewport: { width: w, height: h },
-        screen: { width: w, height: h },
         hasTouch: true,
         isMobile: true,
       }),
@@ -112,7 +114,6 @@ test("a desktop passes", async ({ browser }) => {
   expect(
     await gateVisible(browser, {
       viewport: { width: 1440, height: 900 },
-      screen: { width: 1440, height: 900 },
       hasTouch: false,
       isMobile: false,
     }),
@@ -125,7 +126,6 @@ test("Ask stays open on a phone", async ({ browser }) => {
       browser,
       {
         viewport: { width: 932, height: 430 },
-        screen: { width: 932, height: 430 },
         hasTouch: true,
         isMobile: true,
       },
