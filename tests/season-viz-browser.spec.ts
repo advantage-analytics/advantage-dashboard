@@ -1378,3 +1378,19 @@ test("a season's Placement · Contact · Both switch writes vends in place and k
   ).toHaveCount(0);
   expect(errors).toEqual([]);
 });
+
+test("a scope that keeps no match: the picker and the facts line both read 0 of 3", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 860 });
+  // m-1 is a win; "lost" drops it, and the ticked id keeps nothing else.
+  await page.goto(
+    `${origin}${PROFILE}?tab=visualizations&hands=1&picker=1&sm=m-1&sres=lost&delay=100`,
+  );
+  await expect(
+    page.getByRole("button", { name: "0 of 3 matches" }),
+  ).toBeVisible({ timeout: 8_000 });
+  await expect(page.locator("[data-match-scope-facts-line]")).toContainText(
+    "Showing 0 of 3 analyzed matches",
+  );
+});

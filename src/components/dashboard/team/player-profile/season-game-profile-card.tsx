@@ -240,12 +240,16 @@ function ShapeKey({
 export function SeasonGameProfileCard({
   playerName,
   analyzed,
+  scopeEmpty = false,
   profile,
 }: {
   /** The player's full name, for the chart's description and the empty sentence. */
   playerName: string;
   /** Matches with points — what `profile` was folded from. */
   analyzed: number;
+  /** The page's match scope keeps no match: the empty sentence says so
+   *  (`analyzed` is 0 then, as on day zero). */
+  scopeEmpty?: boolean;
   /** `seasonGameProfile()` — the Overall, last match and last five shapes. */
   profile: SeasonGameProfile;
 }) {
@@ -521,7 +525,7 @@ export function SeasonGameProfileCard({
       {empty ? (
         <p className="text-micro" style={{ color: "var(--ink-500)" }}>
           {analyzed === 0
-            ? `Serve, return and net rates add up here once one of ${name}'s matches is analyzed.`
+            ? `Serve, return and net rates add up here once one of ${name}'s matches ${scopeEmpty ? "fits this scope" : "is analyzed"}.`
             : "No point in these matches records a serve, return or net rate."}
         </p>
       ) : (

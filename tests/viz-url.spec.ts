@@ -837,9 +837,9 @@ test.describe("Error type on a match whose errors are not judged", () => {
     expect(state.filters.error).toEqual(["unforced", "forced"]);
   });
 
-  test("Error type pills: Errors · Double faults unjudged, today's three judged — both from OPTIONS.error", () => {
+  test("Error type pills: Rally errors · Double faults unjudged, today's three judged — both from OPTIONS.error", () => {
     expect(errorOptionsFor(false)).toEqual([
-      { values: ["unforced", "forced"], label: "Errors" },
+      { values: ["unforced", "forced"], label: "Rally errors" },
       { values: ["doubleFault"], label: OPTIONS.error.doubleFault },
     ]);
     expect(errorOptionsFor(true)).toEqual([
@@ -862,7 +862,7 @@ test.describe("Error type on a match whose errors are not judged", () => {
     ]);
     // Unjudged: the one option holding both kinds keeps its own word.
     expect(errorOptionsFor(false).map(errorChipLabel)).toEqual([
-      "Errors",
+      "Rally errors",
       "Double faults",
     ]);
   });

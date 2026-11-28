@@ -3031,7 +3031,7 @@ test.describe("errors cut on judged vs unjudged matches", () => {
     expect(tile().name).toBe("Unforced errors");
   });
 
-  test("applied strip: the collapsed option is one Errors token, and judged words are unchanged", () => {
+  test("applied strip: the collapsed option is one Rally errors token, and judged words are unchanged", () => {
     const state: VizState = {
       cut: "errors",
       chart: "scatter",
@@ -3044,9 +3044,12 @@ test.describe("errors cut on judged vs unjudged matches", () => {
     const unjudged = activeFilterEntries(state, undefined, {
       errorSplitJudged: false,
     });
-    expect(unjudged.map((e) => e.label)).toEqual(["Errors", "Double faults"]);
+    expect(unjudged.map((e) => e.label)).toEqual([
+      "Rally errors",
+      "Double faults",
+    ]);
     expect(unjudged[0].values).toEqual(["unforced", "forced"]);
-    // A saved view's lone "forced" still reads Errors, and is not rewritten.
+    // A saved view's lone "forced" still reads Rally errors, and is not rewritten.
     const forcedOnly: VizState = {
       ...state,
       filters: { ...state.filters, error: ["forced"] },
@@ -3054,7 +3057,12 @@ test.describe("errors cut on judged vs unjudged matches", () => {
     expect(
       activeFilterEntries(forcedOnly, undefined, { errorSplitJudged: false }),
     ).toEqual([
-      { key: "error", value: "forced", values: ["forced"], label: "Errors" },
+      {
+        key: "error",
+        value: "forced",
+        values: ["forced"],
+        label: "Rally errors",
+      },
     ]);
     expect(forcedOnly.filters.error).toEqual(["forced"]);
     for (const opts of [{ errorSplitJudged: true }, undefined]) {

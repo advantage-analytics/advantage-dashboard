@@ -577,7 +577,7 @@ function modelValueFor(key: string, word: string): string | null {
  * The word for the one option an unjudged match's Error type offers in place
  * of Unforced / Forced (`errorOptionsFor`), and its applied-strip token.
  */
-export const UNJUDGED_ERRORS_LABEL = "Errors";
+export const UNJUDGED_ERRORS_LABEL = "Rally errors";
 
 /** One Error type pill: the values it toggles together, and its word. */
 export interface ErrorOption {

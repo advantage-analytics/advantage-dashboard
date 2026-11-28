@@ -313,7 +313,10 @@ function Harness() {
               <span>{SEASON.length} analyzed</span>
             )}
           </p>
-          <ProfileMatchScope matches={PICKER_MATCHES} />
+          <ProfileMatchScope
+            matches={PICKER_MATCHES}
+            shown={scopeSummary?.shown ?? SEASON.length}
+          />
         </div>
       )}
       <WidgetBoundary label="Visualizations">

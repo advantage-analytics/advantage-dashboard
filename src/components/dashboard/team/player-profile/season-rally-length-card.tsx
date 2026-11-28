@@ -32,21 +32,26 @@ import type { SeasonRallyBands } from "@/lib/data/player-season";
 export function seasonRallyEmptySentence(
   playerName: string,
   analyzed: number,
+  scopeEmpty = false,
 ): string {
   return analyzed === 0
-    ? `Rally lengths add up here once one of ${surname(playerName)}'s matches is analyzed.`
+    ? `Rally lengths add up here once one of ${surname(playerName)}'s matches ${scopeEmpty ? "fits this scope" : "is analyzed"}.`
     : "No point in these matches records its rally length.";
 }
 
 export function SeasonRallyLengthCard({
   playerName,
   analyzed,
+  scopeEmpty = false,
   rallyBands,
 }: {
   /** The player's full name; the legend shows their surname. */
   playerName: string;
   /** Matches with points — what `rallyBands` was summed from. */
   analyzed: number;
+  /** The page's match scope keeps no match: the empty sentence says so
+   *  (`analyzed` is 0 then, as on day zero). */
+  scopeEmpty?: boolean;
   /** `seasonRallyBands()` — the three bands and the average behind them. */
   rallyBands: SeasonRallyBands;
 }) {
@@ -58,7 +63,7 @@ export function SeasonRallyLengthCard({
       youName={surname(playerName)}
       oppName={SEASON_OPPONENTS_LABEL}
       shareOf="the season"
-      emptySentence={seasonRallyEmptySentence(playerName, analyzed)}
+      emptySentence={seasonRallyEmptySentence(playerName, analyzed, scopeEmpty)}
     />
   );
 }

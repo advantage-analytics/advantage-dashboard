@@ -60,6 +60,7 @@ export function ProfileStatisticsView({
   evidence,
   insightSignature,
   seasonAnalyzed = analyzed,
+  scopeEmpty = false,
 }: {
   /** The roster's own id (`profile.playerId`) — what the insight route resolves. */
   playerId: string;
@@ -84,10 +85,14 @@ export function ProfileStatisticsView({
    * `analyzed`: no scope, no note.
    */
   seasonAnalyzed?: number;
+  /** The page's match scope keeps no match: no Advantage Intelligence
+   *  card at all (nothing in the scope to sum up), and every card in its
+   *  day-zero state, its sentence saying no match fits the scope. */
+  scopeEmpty?: boolean;
 }) {
   return (
     <>
-      {seasonAnalyzed > 0 && evidence ? (
+      {scopeEmpty ? null : seasonAnalyzed > 0 && evidence ? (
         // Keyed on the signature: a season that changes under the card
         // remounts it, so its cache lookup and stream start over cleanly.
         <ProfileInsightCard
@@ -115,6 +120,7 @@ export function ProfileStatisticsView({
           <SeasonDifferentialCard
             playerName={playerName}
             analyzed={analyzed}
+            scopeEmpty={scopeEmpty}
             outcomes={tallies.outcomes}
           />
         </div>
@@ -123,21 +129,25 @@ export function ProfileStatisticsView({
           <SeasonGameProfileCard
             playerName={playerName}
             analyzed={analyzed}
+            scopeEmpty={scopeEmpty}
             profile={tallies.gameProfile}
           />
           <SeasonPointEndingsCard
             playerName={playerName}
             analyzed={analyzed}
+            scopeEmpty={scopeEmpty}
             outcomes={tallies.outcomes}
           />
           <SeasonRallyLengthCard
             playerName={playerName}
             analyzed={analyzed}
+            scopeEmpty={scopeEmpty}
             rallyBands={tallies.rallyBands}
           />
           <SeasonNetGameCard
             playerName={playerName}
             analyzed={analyzed}
+            scopeEmpty={scopeEmpty}
             netGame={tallies.netGame}
           />
         </div>

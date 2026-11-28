@@ -79,7 +79,9 @@ function loader() {
   });
 }
 
-function render(): string {
+function render(
+  scope: { seasonAnalyzed: number; scopeEmpty: boolean } | null = null,
+): string {
   const { ProfileStatisticsView } = loader().load(VIEW) as {
     ProfileStatisticsView: React.ComponentType<{
       playerId: string;
@@ -90,6 +92,8 @@ function render(): string {
       tallies: ReturnType<typeof foldSeasonTallies>;
       evidence: null;
       insightSignature: string;
+      seasonAnalyzed?: number;
+      scopeEmpty?: boolean;
     }>;
   };
   return renderToStaticMarkup(
@@ -103,6 +107,7 @@ function render(): string {
       // Nothing analyzed: no evidence line, so the slot is the empty state.
       evidence: null,
       insightSignature: "",
+      ...(scope ?? {}),
     }),
   );
 }
@@ -452,5 +457,31 @@ test.describe("profile page wiring", () => {
     expect(source).toMatch(
       /async function ProfileStatisticsBody[\s\S]*await getPlayerSeason\(/,
     );
+  });
+});
+
+test.describe("profile Statistics tab — a match scope that keeps no match", () => {
+  // `?sm=<a win>&sres=lost` over a season of 3: the page folds the cards over
+  // nothing and hands the view `scopeEmpty`.
+  const html = () => render({ seasonAnalyzed: 3, scopeEmpty: true });
+
+  test("no Advantage Intelligence card at all: nothing in the scope to sum up", () => {
+    expect(html()).not.toContain('data-testid="insight-empty"');
+    expect(html()).not.toContain("Advantage Intelligence");
+  });
+
+  test("every card keeps its day-zero anatomy, its sentence saying no match fits the scope", () => {
+    const out = html();
+    for (const card of [
+      "season-head-to-head",
+      "season-differential",
+      "season-game-profile",
+      "season-point-endings",
+      "season-rally-length",
+      "season-net-game",
+    ])
+      expect(out, card).toContain(`aria-labelledby="${card}-heading"`);
+    expect(count(out, "fits this scope.")).toBe(5);
+    expect(out).not.toContain("is analyzed.");
   });
 });

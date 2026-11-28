@@ -11,8 +11,6 @@ import {
 } from "@/components/ui/popover";
 import { floatMenuToneClasses } from "@/components/ui/float-menu";
 import {
-  countedMatches,
-  draftFrom,
   MatchesDraftFilters,
   MatchesDraftFooter,
   MatchesDraftList,
@@ -71,14 +69,21 @@ function useWriteMatchScope() {
  */
 export function ProfileMatchScope({
   matches,
+  shown,
 }: {
   /** Every analyzed match, newest first. */
   matches: readonly SeasonSheetMatch[];
+  /**
+   * How many the URL's scope keeps, counted on the server by the bodies' own
+   * rule (`scopeSeasonMatches`). Not the sheet's draft count: that one drops
+   * a ticked match a filter excludes and counts the rest the filters keep,
+   * so `?sm=<a win>&sres=lost` read "1 of 3" over a "Showing 0 of 3" page.
+   */
+  shown: number;
 }) {
   const searchParams = useSearchParams();
   const scope = parseMatchScope(new URLSearchParams(searchParams.toString()));
   const [open, setOpen] = useState(false);
-  const shown = countedMatches(draftFrom(scope), matches).length;
   const scoped = shown !== matches.length;
   const Chevron = open ? ChevronUp : ChevronDown;
 

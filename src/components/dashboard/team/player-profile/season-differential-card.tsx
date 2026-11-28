@@ -79,12 +79,16 @@ export function seasonDifferential(outcomes: SeasonOutcomes, analyzed: number) {
 export function SeasonDifferentialCard({
   playerName,
   analyzed,
+  scopeEmpty = false,
   outcomes,
 }: {
   /** The player's full name; the first row shows their surname. */
   playerName: string;
   /** Matches with points — what `outcomes` was summed over. */
   analyzed: number;
+  /** The page's match scope keeps no match: the empty sentence says so
+   *  (`analyzed` is 0 then, as on day zero). */
+  scopeEmpty?: boolean;
   /** `seasonOutcomes()` — the same tallies How points ended draws. */
   outcomes: SeasonOutcomes;
 }) {
@@ -179,7 +183,7 @@ export function SeasonDifferentialCard({
         ))}
         <p className="text-micro pt-0.5" style={{ color: "var(--ink-500)" }}>
           {analyzed === 0
-            ? `Winners and errors add up here once one of ${name}'s matches is analyzed.`
+            ? `Winners and errors add up here once one of ${name}'s matches ${scopeEmpty ? "fits this scope" : "is analyzed"}.`
             : "No point in these matches records a winner or an error."}
         </p>
       </section>

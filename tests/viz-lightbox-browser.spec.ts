@@ -532,7 +532,7 @@ test("Rally shots, Errors and Approaches reach 1st or 2nd serve in Advanced filt
   }
 });
 
-test("Errors lead with Error type chips over the error key: this unjudged match offers All · Errors · Double faults, as its menu did", async ({
+test("Errors lead with Error type chips over the error key: this unjudged match offers All · Rally errors · Double faults", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1512, height: 982 });
@@ -540,21 +540,23 @@ test("Errors lead with Error type chips over the error key: this unjudged match 
   const dialog = page.getByRole("dialog").first();
   const group = dialog.getByRole("group", { name: "Error type" });
   const chips = group.getByRole("button");
-  // Nobody judged this match's errors forced or unforced: one Errors chip
+  // Nobody judged this match's errors forced or unforced: one Rally errors chip
   // holds both kinds (`errorOptionsFor`), never a Forced that draws nothing.
-  await expect(chips).toHaveText(["All", "Errors", "Double faults"]);
+  await expect(chips).toHaveText(["All", "Rally errors", "Double faults"]);
   expect(await pressedOf(chips)).toEqual(["true", "false", "false"]);
 
   await group.getByRole("button", { name: "Double faults" }).click();
   await expect(page).toHaveURL(/verr=double/);
   expect(await pressedOf(chips)).toEqual(["false", "false", "true"]);
 
-  await group.getByRole("button", { name: "Errors", exact: true }).click();
+  await group
+    .getByRole("button", { name: "Rally errors", exact: true })
+    .click();
   await expect(page).not.toHaveURL(/verr=[^&]*double/);
   await expect(page).toHaveURL(/verr=/);
   expect(await pressedOf(chips)).toEqual(["false", "true", "false"]);
 
-  await group.getByRole("button", { name: "All" }).click();
+  await group.getByRole("button", { name: "All", exact: true }).click();
   await expect(page).not.toHaveURL(/verr=/);
   expect(await pressedOf(chips)).toEqual(["true", "false", "false"]);
 });

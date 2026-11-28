@@ -93,6 +93,7 @@ export function ProfileVisualizationsView({
   errorSplitJudged,
   saveView,
   otherSideCards,
+  scopeEmpty = false,
 }: {
   /** The player's full name — the cards' subject for "you". */
   playerName: string;
@@ -117,6 +118,9 @@ export function ProfileVisualizationsView({
   /** The wall's cards for the OTHER side, streamed after the page: once they
    *  land, the wall's You | Opponent swaps sides in the browser. */
   otherSideCards?: Promise<SeasonCard[]>;
+  /** The page's match scope keeps no match: one message in place of the
+   *  wall (`MatchScopeEmpty`). */
+  scopeEmpty?: boolean;
 }) {
   // Both sides' wall cards as they arrive: the server's for `side` with the
   // page, the other side's from `otherSideCards` a moment later. A new
@@ -175,6 +179,7 @@ export function ProfileVisualizationsView({
         playerName={playerName}
         firstName={firstName}
         analyzed={analyzed}
+        scopeEmpty={scopeEmpty}
         side={side}
         cards={cards}
         savedCards={savedCards}
@@ -196,6 +201,7 @@ function SeasonVizBody({
   playerName,
   firstName,
   analyzed,
+  scopeEmpty,
   side,
   cards,
   savedCards,
@@ -212,6 +218,8 @@ function SeasonVizBody({
   playerName: string;
   firstName: string;
   analyzed: number;
+  /** The page's match scope keeps no match (`analyzed` is then 0). */
+  scopeEmpty: boolean;
   side: PlayerFilter;
   cards: SeasonCard[];
   savedCards: SeasonCard[];
@@ -261,6 +269,7 @@ function SeasonVizBody({
         playerName={playerName}
         firstName={firstName}
         analyzed={analyzed}
+        scopeEmpty={scopeEmpty}
         player={player}
         cards={shown.cards}
         cardsSide={shown.side}
@@ -286,6 +295,7 @@ function SeasonWall({
   playerName,
   firstName,
   analyzed,
+  scopeEmpty,
   player,
   cards,
   cardsSide,
@@ -302,6 +312,8 @@ function SeasonWall({
   playerName: string;
   firstName: string;
   analyzed: number;
+  /** The page's match scope keeps no match: the empty sentence says so. */
+  scopeEmpty: boolean;
   /** The wall's own You | Opponent — the pressed chip. */
   player: PlayerFilter;
   /** The cards shown, and the side they were computed for. */
@@ -410,9 +422,19 @@ function SeasonWall({
           >
             {analyzed === 0 ? (
               <EmptyWall>
-                No analyzed matches yet. Serve, return and rally placement is
-                drawn from the points in {firstName}&rsquo;s matches, as each
-                one is analysed.
+                {scopeEmpty ? (
+                  <>
+                    None of {firstName}&rsquo;s analyzed matches fits this
+                    scope, so there is no serve, return or rally placement to
+                    draw.
+                  </>
+                ) : (
+                  <>
+                    No analyzed matches yet. Serve, return and rally placement
+                    is drawn from the points in {firstName}&rsquo;s matches, as
+                    each one is analysed.
+                  </>
+                )}
               </EmptyWall>
             ) : visible.length > 0 ? (
               <div
@@ -456,6 +478,7 @@ function SeasonWall({
           playerName={playerName}
           firstName={firstName}
           analyzed={analyzed}
+          scopeEmpty={scopeEmpty}
         />
       )}
     </div>
@@ -474,6 +497,7 @@ function SavedWall({
   playerName,
   firstName,
   analyzed,
+  scopeEmpty,
   saveView,
   manage,
 }: {
@@ -483,6 +507,7 @@ function SavedWall({
   playerName: string;
   firstName: string;
   analyzed: number;
+  scopeEmpty: boolean;
   saveView?: SeasonSaveView;
   manage: SeasonSavedViewActions;
 }) {
@@ -507,8 +532,17 @@ function SavedWall({
   } else if (analyzed === 0) {
     body = (
       <EmptyWall>
-        No analyzed matches yet. Saved views are drawn from the points in{" "}
-        {firstName}&rsquo;s matches, as each one is analysed.
+        {scopeEmpty ? (
+          <>
+            None of {firstName}&rsquo;s analyzed matches fits this scope, so
+            saved views have no points to draw.
+          </>
+        ) : (
+          <>
+            No analyzed matches yet. Saved views are drawn from the points in{" "}
+            {firstName}&rsquo;s matches, as each one is analysed.
+          </>
+        )}
       </EmptyWall>
     );
   } else if (visible.length === 0) {

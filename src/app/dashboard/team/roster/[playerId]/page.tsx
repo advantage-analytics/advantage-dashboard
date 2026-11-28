@@ -67,6 +67,7 @@ import {
   buildSeasonViewCards,
   matchScopeSummary,
   parseSeasonMatchScope,
+  scopeSeasonMatches,
   seasonMatchOptions,
   parseSeasonVizState,
   type SeasonCard,
@@ -380,6 +381,7 @@ export default async function PlayerProfilePage({
                       programId={active.id}
                       playerId={playerId}
                       courtsOnly={courtsOnly}
+                      matchScope={matchScope}
                     />
                   </Suspense>
                 }
@@ -555,15 +557,23 @@ async function MatchScopePicker({
   programId,
   playerId,
   courtsOnly,
+  matchScope,
 }: {
   programId: string;
   playerId: string;
   courtsOnly: boolean;
+  /** The page's match scope; undefined is the whole season. */
+  matchScope: SeasonFilters | undefined;
 }) {
   const season = await requestSeason(programId, playerId, courtsOnly);
   if (!season || season.perMatch.length === 0) return null;
   return (
-    <ProfileMatchScope matches={seasonMatchOptions(season.perMatch, () => 1)} />
+    <ProfileMatchScope
+      matches={seasonMatchOptions(season.perMatch, () => 1)}
+      // The bodies' own count (`scopeSeasonMatches`), so "N of M" and the
+      // facts line's "Showing N of M" never disagree.
+      shown={scopeSeasonMatches(season.perMatch, matchScope).length}
+    />
   );
 }
 
@@ -618,6 +628,11 @@ async function ProfileStatisticsBody({
         insightSignature={seasonInsightSignature(whole)}
         // The card is the whole season's: under a scope it says so.
         seasonAnalyzed={whole.analyzed}
+        scopeEmpty={
+          matchScope !== undefined &&
+          season.analyzed === 0 &&
+          whole.analyzed > 0
+        }
       />
     </ProfileViewWhen>
   );
@@ -679,6 +694,10 @@ async function ProfileVisualizationsBody({
   // player is kept in the browser meanwhile (`profile-visualizations-view.tsx`)
   // and closing writes it back here, so the cards are recomputed for it.
   const side = state.filters.player;
+  const scopeEmpty =
+    matchScope !== undefined &&
+    season.analyzed > 0 &&
+    scopeSeasonMatches(season.perMatch, matchScope).length === 0;
   // The player switch's two words, and the subject word of an opened card's
   // subtitle: "You" only when the viewer is this player.
   const chipLabels = seasonPlayerChipLabels(playerName, isSelf);
@@ -715,7 +734,10 @@ async function ProfileVisualizationsBody({
         playerName={playerName}
         firstName={firstName}
         chipLabels={chipLabels}
-        analyzed={season.analyzed}
+        // A scope that keeps no match draws the day-zero wall, its sentence
+        // saying so, as the Statistics tab draws its cards.
+        analyzed={scopeEmpty ? 0 : season.analyzed}
+        scopeEmpty={scopeEmpty}
         side={side}
         cards={buildSeasonCards(season.perMatch, side, bands, matchScope)}
         savedCards={buildSeasonViewCards(
