@@ -158,7 +158,7 @@ test("the migration patches every SQL reader and asserts its hit counts", () => 
   const sql = readFileSync(
     path.join(
       process.cwd(),
-      "supabase/migrations/20261126160000_let_points_count_as_nothing.sql",
+      "supabase/migrations/20261128032804_let_points_count_as_nothing.sql",
     ),
     "utf8",
   );

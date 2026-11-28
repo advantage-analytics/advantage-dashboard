@@ -30,6 +30,10 @@
 -- object is patched from its LIVE definition. Each patch asserts exactly how
 -- many places it changed and refuses to run otherwise. No row carries the
 -- flag until the publish change ships, so this is safe to apply ahead of it.
+--
+-- Dry-run 2026-11-27 (rolled back): with one point of match 1e7f4043 flagged
+-- as a let, this SQL gave the same match_stats and key_moments as today's
+-- functions with that point deleted.
 
 do $$
 declare
