@@ -5,9 +5,15 @@
  *
  * What it makes (docs/plans/2027-pricing.md, stage C):
  *
- *   - Coach and Coach Pro, each with a monthly and a yearly recurring Price;
+ *   - Player and Player Pro, each with a monthly and a yearly recurring Price;
  *   - "Extra video hour", a one-time Price sold by quantity;
- *   - a 50%-off, `duration: once` coupon for the first month;
+ *   - a `duration: once` coupon for the first month, at the plan module's
+ *     `FIRST_MONTH_DISCOUNT_PERCENT`. Its id carries the percentage
+ *     (`advantage-first-month-30-2027`), so a changed offer makes a NEW
+ *     coupon rather than refusing over the old one. The 50% coupon an
+ *     earlier run made (`advantage-first-month-2027`) is no longer used:
+ *     delete it in the Dashboard, and paste the new id into
+ *     `STRIPE_COUPON_FIRST_MONTH`;
  *   - six college products (Starter / Program / Elite × Spring / Full year),
  *     each with a one-time Price, so invoices sent from the Dashboard read
  *     the same. The app never checks these;
@@ -37,7 +43,8 @@ import {
   EXTRA_HOUR_VALIDITY_MONTHS,
   FIRST_MONTH_DISCOUNT_PERCENT,
   PLAN_TERM_LABELS,
-  coachPlan,
+  firstMonthOffer,
+  personalPlan,
   seasonAllowance,
   type PlanPeriod,
   type PlanTerm,
@@ -55,7 +62,7 @@ loadEnvLocal();
 
 /** "General — electronically supplied services", as the pack checkout uses. */
 const TAX_CODE = "txcd_10000000";
-const COUPON_ID = "advantage-first-month-2027";
+const COUPON_ID = `advantage-first-month-${FIRST_MONTH_DISCOUNT_PERCENT}-2027`;
 const PORTAL_KEY = "advantage-2027";
 const TERMS: readonly PlanTerm[] = ["spring", "full_year"];
 
@@ -147,7 +154,7 @@ async function ensureCoupon(stripe: Stripe): Promise<string> {
   }
   const created = await stripe.coupons.create({
     id: COUPON_ID,
-    name: `${FIRST_MONTH_DISCOUNT_PERCENT}% off your first month`,
+    name: firstMonthOffer(),
     percent_off: FIRST_MONTH_DISCOUNT_PERCENT,
     duration: "once",
   });
@@ -218,12 +225,12 @@ async function main(): Promise<void> {
 
   console.log("Plans");
   for (const planId of PAID_PLAN_IDS) {
-    const plan = coachPlan(planId);
+    const plan = personalPlan(planId);
     const product = await ensureProduct(
       stripe,
       `advantage_${planId.replace("-", "_")}`,
       `Advantage ${plan.name}`,
-      `${plan.hours} hours of match video analysed a month, about ${plan.matches} singles matches. Hours do not carry over.`,
+      `${plan.hours} hours of match video analysed a month, about ${plan.matches} verified singles matches. Hours do not carry over.`,
     );
     for (const period of PLAN_PERIODS) {
       env.push([

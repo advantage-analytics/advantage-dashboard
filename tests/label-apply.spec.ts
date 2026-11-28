@@ -2,8 +2,10 @@ import { expect, test } from "@playwright/test";
 
 import {
   HAND_LABELLED_FLAG,
+  LET_REPLAYED_FLAG,
   OFF_VIDEO_FLAG,
   buildAppliedRows,
+  isLetPointRow,
   countedServeIndex,
   expectedStats,
   LET_RESULT,
@@ -203,7 +205,7 @@ function session(): LabelPoint[] {
       (p) => [shot(p, "p2", "forehand", "in", { status: "deleted" })],
       { status: "deleted", statusBeforeDelete: "unchanged" },
     ),
-    // A replayed let as its own row: never written.
+    // A replayed let as its own row: written flagged, counted as nothing.
     pt(4, null, "let_replayed", (p) => [shot(p, "p1", "first_serve", "let")]),
     // 30–15: an error, around a ghost, a deleted stroke and a restored ghost.
     pt(5, "p2", "error", (p) => [
@@ -253,16 +255,25 @@ function build(points = session()) {
   return buildAppliedRows({ points, adScoring: true, bestOf: 3 });
 }
 
+/** The rows that are points: a replayed let (`isLetPointRow`) left out. */
+function counted(built: { points: AppliedPointRow[] }): AppliedPointRow[] {
+  return built.points.filter((p) => !isLetPointRow(p));
+}
+
 test.describe("buildAppliedRows", () => {
-  test("skips tombstones and let_replayed / not_a_point rows", () => {
-    const { points, problems, warnings } = build();
+  test("skips tombstones and not_a_point rows; a replayed let is written flagged", () => {
+    const built = build();
+    const { points, problems, warnings } = built;
     expect(problems).toEqual([]);
     expect(warnings).toEqual([]);
     expect(points.map((p) => p.pointIndex)).toEqual([
-      0, 1, 2, 5, 6, 7, 8, 9, 10,
+      0, 1, 2, 4, 5, 6, 7, 8, 9, 10,
     ]);
     expect(points.map((p) => p.point_number)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+    ]);
+    expect(counted(built).map((p) => p.pointIndex)).toEqual([
+      0, 1, 2, 5, 6, 7, 8, 9, 10,
     ]);
 
     const notAPoint = session().map((p) =>
@@ -272,7 +283,7 @@ test.describe("buildAppliedRows", () => {
   });
 
   test("maps every ending to its result_type", () => {
-    expect(build().points.map((p) => p.result_type)).toEqual([
+    expect(counted(build()).map((p) => p.result_type)).toEqual([
       "Ace",
       "Double Fault",
       "Forehand Winner",
@@ -286,7 +297,7 @@ test.describe("buildAppliedRows", () => {
   });
 
   test("scores each point from the scoreboard, server-first", () => {
-    const { points } = build();
+    const points = counted(build());
     expect(points.map((p) => p.point_score)).toEqual([
       "0-0",
       "15-0",
@@ -330,7 +341,7 @@ test.describe("buildAppliedRows", () => {
   });
 
   test("a deleted stroke and an unrestored ghost are left out; a restored one is kept", () => {
-    const point = build().points[3];
+    const point = counted(build())[3];
     expect(
       point.shots.map((s) => [s.shot_number, s.shot_type, s.result]),
     ).toEqual([
@@ -351,7 +362,7 @@ test.describe("buildAppliedRows", () => {
   });
 
   test("rows are derived, flagged hand_labelled, and oriented p1 = player1", () => {
-    const { points } = build();
+    const points = counted(build());
     for (const point of points) {
       expect(point.flags).toEqual([HAND_LABELLED_FLAG]);
       expect(point.derived).toBe(true);
@@ -369,7 +380,7 @@ test.describe("buildAppliedRows", () => {
   });
 
   test("zones: a serve by landing, a rally ball by direction", () => {
-    const { points } = build();
+    const points = counted(build());
     expect(points[5].shots[0].zone).toBe("T");
     expect(points[8].shots[0].zone).toBe("Wide");
     // Struck from +x, landing on -x: crosscourt.
@@ -628,10 +639,17 @@ test.describe("a point with no ending stored", () => {
 
 test.describe("lets kept, strokes before the serve dropped", () => {
   test("the build counts live let serves on applied points only", () => {
-    expect(build().letsKept).toBe(1);
-    const lines = letsAndDroppedLines({ letsKept: 1, droppedBeforeServe: 2 });
+    // The applied point's let, and the replayed let point's own serve.
+    expect(build().letsKept).toBe(2);
+    expect(build().letPointsKept).toBe(1);
+    const lines = letsAndDroppedLines({
+      letsKept: 1,
+      letPointsKept: 3,
+      droppedBeforeServe: 2,
+    });
     expect(lines[0]).toContain("lets kept: 1");
-    expect(lines[1]).toContain("strokes before the serve dropped: 2");
+    expect(lines[1]).toContain("let points kept: 3");
+    expect(lines[2]).toContain("strokes before the serve dropped: 2");
   });
 
   test("a tombstoned let and a let on a deleted point are not counted", () => {
@@ -786,6 +804,86 @@ test.describe("lets kept, strokes before the serve dropped", () => {
   });
 });
 
+test.describe("a replayed let point", () => {
+  /** p1 serves 15–0, the point is played and replayed as a let, then an ace. */
+  function letSession(): LabelPoint[] {
+    clock = 100;
+    id = 0;
+    return [
+      pt(0, "p1", "ace", (p) => [shot(p, "p1", "first_serve", "in")]),
+      // Played out, then called a let: a winner the labeller seeded stays a
+      // label, never a point.
+      pt(1, "p2", "let_replayed", (p) => [
+        shot(p, "p1", "first_serve", "in", { landingX: 0.3, landingY: 18 }),
+        shot(p, "p2", "forehand", "in"),
+        shot(p, "p1", "backhand", "out"),
+      ]),
+      pt(2, "p1", "ace", (p) => [shot(p, "p1", "first_serve", "in")]),
+    ];
+  }
+
+  test("is written whole, flagged, with its strokes and no pressure", () => {
+    const built = build(letSession());
+    expect(built.problems).toEqual([]);
+    expect(built.points.map((p) => p.point_number)).toEqual([1, 2, 3]);
+    const let_ = built.points[1];
+    expect(isLetPointRow(let_)).toBe(true);
+    expect(let_.flags).toEqual([HAND_LABELLED_FLAG, LET_REPLAYED_FLAG]);
+    expect(let_.result_type).toBe(LET_RESULT);
+    expect(
+      let_.is_break_point || let_.is_set_point || let_.is_match_point,
+    ).toBe(false);
+    expect(let_.rally_length).toBeNull();
+    expect(let_.errorKind).toBeNull();
+    // NOT NULL, a placeholder: the server, whatever the label's winner.
+    expect(let_.server_is_player1).toBe(true);
+    expect(let_.won_by_player1).toBe(true);
+    expect(
+      let_.shots.map((s) => [s.shot_number, s.shot_type, s.result]),
+    ).toEqual([
+      [1, "First Serve", "In"],
+      [2, "Forehand", "In"],
+      [3, "Backhand", "Out"],
+    ]);
+    expect(let_.video_time).toBe(102);
+    expect(let_.duration).toBe(2);
+  });
+
+  test("moves no score: it and the point that replays it start at 15–0", () => {
+    const { points } = build(letSession());
+    expect(points.map((p) => p.point_score)).toEqual(["0-0", "15-0", "15-0"]);
+    expect(points.map((p) => p.game_score)).toEqual(["0-0", "0-0", "0-0"]);
+  });
+
+  test("the preview counts nothing of it but its written shots", () => {
+    const withLet = expectedStats(build(letSession()).points);
+    const without = expectedStats(
+      build(letSession().filter((p) => p.ending !== "let_replayed")).points,
+    );
+    expect(withLet.points).toBe(2);
+    expect(withLet.shots).toBe(without.shots + 3);
+    expect(withLet.p1).toEqual(without.p1);
+    expect(withLet.p2).toEqual(without.p2);
+    expect(withLet.games).toBe(without.games);
+  });
+
+  test("a let with no server is a problem, not a row", () => {
+    const points = letSession().map((p) =>
+      p.pointIndex === 1 ? { ...p, server: null } : p,
+    );
+    const built = build(points);
+    expect(built.problems).toEqual(["point 2 (a let): no server"]);
+    expect(built.points.some(isLetPointRow)).toBe(false);
+  });
+
+  test("its insert row carries the flag and no extra columns", () => {
+    const row = pointInsertRow("m-1", build(letSession()).points[1]);
+    expect(row.flags).toEqual([HAND_LABELLED_FLAG, LET_REPLAYED_FLAG]);
+    expect(row.result_type).toBe("Let");
+    expect(Object.keys(row)).not.toContain("labelPointId");
+  });
+});
+
 test.describe("vendorShotFacts", () => {
   test("speed in mph, bounce on the fitted clock plus the trim offset", () => {
     const raw = (eventId: number, frame: number, time: number, extra = {}) => ({
@@ -856,12 +954,14 @@ test.describe("buildAppliedRows with a start score", () => {
   const fromStart = () => session().filter((p) => p.pointIndex !== 9);
 
   test("point, game and set scores are counted from the start", () => {
-    const { points, problems, warnings } = buildAppliedRows({
+    const built = buildAppliedRows({
       points: fromStart(),
       adScoring: true,
       bestOf: 3,
       start,
     });
+    const { problems, warnings } = built;
+    const points = counted(built);
     expect(problems).toEqual([]);
     expect(warnings).toEqual([]);
     expect(points.map((p) => p.point_score)).toEqual([
@@ -886,12 +986,14 @@ test.describe("buildAppliedRows with a start score", () => {
   });
 
   test("the pressure flags read the start: set and match points at 5–0 and a set up, no break point", () => {
-    const { points } = buildAppliedRows({
-      points: fromStart(),
-      adScoring: true,
-      bestOf: 3,
-      start,
-    });
+    const points = counted(
+      buildAppliedRows({
+        points: fromStart(),
+        adScoring: true,
+        bestOf: 3,
+        start,
+      }),
+    );
     const pressure = points.map((p) => [
       p.point_score,
       p.is_break_point,

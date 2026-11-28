@@ -8,12 +8,16 @@ import {
   hoursWindow,
   pilotIsRunning,
   quotaTierFor,
+  seasonWindowStart,
   type AllowanceWorkspace,
   type VideoAllowance,
 } from "@/lib/services/splitstep/allowance";
 import {
+  buildPeek,
   capRefusalMessage,
   monthlyCapSecondsFor,
+  peekRefusalMessage,
+  personalRefusalMessage,
   scopeToAllowance,
   windowArgs,
 } from "@/lib/services/splitstep/quota";
@@ -146,7 +150,7 @@ test.describe("a plan bought in December: its hours start that day (decision 8)"
 
   test("a paid plan is drawn before January 1, over its own window", () => {
     const allowance = allowanceFor(
-      personal({ plan: "coach-pro", planPeriodStart: "2026-12-15T10:00:00Z" }),
+      personal({ plan: "player-pro", planPeriodStart: "2026-12-15T10:00:00Z" }),
       DEC_20,
     );
     expect([allowance.kind, allowance.capSeconds]).toEqual(["plan", 10 * H]);
@@ -158,12 +162,12 @@ test.describe("a plan bought in December: its hours start that day (decision 8)"
   });
 
   test("the same window on both sides of January 1", () => {
-    const coach = personal({
-      plan: "coach",
+    const player = personal({
+      plan: "player",
       planPeriodStart: "2026-12-15T10:00:00Z",
     });
-    const before = allowanceFor(coach, LAST_BETA_INSTANT);
-    const after = allowanceFor(coach, FIRST_PLAN_INSTANT);
+    const before = allowanceFor(player, LAST_BETA_INSTANT);
+    const after = allowanceFor(player, FIRST_PLAN_INSTANT);
     expect([before.kind, before.capSeconds]).toEqual(["plan", 5 * H]);
     expect(iso(before)).toEqual(iso(after));
     expect(before.windowed).toBe(true);
@@ -171,13 +175,13 @@ test.describe("a plan bought in December: its hours start that day (decision 8)"
 
   test("an override and an admin keep their precedence over the plan", () => {
     const override = allowanceFor(
-      personal({ plan: "coach", videoHoursOverride: 6.5 }),
+      personal({ plan: "player", videoHoursOverride: 6.5 }),
       DEC_20,
     );
     expect([override.kind, override.capSeconds]).toEqual(["override", 6.5 * H]);
     expect(override.windowed).toBe(true);
     const admin = allowanceFor(
-      personal({ plan: "coach", unlimitedVideo: true }),
+      personal({ plan: "player", unlimitedVideo: true }),
       DEC_20,
     );
     expect(admin.kind).toBe("unlimited");
@@ -189,7 +193,7 @@ test.describe("a plan bought in December: its hours start that day (decision 8)"
       expect([allowance.kind, allowance.windowed]).toEqual(["beta", false]);
     }
     // A team reads no personal plan, whatever rides on the workspace.
-    const college = allowanceFor(team({ plan: "coach-pro" }), DEC_20);
+    const college = allowanceFor(team({ plan: "player-pro" }), DEC_20);
     expect([college.kind, college.capSeconds]).toEqual(["beta", 75 * H]);
   });
 });
@@ -205,7 +209,7 @@ test.describe("from January 1, 2027: a personal workspace draws its plan", () =>
     // 7 pm on December 31 in New York is already January 1 in UTC.
     expect(
       allowanceFor(
-        personal({ plan: "coach" }),
+        personal({ plan: "player" }),
         new Date("2026-12-31T19:00:00-05:00"),
       ).kind,
     ).toBe("plan");
@@ -234,21 +238,21 @@ test.describe("from January 1, 2027: a personal workspace draws its plan", () =>
     expect([allowance.kind, allowance.capSeconds]).toEqual(["none", 0]);
   });
 
-  test("Coach is 5 hours and Coach Pro 10, over the hours window", () => {
+  test("Player is 5 hours and Player Pro 10, over the hours window", () => {
     const anchor = "2027-01-31T12:00:00Z";
-    const coach = allowanceFor(
-      personal({ plan: "coach", planPeriodStart: anchor }),
+    const player = allowanceFor(
+      personal({ plan: "player", planPeriodStart: anchor }),
       FEB_10,
     );
-    expect([coach.kind, coach.capSeconds]).toEqual(["plan", 5 * H]);
-    expect(iso(coach)).toEqual(
+    expect([player.kind, player.capSeconds]).toEqual(["plan", 5 * H]);
+    expect(iso(player)).toEqual(
       window("2027-01-31T12:00:00Z", "2027-02-28T12:00:00Z"),
     );
     // The row a reservation writes is still filed under the calendar month.
-    expect(coach.billingMonth).toBe("2027-02-01");
+    expect(player.billingMonth).toBe("2027-02-01");
 
     const pro = allowanceFor(
-      personal({ plan: "coach-pro", planPeriodStart: anchor }),
+      personal({ plan: "player-pro", planPeriodStart: anchor }),
       FEB_10,
     );
     expect([pro.kind, pro.capSeconds]).toEqual(["plan", 10 * H]);
@@ -257,7 +261,7 @@ test.describe("from January 1, 2027: a personal workspace draws its plan", () =>
   test("a paid plan with no period start falls back to the calendar month", () => {
     for (const planPeriodStart of [null, undefined, "not a date"]) {
       const allowance = allowanceFor(
-        personal({ plan: "coach", planPeriodStart }),
+        personal({ plan: "player", planPeriodStart }),
         FEB_10,
       );
       expect([allowance.kind, allowance.capSeconds]).toEqual(["plan", 5 * H]);
@@ -280,22 +284,22 @@ test.describe("from January 1, 2027: a personal workspace draws its plan", () =>
     ]);
     expect(iso(free)).toEqual(FEBRUARY);
 
-    const coach = allowanceFor(
+    const player = allowanceFor(
       personal({
-        plan: "coach",
+        plan: "player",
         videoHoursOverride: 20,
         unlimitedVideo: true,
         planPeriodStart: "2027-01-20T00:00:00Z",
       }),
       FEB_10,
     );
-    expect([coach.kind, coach.capSeconds]).toEqual(["override", 20 * H]);
-    expect(iso(coach)).toEqual(
+    expect([player.kind, player.capSeconds]).toEqual(["override", 20 * H]);
+    expect(iso(player)).toEqual(
       window("2027-01-20T00:00:00Z", "2027-02-20T00:00:00Z"),
     );
     // Zero is an allowance an admin can set, not "no override".
     expect(
-      allowanceFor(personal({ plan: "coach", videoHoursOverride: 0 }), FEB_10)
+      allowanceFor(personal({ plan: "player", videoHoursOverride: 0 }), FEB_10)
         .capSeconds,
     ).toBe(0);
   });
@@ -307,6 +311,136 @@ test.describe("from January 1, 2027: a personal workspace draws its plan", () =>
       UNLIMITED_CAP_SECONDS,
     ]);
     expect(allowanceResetsOn(allowance)).toBeNull();
+  });
+});
+
+test.describe("a failed renewal: the plan stays, the unpaid window has no plan hours", () => {
+  const player = (fields: Partial<AllowanceWorkspace> = {}) =>
+    personal({
+      plan: "player",
+      planPeriodStart: "2027-01-20T00:00:00Z",
+      ...fields,
+    });
+
+  test("past_due is the plan path with a cap of 0 and the flag", () => {
+    for (const plan of ["player", "player-pro"]) {
+      const allowance = allowanceFor(
+        player({ plan, planStatus: "past_due" }),
+        FEB_10,
+      );
+      expect([
+        allowance.kind,
+        allowance.capSeconds,
+        allowance.pastDue,
+        allowance.windowed,
+      ]).toEqual(["plan", 0, true, true]);
+      // Still the subscription's own window: paying brings THIS month's hours.
+      expect(iso(allowance)).toEqual(
+        window("2027-01-20T00:00:00Z", "2027-02-20T00:00:00Z"),
+      );
+      // Nothing comes back with a date; it comes back with the payment.
+      expect(allowanceResetsOn(allowance)).toBeNull();
+    }
+  });
+
+  test("the hours appear the moment the status is active again", () => {
+    const paid = allowanceFor(player({ planStatus: "active" }), FEB_10);
+    expect([paid.kind, paid.capSeconds, paid.pastDue]).toEqual([
+      "plan",
+      5 * H,
+      undefined,
+    ]);
+    // Every other status, and none at all, is a paid window.
+    for (const planStatus of [null, undefined, "canceled", "trialing"]) {
+      expect(allowanceFor(player({ planStatus }), FEB_10).capSeconds).toBe(
+        5 * H,
+      );
+    }
+  });
+
+  test("it applies in December too, to a plan bought early", () => {
+    const allowance = allowanceFor(
+      player({
+        planPeriodStart: "2026-12-10T00:00:00Z",
+        planStatus: "past_due",
+      }),
+      LAST_BETA_INSTANT,
+    );
+    expect([allowance.kind, allowance.capSeconds, allowance.pastDue]).toEqual([
+      "plan",
+      0,
+      true,
+    ]);
+  });
+
+  test("an admin's override and an unlimited workspace keep their precedence", () => {
+    const override = allowanceFor(
+      player({ planStatus: "past_due", videoHoursOverride: 3 }),
+      FEB_10,
+    );
+    expect([override.kind, override.capSeconds, override.pastDue]).toEqual([
+      "override",
+      3 * H,
+      undefined,
+    ]);
+    const unlimited = allowanceFor(
+      player({ planStatus: "past_due", unlimitedVideo: true }),
+      FEB_10,
+    );
+    expect([unlimited.kind, unlimited.capSeconds, unlimited.pastDue]).toEqual([
+      "unlimited",
+      UNLIMITED_CAP_SECONDS,
+      undefined,
+    ]);
+  });
+
+  test("Free and a team are never past due, whatever the status says", () => {
+    const free = allowanceFor(personal({ planStatus: "past_due" }), FEB_10);
+    expect([free.kind, free.pastDue]).toEqual(["none", undefined]);
+    const season = allowanceFor(
+      team({ programPlan: SPRING, planStatus: "past_due" }),
+      FEB_10,
+    );
+    expect([season.kind, season.capSeconds, season.pastDue]).toEqual([
+      "season",
+      80 * H,
+      undefined,
+    ]);
+  });
+
+  test("the out-of-hours refusal says the payment failed, not to add hours", () => {
+    const SENTENCE =
+      "Your last payment failed. Update your card to get this month's hours.";
+    expect(
+      personalRefusalMessage({
+        neededSeconds: 2 * H,
+        remainingSeconds: 0,
+        pastDue: true,
+      }),
+    ).toBe(`You're out of video hours. ${SENTENCE}`);
+    // Extra hours still count, and still fall short.
+    expect(
+      personalRefusalMessage({
+        neededSeconds: 2 * H,
+        remainingSeconds: 1 * H,
+        pastDue: true,
+      }),
+    ).toBe(`This video needs 2h. You have 1h left. ${SENTENCE}`);
+    // The peek `/api/splitstep/upload-url` refuses from says the same words.
+    const peek = { ...buildPeek(0, 0, 1 * H), pastDue: true };
+    expect(peekRefusalMessage(peek, 2 * H, { kind: "personal" })).toBe(
+      `This video needs 2h. You have 1h left. ${SENTENCE}`,
+    );
+    // Extra hours that cover it are not refused at all.
+    expect(peekRefusalMessage(peek, 30 * 60, { kind: "personal" })).toBeNull();
+    // Paid up, the refusal is the usual one.
+    expect(
+      personalRefusalMessage({
+        neededSeconds: 2 * H,
+        remainingSeconds: 0,
+        now: FEB_10,
+      }),
+    ).not.toContain("payment failed");
   });
 });
 
@@ -407,6 +541,67 @@ test.describe("from January 1, 2027: a team draws a season, a pilot, or nothing"
     expect(seasonAt("2027-03-14T15:00:00Z").billingMonth).toBe("2027-03-01");
   });
 
+  test("a plan saved before its start date counts from the start date", () => {
+    // Saved in December for a January 1 season: nothing earlier is in play.
+    const allowance = seasonAt("2027-03-14T15:00:00Z", {
+      programPlan: { ...SPRING, hoursFrom: "2026-12-12T18:30:00Z" },
+    });
+    expect(iso(allowance)).toEqual(
+      window("2027-01-01T00:00:00Z", "2027-06-01T00:00:00Z"),
+    );
+    // Saved in the season's first instant is the same answer.
+    expect(
+      iso(
+        seasonAt("2027-03-14T15:00:00Z", {
+          programPlan: { ...SPRING, hoursFrom: "2027-01-01T00:00:00Z" },
+        }),
+      ),
+    ).toEqual(window("2027-01-01T00:00:00Z", "2027-06-01T00:00:00Z"));
+  });
+
+  test("a plan saved mid-season counts from the moment it was saved", () => {
+    // Saved February 10: January's video is not drawn from this pool.
+    const saved = "2027-02-10T15:30:00.123Z";
+    const allowance = seasonAt("2027-03-14T15:00:00Z", {
+      programPlan: { ...SPRING, hoursFrom: saved },
+    });
+    expect([allowance.kind, allowance.capSeconds]).toEqual(["season", 80 * H]);
+    expect(iso(allowance)).toEqual(window(saved, "2027-06-01T00:00:00Z"));
+    // The same instants reach the window-keyed RPCs and the ledger read.
+    expect(windowArgs(allowance)).toEqual({
+      p_window_start: saved,
+      p_window_end: "2027-06-01T00:00:00.000Z",
+    });
+    // The season still ends, and resets, where it did.
+    expect(allowanceResetsOn(allowance)).toBe("Jun 1");
+  });
+
+  test("no hours_from column, or an unreadable one, reads as from the start date", () => {
+    for (const hoursFrom of [undefined, null, "", "not a date"]) {
+      expect(
+        iso(
+          seasonAt("2027-03-14T15:00:00Z", {
+            programPlan: { ...SPRING, hoursFrom },
+          }),
+        ),
+      ).toEqual(window("2027-01-01T00:00:00Z", "2027-06-01T00:00:00Z"));
+    }
+    // A stamp at or past the season's end cannot open a window: the start date.
+    const end = new Date("2027-06-01T00:00:00Z");
+    expect(
+      seasonWindowStart(
+        { startsOn: "2027-01-01", hoursFrom: "2027-06-01T00:00:00Z" },
+        end,
+      ).toISOString(),
+    ).toBe("2027-01-01T00:00:00.000Z");
+    expect(
+      seasonWindowStart(
+        { startsOn: "2027-01-01", hoursFrom: "2027-05-31T23:59:59Z" },
+        end,
+      ).toISOString(),
+    ).toBe("2027-05-31T23:59:59.000Z");
+  });
+
   test("the day after a season ends the team has nothing", () => {
     const after = seasonAt("2027-06-01T00:00:00Z");
     expect([after.kind, after.capSeconds]).toEqual(["none", 0]);
@@ -443,7 +638,7 @@ test.describe("from January 1, 2027: a team draws a season, a pilot, or nothing"
       hours("program", "full_year"),
       hours("elite", "spring"),
       hours("elite", "full_year"),
-    ]).toEqual([80, 130, 200, 280, 300, 400]);
+    ]).toEqual([80, 130, 225, 325, 400, 550]);
     // A plan this build does not know is no plan.
     expect(hours("platinum", "spring")).toBe(0);
   });
@@ -501,7 +696,11 @@ test.describe("from January 1, 2027: a team draws a season, a pilot, or nothing"
 
   test("a team never reads a member's plan or override", () => {
     const allowance = allowanceFor(
-      team({ plan: "coach-pro", videoHoursOverride: 50, unlimitedVideo: true }),
+      team({
+        plan: "player-pro",
+        videoHoursOverride: 50,
+        unlimitedVideo: true,
+      }),
       FEB_10,
     );
     expect([allowance.kind, allowance.capSeconds]).toEqual(["none", 0]);
@@ -516,7 +715,7 @@ test.describe("what the callers do with the answer", () => {
     expect(resets(team(PILOT), FEB_10)).toBe("Mar 1");
     expect(
       resets(
-        personal({ plan: "coach", planPeriodStart: "2027-01-31T12:00:00Z" }),
+        personal({ plan: "player", planPeriodStart: "2027-01-31T12:00:00Z" }),
         FEB_10,
       ),
     ).toBe("Feb 28");

@@ -51,7 +51,7 @@
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { CoachPlanId, PlanPeriod } from "@/lib/billing/plans";
+import type { PersonalPlanId, PlanPeriod } from "@/lib/billing/plans";
 import { expandableId } from "@/lib/services/credits/checkout";
 import { planForPriceId } from "@/lib/stripe/prices";
 import { errorMessage } from "./http";
@@ -151,7 +151,7 @@ export type SyncOutcome =
   | {
       outcome: "synced";
       userId: string;
-      plan: CoachPlanId;
+      plan: PersonalPlanId;
       period: PlanPeriod | null;
       status: PlanStatus;
     }

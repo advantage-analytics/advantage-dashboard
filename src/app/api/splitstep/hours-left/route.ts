@@ -40,6 +40,8 @@ export async function GET() {
       grantedSeconds: peek.grantedSeconds,
       nextCreditExpiresAt: peek.nextCreditExpiresAt,
       resetsOn: peek.resetsOn,
+      // For the upload wizard's re-read once a failed payment is fixed.
+      pastDue: peek.pastDue === true,
     };
     return NextResponse.json(body, {
       headers: { "Cache-Control": "no-store" },

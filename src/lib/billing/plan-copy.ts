@@ -35,7 +35,7 @@ import {
 } from "@/lib/services/splitstep/allowance";
 import { isPaidPlan, planFor } from "@/lib/user/plan";
 import type { Workspace } from "@/lib/workspace/types";
-import { hoursLeftLabel } from "./checkout-view";
+import { PAST_DUE_SENTENCE, hoursLeftLabel } from "./checkout-view";
 import {
   ASK_QUESTIONS_PER_MONTH,
   COLLEGE_PLANS,
@@ -44,6 +44,7 @@ import {
   PILOT_LATEST_END,
   PLAN_TERM_LABELS,
   aboutMatches,
+  matchesPhrase,
   plansHaveBegun,
   programPlanFor,
   usd,
@@ -141,7 +142,7 @@ export interface PlanStanding {
   /** `allowanceFor()`'s kind for the workspace. */
   kind: AllowanceKind;
   /**
-   * The word a surface tags the workspace with: `Free`, `Coach`, `Coach Pro`,
+   * The word a surface tags the workspace with: `Free`, `Player`, `Player Pro`,
    * a team's plan (`Starter`, `Program`, `Elite`), `Pilot` on a running
    * pilot, `No plan` for a team with neither.
    */
@@ -157,6 +158,12 @@ export interface PlanStanding {
   resetsOn: string | null;
   /** ISO instant the hours window ends. */
   windowEnd: string;
+  /**
+   * A personal plan whose last payment failed: the plan and its name stay,
+   * `capSeconds` is 0 and nothing resets until the card is updated. Every
+   * surface then says `PAST_DUE_SENTENCE` where it would say the hours.
+   */
+  pastDue: boolean;
 }
 
 /** A workspace's plan and hours window at `now`, with their words. */
@@ -170,6 +177,7 @@ export function planStandingFor(
     capSeconds: allowance.capSeconds,
     resetsOn: allowanceResetsOn(allowance),
     windowEnd: allowance.windowEnd.toISOString(),
+    pastDue: allowance.pastDue === true,
   };
 
   if (workspace.kind === "personal") {
@@ -320,6 +328,19 @@ export function planPillView(
     until ? `last until ${until}` : "are used after them"
   }.`;
 
+  // A failed renewal: the plan stays, this month's hours wait on the card.
+  if (standing.pastDue) {
+    return done({
+      figure:
+        extra > 0
+          ? { strong: `${formatHoursShort(extra)}h`, rest: "extra" }
+          : { strong: "0h", rest: "left" },
+      label: "Payment failed",
+      detail: PAST_DUE_SENTENCE,
+      share: extra > 0 ? 1 : 0,
+    });
+  }
+
   // No hours of the plan's own: Free, or an allowance of zero.
   if (cap <= 0) {
     if (extra > 0) {
@@ -425,11 +446,9 @@ function analyzedFact(analyzed: number): HomeCardFact {
   };
 }
 
-/** "Your first month of a plan is half off." */
+/** "Your first month of a plan is 30% off." */
 function firstMonthSentence(): string {
-  return FIRST_MONTH_DISCOUNT_PERCENT === 50
-    ? "Your first month of a plan is half off."
-    : `Your first month of a plan is ${FIRST_MONTH_DISCOUNT_PERCENT}% off.`;
+  return `Your first month of a plan is ${FIRST_MONTH_DISCOUNT_PERCENT}% off.`;
 }
 
 export function homeCardView(input: {
@@ -534,6 +553,21 @@ export function homeCardView(input: {
 
   const extraFact: HomeCardFact[] =
     extra > 0 ? [{ text: `${formatHoursLong(extra)} extra` }] : [];
+
+  // A failed renewal: the card's one sentence says so, in place of the offer.
+  if (standing.pastDue) {
+    return {
+      eyebrow,
+      figure,
+      line1,
+      line2: extra > 0 ? "left in extra hours" : "left this month",
+      sentence: PAST_DUE_SENTENCE,
+      facts: [matches],
+      cta: "See plan",
+      href: PLAN_HREF,
+      ariaLabel: `${standing.name} plan: see plan`,
+    };
+  }
 
   if (input.capSeconds <= 0) {
     return {
@@ -662,10 +696,13 @@ export function usageCardView(input: {
           freeLeftSeconds: left,
           creditSeconds: extra,
         },
-    line: `${planPart} · ${extraPart}`,
+    // A failed renewal: the line is that, and any extra hours after it.
+    line: standing.pastDue
+      ? `${PAST_DUE_SENTENCE}${extra > 0 ? ` ${extraPart}` : ""}`
+      : `${planPart} · ${extraPart}`,
     link: {
       label:
-        capSeconds > 0 || unlimited
+        capSeconds > 0 || unlimited || standing.pastDue
           ? "Manage on Plan"
           : "Choose a plan on Plan",
       href: PLAN_HREF,
@@ -796,13 +833,9 @@ export function teamMeterSuffix(standing: PlanStanding): string | null {
 
 /**
  * `about half a match`, `about 1 match`, `about 3 matches` — what a balance
- * covers, from `HOURS_PER_MATCH`: a half, or the nearest whole match.
+ * covers, for a sentence that always says something. The arithmetic is
+ * `matchesPhrase()`'s; the extra-hours row reads it from one whole match up.
  */
 export function aboutMatchesPhrase(seconds: number): string {
-  const matches = Math.max(0, seconds) / 3600 / HOURS_PER_MATCH;
-  const halves = Math.round(matches * 2);
-  if (halves <= 0) return "less than half a match";
-  if (halves === 1) return "about half a match";
-  const whole = Math.max(1, Math.round(matches));
-  return `about ${whole} ${whole === 1 ? "match" : "matches"}`;
+  return matchesPhrase(seconds) ?? "less than half a match";
 }

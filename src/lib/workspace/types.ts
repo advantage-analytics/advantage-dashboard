@@ -251,6 +251,13 @@ export interface Workspace {
    */
   planPeriodStart?: string | null;
   /**
+   * `users.plan_status` of the personal workspace's owner: `active`,
+   * `past_due`, `canceled`, or null for never subscribed. Only `past_due`
+   * changes anything: the plan stays but its unpaid window carries no plan
+   * hours (`allowanceFor()`). Absent reads as paid.
+   */
+  planStatus?: string | null;
+  /**
    * `programs.status` as the server read it — the column `canSubmitVideo` is
    * derived from, carried raw. Null for a personal workspace, which has no
    * program row.
@@ -396,7 +403,7 @@ export interface Viewer {
    */
   avatarUrl: string | null;
   /**
-   * `users.plan` — 'free' | 'coach' | 'coach-pro', plus the legacy 'pro'. The
+   * `users.plan` — 'free' | 'player' | 'player-pro', plus the legacy 'pro'. The
    * paid entitlement, and only that. Read it through `planFor()` in
    * `lib/user/plan.ts`, which is where legacy and unknown values become Free.
    */

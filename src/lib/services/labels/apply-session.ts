@@ -45,6 +45,7 @@ import { requestMatchInsights } from "@/lib/services/splitstep/request-insights"
 import {
   buildAppliedRows,
   expectedStats,
+  isLetPointRow,
   pointInsertRow,
   vendorShotFacts,
   type AppliedPointRow,
@@ -545,7 +546,10 @@ async function relinkBookmarks(
   const timeOf = new Map(
     backup.points.map((p) => [p.id as string, p.video_time as number | null]),
   );
-  const timed = points.filter((p) => p.video_time !== null);
+  // A replayed let is no point to keep a bookmark on.
+  const timed = points.filter(
+    (p) => p.video_time !== null && !isLetPointRow(p),
+  );
   const rows: Row[] = [];
   for (const bookmark of backup.bookmarks) {
     const t = timeOf.get(bookmark.point_id as string);
@@ -629,7 +633,9 @@ export async function publishPlanned(params: {
       error: `Not published: ${scoreMismatchSentence(plan.mismatch)}. Fix the set, mark the video as ending early, or correct the match record.`,
     };
   }
-  if (plan.built.points.length === 0) {
+  // A replayed let is written but is no point: a session of nothing else
+  // would replace the match with zero counted points.
+  if (plan.built.points.every(isLetPointRow)) {
     return { ok: false, error: "Not published: there are no points to write." };
   }
   const jobId = session.jobId;

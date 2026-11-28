@@ -8,17 +8,21 @@
  * from the plan module or from `/api/billing/upgrade/preview`; nothing here is
  * a typed price.
  *
- * Five scenes from four ways in:
+ * Six scenes from five ways in, and one more that is a mock:
  *
  *   choose               Settings › Plan "Choose a plan", or `?plan=&period=`
  *   hours                "Buy hours" anywhere: 1–50 extra hours
  *   paywall-free         the upload wizard at Send, a Free player
  *   paywall-subscriber   the upload wizard at Send, a subscriber out of hours
- *   upgrade              Coach → Coach Pro, charged to the card on file
+ *   upgrade              Player → Player Pro, charged to the card on file
+ *   pay-yearly           monthly → yearly on the same plan, charged the same way
+ *   change               MOCK ONLY: a move that waits for renewal (a smaller
+ *                        plan, yearly → monthly). No page opens it and no
+ *                        endpoint makes it; `/design/plans-2027` draws it.
  *
  * The mode is what the caller asked for; the scene is what this account can
  * actually be shown (`checkoutScene()`): a subscriber asking to "choose a
- * plan" is shown the upgrade, and Coach Pro has nothing above it to move to.
+ * plan" is shown the upgrade, and Player Pro has nothing above it to move to.
  *
  * Client-safe and pure.
  */
@@ -28,18 +32,31 @@ import {
   EXTRA_HOUR_PRICE,
   EXTRA_HOUR_VALIDITY_MONTHS,
   FIRST_MONTH_DISCOUNT_PERCENT,
-  aboutMatches,
-  coachPlan,
+  PERSONAL_PLAN_AUDIENCE,
+  extraHourRate,
+  firstMonthOffer,
   formatUsdCents,
+  matchesPhrase,
+  personalPlan,
+  planHeadline,
+  planHoursShort,
   planHoursSeconds,
   usd,
-  type CoachPlanId,
+  type PersonalPlanId,
   type PlanPeriod,
 } from "./plans";
 import type { UpgradeQuote } from "./upgrade";
 
-/** A plan that is sold: every `CoachPlanId` but Free. */
-export type PaidPlan = Exclude<CoachPlanId, "free">;
+/** A plan that is sold: every `PersonalPlanId` but Free. */
+export type PaidPlan = Exclude<PersonalPlanId, "free">;
+
+/**
+ * What every surface says to a subscriber whose renewal failed. The plan and
+ * everything else on it stay while Stripe retries; this month's plan hours
+ * arrive when the invoice is paid.
+ */
+export const PAST_DUE_SENTENCE =
+  "Your last payment failed. Update your card to get this month's hours.";
 
 /** Whole hours one purchase may hold — `MIN/MAX_EXTRA_HOURS` on the server. */
 export const EXTRA_HOURS_MIN = 1;
@@ -51,15 +68,35 @@ export type CheckoutMode =
   | { kind: "hours" }
   /** The upload wizard, at Send: the trimmed video costs `neededSeconds`. */
   | { kind: "paywall"; neededSeconds: number }
-  | { kind: "upgrade" };
+  | { kind: "upgrade" }
+  /** Settings › Plan "Switch to yearly": the same plan, paid yearly from today. */
+  | { kind: "yearly" }
+  /**
+   * MOCK ONLY — nothing on a real page builds this mode and no endpoint
+   * carries it out. A change that takes effect at renewal, as data.
+   */
+  | { kind: "change"; change: ScheduledChange };
+
+/** A plan change that waits for the current period to end. Data only. */
+export interface ScheduledChange {
+  to: { plan: PaidPlan; period: PlanPeriod };
+  /** The renewal day it takes effect, `YYYY-MM-DD` (UTC). */
+  effectiveOn: string;
+}
 
 export type CheckoutScene =
-  "choose" | "hours" | "paywall-free" | "paywall-subscriber" | "upgrade";
+  | "choose"
+  | "hours"
+  | "paywall-free"
+  | "paywall-subscriber"
+  | "upgrade"
+  | "pay-yearly"
+  | "change";
 
 /** What the dialog knows about the buyer. */
 export interface CheckoutAccount {
   /** The plan the account is on — `planFor(users.plan).id`. */
-  plan: CoachPlanId;
+  plan: PersonalPlanId;
   /** `users.plan_period`, when subscribed. */
   period: PlanPeriod | null;
   /** Hours left in the current window that are not extra hours. */
@@ -73,10 +110,23 @@ export interface CheckoutAccount {
    * Stripe too and has the last word (`firstMonthDiscount` in its answer).
    */
   firstMonthEligible: boolean;
+  /**
+   * The subscriber's last payment failed (`users.plan_status = 'past_due'`):
+   * the plan stays, this month's plan hours wait on the card, and no plan
+   * change is offered until it is updated.
+   */
+  pastDue?: boolean;
 }
 
-/** `/api/billing/upgrade/preview`'s answer. */
-export type UpgradePreviewView = UpgradeQuote & { period: PlanPeriod };
+/**
+ * `/api/billing/upgrade/preview`'s answer. `period` is how the subscription
+ * is billed AFTER the change; `fromPeriod` how it is billed now, which
+ * differs only for the switch to yearly (left out, the same).
+ */
+export type UpgradePreviewView = UpgradeQuote & {
+  period: PlanPeriod;
+  fromPeriod?: PlanPeriod;
+};
 
 export type PreviewState =
   | { status: "idle" }
@@ -101,7 +151,8 @@ export function afterUpgradeRefusal(
   return { preview, refetch: false };
 }
 
-export type CheckoutChoice = PaidPlan | "hours" | "upgrade";
+export type CheckoutChoice =
+  PaidPlan | "hours" | "upgrade" | "yearly" | "change";
 
 export interface CheckoutSelection {
   choice: CheckoutChoice;
@@ -114,7 +165,10 @@ export interface CheckoutSelection {
 export type CheckoutAction =
   | { kind: "plan"; plan: PaidPlan; period: PlanPeriod; amountCents: number }
   | { kind: "hours"; hours: number; amountCents: number }
-  | { kind: "upgrade"; payTodayCents: number };
+  /** `period: "yearly"` is the switch to yearly; left out, Player → Player Pro. */
+  | { kind: "upgrade"; payTodayCents: number; period?: "yearly" }
+  /** MOCK ONLY: a change at renewal. The dialog closes; nothing is called. */
+  | { kind: "schedule"; change: ScheduledChange };
 
 export interface CheckoutRowView {
   id: CheckoutChoice | "current";
@@ -155,18 +209,50 @@ export interface CheckoutView {
   sampleLink: boolean;
   /** Why there is nothing to pay for (the upgrade could not be priced). */
   problem: string | null;
+  /**
+   * The aside ends with "Update card", which opens Stripe's portal: a
+   * subscriber whose payment failed.
+   */
+  portalLink?: boolean;
   secondary: "Not now" | "Shorten the trim instead";
   primary: string;
   action: CheckoutAction | null;
+  /** What the dialog says while the card on file is being charged. */
+  working?: string;
 }
 
-function isPaid(plan: CoachPlanId): plan is PaidPlan {
+function isPaid(plan: PersonalPlanId): plan is PaidPlan {
   return plan !== "free";
 }
 
 /** `0h`, `23m`, `3h 12m` — a balance, which reads "0h" at nothing, not "0m". */
 export function hoursLeftLabel(seconds: number): string {
   return seconds <= 0 ? "0h" : formatHoursLong(seconds);
+}
+
+/**
+ * `4h 12m` — everything the account can still spend this month: what is left
+ * of the plan's hours plus unexpired extra hours. The one figure "N left this
+ * month" means, on Settings › Plan's headline and in the dialog's header row
+ * alike (the header pill adds the same two). A sentence that counts the
+ * plan's hours alone (an upgrade's credit) says "plan hours".
+ */
+export function totalLeftLabel(
+  planLeftSeconds: number,
+  extraSeconds: number,
+): string {
+  return hoursLeftLabel(
+    Math.max(0, planLeftSeconds) + Math.max(0, extraSeconds),
+  );
+}
+
+/**
+ * A duration inside an aside's sentence, which wraps as prose: `3h 12m` and
+ * `15 days` keep their parts on one line (a no-break space). Only where an
+ * aside is built; rows and every other caller keep the plain space.
+ */
+function unbroken(duration: string): string {
+  return duration.replace(/ /g, "\u00A0");
 }
 
 function plural(count: number, one: string, many: string): string {
@@ -193,31 +279,58 @@ export function extraHoursToCover(shortSeconds: number): number {
   return clampHours(Math.ceil(Math.max(0, shortSeconds) / 3600));
 }
 
+/** What of the account decides the scene: the plan, and how it is billed. */
+type SceneAccount = Pick<CheckoutAccount, "plan"> &
+  Partial<Pick<CheckoutAccount, "period" | "pastDue">>;
+
 /** Which scene this account is shown for the mode the caller asked for. */
 export function checkoutScene(
   mode: CheckoutMode,
-  account: Pick<CheckoutAccount, "plan">,
+  account: SceneAccount,
 ): CheckoutScene {
   if (mode.kind === "paywall") {
     return isPaid(account.plan) ? "paywall-subscriber" : "paywall-free";
   }
   if (mode.kind === "hours") return "hours";
-  // Choosing or upgrading: by the plan the account is already on.
+  // A plan to change is a plan held: anyone else is choosing their first.
   if (account.plan === "free") return "choose";
-  if (account.plan === "coach") return "upgrade";
+  if (mode.kind === "change") return "change";
+  if (mode.kind === "yearly") {
+    // Only a monthly subscriber has a year to switch to.
+    return account.period === "monthly" ? "pay-yearly" : "hours";
+  }
+  // Choosing or upgrading: by the plan the account is already on.
+  if (account.plan === "player") return "upgrade";
   return "hours";
 }
 
 /** Whether the scene needs `/api/billing/upgrade/preview`. */
 export function needsUpgradePreview(
   mode: CheckoutMode,
-  account: Pick<CheckoutAccount, "plan">,
+  account: SceneAccount,
 ): boolean {
   const scene = checkoutScene(mode, account);
   return (
     scene === "upgrade" ||
-    (scene === "paywall-subscriber" && account.plan === "coach")
+    scene === "pay-yearly" ||
+    // No plan change is offered over a failed payment, so none is priced.
+    (scene === "paywall-subscriber" &&
+      account.plan === "player" &&
+      !account.pastDue)
   );
+}
+
+/**
+ * What `/api/billing/upgrade` and its preview are sent for the scene: the
+ * switch to yearly names its period, the plan upgrade sends nothing.
+ */
+export function upgradeRequestFor(
+  mode: CheckoutMode,
+  account: SceneAccount,
+): { period: "yearly" } | undefined {
+  return checkoutScene(mode, account) === "pay-yearly"
+    ? { period: "yearly" }
+    : undefined;
 }
 
 /** Seconds the video is short of what the account holds. */
@@ -239,14 +352,25 @@ export function initialSelection(
   switch (scene) {
     case "choose":
       return {
-        choice: (mode.kind === "choose" && mode.plan) || "coach",
+        choice: (mode.kind === "choose" && mode.plan) || "player",
         period: (mode.kind === "choose" && mode.period) || "monthly",
         hours,
       };
     case "paywall-free":
-      return { choice: "coach", period: "monthly", hours };
+      return { choice: "player", period: "monthly", hours };
     case "upgrade":
       return { choice: "upgrade", period: account.period ?? "monthly", hours };
+    case "pay-yearly":
+      return { choice: "yearly", period: "yearly", hours };
+    case "change":
+      return {
+        choice: "change",
+        period:
+          mode.kind === "change"
+            ? mode.change.to.period
+            : (account.period ?? "monthly"),
+        hours,
+      };
     case "paywall-subscriber":
     case "hours":
       return { choice: "hours", period: account.period ?? "monthly", hours };
@@ -259,7 +383,7 @@ export function planPricing(
   period: PlanPeriod,
   firstMonthEligible: boolean,
 ): { dueCents: number; wasCents: number | null; then: string } {
-  const { monthly, yearly } = coachPlan(plan);
+  const { monthly, yearly } = personalPlan(plan);
   if (period === "yearly") {
     // Eleven months' price: the struck figure is the twelve it replaces.
     return {
@@ -280,24 +404,35 @@ export function planPricing(
   return { dueCents: monthly * 100, wasCents: null, then: "a month" };
 }
 
-/** "Half off your first month". */
-function firstMonthOffer(): string {
-  return FIRST_MONTH_DISCOUNT_PERCENT === 50
-    ? "Half off your first month"
-    : `${FIRST_MONTH_DISCOUNT_PERCENT}% off your first month`;
-}
-
-/** `5h a month, about 3 matches`. */
+/**
+ * `About 3 verified matches a month · 5 hours`. The dialog's rows are narrower
+ * than Settings › Plan's, so the hours go without "of match video".
+ */
 function planLine(plan: PaidPlan): string {
-  const { hours, matches } = coachPlan(plan);
-  return `${hours ?? 0}h a month, about ${matches} matches`;
+  const hours = planHoursShort(plan);
+  return hours ? `${planHeadline(plan)} · ${hours}` : planHeadline(plan);
 }
 
 function hoursName(hours: number): string {
   return plural(hours, "extra hour", "extra hours");
 }
 
+/**
+ * `About 1 match · Last 12 months`: what the extra hours cover, from one
+ * whole match up. One hour is the validity alone: "half a match" at one
+ * hour's price would contradict the per-match price printed above it.
+ */
+function hoursCoverLine(hours: number): string {
+  const about = matchesPhrase(hours * 3600, { fromWholeMatch: true });
+  return about
+    ? `${about.charAt(0).toUpperCase()}${about.slice(1)} · ${HOURS_LAST}`
+    : HOURS_LAST;
+}
+
+/** The price beside an extra-hours figure, where the row's line says the rest. */
 const HOUR_RATE = `${usd(EXTRA_HOUR_PRICE)} an hour`;
+/** The buy-hours band's rate: the price, and about what a match costs. */
+const HOUR_RATE_LINE = extraHourRate();
 const HOURS_LAST = `Last ${EXTRA_HOUR_VALIDITY_MONTHS} months`;
 const SALES_FINAL = "All sales final, except where required by law.";
 
@@ -313,7 +448,7 @@ function planRow(
     dueCents: pricing.dueCents,
     row: {
       id: plan,
-      name: coachPlan(plan).name,
+      name: personalPlan(plan).name,
       line,
       price: formatUsdCents(pricing.dueCents),
       ...(pricing.wasCents !== null
@@ -326,7 +461,11 @@ function planRow(
   };
 }
 
-/** What the credit is "for": the share that set it. */
+/**
+ * What the credit is "for": the share that set it. The hours are the plan's
+ * own, not the header's total; the row has no room to say "of plan hours"
+ * on one line (measured), so the aside under it does.
+ */
 function creditFor(preview: UpgradePreviewView): string {
   return preview.creditBasis === "days"
     ? `your ${plural(preview.daysLeft, "day", "days")} left`
@@ -337,7 +476,7 @@ function upgradeRow(
   preview: PreviewState,
   selected: boolean,
 ): CheckoutRowView | null {
-  const pro = coachPlan("coach-pro");
+  const pro = personalPlan("player-pro");
   if (preview.status === "failed" || preview.status === "idle") return null;
   if (preview.status === "loading") {
     return {
@@ -410,17 +549,21 @@ export function buildCheckoutView(input: {
     input.canShortenTrim && mode.kind === "paywall"
       ? "Shorten the trim instead"
       : "Not now";
-  const current = isPaid(account.plan) ? coachPlan(account.plan) : null;
+  const current = isPaid(account.plan) ? personalPlan(account.plan) : null;
   const subscriberOffer = {
-    offer: `${current?.name ?? "Free"} · ${hoursLeftLabel(account.planLeftSeconds)} left this month`,
-    offerDetail: account.resetsOn ? `Hours reset ${account.resetsOn}` : "",
+    offer: `${current?.name ?? "Free"} · ${totalLeftLabel(account.planLeftSeconds, account.extraSeconds)} left this month`,
+    offerDetail: account.pastDue
+      ? "Payment failed"
+      : account.resetsOn
+        ? `Hours reset ${account.resetsOn}`
+        : "",
   };
 
   if (scene === "choose") {
     const chosen: PaidPlan =
-      selection.choice === "coach-pro" ? "coach-pro" : "coach";
-    const plan = coachPlan(chosen);
-    const rows = (["coach", "coach-pro"] as const).map((id) =>
+      selection.choice === "player-pro" ? "player-pro" : "player";
+    const plan = personalPlan(chosen);
+    const rows = (["player", "player-pro"] as const).map((id) =>
       planRow(
         id,
         { ...selection, choice: chosen },
@@ -441,7 +584,7 @@ export function buildCheckoutView(input: {
         lead: "Start",
         figure: plan.name,
         trail: ".",
-        body: `${plan.hours ?? 0} hours of match video a month, about ${plan.matches} matches, with Verified by Advantage on every match.`,
+        body: `${PERSONAL_PLAN_AUDIENCE} ${planHeadline(chosen)}, from ${plan.hours ?? 0} hours of match video.`,
         offer:
           selection.period === "yearly"
             ? "One month free"
@@ -474,7 +617,6 @@ export function buildCheckoutView(input: {
   }
 
   if (scene === "hours") {
-    const left = account.planLeftSeconds + account.extraSeconds;
     return {
       scene,
       band: {
@@ -482,12 +624,12 @@ export function buildCheckoutView(input: {
         figure: "extra hours",
         trail: ".",
         body: current
-          ? `${HOUR_RATE}. Extra hours last ${EXTRA_HOUR_VALIDITY_MONTHS} months and are used after your plan's hours.`
-          : `${HOUR_RATE}, no plan needed. Extra hours last ${EXTRA_HOUR_VALIDITY_MONTHS} months.`,
+          ? `${HOUR_RATE_LINE}. Extra hours last ${EXTRA_HOUR_VALIDITY_MONTHS} months and are used after your plan's hours.`
+          : `${HOUR_RATE_LINE}, no plan needed. Extra hours last ${EXTRA_HOUR_VALIDITY_MONTHS} months.`,
         ...(current
           ? subscriberOffer
           : {
-              offer: `Free · ${hoursLeftLabel(left)} left`,
+              offer: `Free · ${totalLeftLabel(account.planLeftSeconds, account.extraSeconds)} left`,
               offerDetail: HOUR_RATE,
             }),
       },
@@ -497,7 +639,7 @@ export function buildCheckoutView(input: {
         {
           id: "hours",
           name: hoursName(hours),
-          line: `About ${plural(aboutMatches(hours), "match", "matches")} · ${HOURS_LAST}`,
+          line: hoursCoverLine(hours),
           price: formatUsdCents(hoursCents),
           then: HOUR_RATE,
           selectable: true,
@@ -524,21 +666,17 @@ export function buildCheckoutView(input: {
     account.planLeftSeconds + account.extraSeconds + hours * 3600;
 
   if (scene === "paywall-free") {
-    const chosen: CheckoutChoice =
-      selection.choice === "upgrade" ? "coach" : selection.choice;
+    const chosen: PaidPlan | "hours" =
+      selection.choice === "hours" || selection.choice === "player-pro"
+        ? selection.choice
+        : "player";
     const picked = { ...selection, choice: chosen };
-    const plans = (["coach", "coach-pro"] as const).map((id) =>
-      planRow(
-        id,
-        picked,
-        account,
-        "monthly",
-        `${planLine(id)} · Verified by Advantage`,
-      ),
+    const plans = (["player", "player-pro"] as const).map((id) =>
+      planRow(id, picked, account, "monthly", planLine(id)),
     );
-    const coach = coachPlan("coach");
-    const coachPricing = planPricing(
-      "coach",
+    const player = personalPlan("player");
+    const playerPricing = planPricing(
+      "player",
       "monthly",
       account.firstMonthEligible,
     );
@@ -557,17 +695,17 @@ export function buildCheckoutView(input: {
     if (chosen === "hours") {
       aside =
         afterHours >= needed
-          ? `Covers it, ${formatHoursLong(afterHours - needed)} to spare. ${SALES_FINAL}`
-          : `Covers ${formatHoursLong(afterHours)} of this match; shorten the trim to fit. ${SALES_FINAL}`;
+          ? `Covers it, ${unbroken(formatHoursLong(afterHours - needed))} to spare. ${SALES_FINAL}`
+          : `Covers ${unbroken(formatHoursLong(afterHours))} of this match; shorten the trim to fit. ${SALES_FINAL}`;
       action = { kind: "hours", hours, amountCents: hoursCents };
     } else {
-      const plan = coachPlan(chosen);
+      const plan = personalPlan(chosen);
       // A new plan's hours replace whatever the month held; extra hours stay.
       const after = planHoursSeconds(chosen) + account.extraSeconds;
       const covers =
         after >= needed
-          ? `${plan.name} covers this match with ${formatHoursLong(after - needed)} to spare.`
-          : `${plan.name} covers ${formatHoursLong(after)} of this match; shorten the trim to fit.`;
+          ? `${plan.name} covers this match with ${unbroken(formatHoursLong(after - needed))} to spare.`
+          : `${plan.name} covers ${unbroken(formatHoursLong(after))} of this match; shorten the trim to fit.`;
       aside = `${covers} Prefer yearly? ${usd(plan.yearly)}, one month free.`;
       action = {
         kind: "plan",
@@ -583,12 +721,12 @@ export function buildCheckoutView(input: {
         ...neededBand,
         body: "Pick how to pay and it's analyzed right away. Your file and trim stay put while you pay.",
         offer:
-          coachPricing.wasCents !== null
+          playerPricing.wasCents !== null
             ? firstMonthOffer()
-            : `Plans from ${usd(coach.monthly)} a month`,
+            : `Plans from ${usd(player.monthly)} a month`,
         offerDetail:
-          coachPricing.wasCents !== null
-            ? `${coach.name} ${formatUsdCents(coachPricing.dueCents)} today, then ${usd(coach.monthly)} a month`
+          playerPricing.wasCents !== null
+            ? `${player.name} ${formatUsdCents(playerPricing.dueCents)} today, then ${usd(player.monthly)} a month`
             : `Extra hours ${HOUR_RATE}`,
       },
       periodPills: false,
@@ -604,7 +742,9 @@ export function buildCheckoutView(input: {
   }
 
   if (scene === "paywall-subscriber") {
-    const canUpgrade = account.plan === "coach";
+    // A failed payment: no plan change is offered; extra hours still work.
+    const pastDue = account.pastDue === true;
+    const canUpgrade = account.plan === "player" && !pastDue;
     const upgrade = canUpgrade
       ? upgradeRow(preview, selection.choice === "upgrade")
       : null;
@@ -646,10 +786,13 @@ export function buildCheckoutView(input: {
       periodPills: false,
       radioLabel: "How to pay",
       rows,
-      aside: account.resetsOn
-        ? `Or keep it as a draft and send it when your hours reset on ${account.resetsOn}.`
-        : "Or keep it as a draft and send it later.",
+      aside: pastDue
+        ? PAST_DUE_SENTENCE
+        : account.resetsOn
+          ? `Or keep it as a draft and send it when your hours reset on ${account.resetsOn}.`
+          : "Or keep it as a draft and send it later.",
       sampleLink: false,
+      ...(pastDue ? { portalLink: true } : {}),
       problem: null,
       secondary,
       primary: payLabel(
@@ -660,9 +803,21 @@ export function buildCheckoutView(input: {
     };
   }
 
-  // Upgrade, from Settings › Plan: Coach → Coach Pro on the same period.
-  const pro = coachPlan("coach-pro");
-  const coach = coachPlan("coach");
+  if (scene === "pay-yearly" && current) {
+    return payYearlyView({ account, current, preview, secondary });
+  }
+  if (scene === "change" && current && mode.kind === "change") {
+    return scheduledChangeView({
+      account,
+      current,
+      change: mode.change,
+      secondary,
+    });
+  }
+
+  // Upgrade, from Settings › Plan: Player → Player Pro on the same period.
+  const pro = personalPlan("player-pro");
+  const player = personalPlan("player");
   const period =
     preview.status === "ready"
       ? preview.preview.period
@@ -671,10 +826,10 @@ export function buildCheckoutView(input: {
   const row = upgradeRow(preview, true);
   const currentRow: CheckoutRowView = {
     id: "current",
-    name: coach.name,
+    name: player.name,
     pill: "Your plan",
-    line: planLine("coach"),
-    price: usd(yearly ? coach.yearly : coach.monthly),
+    line: planLine("player"),
+    price: usd(yearly ? player.yearly : player.monthly),
     then: yearly ? "a year" : "a month",
     selectable: false,
     selected: false,
@@ -687,7 +842,7 @@ export function buildCheckoutView(input: {
     const quote = preview.preview;
     const extra =
       account.extraSeconds > 0
-        ? `, and your ${formatHoursLong(account.extraSeconds)} of extra hours stays`
+        ? `, and your ${unbroken(formatHoursLong(account.extraSeconds))} of extra hours stays`
         : "";
     // A discount cut what was paid: say what the two shares are of.
     const paidNote =
@@ -695,9 +850,9 @@ export function buildCheckoutView(input: {
         ? `, of the ${formatUsdCents(quote.creditBaseCents)} you paid this ${yearly ? "year" : "month"}`
         : "";
     aside =
-      `Your credit is the smaller of what's left of your ${coach.name} ${yearly ? "year" : "month"}: ` +
-      `${plural(quote.daysLeft, "day", "days")} (${formatUsdCents(quote.daysCreditCents)}) or ` +
-      `${hoursLeftLabel(quote.periodHoursLeftSeconds)} of hours (${formatUsdCents(quote.hoursCreditCents)})${paidNote}. ` +
+      `Your credit is the smaller of what's left of your ${player.name} ${yearly ? "year" : "month"}: ` +
+      `${unbroken(plural(quote.daysLeft, "day", "days"))} (${formatUsdCents(quote.daysCreditCents)}) or ` +
+      `${unbroken(hoursLeftLabel(quote.periodHoursLeftSeconds))} of plan hours (${formatUsdCents(quote.hoursCreditCents)})${paidNote}. ` +
       `${billedFrom(quote)}${extra}.`;
     action = { kind: "upgrade", payTodayCents: quote.payTodayCents };
     primary = payLabel(quote.payTodayCents, false);
@@ -721,6 +876,209 @@ export function buildCheckoutView(input: {
     secondary,
     primary,
     action,
+    working: `Moving you up to ${pro.name}…`,
+  };
+}
+
+/* ---------- Pay yearly ---------- */
+
+/**
+ * `Feb 14`, or `Apr 29, 2028` with the year, UTC, from an ISO day or instant.
+ * Null when unreadable.
+ */
+export function utcDayLabel(iso: string, withYear: boolean): string | null {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(withYear ? { year: "numeric" } : {}),
+    timeZone: "UTC",
+  });
+}
+
+/**
+ * Monthly → yearly on the same plan, from Settings › Plan. The card on file
+ * is charged the yearly price less the credit for the unused month, exactly
+ * as the upgrade is; the rows are the year and the month it replaces.
+ */
+function payYearlyView(input: {
+  account: CheckoutAccount;
+  current: ReturnType<typeof personalPlan>;
+  preview: PreviewState;
+  secondary: CheckoutView["secondary"];
+}): CheckoutView {
+  const { account, current, preview, secondary } = input;
+  const hours = current.hours ?? 0;
+  const name = `${current.name}, yearly`;
+
+  const rows: CheckoutRowView[] = [];
+  let aside: string | null = null;
+  let action: CheckoutAction | null = null;
+  let primary = "Continue to pay";
+
+  if (preview.status === "loading") {
+    rows.push({
+      id: "yearly",
+      name,
+      line: "Checking today's price",
+      price: "",
+      selectable: false,
+      selected: true,
+      pending: true,
+    });
+  } else if (preview.status === "ready") {
+    const quote = preview.preview;
+    rows.push({
+      id: "yearly",
+      name,
+      line:
+        quote.creditCents > 0
+          ? `${formatUsdCents(quote.creditCents)} credit for ${creditFor(quote)}`
+          : `${hours} fresh hours today, then ${hours} each month`,
+      price: formatUsdCents(quote.payTodayCents),
+      then: `then ${usd(current.yearly)} a year`,
+      selectable: true,
+      selected: true,
+    });
+    const extra =
+      account.extraSeconds > 0
+        ? `, and your ${unbroken(formatHoursLong(account.extraSeconds))} of extra hours stays`
+        : "";
+    const paidNote =
+      quote.creditBaseCents < quote.oldPeriodPriceCents
+        ? `, of the ${formatUsdCents(quote.creditBaseCents)} you paid this month`
+        : "";
+    const next = utcDayLabel(quote.nextBillingDay, true);
+    aside =
+      `Your credit is the smaller of what's left of your ${current.name} month: ` +
+      `${unbroken(plural(quote.daysLeft, "day", "days"))} (${formatUsdCents(quote.daysCreditCents)}) or ` +
+      `${unbroken(hoursLeftLabel(quote.periodHoursLeftSeconds))} of plan hours (${formatUsdCents(quote.hoursCreditCents)})${paidNote}. ` +
+      `Then ${usd(current.yearly)} a year${next ? `, next on ${next}` : ""}${extra}.`;
+    action = {
+      kind: "upgrade",
+      payTodayCents: quote.payTodayCents,
+      period: "yearly",
+    };
+    primary = payLabel(quote.payTodayCents, false);
+  }
+
+  rows.push({
+    id: "current",
+    name: `${current.name}, monthly`,
+    pill: "Your plan",
+    line: planLine(current.id as PaidPlan),
+    price: usd(current.monthly),
+    then: "a month",
+    selectable: false,
+    selected: false,
+  });
+
+  return {
+    scene: "pay-yearly",
+    band: {
+      lead: "Pay",
+      figure: "yearly",
+      trail: ".",
+      body: `${current.name} for ${usd(current.yearly)} a year: one month free. Your year starts today with a fresh ${hours} hours, and ${hours} more each month.`,
+      offer: `${current.name} · ${totalLeftLabel(account.planLeftSeconds, account.extraSeconds)} left this month`,
+      offerDetail: account.resetsOn ? `Hours reset ${account.resetsOn}` : "",
+    },
+    periodPills: false,
+    radioLabel: "Billing",
+    rows,
+    aside,
+    sampleLink: false,
+    problem: preview.status === "failed" ? preview.message : null,
+    secondary,
+    primary,
+    action,
+    working: "Switching you to yearly…",
+  };
+}
+
+/* ---------- A change at renewal (MOCK ONLY) ---------- */
+
+/**
+ * MOCK ONLY. A smaller plan, or yearly → monthly: both wait for the current
+ * period to end and charge nothing today. Composed from the plan module and
+ * the change's own data so the owner can see it on the real dialog; there is
+ * no endpoint behind the button and no page that opens it.
+ */
+function scheduledChangeView(input: {
+  account: CheckoutAccount;
+  current: ReturnType<typeof personalPlan>;
+  change: ScheduledChange;
+  secondary: CheckoutView["secondary"];
+}): CheckoutView {
+  const { account, current, change, secondary } = input;
+  const to = personalPlan(change.to.plan);
+  const wasYearly = account.period === "yearly";
+  // A year's renewal is far enough off to want its year.
+  const on = utcDayLabel(change.effectiveOn, wasYearly) ?? "renewal";
+  const toPrice =
+    change.to.period === "yearly"
+      ? `${usd(to.yearly)} a year`
+      : `${usd(to.monthly)} a month`;
+  const periodOnly = change.to.plan === current.id;
+  const currentHours = current.hours ?? 0;
+  const offer = {
+    offer: `${current.name} · ${totalLeftLabel(account.planLeftSeconds, account.extraSeconds)} left this month`,
+    offerDetail: account.resetsOn ? `Hours reset ${account.resetsOn}` : "",
+  };
+
+  return {
+    scene: "change",
+    band: periodOnly
+      ? {
+          lead: "Pay",
+          figure: change.to.period,
+          trail: ".",
+          body: `${to.name} at ${toPrice} from ${on}. Your hours stay ${to.hours ?? 0} a month.`,
+          ...offer,
+        }
+      : {
+          lead: "Move down to",
+          figure: to.name,
+          trail: ".",
+          body: `${to.hours ?? 0} hours of match video a month, about ${to.matches} matches, from ${on}.`,
+          ...offer,
+        },
+    periodPills: false,
+    radioLabel: "Plan",
+    rows: [
+      {
+        id: "change",
+        name: periodOnly ? `${to.name}, ${change.to.period}` : to.name,
+        line: periodOnly
+          ? `${toPrice} from ${on}`
+          : `${toPrice} from ${on} · ${to.hours ?? 0} hours a month`,
+        price: formatUsdCents(0),
+        then: "today",
+        selectable: true,
+        selected: true,
+      },
+      {
+        id: "current",
+        name: periodOnly
+          ? `${current.name}, ${wasYearly ? "yearly" : "monthly"}`
+          : current.name,
+        pill: "Your plan",
+        line: planLine(current.id as PaidPlan),
+        price: usd(wasYearly ? current.yearly : current.monthly),
+        then: wasYearly ? "a year" : "a month",
+        selectable: false,
+        selected: false,
+      },
+    ],
+    aside: periodOnly
+      ? `Your ${wasYearly ? "year" : "month"} is paid through ${on}. Nothing is charged today.`
+      : `You keep ${current.name} and its ${currentHours} hours until ${on}. Nothing is charged today.`,
+    sampleLink: false,
+    problem: null,
+    secondary,
+    primary: periodOnly ? `Switch on ${on}` : `Move to ${to.name} on ${on}`,
+    action: { kind: "schedule", change },
   };
 }
 
@@ -731,7 +1089,9 @@ export function buildCheckoutView(input: {
  *
  *  - `no-hours`: a Free player with nothing to spend, told before they pick a
  *    video that a plan or hours comes before analysis;
- *  - `too-long`: a subscriber whose picked video is longer than what is left.
+ *  - `too-long`: a subscriber whose picked video is longer than what is left;
+ *  - `past-due`: a subscriber whose last payment failed, so this month's plan
+ *    hours are not there yet. Said whatever is left, before the other two.
  *
  * `remainingSeconds` is plan hours and extra hours together, undefined while
  * the reading loads — an unread number never puts a note on screen.
@@ -739,21 +1099,26 @@ export function buildCheckoutView(input: {
 export type FileStepHoursNote =
   | { kind: "none" }
   | { kind: "no-hours" }
-  | { kind: "too-long"; leftSeconds: number };
+  | { kind: "too-long"; leftSeconds: number }
+  /** A subscriber whose last payment failed: this month's hours wait on it. */
+  | { kind: "past-due" };
 
 export function fileStepHoursNote(input: {
   /** Plans are on sale, the upload bills a personal workspace, and it is a video. */
   enabled: boolean;
-  plan: CoachPlanId;
+  plan: PersonalPlanId;
   remainingSeconds: number | undefined;
   /** The picked video's length, when one is picked and measured. */
   videoSeconds?: number | null;
+  /** `VideoAllowance.pastDue` for the billed workspace. */
+  pastDue?: boolean;
 }): FileStepHoursNote {
   const { enabled, plan, remainingSeconds, videoSeconds } = input;
   if (!enabled || remainingSeconds === undefined) return { kind: "none" };
   if (!isPaid(plan)) {
     return remainingSeconds <= 0 ? { kind: "no-hours" } : { kind: "none" };
   }
+  if (input.pastDue) return { kind: "past-due" };
   return typeof videoSeconds === "number" && videoSeconds > remainingSeconds
     ? { kind: "too-long", leftSeconds: remainingSeconds }
     : { kind: "none" };
@@ -768,7 +1133,10 @@ export function meterSuffix(input: {
   /** `VideoAllowance.kind` for the billed workspace. */
   allowanceKind: string;
   resetsOn: string | null;
+  /** `VideoAllowance.pastDue`: no reset day to name, only the failed payment. */
+  pastDue?: boolean;
 }): string | null {
+  if (input.pastDue) return "payment failed";
   if (input.allowanceKind === "plan") {
     return input.resetsOn ? `resets ${input.resetsOn}` : "plan hours";
   }
@@ -782,7 +1150,9 @@ export function meterSuffix(input: {
 export type CheckoutResult =
   | { kind: "hours"; hours: number; seconds: number; expiresAt: string }
   | { kind: "plan"; plan: PaidPlan; period: PlanPeriod }
-  | { kind: "upgrade"; plan: PaidPlan; period: PlanPeriod };
+  | { kind: "upgrade"; plan: PaidPlan; period: PlanPeriod }
+  /** The same plan, now paid yearly. */
+  | { kind: "yearly"; plan: PaidPlan; period: "yearly" };
 
 /**
  * The one line a page shows after a purchase: what was added, in bold, then
@@ -794,20 +1164,27 @@ export function purchaseNote(result: CheckoutResult): {
 } {
   if (result.kind === "hours") {
     const until = new Date(result.expiresAt);
-    const lasts = Number.isNaN(until.getTime())
-      ? ""
-      : `They last until ${until.toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-          timeZone: "UTC",
-        })}. `;
+    // One hour is "it": "1 extra hour added. They last…" did not agree.
+    const verb = result.hours === 1 ? "It lasts" : "They last";
+    const day = until.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+    const lasts = Number.isNaN(until.getTime()) ? "" : `${verb} until ${day}. `;
     return {
       lead: `${hoursName(result.hours)} added.`,
       rest: `${lasts}A receipt is on its way to your email.`,
     };
   }
-  const plan = coachPlan(result.plan);
+  const plan = personalPlan(result.plan);
+  if (result.kind === "yearly") {
+    return {
+      lead: `${plan.name} is now paid yearly.`,
+      rest: `Your ${plan.hours ?? 0} hours are ready. A receipt is on its way to your email.`,
+    };
+  }
   return {
     lead:
       result.kind === "upgrade"

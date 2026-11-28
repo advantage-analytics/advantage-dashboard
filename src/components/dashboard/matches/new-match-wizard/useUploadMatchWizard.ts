@@ -59,6 +59,7 @@ import {
   readProgramUsedSeconds,
   scopeToAllowance,
   sumUsedSeconds,
+  type HoursLeft,
 } from "@/lib/services/splitstep/quota";
 import type { CreditsAdded } from "@/components/dashboard/credits/add-hours-dialog";
 import type { CheckoutResult } from "@/lib/billing/checkout-view";
@@ -67,7 +68,7 @@ import {
   planHoursSeconds,
   plansHaveBegun,
   plansOnSale,
-  type CoachPlanId,
+  type PersonalPlanId,
 } from "@/lib/billing/plans";
 import { planFor } from "@/lib/user/plan";
 import { secondsLeft } from "@/lib/data/usage-format";
@@ -658,9 +659,21 @@ export interface UseUploadMatchWizardReturn {
    */
   plansActive: boolean;
   /** The plan the billed personal workspace is on, a purchase made here included. */
-  quotaPlanId: CoachPlanId;
+  quotaPlanId: PersonalPlanId;
   /** `VideoAllowance.kind` for the billed workspace — which hours the meter is showing. */
   quotaAllowanceKind: string;
+  /**
+   * The billed personal workspace's last payment failed: its plan stays but
+   * this month's plan hours wait on the card (`VideoAllowance.pastDue`).
+   */
+  quotaPastDue: boolean;
+  /**
+   * Re-read whether that payment has gone through since, and lift
+   * `quotaPastDue` and restore the plan's hours in place when it has. Run on
+   * the tab regaining focus and on the paywall closing; a no-op unless past
+   * due, and a failed read changes nothing.
+   */
+  refreshPastDue: () => Promise<void>;
   /**
    * What closes a TEAM's footer meter once plans have begun — "Spring, ends
    * May 31", "Pilot ends May 31", "No plan" — or null for the beta's wording
@@ -1339,10 +1352,14 @@ export function useUploadMatchWizard({
   // a refresh under an in-memory video), so the purchase is laid over it here
   // until the context agrees. The server reads `users.plan` itself at Send.
   const [purchasedPlan, setPurchasedPlan] = useState<{
-    plan: CoachPlanId;
+    plan: PersonalPlanId;
     startedAt: string;
   } | null>(null);
-  const billedWorkspace =
+  // A failed payment the subscriber has fixed since the page loaded, as
+  // `refreshPastDue()` below read it. Laid over the same stale context, for
+  // the same reason: the picked video would not survive a refresh.
+  const [pastDueCleared, setPastDueCleared] = useState(false);
+  const purchasedWorkspace =
     purchasedPlan &&
     eligibilityWorkspace.kind === "personal" &&
     planFor(eligibilityWorkspace.plan).id !== purchasedPlan.plan
@@ -1350,12 +1367,21 @@ export function useUploadMatchWizard({
           ...eligibilityWorkspace,
           plan: purchasedPlan.plan,
           planPeriodStart: purchasedPlan.startedAt,
+          // Just paid for: whatever the stale context said, it is not unpaid.
+          planStatus: "active",
         }
       : eligibilityWorkspace;
+  const billedWorkspace =
+    pastDueCleared &&
+    purchasedWorkspace.kind === "personal" &&
+    purchasedWorkspace.planStatus === "past_due"
+      ? { ...purchasedWorkspace, planStatus: "active" }
+      : purchasedWorkspace;
   const quotaPlanId = planFor(
     billedWorkspace.kind === "personal" ? billedWorkspace.plan : null,
   ).id;
   const quotaAllowance = allowanceFor(billedWorkspace);
+  const quotaPastDue = quotaAllowance.pastDue === true;
   const quotaCapSeconds =
     admin?.context.videoAllowance.capSeconds ?? quotaAllowance.capSeconds;
   // "Sep 1": the day that allowance turns over, or null when nothing comes
@@ -1569,6 +1595,64 @@ export function useUploadMatchWizard({
       ? teamMeterSuffix(planStandingFor(billedWorkspace))
       : null;
 
+  /**
+   * Past due, asked again. The subscriber fixes their card in another tab
+   * ("Update card" opens Stripe's portal there) and comes back to a wizard
+   * whose workspace context still says the payment failed: no plan hours on
+   * the meter, a refusal at the trim step, though the server would now take
+   * the upload. `/api/splitstep/hours-left` is the same peek the upload
+   * routes refuse on, read fresh; once it says the plan is paid, the flag is
+   * lifted here and the plan's hours come back with it. The cap changing
+   * re-runs the usage reading above, which confirms the figure.
+   *
+   * In place: state only, never a refresh. One way: this never SETS past due,
+   * and anything short of a clear "paid" for this workspace (a failed read,
+   * an older answer without the field, another workspace's answer) leaves
+   * the wizard exactly as it was. The server still decides at Send.
+   */
+  const pastDueReadRef = useRef(0);
+  const billedWorkspaceId = eligibilityWorkspace.id;
+  const refreshPastDue = useCallback(async () => {
+    if (!quotaPastDue) return;
+    const token = ++pastDueReadRef.current;
+    let answer: HoursLeft | null = null;
+    try {
+      const response = await fetch("/api/splitstep/hours-left", {
+        cache: "no-store",
+      });
+      if (!response.ok) return;
+      answer = (await response.json()) as HoursLeft | null;
+    } catch {
+      return;
+    }
+    if (pastDueReadRef.current !== token) return;
+    if (answer?.workspaceId !== billedWorkspaceId) return;
+    if (answer.pastDue !== false) return;
+    if (!Number.isFinite(answer.remainingSeconds)) return;
+    setPastDueCleared(true);
+    setQuotaFreeSeconds(Math.max(0, answer.remainingSeconds));
+  }, [quotaPastDue, billedWorkspaceId, setPastDueCleared, setQuotaFreeSeconds]);
+  // Coming back to the tab is when the card may have been fixed.
+  useEffect(() => {
+    if (!open || !quotaPastDue) return;
+    // Guarded as the approval re-check is: the hook specs run with no DOM.
+    if (
+      typeof document === "undefined" ||
+      typeof window === "undefined" ||
+      typeof window.addEventListener !== "function"
+    )
+      return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshPastDue();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [open, quotaPastDue, refreshPastDue]);
+
   const openAddHours = useCallback(
     (neededSeconds?: number) => {
       // Credits spend only in the billed workspace when it is personal.
@@ -1584,7 +1668,9 @@ export function useUploadMatchWizard({
     paywallResumeRef.current = null;
     setPaywall(null);
     if (paymentPending) setQuotaReadNonce((n) => n + 1);
-  }, [paymentPending, setQuotaReadNonce]);
+    // The paywall is where "Update card" lives: ask again as it closes.
+    void refreshPastDue();
+  }, [paymentPending, setQuotaReadNonce, refreshPastDue]);
   const handlePaymentPending = useCallback(() => {
     setPaymentPending(true);
     setQuotaReadNonce((n) => n + 1);
@@ -4492,6 +4578,8 @@ export function useUploadMatchWizard({
     plansActive,
     quotaPlanId,
     quotaAllowanceKind: quotaAllowance.kind,
+    quotaPastDue,
+    refreshPastDue,
     quotaTeamSuffix,
     openAddHours,
     closeAddHours,

@@ -33,8 +33,13 @@ export type BillingRefusalCode =
   | "already_subscribed"
   /** No subscription to upgrade, open a portal for, or change. */
   | "no_subscription"
-  /** Not Coach → Coach Pro on a healthy subscription. */
+  /**
+   * Not one of the two changes charged today (Player → Player Pro on the same
+   * period, monthly → yearly on the same plan) on a healthy subscription.
+   */
   | "not_an_upgrade"
+  /** The last payment failed: the card is fixed before any plan change. */
+  | "past_due"
   /** The card on file was declined; nothing was changed. */
   | "payment_failed"
   /** The same upgrade is already being made, or was just tried. */

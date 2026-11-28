@@ -383,6 +383,7 @@ function UploadWizardPage() {
       plansActive,
       quotaPlanId,
       quotaAllowanceKind,
+      quotaPastDue,
       quotaResetsOn,
       handlePurchase,
       syncPlan,
@@ -535,6 +536,7 @@ function UploadWizardPage() {
             firstMonthEligible: planBilling
               ? !planBilling.everSubscribed
               : false,
+            pastDue: quotaPastDue,
           }}
           // Closing IS going back to the trim: the dialog sits over it.
           onShortenTrim={

@@ -5,14 +5,18 @@
  *
  * The two tables are the minimal shape the migration touches, with the
  * constraints as they were read from the live catalog on 2026-11-25:
- * `users.plan` in both states the migration may meet (live's free | pro, and
- * stage A's free | coach | coach-pro | pro), and `video_credits` with live's
+ * `users.plan` in the states the migration may meet (the original free | pro,
+ * stage A's free | coach | coach-pro | pro, which is live's today, and the
+ * final-pricing migration's free | player | player-pro | pro), and
+ * `video_credits` with live's
  * `pack`, `source` and purchase-needs-a-session checks and its three unique
  * Stripe columns.
  *
  * What this proves: the Lifetime account moves to Free and nobody else moves;
- * `pro` can no longer be written while the three plans on sale can; the
- * migration runs twice, and from either starting check; and an extra-hours
+ * `pro` and the pre-rename ids can no longer be written while the three plans
+ * on sale (free | player | player-pro) can; a row still holding a pre-rename
+ * id is moved to the plan it became; the migration runs twice, and from any
+ * starting check; and an extra-hours
  * row — a purchase with no pack — is accepted by live's checks as they stand
  * and is recorded once per Checkout Session, payment intent and event.
  *
@@ -35,7 +39,7 @@ const migration = await readFile(
 
 const LIFETIME = uuid(1);
 const FREE = uuid(2);
-const COACH = uuid(3);
+const PAID = uuid(3);
 
 async function boot(planCheck) {
   const db = new PGlite();
@@ -81,8 +85,9 @@ const plans = async (db) =>
   );
 
 for (const [name, check] of [
-  ["live's check (free | pro)", "'free', 'pro'"],
+  ["the original check (free | pro)", "'free', 'pro'"],
   ["stage A's check", "'free', 'coach', 'coach-pro', 'pro'"],
+  ["the final-pricing check", "'free', 'player', 'player-pro', 'pro'"],
 ]) {
   test(`from ${name}: Lifetime moves to Free and pro leaves the check`, async () => {
     const db = await boot(check);
@@ -90,12 +95,23 @@ for (const [name, check] of [
 
     assert.deepEqual(await plans(db), { [LIFETIME]: "free", [FREE]: "free" });
 
-    await db.query("insert into public.users (id, plan) values ($1, 'coach')", [
-      COACH,
-    ]);
-    await db.query("update public.users set plan = 'coach-pro' where id = $1", [
-      COACH,
-    ]);
+    await db.query(
+      "insert into public.users (id, plan) values ($1, 'player')",
+      [PAID],
+    );
+    await db.query(
+      "update public.users set plan = 'player-pro' where id = $1",
+      [PAID],
+    );
+    for (const retired of ["coach", "coach-pro"]) {
+      await assert.rejects(
+        db.query("update public.users set plan = $2 where id = $1", [
+          FREE,
+          retired,
+        ]),
+        /users_plan_check/,
+      );
+    }
     await assert.rejects(
       db.query("update public.users set plan = 'pro' where id = $1", [FREE]),
       /users_plan_check/,
@@ -112,10 +128,25 @@ for (const [name, check] of [
     assert.deepEqual(await plans(db), {
       [LIFETIME]: "free",
       [FREE]: "free",
-      [COACH]: "coach-pro",
+      [PAID]: "player-pro",
     });
   });
 }
+
+test("a row still on a pre-rename id is moved to the plan it became", async () => {
+  const db = await boot("'free', 'coach', 'coach-pro', 'pro'");
+  await db.query(
+    "insert into public.users (id, plan) values ($1, 'coach'), ($2, 'coach-pro')",
+    [PAID, uuid(4)],
+  );
+  await db.exec(migration);
+  assert.deepEqual(await plans(db), {
+    [LIFETIME]: "free",
+    [FREE]: "free",
+    [PAID]: "player",
+    [uuid(4)]: "player-pro",
+  });
+});
 
 test("extra hours are a purchase with no pack, recorded once", async () => {
   const db = await boot("'free', 'pro'");

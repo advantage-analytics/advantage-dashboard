@@ -1,58 +1,139 @@
 # 2027 pricing: build plan
 
-Written 2026-11-25, design-review decisions added 2026-11-26. Replaces stage 2 of
+Written 2026-11-25, design-review decisions added 2026-11-26, **final pricing
+added 2026-11-27** (see "Final pricing", which overrides everything else
+here). Replaces stage 2 of
 [`2027-player-pricing.md`](2027-player-pricing.md), whose "Player $29 / Player
-Pro $49" draft is superseded. Stage 1 of that doc (credit packs, PR #468) is
+Pro $49" draft is superseded: the personal plans are called Player and Player
+Pro again, at the prices below. Stage 1 of that doc (credit packs, PR #468) is
 shipped and stays the record of how credits work.
 
 From **January 1, 2027** the dashboard sells, enforces and says what the
-landing site (`advantage-landing`) sells. Vendor rates are confidential and
-are not in this repo; every figure below is a price we charge.
+landing site (`advantage-landing`) sells. Every figure below is a price we
+charge.
 
 ## Source of truth
 
-`advantage-landing/src/lib/plans.ts` (checked at `4690315`, 2026-11-19) holds
-every price and hour count. The dashboard copies them into **one module,
-`src/lib/billing/plans.ts`**, and pages, quota code, Stripe setup and emails
-read from it. Nothing is typed into a page. The last check of the build is a
-table of every figure in that module against `plans.ts` (see "Check").
+**`src/lib/billing/plans.ts`** holds every price, hour count, match count and
+Ask limit the dashboard shows, and pages, quota code, Stripe setup and emails
+read from it. Nothing is typed into a page; `tests/billing-plans.spec.ts`
+pins each figure. The landing site keeps its own copy
+(`advantage-landing/src/lib/plans.ts`; the two repos share no code), brought
+in line by [`2027-landing-handoff.md`](2027-landing-handoff.md).
 
-### Players and coaches (personal workspaces)
+### Personal plans (personal workspaces): for players and parents
 
-| id          | Name      | Monthly | Yearly | Video hours     | Verified by Advantage | Ask (app + connector) |
-| ----------- | --------- | ------- | ------ | --------------- | --------------------- | --------------------- |
-| `free`      | Free      | $0      | —      | none            | No                    | 20 questions a month  |
-| `coach`     | Coach     | $150    | $1,650 | 5 a month (~3)  | Every match           | Unlimited (fair use)  |
-| `coach-pro` | Coach Pro | $300    | $3,300 | 10 a month (~5) | Every match           | Unlimited (fair use)  |
+| id           | Name       | Monthly | Yearly | Headline                         | Sub-copy                                       | Ask (app + connector) |
+| ------------ | ---------- | ------- | ------ | -------------------------------- | ---------------------------------------------- | --------------------- |
+| `free`       | Free       | $0      | —      | Free for SwingVision users       | no video hours                                 | 20 questions a month  |
+| `player`     | Player     | $150    | $1,650 | About 3 verified matches a month | 5 hours of match video · every match verified  | 150 questions a month |
+| `player-pro` | Player Pro | $300    | $3,300 | About 6 verified matches a month | 10 hours of match video · every match verified | 300 questions a month |
 
-Yearly is 11 months' price. Hours don't carry over to the next month.
+Yearly is 11 months' price. Hours don't carry over to the next month. The
+match counts (3 and 6) are stated figures, not worked out from the hours. One
+person per account: a parent with two juniors needs two plans.
 
 ### College programs (team workspaces), by the season
 
-| id        | Name    | Spring (Jan–May) | Full year       | Rush included | Priority                  |
-| --------- | ------- | ---------------- | --------------- | ------------- | ------------------------- |
-| `starter` | Starter | $3,000 · 80 h    | $4,800 · 130 h  | 0             | Not available             |
-| `program` | Program | $7,500 · 200 h   | $10,500 · 280 h | 3 a season    | Add-on, +15%              |
-| `elite`   | Elite   | $11,000 · 300 h  | $15,000 · 400 h | 6 a season    | Up to 30 h/month included |
+Price · hours · about N verified matches.
 
-Rush and Priority figures live in the module for the later build, but **this
-build ignores them**: every job is Standard (see "Out of scope").
+| id        | Name    | Spring (Jan–May)      | Full year             | Covers                                 | Ask, team pool a month |
+| --------- | ------- | --------------------- | --------------------- | -------------------------------------- | ---------------------- |
+| `starter` | Starter | $3,000 · 80 h · 45    | $4,800 · 130 h · 70   | Your top courts, every dual            | 500                    |
+| `program` | Program | $7,500 · 225 h · 125  | $10,500 · 325 h · 180 | Nearly every singles match, every dual | 1,000                  |
+| `elite`   | Elite   | $12,000 · 400 h · 220 | $16,500 · 550 h · 305 | Every match, plus fall and practice    | 2,000                  |
+
+**Rush and Priority are not in any plan.** Every job is Standard; where a
+plan's contents are listed there is one line, "Rush and Priority: coming
+soon" (`RUSH_PRIORITY_COMING_SOON`). `rushIncluded` is 0 and there are no
+Priority hours on every college plan, and `admin_set_program_plan` stamps
+`rush_included = 0`. Roster caps are not decided and nothing stores one.
 
 ### Rules across plans
 
-- Hours are **hours of match video analyzed**, about 1.8 per singles match.
-  They are counted on the trimmed video when the player trims, as now.
+- Hours are **hours of match video analyzed**, about 1.8 per singles match
+  (longer matches use more). They are counted on the trimmed video when the
+  player trims, as now.
+- Every plan is **headlined in matches, with its hours as sub-copy**. A price
+  per hour is shown in one place only: the extra-hours line.
 - **Extra hours are $35 each**, bought at any time by anyone, with or without a
-  plan, and they last 12 months. They replace the $14 / $60 credit packs.
+  plan, and they last 12 months. The line reads "$35 an hour (about $60 per
+  extra match)"; the $60 is a stated figure in the plan module. They replace
+  the $14 / $60 credit packs.
 - Order of spend: plan hours first, then purchased hours (old credits and new
   extra hours together), soonest-expiring first.
 - Emails at **80%** of a period's hours and when they **run out**.
 - An email when a match is ready (exists today).
 - Singles only.
 
+## Final pricing (Cj, 2026-11-27)
+
+Decided after the 2027 build merged. These override the decisions and stages
+below wherever they disagree; the tables above already show them.
+
+**What was reversed**
+
+| Was                                                                   | Now                                                                                                        |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Coach / Coach Pro (ids `coach`, `coach-pro`), for players and coaches | **Player / Player Pro** (ids `player`, `player-pro`): "For players and parents." One person per account.   |
+| First month 50% off ($75 / $150)                                      | **First month 30% off** ($105 / $210). Still monthly only, first-time customers only, applied by checkout. |
+| A Free player's extra hours earn Verified by Advantage (decision 5)   | **Verified is for a paid plan only**: Player, Player Pro, a team's season plan or a pilot.                 |
+| Ask on a college plan: 300 a person a month                           | **One team pool a month**: Starter 500, Program 1,000, Elite 2,000.                                        |
+| Program 3 Rush a season; Elite 6 Rush and 30 Priority hours a month   | **Rush and Priority are in no plan**: one "coming soon" line.                                              |
+| Player Pro (then Coach Pro): about 5 matches                          | **About 6 verified matches a month** (stated).                                                             |
+| Program $7,500 · 200 h / $10,500 · 280 h                              | **$7,500 · 225 h · 125 / $10,500 · 325 h · 180**                                                           |
+| Elite $11,000 · 300 h / $15,000 · 400 h                               | **$12,000 · 400 h · 220 / $16,500 · 550 h · 305**                                                          |
+
+Starter is unchanged ($3,000 · 80 h · 45 / $4,800 · 130 h · 70), as are the
+personal prices and hours and the $35 extra hour.
+
+**How it is built**
+
+- **Names and ids.** `PersonalPlanId` is `free | player | player-pro`
+  everywhere: types, view models, copy, emails, the preview fixtures, the
+  Stripe setup script (products `advantage_player`, `advantage_player_pro`,
+  lookup keys to match) and the env names (`STRIPE_PRICE_PLAYER_MONTHLY`,
+  `STRIPE_PRICE_PLAYER_YEARLY`, `STRIPE_PRICE_PLAYER_PRO_MONTHLY`,
+  `STRIPE_PRICE_PLAYER_PRO_YEARLY`). A subscription's description in Stripe
+  reads "Advantage Player, monthly". "Coach" now only ever means a person: a
+  team role or a persona.
+- **Old links still work.** `?plan=coach` and `?plan=coach-pro` (and a
+  plan-intent cookie set before the rename) are read as `player` and
+  `player-pro` (`personalPlanIdFrom()`), so the landing site can change on its
+  own schedule.
+- **Database.** `20261127060000_plans_2027_final_pricing.sql` (not applied
+  yet; apply after the follow-ups migration, with this build, before plans go
+  on sale): moves any `coach` / `coach-pro` row to the new id (live held none
+  on 2026-11-27), replaces `users_plan_check` with `free | player |
+player-pro` (plus the legacy `pro` while the check still allows it), and
+  replaces three functions, each a copy of its latest body with one change:
+  `reserve_plan_personal_quota` (the plan ids), `label_review_eligibility`
+  (counts `plan`, `season` and `pilot` only) and `admin_set_program_plan`
+  (stamps `rush_included = 0`). The unapplied billing migration's final check
+  is `free | player | player-pro`.
+- **Verified, paid plans only.** The reservation still writes
+  `processing_usage.paid_basis = 'extra_hours'` for a purchased credit spent
+  off a plan: it records how the match was paid for. The review gate no
+  longer counts it. A subscriber spending extra hours is marked `plan`, so
+  they keep review; a match sent before January 1 stays eligible.
+- **First month.** `FIRST_MONTH_DISCOUNT_PERCENT = 30`, and every sentence is
+  built from it ("30% off your first month", "$105 today, then $150 a
+  month"). The coupon's id carries the percentage,
+  `advantage-first-month-30-2027`, so the setup script makes a new coupon; the
+  50% one an earlier run made (`advantage-first-month-2027`) is unused and can
+  be deleted. `STRIPE_COUPON_FIRST_MONTH` takes the new id.
+- **Stripe prices.** A Price cannot be edited. Where an earlier run of the
+  setup script created the Coach products or the old Elite invoice prices,
+  archive them; the script creates the new ones under the new ids and lookup
+  keys.
+- **Ask.** The plan module exposes the numbers (`ASK_QUESTIONS_PER_MONTH`,
+  `ASK_TEAM_QUESTIONS_PER_MONTH`); enforcing them belongs to the Ask session
+  and is not part of this change.
+
 ## Decisions (Cj, 2026-11-20 to 2026-11-25)
 
-These override anything else in this doc or in `2027-player-pricing.md`.
+These override anything else in this doc or in `2027-player-pricing.md`,
+except where "Final pricing" above reverses them (marked inline).
 
 **Who pays from January 1**
 
@@ -70,30 +151,32 @@ These override anything else in this doc or in `2027-player-pricing.md`.
 **Free plan and the paywall**
 
 5. Free is for SwingVision: imports, 20 Ask questions a month, and the team
-   film of any team they belong to. A Free player who buys extra hours gets
-   Verified by Advantage on those matches (they paid for them). The Ask limit
-   on paid plans is being decided in the Ask session.
-6. The paywall offers **50% off the first month** (Coach $75, Coach Pro $150),
-   **monthly only**, first-time customers only. Our checkout applies it; nobody
+   film of any team they belong to. ~~A Free player who buys extra hours gets
+   Verified by Advantage on those matches.~~ **Reversed 2026-11-27:** Verified
+   by Advantage is for a paid plan only; extra hours bought on Free are
+   analysed and not reviewed.
+6. The paywall offers **30% off the first month** (Player $105, Player Pro
+   $210; it was 50% until 2026-11-27), **monthly only**, first-time customers
+   only. Our checkout applies it; nobody
    types a code. Yearly already has a month free and gets no discount. The
    paywall also links a sample match report.
 
 **Plans and billing**
 
-7. **Upgrades** (Coach → Coach Pro) start a new billing month the day they
-   happen: a full month of Coach Pro charged, less a credit for the unused
-   part of Coach, and the full 10 hours fresh. The credit is the **smaller**
+7. **Upgrades** (Player → Player Pro) start a new billing month the day they
+   happen: a full month of Player Pro charged, less a credit for the unused
+   part of Player, and the full 10 hours fresh. The credit is the **smaller**
    of the share of the month left and the share of the plan's hours left
    (half the month left but 24m of 5h left credits $12, not $75), so hours
    already used are never refunded. **Downgrades and cancellations** take
    effect at renewal.
 8. A subscription bought in December is billed that day and its hours start
    that day.
-9. **Ask on paid plans** has a fair-use limit we don't advertise. The figures
-   are set in the Ask session (working numbers: Coach 150, Coach Pro 300,
-   college 300 per person, a month; an agent-mode question counts as 3) and
-   live in the plan module, never in the gate. At the limit the message is
-   "Contact us", not a paywall.
+9. **Ask on paid plans.** The figures live in the plan module, never in the
+   gate: Player 150 and Player Pro 300 a month; a college team shares one pool
+   a month (Starter 500, Program 1,000, Elite 2,000; it was 300 a person until
+   2026-11-27); an agent-mode question counts as 3. At the limit the message
+   is "Contact us", not a paywall.
 
 **Colleges**
 
@@ -121,13 +204,13 @@ the canvas shows and override anything above that disagrees.
 - **December notice:** wording approved (the canvas's email and Home strip).
   Send on Cj's go-ahead.
 - **Pilots:** SplitStep confirmed UCLA, Babson and TCU as pilots from January 1.
-- **Discount:** 50% off the first month, monthly only, Coach and Coach Pro,
-  first-time customers.
+- **Discount:** 30% off the first month (50% until 2026-11-27), monthly only,
+  Player and Player Pro, first-time customers.
 - **Failed payment:** the plan stays while Stripe retries, then drops to Free.
 - **Extra hours for teams:** allowed on top of a season, mainly for academies
   and federations; colleges usually budget the year up front.
 - **One checkout dialog, every door:** Choose a plan, Upgrade, the landing
-  link and the upload paywall all open the same dialog. Upgrade shows Coach
+  link and the upload paywall all open the same dialog. Upgrade shows Player
   Pro chosen, the current plan beside it, and the credit with both numbers
   (days left and hours left). There is no checkout page and no separate
   upgrade confirm.
@@ -216,7 +299,9 @@ Copy only, so it can go first.
 ### A. Plan model
 
 - **Migration:** widen `users.plan` to `free | coach | coach-pro | pro` (keep
-  `pro` until the Lifetime account is moved, then drop it in stage C). Add
+  `pro` until the Lifetime account is moved, then drop it in stage C). The
+  final-pricing migration renames the two paid ids to `player` and
+  `player-pro`. Add
   `plan_period` (`monthly | yearly`), `plan_status`, `plan_period_start`,
   `plan_period_end`, `stripe_customer_id`, `stripe_subscription_id`. Check
   `users` column grants first (players must not write any of these).
@@ -227,7 +312,7 @@ Copy only, so it can go first.
   `upload_policy` to `owner_coaches` (`players_can_upload` is derived from
   it; check the live schema for how before writing the migration).
 - **`src/lib/billing/plans.ts`:** every figure above, typed like the landing
-  site's (`COACH_PLANS`, `COLLEGE_PLANS`, `EXTRA_HOUR_PRICE`,
+  site's (`PERSONAL_PLANS`, `COLLEGE_PLANS`, `EXTRA_HOUR_PRICE`,
   `HOURS_PER_MATCH`, Ask limits, `FIRST_MONTH_DISCOUNT_PERCENT`,
   `PLANS_BEGIN = 2027-01-01`). `credits/packs.ts` keeps reading old credits;
   its packs stop being offered.
@@ -244,7 +329,7 @@ Copy only, so it can go first.
 ### B. Allowances
 
 - `quotaTierFor()` / `monthlyCapSecondsFor()` read the plan from January 1:
-  - personal: Free 0, Coach 5 h, Coach Pro 10 h a **billing month**, which
+  - personal: Free 0, Player 5 h, Player Pro 10 h a **billing month**, which
     is the subscription's own period (`plan_period_start`–`plan_period_end`),
     not the calendar month the beta used. Reservations and the meter key on
     that period, so an upgrade's new period starts with fresh hours and
@@ -272,12 +357,12 @@ Copy only, so it can go first.
 
 ### C. Stripe subscriptions and extra hours
 
-- Products: Coach and Coach Pro, each with a monthly and a yearly price;
+- Products: Player and Player Pro, each with a monthly and a yearly price;
   "Extra hour" at $35 a unit; the six college products for invoices. Stripe
   Tax on, the existing statement descriptor.
 - **Checkout** stays Embedded Checkout inside the upload wizard so the picked
   file isn't lost, and also opens from Settings › Plan. Monthly and yearly side
-  by side. The 50% first-month discount is added by our server only for a
+  by side. The first-month discount is added by our server only for a
   monthly price and a customer with no earlier payment.
 - **Extra hours** use the same checkout in one-time mode with a quantity. They
   write `video_credits` rows (12 months), so one spend path covers old credits
@@ -305,16 +390,17 @@ Copy only, so it can go first.
 ### D. Gating
 
 - Server-side checks, never only hidden buttons:
-  - Human review: a match goes to the review queue when it was paid for,
-    with plan hours or purchased extra hours (decision 5). A Free player's
-    SwingVision import does not.
+  - Human review: a match goes to the review queue when it was analysed on a
+    paid plan (Player, Player Pro, a season or a pilot). Extra hours bought
+    on Free do not earn it (final pricing), and neither does a Free player's
+    SwingVision import.
   - Ask: `ask_reserve_question()` reads the plan's limit from the plan
     module (Free 20; paid figures per decision 9) and the connector's `ask`
     tool goes through the same reservation. The connector's call-rate limit
     stays.
 - Upgrade prompt for Free users at each gate, with the plan module's figures.
-- Tests: a match paid with extra hours on a Free account is reviewed and an
-  unpaid import is not; Ask refuses at each limit; the MCP `ask` tool spends
+- Tests: a match paid with extra hours on a Free account is not reviewed, a
+  subscriber's is, and an unpaid import is not; Ask refuses at each limit; the MCP `ask` tool spends
   from the same allowance.
 
 ### F. Copy and emails
@@ -331,22 +417,23 @@ Copy only, so it can go first.
 
 ## Email copy (drafts on the canvas)
 
-Figures are the Coach example; templates fill them from the plan module.
+Figures are the Player example; templates fill them from the plan module.
 
-|           | December notice                                                                                                                                                                                                                     | 80% used                                                                                                                                                                                                                       | Used up                                                                                                                                                                                                   |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Subject   | Free beta hours end December 31                                                                                                                                                                                                     | 1h of match video left this month                                                                                                                                                                                              | You've used this month's video hours                                                                                                                                                                      |
-| Preheader | From January 1, a new match needs a plan or extra hours. Everything you've uploaded stays.                                                                                                                                          | About half a match left on Coach. Your hours reset Feb 14.                                                                                                                                                                     | New uploads wait until Feb 14. Add hours to send one sooner.                                                                                                                                              |
-| Heading   | Free beta hours end December 31                                                                                                                                                                                                     | 1h of match video left this month                                                                                                                                                                                              | You've used this month's 5h of match video                                                                                                                                                                |
-| Body      | From January 1, analyzing a new match needs a plan or extra hours. **Everything you've already uploaded stays**: your matches, reports and film. SwingVision imports stay free. Your first month of a monthly plan is **half off**. | You've used 4h of your 5h on Coach. The hour left covers about half a match, and your hours reset on February 14. / Playing more before then? Extra hours are $35 each and last 12 months, or Coach Pro gives you 10h a month. | New matches wait until your hours reset on February 14. Anything you've already sent keeps processing. / To analyze a match sooner, add extra hours at $35 each, or move up to Coach Pro for 10h a month. |
-| Facts     | Coach · Coach Pro · Extra hours                                                                                                                                                                                                     | Left: 1h · about half a match; Resets: Feb 14                                                                                                                                                                                  | Used: 5h of 5h; Resets: Feb 14                                                                                                                                                                            |
-| Button    | Choose a plan                                                                                                                                                                                                                       | Add hours                                                                                                                                                                                                                      | Add hours                                                                                                                                                                                                 |
-| Note      | Nothing is charged until you choose a plan.                                                                                                                                                                                         | the "Analysis allowance alerts" opt-out                                                                                                                                                                                        | the same                                                                                                                                                                                                  |
+|           | December notice                                                                                                                                                                                                                    | 80% used                                                                                                                                                                                                                         | Used up                                                                                                                                                                                                    |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Subject   | Free beta hours end December 31                                                                                                                                                                                                    | 1h of match video left this month                                                                                                                                                                                                | You've used this month's video hours                                                                                                                                                                       |
+| Preheader | From January 1, a new match needs a plan or extra hours. Everything you've uploaded stays.                                                                                                                                         | About half a match left on Player. Your hours reset Feb 14.                                                                                                                                                                      | New uploads wait until Feb 14. Add hours to send one sooner.                                                                                                                                               |
+| Heading   | Free beta hours end December 31                                                                                                                                                                                                    | 1h of match video left this month                                                                                                                                                                                                | You've used this month's 5h of match video                                                                                                                                                                 |
+| Body      | From January 1, analyzing a new match needs a plan or extra hours. **Everything you've already uploaded stays**: your matches, reports and film. SwingVision imports stay free. Your first month of a monthly plan is **30% off**. | You've used 4h of your 5h on Player. The hour left covers about half a match, and your hours reset on February 14. / Playing more before then? Extra hours are $35 each and last 12 months, or Player Pro gives you 10h a month. | New matches wait until your hours reset on February 14. Anything you've already sent keeps processing. / To analyze a match sooner, add extra hours at $35 each, or move up to Player Pro for 10h a month. |
+| Facts     | Player · Player Pro · Extra hours                                                                                                                                                                                                  | Left: 1h · about half a match; Resets: Feb 14                                                                                                                                                                                    | Used: 5h of 5h; Resets: Feb 14                                                                                                                                                                             |
+| Button    | Choose a plan                                                                                                                                                                                                                      | Add hours                                                                                                                                                                                                                        | Add hours                                                                                                                                                                                                  |
+| Note      | Nothing is charged until you choose a plan.                                                                                                                                                                                        | the "Analysis allowance alerts" opt-out                                                                                                                                                                                          | the same                                                                                                                                                                                                   |
 
 ## Out of scope for this build
 
-- **Rush and Priority (stage E).** Every job is Standard: no queue field, no
-  speed choice, no charge, `processing_jobs.priority` stays `'standard'`. The
+- **Rush and Priority (stage E).** In no plan, and "coming soon" wherever
+  plan contents are listed. Every job is Standard: no queue field, no speed
+  choice, no charge, `processing_jobs.priority` stays `'standard'`. The
   vendor's faster queues have small monthly capacity, so the later build needs
   a monthly limit on Rush. It waits on Christian's request field.
 - College sales terms (instalments, PO, price lock, second-team discount)
@@ -363,8 +450,8 @@ This repo doesn't change `advantage-landing`; the handoff lists what it needs.
 For each stage: `npm run typecheck`, `npm run lint`, `npm run format:check`,
 the Playwright tests and `tests/database`. The last PR ends with a table of
 every figure in `src/lib/billing/plans.ts` against
-`advantage-landing/src/lib/plans.ts`; every row must match or be one of the
-landing changes in the handoff.
+`advantage-landing/src/lib/plans.ts`; every row must match once the landing
+changes in the handoff are made.
 
 ## Still open
 

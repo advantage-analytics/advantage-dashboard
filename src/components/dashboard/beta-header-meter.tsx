@@ -40,7 +40,7 @@ import {
  *
  * Once plans apply to the workspace (`plansApplyTo()`: January 1, 2027, or
  * earlier for a player already on a paid plan) the tag is the plan — Free,
- * Coach, Coach Pro, a team's plan, Pilot on a pilot team, No plan — and the
+ * Player, Player Pro, a team's plan, Pilot on a pilot team, No plan — and the
  * figure and tooltip are the resolver's (`PlanMeterPill`). A personal pill
  * goes to Settings › Plan; a team's goes to the team's own page.
  *

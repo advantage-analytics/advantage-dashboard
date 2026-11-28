@@ -1,5 +1,5 @@
 /**
- * Open a checkout: `POST { kind: "plan", plan, period }` for Coach or Coach
+ * Open a checkout: `POST { kind: "plan", plan, period }` for Player or Player
  * Pro, monthly or yearly, or `POST { kind: "hours", hours }` for 1–50 extra
  * hours.
  *

@@ -26,10 +26,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 /* ---------- Environment: the price ids the specs use ---------- */
 
 export const TEST_PRICES = {
-  STRIPE_PRICE_COACH_MONTHLY: "price_coach_m",
-  STRIPE_PRICE_COACH_YEARLY: "price_coach_y",
-  STRIPE_PRICE_COACH_PRO_MONTHLY: "price_pro_m",
-  STRIPE_PRICE_COACH_PRO_YEARLY: "price_pro_y",
+  STRIPE_PRICE_PLAYER_MONTHLY: "price_player_m",
+  STRIPE_PRICE_PLAYER_YEARLY: "price_player_y",
+  STRIPE_PRICE_PLAYER_PRO_MONTHLY: "price_pro_m",
+  STRIPE_PRICE_PLAYER_PRO_YEARLY: "price_pro_y",
   STRIPE_PRICE_EXTRA_HOUR: "price_hour",
   STRIPE_COUPON_FIRST_MONTH: "coupon_first_month",
 } as const;
@@ -249,7 +249,7 @@ export function fakeSubscription(over: {
     cancellation_details: null,
     metadata: over.metadata ?? {},
     items: {
-      data: [{ id: "si_1", price: { id: over.price ?? "price_coach_m" } }],
+      data: [{ id: "si_1", price: { id: over.price ?? "price_player_m" } }],
     },
   } as unknown as Stripe.Subscription;
 }

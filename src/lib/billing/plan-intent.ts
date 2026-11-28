@@ -1,6 +1,6 @@
 /**
- * "I picked Coach, monthly, on the landing site" — carried from
- * `/sign-up?plan=coach&period=monthly` to Settings › Plan, where the checkout
+ * "I picked Player, monthly, on the landing site" — carried from
+ * `/sign-up?plan=player&period=monthly` to Settings › Plan, where the checkout
  * dialog opens on it.
  *
  * The two values ride the existing `?next=` chain as the Plan page's own
@@ -13,15 +13,21 @@
  *
  * Both values are checked against the plan module wherever they are read.
  * Anything else — an unknown plan, a missing period, `free` — is no intent,
- * and the person lands where they always did.
+ * and the person lands where they always did. The ids the plans had before
+ * they were renamed (`coach`, `coach-pro`) are read as the plans they became,
+ * so a link or cookie made before the rename still opens the right checkout.
  *
  * Client-safe and pure.
  */
 
-import { isCoachPlanId, type CoachPlanId, type PlanPeriod } from "./plans";
+import {
+  personalPlanIdFrom,
+  type PersonalPlanId,
+  type PlanPeriod,
+} from "./plans";
 
-/** A plan that is sold: every `CoachPlanId` but Free. */
-type PaidPlan = Exclude<CoachPlanId, "free">;
+/** A plan that is sold: every `PersonalPlanId` but Free. */
+type PaidPlan = Exclude<PersonalPlanId, "free">;
 
 export interface PlanIntent {
   plan: PaidPlan;
@@ -47,14 +53,14 @@ export function parsePlanIntent(
   plan: unknown,
   period: unknown,
 ): PlanIntent | null {
-  const planValue = one(plan);
+  const planValue = personalPlanIdFrom(one(plan));
   const periodValue = one(period);
-  if (!isCoachPlanId(planValue) || planValue === "free") return null;
+  if (planValue === null || planValue === "free") return null;
   if (periodValue !== "monthly" && periodValue !== "yearly") return null;
   return { plan: planValue, period: periodValue };
 }
 
-/** `/dashboard/settings/plan?plan=coach&period=monthly`. */
+/** `/dashboard/settings/plan?plan=player&period=monthly`. */
 export function planIntentHref(intent: PlanIntent): string {
   return `${PLAN_SETTINGS_PATH}?plan=${intent.plan}&period=${intent.period}`;
 }
@@ -77,7 +83,7 @@ export function planIntentFromPath(
   }
 }
 
-/** The cookie's value: `coach.monthly`. */
+/** The cookie's value: `player.monthly`. */
 export function encodePlanIntent(intent: PlanIntent): string {
   return `${intent.plan}.${intent.period}`;
 }

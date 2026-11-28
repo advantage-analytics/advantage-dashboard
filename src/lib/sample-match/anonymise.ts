@@ -32,7 +32,10 @@ export const SAMPLE_NAMES: SampleNames = {
  * draw a baseline from, and an empty history is what the tiles already treat
  * as "no baseline".
  */
-export type SampleMatchData = Omit<MatchDetailData, "kpiHistory"> & {
+export type SampleMatchData = Omit<
+  MatchDetailData,
+  "kpiHistory" | "letPoints"
+> & {
   kpiHistory: [];
 };
 
@@ -252,8 +255,11 @@ export function anonymiseMatchDetail(
       }
     : mapped.statsResult;
 
+  // Replayed lets are the Video tab's alone; the sample carries none.
+  const { letPoints: _lets, ...kept } = mapped;
+  void _lets;
   return {
-    ...mapped,
+    ...kept,
     match,
     statsResult,
     points,

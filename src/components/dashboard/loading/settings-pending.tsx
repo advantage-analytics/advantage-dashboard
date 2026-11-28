@@ -529,7 +529,7 @@ export function SettingsPlanPending() {
           <Text className="text-title-lg">4h 12m left this month</Text>
           <Text className="text-[12px]">
             {paid
-              ? "3h 12m of Coach this month · Resets Feb 14"
+              ? "3h 12m of Player this month · Resets Feb 14"
               : "No plan hours or extra hours yet"}
           </Text>
         </SettingsCard>
@@ -539,26 +539,26 @@ export function SettingsPlanPending() {
             label={planFor(viewer.plan).name}
             description={
               paid
-                ? "5 hours of match video a month · Renews Feb 14 at $150"
-                : "20 Ask questions a month · Coach from $150, first month half off"
+                ? "About 3 verified matches a month · 5 hours of match video"
+                : "Free for SwingVision users · 20 Ask questions a month"
             }
             control={
-              planFor(viewer.plan).id === "coach-pro" ? null : (
+              planFor(viewer.plan).id === "player-pro" ? null : (
                 <Button>
-                  {paid ? "Upgrade to Coach Pro" : "Choose a plan"}
+                  {paid ? "Upgrade to Player Pro" : "Choose a plan"}
                 </Button>
               )
             }
           />
           <CardRow
             label="Extra hours"
-            description="$35 an hour · Last 12 months · No plan needed"
+            description="$35 an hour (about $60 per extra match) · Last 12 months · No plan needed"
             control={<Button>Buy hours</Button>}
           />
           {paid && (
             <CardRow
               label="Billing"
-              description="Card, receipts and cancelling."
+              description="Renews Feb 14 at $150"
               control={<Button>Manage billing ↗</Button>}
             />
           )}

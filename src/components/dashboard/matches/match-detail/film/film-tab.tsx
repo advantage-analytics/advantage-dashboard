@@ -258,7 +258,7 @@ function FilmRoom({
   // from the page's original server render on the way back and every bookmark
   // toggled since would disappear. `pointsRef` is the provider's
   // always-current copy of the same array, for the write path below.
-  const { match, points, pointsRef, setPoints } = useMatchData();
+  const { match, points, pointsRef, setPoints, letPoints } = useMatchData();
   const sides = useMatchSides();
   const supabase = useMemo(() => createClient(), []);
   const playerRef = useRef<FilmPlayerHandle>(null);
@@ -1320,6 +1320,7 @@ function FilmRoom({
               onHoldPoint={holdPoint}
               onFollow={followPlayback}
               nowPlaying={nowPlaying}
+              letPoints={letPoints}
             />
           </div>
         </div>

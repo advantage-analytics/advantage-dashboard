@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAllPages } from "@/lib/data/paged-query";
 import { isLetResult } from "@/lib/data/serve-return-shots";
+import { LET_POINT_FILTER } from "@/lib/data/let-points";
 
 /** The `points` side of a serve row — what both serve maps read. */
 export type ServeShotPoint = {
@@ -63,6 +64,8 @@ export async function fetchServeShotsForMatches(
         "id, match_id, server_is_player1, set_number, result_type, point_score, game_score, won_by_player1, shots(id, shot_number, shot_type, landing_x, landing_y, contact_y, spin_type, zone, result)",
       )
       .in("match_id", matchIds)
+      // A replayed let is no point, and its serve no serve (let-points.ts).
+      .not(...LET_POINT_FILTER)
       .in("shots.shot_type", ["First Serve", "Second Serve"])
       .order("id", { ascending: true })
       .order("shot_number", { ascending: true, referencedTable: "shots" })

@@ -172,7 +172,7 @@ test.describe("what cannot be saved", () => {
 
   test("no plan chosen, an unknown plan or term", () => {
     expect(planDraftProblem(draftOf(null))).toBe("Choose a plan.");
-    expect(planDraftProblem({ ...draftOf(SAVED), planId: "coach" })).toBe(
+    expect(planDraftProblem({ ...draftOf(SAVED), planId: "player" })).toBe(
       "Choose a plan.",
     );
     expect(planDraftProblem({ ...draftOf(SAVED), term: "full-year" })).toBe(
@@ -263,7 +263,7 @@ test.describe("what the card prints", () => {
     }
     // One spelled out, so the shape itself is on record.
     expect(planOptionDescription(collegePlan("program"))).toBe(
-      "Spring $7,500 · 200 h · Full year $10,500 · 280 h",
+      "Spring $7,500 · 225 h · Full year $10,500 · 325 h",
     );
   });
 

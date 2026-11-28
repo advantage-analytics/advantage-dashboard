@@ -3,14 +3,19 @@
  * plans on (docs/plans/2027-pricing.md, decision 5 and stage D).
  *
  * From `PLANS_BEGIN` a match is offered for the labellers' To do only when it
- * was PAID FOR: analysed on a Coach / Coach Pro plan, on purchased extra
- * hours (a Free player's included), on a team's season plan or on a team's
- * pilot. A match sent for analysis before `PLANS_BEGIN` stays eligible
- * whatever it drew. Before that date nothing is read and nothing changes.
+ * was analysed on a PAID PLAN: a Player / Player Pro plan, a team's season
+ * plan or a team's pilot. Extra hours bought by a Free player are NOT a plan:
+ * the match is analysed, and it is not offered for review. (A subscriber
+ * spending extra hours is still on a plan, and keeps review.) A match sent
+ * for analysis before `PLANS_BEGIN` stays eligible whatever it drew. Before
+ * that date nothing is read and nothing changes.
  *
  * The answer is the database's: `label_review_eligibility()` (migration
- * `20261126090000_plans_2027_gating`) reads the marker the reservation wrote
- * (`processing_usage.paid_basis`). This file asks it and hands the queue's
+ * `20261126090000_plans_2027_gating`, replaced by
+ * `20261127060000_plans_2027_final_pricing`) reads the marker the reservation
+ * wrote (`processing_usage.paid_basis`) and counts `plan`, `season` and
+ * `pilot`; `extra_hours` is still written, as a record of how the match was
+ * paid for, and is not counted. This file asks it and hands the queue's
  * rule (`canAddToTodo` in `queue.ts`) one boolean per job. The gate is on the
  * server, where the Not in To do list is built and where an add re-reads it
  * (`addToLabelTodo`); no button is hidden to make it hold.
@@ -32,11 +37,20 @@ const LOG = "[labels:review-eligibility]";
 /** What a paid reservation drew (`processing_usage.paid_basis`). */
 export type PaidBasis = "plan" | "extra_hours" | "season" | "pilot";
 
+/**
+ * The markers that earn human review: every `PaidBasis` but `extra_hours`.
+ * The same list `label_review_eligibility()` spells.
+ */
+export type ReviewBasis = Exclude<PaidBasis, "extra_hours">;
+
+export const REVIEW_BASES: readonly ReviewBasis[] = ["plan", "season", "pilot"];
+
 /** One row of `label_review_eligibility()`. */
 export interface ReviewEligibilityRow {
   job_id: string;
   eligible: boolean;
-  paid_basis: PaidBasis | null;
+  /** The newest marker that counts, or null: never `extra_hours`. */
+  paid_basis: ReviewBasis | null;
 }
 
 /**

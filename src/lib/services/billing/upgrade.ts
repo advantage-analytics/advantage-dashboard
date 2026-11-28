@@ -1,13 +1,20 @@
 /**
- * Coach → Coach Pro, on the same period — server only. Decision 7.
+ * The two plan changes charged today — server only. Decision 7, and the same
+ * rule for paying yearly:
  *
- * The money is `quoteUpgrade()` (`lib/billing/upgrade.ts`): the new plan's
- * full period price, less a credit for the smaller of the time left and the
- * plan hours left. Stripe's own proration only counts days, so it is turned
+ *   plan     Player → Player Pro, on the same period (the Upgrade button);
+ *   period   monthly → yearly, on the same plan (Pay yearly).
+ *
+ * `upgradeKind()` (`lib/billing/upgrade.ts`) admits exactly those; anything
+ * else is refused `not_an_upgrade`. One machinery runs both: only the target
+ * price, the attempt id and a few words differ.
+ *
+ * The money is `quoteUpgrade()`: the target's full period price, less a
+ * credit for the smaller of the time left and the plan hours left. Stripe's own proration only counts days, so it is turned
  * off (`proration_behavior: "none"`) and the server hands Stripe the credit
  * as a CUSTOMER-BALANCE credit, which the upgrade's invoice consumes. The new
  * period starts now (`billing_cycle_anchor: "now"`), which moves
- * `plan_period_start` and so hands out the new plan's full hours.
+ * `plan_period_start` and so hands out a fresh month of the plan's hours.
  *
  * ── Order of Stripe calls, and what each failure leaves ────────────────────
  *
@@ -19,7 +26,7 @@
  *              reversed (see "The record" below). Fails → stop, nothing new.
  *   2. credit  customers.createBalanceTransaction(−credit), tagged with this
  *              attempt and subscription. Fails → stop; nothing to undo.
- *   3. update  subscriptions.update: Coach Pro price, anchor now, no
+ *   3. update  subscriptions.update: the target's price, anchor now, no
  *              proration, `payment_behavior: "error_if_incomplete"`, and
  *              `metadata.upgrade_attempt = <attempt>` in the SAME call.
  *              Stripe invoices the new period at once, applies the balance,
@@ -45,12 +52,14 @@
  * credit because the credit is on the balance before step 3 is sent.
  *
  * ── Twice at once ──────────────────────────────────────────────────────────
- * The attempt id is deterministic — subscription, its period start, and the
- * minute — and is the idempotency key of steps 2, 3 and the reversal. Two
+ * The attempt id is deterministic — subscription, its period start, the
+ * minute, and which change it is (a switch to yearly carries `_yearly`, so it
+ * never shares a key with a plan upgrade asked in the same minute) — and is
+ * the idempotency key of steps 2, 3 and the reversal. Two
  * clicks in one minute are one attempt to Stripe (the second gets the first's
  * answer, or "in progress"; a retry in the minute a card was declined is
- * told to wait for the next one); after a successful upgrade the plan is no longer
- * Coach and every later request is refused before step 1. A young,
+ * told to wait for the next one); after a successful change the subscription
+ * is already on its target and every later request is refused before step 1. A young,
  * unsettled credit from a DIFFERENT attempt means one is still running:
  * refused as in progress rather than raced.
  */
@@ -58,10 +67,11 @@
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { coachPlan, type PlanPeriod } from "@/lib/billing/plans";
+import { personalPlan, type PlanPeriod } from "@/lib/billing/plans";
 import {
-  isUpgrade,
   quoteUpgrade,
+  upgradeKind,
+  type UpgradeKind,
   type UpgradeQuote,
 } from "@/lib/billing/upgrade";
 import { expandableId } from "@/lib/services/credits/checkout";
@@ -75,6 +85,8 @@ import {
 } from "@/lib/services/splitstep/quota";
 import {
   PLAN_PRICE_ENV,
+  isPaidPlanId,
+  isPlanPeriod,
   planForPriceId,
   priceIdFor,
   type PaidPlanId,
@@ -85,7 +97,7 @@ import {
   refuse,
   type BillingResult,
 } from "./http";
-import type { CheckoutUser } from "./checkout";
+import { planProductName, type CheckoutUser } from "./checkout";
 import {
   readBillingUser,
   subscriptionPeriod,
@@ -93,7 +105,7 @@ import {
   syncSubscription,
 } from "./subscription";
 
-const UPGRADE_TO: PaidPlanId = "coach-pro";
+const UPGRADE_TO: PaidPlanId = "player-pro";
 
 export const UPGRADE_CREDIT_KIND = "upgrade_credit";
 export const UPGRADE_REVERSAL_KIND = "upgrade_credit_reversal";
@@ -101,20 +113,82 @@ export const UPGRADE_REVERSAL_KIND = "upgrade_credit_reversal";
 /** An unsettled credit younger than this belongs to an attempt still running. */
 const IN_FLIGHT_MS = 10 * 60_000;
 
-const UNAVAILABLE = (detail: string) =>
-  refuse(
-    "checkout_unavailable",
-    502,
-    "The upgrade couldn't be made. Try again in a moment.",
-    detail,
-  );
-const IN_PROGRESS = (detail: string) =>
-  refuse(
-    "upgrade_in_progress",
-    409,
-    "Your upgrade is already being made. Give it a moment.",
-    detail,
-  );
+/**
+ * What the caller asked to move to. Each half left out stays as it is; with
+ * nothing asked at all it is the Upgrade button: Player Pro on the same period.
+ */
+export interface UpgradeRequest {
+  plan?: PaidPlanId;
+  period?: PlanPeriod;
+}
+
+/**
+ * The target a request body names, `undefined` when it names none, or `null`
+ * when what it names is not a plan or a period at all. `{ period }`,
+ * `{ plan }`, both, or the same two inside `target`.
+ */
+export function readUpgradeRequest(
+  body: Record<string, unknown>,
+): UpgradeRequest | undefined | null {
+  const nested = body.target;
+  if (nested !== undefined && (nested === null || typeof nested !== "object")) {
+    return null;
+  }
+  const source = (nested as Record<string, unknown> | undefined) ?? body;
+  const { plan, period } = source;
+  if (plan !== undefined && !isPaidPlanId(plan)) return null;
+  if (period !== undefined && !isPlanPeriod(period)) return null;
+  if (plan === undefined && period === undefined) return undefined;
+  return {
+    ...(plan !== undefined ? { plan } : {}),
+    ...(period !== undefined ? { period } : {}),
+  };
+}
+
+/** A paid plan and how it is billed. */
+interface PaidTarget {
+  plan: PaidPlanId;
+  period: PlanPeriod;
+}
+
+function targetOf(
+  sold: PaidTarget,
+  request: UpgradeRequest | undefined,
+): PaidTarget {
+  if (
+    !request ||
+    (request.plan === undefined && request.period === undefined)
+  ) {
+    return { plan: UPGRADE_TO, period: sold.period };
+  }
+  return {
+    plan: request.plan ?? sold.plan,
+    period: request.period ?? sold.period,
+  };
+}
+
+/** The few words that differ between the two changes. */
+const WORDS = {
+  plan: {
+    unavailable: "The upgrade couldn't be made. Try again in a moment.",
+    inProgress: "Your upgrade is already being made. Give it a moment.",
+    notConfigured: "Upgrading isn't available yet. Try again later.",
+    notActive: "Update your card before upgrading.",
+  },
+  period: {
+    unavailable:
+      "The switch to yearly couldn't be made. Try again in a moment.",
+    inProgress:
+      "Your switch to yearly is already being made. Give it a moment.",
+    notConfigured: "Paying yearly isn't available yet. Try again later.",
+    notActive: "Update your card before switching to yearly.",
+  },
+} as const satisfies Record<UpgradeKind, Record<string, string>>;
+
+const UNAVAILABLE = (detail: string, kind: UpgradeKind = "plan") =>
+  refuse("checkout_unavailable", 502, WORDS[kind].unavailable, detail);
+const IN_PROGRESS = (detail: string, kind: UpgradeKind = "plan") =>
+  refuse("upgrade_in_progress", 409, WORDS[kind].inProgress, detail);
 
 type StripeErrorLike = { type?: string; code?: string; statusCode?: number };
 
@@ -136,7 +210,11 @@ interface Prepared {
   userId: string;
   customerId: string;
   subscription: Stripe.Subscription;
-  period: PlanPeriod;
+  /** What the subscription is on now. */
+  from: PaidTarget;
+  /** What it moves to. */
+  target: PaidTarget;
+  kind: UpgradeKind;
   targetPriceId: string;
   quote: UpgradeQuote;
 }
@@ -239,18 +317,19 @@ async function periodPaidCents(
   return paid;
 }
 
-/** Step 0: everything an upgrade is decided from. Writes nothing. */
+/** Step 0: everything a change is decided from. Writes nothing. */
 async function prepareUpgrade(params: {
   stripe: Stripe;
   admin: SupabaseClient;
   user: CheckoutUser | null;
+  target?: UpgradeRequest;
   now: Date;
 }): Promise<BillingResult<Prepared>> {
   const { stripe, admin, user, now } = params;
   if (!user) return { ok: false, error: SIGN_IN_REFUSAL };
 
   const NO_SUBSCRIPTION = (detail: string) =>
-    refuse("no_subscription", 409, "You don't have a plan to upgrade.", detail);
+    refuse("no_subscription", 409, "You don't have a plan to change.", detail);
 
   try {
     const row = await readBillingUser(admin, "id", user.id);
@@ -268,20 +347,44 @@ async function prepareUpgrade(params: {
       return NO_SUBSCRIPTION("customer_mismatch");
     }
 
-    const sold = planForPriceId(subscriptionPriceId(subscription));
-    if (!sold || !isUpgrade(sold.plan, UPGRADE_TO)) {
+    // A failed renewal is fixed first, whatever was asked: the card on file
+    // is the one that just failed, and the current period is not paid for,
+    // so there is nothing to credit.
+    if (subscription.status === "past_due") {
       return refuse(
-        "not_an_upgrade",
+        "past_due",
         409,
-        `You're already on ${coachPlan(UPGRADE_TO).name}.`,
-        sold ? `from_${sold.plan}` : "unknown_price",
+        "Your last payment failed. Update your card before changing your plan.",
+        "status_past_due",
       );
+    }
+
+    const sold = planForPriceId(subscriptionPriceId(subscription));
+    const asked =
+      params.target?.plan !== undefined || params.target?.period !== undefined;
+    const target = sold ? targetOf(sold, params.target) : null;
+    const kind = sold && target ? upgradeKind(sold, target) : null;
+    if (!sold || !target || !kind) {
+      // With nothing asked this is the Upgrade button, which only a Player Pro
+      // subscriber (or an unknown price) is refused at.
+      let sentence = `You're already on ${personalPlan(UPGRADE_TO).name}.`;
+      let detail = sold ? `from_${sold.plan}` : "unknown_price";
+      if (sold && target && asked) {
+        const same = target.plan === sold.plan && target.period === sold.period;
+        sentence = !same
+          ? "That change can't be made here."
+          : params.target?.plan === undefined
+            ? `You already pay ${target.period}.`
+            : `You're already on ${personalPlan(target.plan).name}.`;
+        detail = `from_${sold.plan}_${sold.period}_to_${target.plan}_${target.period}`;
+      }
+      return refuse("not_an_upgrade", 409, sentence, detail);
     }
     if (subscription.status !== "active") {
       return refuse(
         "not_an_upgrade",
         409,
-        "Update your card before upgrading.",
+        WORDS[kind].notActive,
         `status_${subscription.status}`,
       );
     }
@@ -291,23 +394,23 @@ async function prepareUpgrade(params: {
       return refuse(
         "not_an_upgrade",
         409,
-        "A change to your plan is already scheduled. Contact us to upgrade.",
+        "A change to your plan is already scheduled. Contact us to change it.",
         "has_schedule",
       );
     }
 
-    const targetPriceId = priceIdFor(UPGRADE_TO, sold.period);
+    const targetPriceId = priceIdFor(target.plan, target.period);
     if (!targetPriceId) {
       return refuse(
         "price_not_configured",
         503,
-        "Upgrading isn't available yet. Try again later.",
-        PLAN_PRICE_ENV[UPGRADE_TO][sold.period],
+        WORDS[kind].notConfigured,
+        PLAN_PRICE_ENV[target.plan][target.period],
       );
     }
 
     const period = subscriptionPeriod(subscription);
-    if (!period.start || !period.end) return UNAVAILABLE("no_period");
+    if (!period.start || !period.end) return UNAVAILABLE("no_period", kind);
 
     // The same read feeds the preview and the charge, so they agree.
     const [usedSeconds, paidForPeriodCents] = await Promise.all([
@@ -320,12 +423,15 @@ async function prepareUpgrade(params: {
         userId: user.id,
         customerId,
         subscription,
-        period: sold.period,
+        from: sold,
+        target,
+        kind,
         targetPriceId,
         quote: quoteUpgrade({
           from: sold.plan,
-          to: UPGRADE_TO,
+          to: target.plan,
           period: sold.period,
+          toPeriod: target.period,
           periodStart: new Date(period.start),
           periodEnd: new Date(period.end),
           now,
@@ -339,21 +445,33 @@ async function prepareUpgrade(params: {
       userId: user.id,
       error: errorMessage(error),
     });
-    return UNAVAILABLE("prepare_failed");
+    return UNAVAILABLE(
+      "prepare_failed",
+      params.target?.period === "yearly" && params.target.plan === undefined
+        ? "period"
+        : "plan",
+    );
   }
 }
 
 /** What the dialog shows, and what `executeUpgrade()` then charges. */
 export type UpgradePreview = UpgradeQuote & {
+  /** Which of the two changes this prices. */
+  kind: UpgradeKind;
   from: PaidPlanId;
   to: PaidPlanId;
+  /** How the subscription is billed AFTER the change. */
   period: PlanPeriod;
+  /** How it is billed now: the same, except for a switch to yearly. */
+  fromPeriod: PlanPeriod;
 };
 
 export async function previewUpgrade(params: {
   stripe: Stripe;
   admin: SupabaseClient;
   user: CheckoutUser | null;
+  /** Left out: Player Pro on the same period. */
+  target?: UpgradeRequest;
   now?: Date;
 }): Promise<BillingResult<UpgradePreview>> {
   const prepared = await prepareUpgrade({
@@ -365,19 +483,27 @@ export async function previewUpgrade(params: {
     ok: true,
     value: {
       ...prepared.value.quote,
-      from: "coach",
-      to: UPGRADE_TO,
-      period: prepared.value.period,
+      kind: prepared.value.kind,
+      from: prepared.value.from.plan,
+      to: prepared.value.target.plan,
+      period: prepared.value.target.period,
+      fromPeriod: prepared.value.from.period,
     },
   };
 }
 
-/** The deterministic id of one upgrade attempt — see "Twice at once". */
+/**
+ * The deterministic id of one attempt — see "Twice at once". A switch to
+ * yearly is marked, so the two changes a monthly Player can ask for in one
+ * minute never share an idempotency key.
+ */
 export function upgradeAttemptId(
   subscription: Pick<Stripe.Subscription, "id" | "current_period_start">,
   now: Date,
+  kind: UpgradeKind = "plan",
 ): string {
-  return `upg_${subscription.id}_${subscription.current_period_start}_${Math.floor(now.getTime() / 60_000)}`;
+  const base = `upg_${subscription.id}_${subscription.current_period_start}_${Math.floor(now.getTime() / 60_000)}`;
+  return kind === "period" ? `${base}_yearly` : base;
 }
 
 async function reverseCredit(params: {
@@ -521,6 +647,8 @@ export async function executeUpgrade(params: {
    * the new figures rather than charged unseen.
    */
   expectedPayTodayCents?: number;
+  /** Left out: Player Pro on the same period. `{ period: "yearly" }`: pay yearly. */
+  target?: UpgradeRequest;
   now?: Date;
 }): Promise<BillingResult<UpgradeDone>> {
   const { stripe, admin } = params;
@@ -528,8 +656,16 @@ export async function executeUpgrade(params: {
 
   const prepared = await prepareUpgrade({ ...params, now });
   if (!prepared.ok) return prepared;
-  const { userId, customerId, subscription, period, targetPriceId, quote } =
-    prepared.value;
+  const {
+    userId,
+    customerId,
+    subscription,
+    from,
+    target,
+    kind,
+    targetPriceId,
+    quote,
+  } = prepared.value;
 
   if (
     params.expectedPayTodayCents !== undefined &&
@@ -544,7 +680,7 @@ export async function executeUpgrade(params: {
   }
 
   const item = subscription.items.data[0];
-  const attempt = upgradeAttemptId(subscription, now);
+  const attempt = upgradeAttemptId(subscription, now, kind);
   const log = { userId, customerId, subscriptionId: subscription.id, attempt };
 
   // 1. Settle anything an earlier attempt left.
@@ -556,7 +692,7 @@ export async function executeUpgrade(params: {
       attempt,
       now,
     });
-    if (swept === "busy") return IN_PROGRESS("unsettled_credit");
+    if (swept === "busy") return IN_PROGRESS("unsettled_credit", kind);
     if (swept === "spent") {
       return refuse(
         "upgrade_in_progress",
@@ -565,13 +701,13 @@ export async function executeUpgrade(params: {
         "attempt_spent",
       );
     }
-    if (swept === "failed") return UNAVAILABLE("sweep_failed");
+    if (swept === "failed") return UNAVAILABLE("sweep_failed", kind);
   } catch (error) {
     console.error("[billing] could not sweep upgrade credits", {
       ...log,
       error: errorMessage(error),
     });
-    return UNAVAILABLE("sweep_failed");
+    return UNAVAILABLE("sweep_failed", kind);
   }
 
   // 2. The credit, on the balance before the invoice exists.
@@ -583,7 +719,10 @@ export async function executeUpgrade(params: {
         {
           amount: -quote.creditCents,
           currency: "usd",
-          description: `Unused ${coachPlan("coach").name} time, credited on upgrade`,
+          description:
+            kind === "period"
+              ? `Unused ${personalPlan(from.plan).name} month, credited on the switch to yearly`
+              : `Unused ${personalPlan(from.plan).name} time, credited on upgrade`,
           metadata: {
             kind: UPGRADE_CREDIT_KIND,
             attempt,
@@ -599,8 +738,8 @@ export async function executeUpgrade(params: {
         error: errorMessage(error),
       });
       return isIdempotencyConflict(error)
-        ? IN_PROGRESS("credit_in_flight")
-        : UNAVAILABLE("credit_failed");
+        ? IN_PROGRESS("credit_in_flight", kind)
+        : UNAVAILABLE("credit_failed", kind);
     }
   }
 
@@ -615,6 +754,9 @@ export async function executeUpgrade(params: {
         proration_behavior: "none",
         billing_cycle_anchor: "now",
         payment_behavior: "error_if_incomplete",
+        // Checkout named the subscription after the plan it started on;
+        // Stripe's portal prints that beside the new price unless it follows.
+        description: planProductName(target.plan, target.period),
         metadata: { ...subscription.metadata, upgrade_attempt: attempt },
       },
       { idempotencyKey: `${attempt}:update` },
@@ -630,7 +772,9 @@ export async function executeUpgrade(params: {
       error: errorMessage(failure),
     });
     // A twin request holds the same attempt and the same credit: leave both.
-    if (isIdempotencyConflict(failure)) return IN_PROGRESS("update_in_flight");
+    if (isIdempotencyConflict(failure)) {
+      return IN_PROGRESS("update_in_flight", kind);
+    }
 
     let after: Stripe.Subscription | null = null;
     try {
@@ -640,7 +784,7 @@ export async function executeUpgrade(params: {
         ...log,
         error: errorMessage(error),
       });
-      return UNAVAILABLE("outcome_unknown");
+      return UNAVAILABLE("outcome_unknown", kind);
     }
 
     if (after.metadata?.upgrade_attempt === attempt) {
@@ -662,7 +806,7 @@ export async function executeUpgrade(params: {
             "Your card was declined, so nothing changed. Update your card and try again.",
             "card_declined",
           )
-        : UNAVAILABLE("update_failed");
+        : UNAVAILABLE("update_failed", kind);
     }
   }
 
@@ -685,8 +829,8 @@ export async function executeUpgrade(params: {
   return {
     ok: true,
     value: {
-      plan: UPGRADE_TO,
-      period,
+      plan: target.plan,
+      period: target.period,
       payTodayCents: quote.payTodayCents,
       creditCents: quote.creditCents,
       nextBillingDay: quote.nextBillingDay,

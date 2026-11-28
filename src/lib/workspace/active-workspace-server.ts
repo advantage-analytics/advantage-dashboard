@@ -9,16 +9,18 @@ import { getAuthUser } from "@/lib/supabase/auth-user-server";
 import { getInitials } from "@/lib/data/match-utils";
 import { isRecordingSource } from "@/app/onboarding/answers";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
-import {
-  isCollegePlanId,
-  isPlanTerm,
-  type ProgramPlanRef,
-} from "@/lib/billing/plans";
+import type { ProgramPlanRef } from "@/lib/billing/plans";
 import {
   VERSIONS_ABSENT_RETRY_MS,
   isMissingTable,
 } from "@/lib/data/season-points-cache";
-import { readPlanPeriodStart } from "@/lib/billing/plan-fields";
+import {
+  readPlanWindow,
+  toProgramPlanRef,
+  withHoursFrom,
+  type PlanWindowFacts,
+  type ProgramPlanRow,
+} from "@/lib/billing/plan-fields";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import type { ProgramStatus } from "@/lib/services/programs/claim-state";
 import type {
@@ -61,7 +63,7 @@ function personalWorkspace(
   individualPilot: boolean,
   unlimitedVideo: boolean,
   videoHoursOverride: number | null,
-  planPeriodStart: string | null,
+  planWindow: PlanWindowFacts,
 ): Workspace {
   return {
     // Not an invention: `processing_usage` already keys an individual's
@@ -90,7 +92,7 @@ function personalWorkspace(
     videoHoursOverride,
     // The owner's plan and its period — see `Workspace.plan`.
     plan: viewer.plan,
-    planPeriodStart,
+    ...planWindow,
     // No program row, so no status to carry — see `Workspace.programStatus`.
     programStatus: null,
     // A program-wide policy about *other* people, in a workspace whose only
@@ -178,9 +180,11 @@ async function programPlansByProgram(
   supabase: SupabaseClient,
 ): Promise<Map<string, ProgramPlanRef>> {
   if (Date.now() < programPlansAbsentUntil) return new Map();
-  const { data, error } = await supabase
-    .from("program_plans")
-    .select("program_id, plan_id, plan_term, starts_on, ends_on");
+  // `hours_from` arrives with a later migration than the table: asked for,
+  // and done without where the column is not there yet — `withHoursFrom()`.
+  const { data, error } = await withHoursFrom((columns) =>
+    supabase.from("program_plans").select(columns),
+  );
 
   if (error) {
     if (isMissingTable(error)) {
@@ -194,16 +198,13 @@ async function programPlansByProgram(
   }
 
   const byProgram = new Map<string, ProgramPlanRef>();
-  for (const row of data ?? []) {
+  for (const row of (data ?? []) as unknown as (ProgramPlanRow & {
+    program_id: string;
+  })[]) {
     // The CHECKs pin both value sets; a value this build does not know is a
     // plan newer than this code, and reads as no plan rather than a guess.
-    if (!isCollegePlanId(row.plan_id) || !isPlanTerm(row.plan_term)) continue;
-    byProgram.set(row.program_id, {
-      id: row.plan_id,
-      term: row.plan_term,
-      startsOn: row.starts_on,
-      endsOn: row.ends_on,
-    });
+    const ref = toProgramPlanRef(row);
+    if (ref) byProgram.set(row.program_id, ref);
   }
   return byProgram;
 }
@@ -453,7 +454,7 @@ export const getWorkspaceContext = cache(
     // why other members' names need a SECURITY DEFINER lookup rather than a
     // select from here.
     // Memberships depend only on the authenticated id, not the profile row.
-    const [{ data: row }, programs, planPeriodStart] = await Promise.all([
+    const [{ data: row }, programs, planWindow] = await Promise.all([
       supabase
         .from("users")
         .select(
@@ -462,8 +463,8 @@ export const getWorkspaceContext = cache(
         .eq("id", user.id)
         .single(),
       listProgramWorkspaces(supabase, user.id),
-      // Its own tolerant read — see `readPlanPeriodStart`.
-      readPlanPeriodStart(supabase, user.id),
+      // Its own tolerant read — see `readPlanWindow`.
+      readPlanWindow(supabase, user.id),
     ]);
 
     const avatarPath = row?.avatar_path ?? null;
@@ -492,7 +493,7 @@ export const getWorkspaceContext = cache(
         row?.video_hours_override == null
           ? null
           : Number(row.video_hours_override),
-        planPeriodStart,
+        planWindow,
       ),
       ...programs,
     ];

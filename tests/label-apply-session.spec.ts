@@ -45,6 +45,8 @@ function plan(
   fields: Partial<{
     problems: string[];
     points: number;
+    /** How many of `points` are replayed lets (`let_replayed`). */
+    lets: number;
     mismatch: boolean;
   }>,
 ): ReturnType<typeof planApply> {
@@ -56,6 +58,7 @@ function plan(
       droppedBeforeServe: 0,
       points: Array.from({ length: fields.points ?? 1 }, (_, i) => ({
         point_number: i + 1,
+        flags: i < (fields.lets ?? 0) ? ["hand_labelled", "let_replayed"] : [],
         shots: [],
       })),
     },
@@ -80,6 +83,11 @@ test("a score mismatch not accepted, or no points: refused, nothing touched", as
   });
 
   expect(await refuse(plan({ points: 0 }))).toEqual({
+    ok: false,
+    error: "Not published: there are no points to write.",
+  });
+  // Replayed lets alone are no points either.
+  expect(await refuse(plan({ points: 2, lets: 2 }))).toEqual({
     ok: false,
     error: "Not published: there are no points to write.",
   });

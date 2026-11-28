@@ -36,6 +36,17 @@ export const HAND_LABELLED_FLAG = "hand_labelled";
  */
 export const OFF_VIDEO_FLAG = "off_video";
 
+/**
+ * Beside `hand_labelled`: a point the labeller marked `let_replayed` — played
+ * out on the video, then replayed — published whole so the Video tab can show
+ * it, with `result_type` 'Let'. It is no point: no score moves, no pressure
+ * flag, and `won_by_player1` is a placeholder (the server) that means nothing.
+ * EVERY reader that counts points, serves or shots must skip a point carrying
+ * it — `getMatchPointsFromSupabase` drops it unless asked, and the SQL readers
+ * (`calculate_match_stats`, `key_moments`, the Ask views) filter it.
+ */
+export const LET_REPLAYED_FLAG = "let_replayed";
+
 export const POINT_FLAGS = {
   /**
    * Score fold and the last stroke's `in` flag name different winners.
