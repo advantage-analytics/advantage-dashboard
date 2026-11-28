@@ -605,6 +605,19 @@ export function errorOptionsFor(errorSplitJudged: boolean): ErrorOption[] {
   ];
 }
 
+/**
+ * An Error type option as an Errors toolbar chip: short beside "All" (the
+ * Errors board reads All · Unforced · Forced · Double faults). The strip,
+ * the wall's card names and Advanced filters keep the full words.
+ */
+export function errorChipLabel(option: ErrorOption): string {
+  if (option.values.length === 1) {
+    if (option.values[0] === "unforced") return "Unforced";
+    if (option.values[0] === "forced") return "Forced";
+  }
+  return option.label;
+}
+
 const ORDER = [
   "player",
   "ball",

@@ -25,6 +25,7 @@ import {
   type VizResult,
 } from "./viz-model";
 import {
+  errorChipLabel,
   errorOptionsFor,
   OPTIONS,
   seasonMatchKept,
@@ -607,6 +608,7 @@ export function ErrorTypeChips({
 }) {
   const options = errorOptionsFor(errorSplitJudged);
   const current = new Set<string>(filters.error);
+
   const holdsExactly = (values: readonly string[]) =>
     values.length === current.size && values.every((v) => current.has(v));
   return (
@@ -623,7 +625,7 @@ export function ErrorTypeChips({
           pressed={holdsExactly(option.values)}
           onClick={() => setFilters({ ...filters, error: [...option.values] })}
         >
-          {option.label}
+          {errorChipLabel(option)}
         </LifecycleChip>
       ))}
     </div>

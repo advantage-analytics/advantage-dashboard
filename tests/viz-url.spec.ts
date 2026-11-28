@@ -17,6 +17,7 @@ import {
   carryFilters,
   clearedFilters,
   COURT_ENDS_PARAM,
+  errorChipLabel,
   errorOptionsFor,
   filtersForCut,
   focusTargetAfterViewChange,
@@ -849,6 +850,19 @@ test.describe("Error type on a match whose errors are not judged", () => {
     expect(errorOptionsFor(true).map((o) => o.label)).toEqual([
       "Unforced errors",
       "Forced errors",
+      "Double faults",
+    ]);
+  });
+
+  test("the Errors toolbar chips read short, as the Errors board does", () => {
+    expect(errorOptionsFor(true).map(errorChipLabel)).toEqual([
+      "Unforced",
+      "Forced",
+      "Double faults",
+    ]);
+    // Unjudged: the one option holding both kinds keeps its own word.
+    expect(errorOptionsFor(false).map(errorChipLabel)).toEqual([
+      "Errors",
       "Double faults",
     ]);
   });
