@@ -23,6 +23,7 @@ import { readFormFields } from "@/lib/auth/form-fields";
 import posthog from "posthog-js";
 import { isPostHogConfigured } from "@/lib/posthog-client";
 import { loginFailureReason, type LoginMethod } from "@/lib/auth/login-failure";
+import { track } from "@/lib/analytics";
 
 /**
  * Google's brand mark. Hoisted out of the component because it is static and
@@ -123,6 +124,8 @@ export function LoginForm({
 
   const handleGoogleOAuth = async () => {
     setError(null);
+    // Before any await: a tap that never reaches Google still leaves a record.
+    track("login_started", { method: "google" });
     // The destination never rides in `redirectTo`. Supabase puts that URL in
     // the authorize request it receives and logs, and an invitation's
     // destination carries the invite token — a credential meant to exist in
@@ -137,25 +140,30 @@ export function LoginForm({
     const secure = window.location.protocol === "https:" ? "; Secure" : "";
     const carry = destination !== "/dashboard";
     document.cookie = `${AUTH_NEXT_COOKIE}=${carry ? encodeURIComponent(destination) : ""}; Path=/; Max-Age=${carry ? AUTH_NEXT_MAX_AGE_SECONDS : 0}; SameSite=Lax${secure}`;
-    const supabase = createClient();
-    const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/callback?next=/dashboard`,
-        // Drive the redirect ourselves (below) so supabase-js does not ALSO
-        // navigate the browser. Two navigations to the same authorize URL race
-        // and abort each other (ERR_ABORTED) — mobile Safari is strict about it,
-        // which left the Google button doing nothing on phones.
-        skipBrowserRedirect: true,
-      },
-    });
-    if (oauthError) {
-      captureLoginFailed("google", oauthError);
-      setError(toAuthError(oauthError));
-      return;
-    }
-    if (data?.url) {
+    try {
+      const supabase = createClient();
+      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/callback?next=/dashboard`,
+          // Drive the redirect ourselves (below) so supabase-js does not ALSO
+          // navigate the browser. Two navigations to the same authorize URL
+          // race and abort each other (ERR_ABORTED) — mobile Safari is strict
+          // about it, which left the Google button doing nothing on phones.
+          skipBrowserRedirect: true,
+        },
+      });
+      if (oauthError) throw oauthError;
+      // Neither an error nor a URL used to end the tap in silence.
+      if (!data?.url) {
+        throw Object.assign(new Error("No redirect URL"), {
+          code: "no_redirect_url",
+        });
+      }
       window.location.href = data.url;
+    } catch (err: unknown) {
+      captureLoginFailed("google", err);
+      setError(toAuthError(err));
     }
   };
 

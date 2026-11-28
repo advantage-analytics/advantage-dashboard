@@ -14,14 +14,16 @@ import FormError, { ErrorText } from "./form-error";
 import AuthCheckbox from "./auth-checkbox";
 import {
   toAuthError,
-  validateEmail,
-  validatePassword,
   PASSWORD_RULE,
   type AuthError,
 } from "@/lib/auth/error-messages";
+import {
+  signUpFormRefusal,
+  signUpServerReason,
+} from "@/lib/auth/sign-up-refusal";
 import { authHref, safeNext } from "@/lib/auth/safe-next";
 import { readFormFields } from "@/lib/auth/form-fields";
-import { setSignupAttribution } from "@/lib/analytics";
+import { setSignupAttribution, track } from "@/lib/analytics";
 
 /**
  * @param next Where the confirmation mail should land — `/sign-up` reads it
@@ -60,25 +62,20 @@ export function SignUpForm({
 
     // Each check names the field it failed on, so the message lands on that
     // field's rule rather than in one banner below the whole group.
-    const emailProblem = validateEmail(fields.email);
-    if (emailProblem) {
-      setError({ field: "email", message: emailProblem });
-      return;
-    }
-    const passwordProblem = validatePassword(fields.password);
-    if (passwordProblem) {
-      setError({ field: "password", message: passwordProblem });
-      return;
-    }
-    if (fields.password !== fields["confirm-password"]) {
-      setError({ field: "confirm", message: "Both passwords have to match." });
-      return;
-    }
-    if (!agree) {
-      setError({
-        field: "consent",
-        message: "Agree to the Terms and Privacy Policy to continue.",
+    const refusal = signUpFormRefusal(
+      {
+        email: fields.email,
+        password: fields.password,
+        confirm: fields["confirm-password"],
+      },
+      agree,
+    );
+    if (refusal) {
+      track("sign_up_refused", {
+        field: refusal.field,
+        reason: refusal.reason,
       });
+      setError({ field: refusal.field, message: refusal.message });
       return;
     }
 
@@ -114,7 +111,12 @@ export function SignUpForm({
       );
       router.push(authHref("/sign-up-success", destination));
     } catch (err: unknown) {
-      setError(toAuthError(err));
+      const authError = toAuthError(err);
+      track("sign_up_refused", {
+        field: authError.field,
+        reason: signUpServerReason(err),
+      });
+      setError(authError);
     } finally {
       setIsLoading(false);
     }
