@@ -26,6 +26,9 @@ import { cn } from "@/lib/utils";
  * The dialog only decides whether a name may be sent; the caller renames
  * (optimistically) and answers a server refusal in its own status line.
  */
+/** What a rename reaches, said under the field until the name is taken. */
+const RENAME_NOTE = "Changes the name on every match and player profile.";
+
 export function RenameViewDialog({
   open,
   onOpenChange,
@@ -50,7 +53,7 @@ export function RenameViewDialog({
   const [name, setName] = useState(currentName);
   const inputRef = useRef<HTMLInputElement>(null);
   const nameId = useId();
-  const errorId = useId();
+  const noteId = useId();
 
   // Every open starts from the view's current name. `open` flipping true is
   // an outside signal (a menu row was chosen), the same case
@@ -121,12 +124,11 @@ export function RenameViewDialog({
         }}
       >
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <p className="text-[13px] font-medium text-[var(--ink-900)]">
-            Rename view
-          </p>
-
           <div className="flex flex-col gap-1.5">
-            <label htmlFor={nameId} className="sr-only">
+            <label
+              htmlFor={nameId}
+              className="text-[12px] font-medium text-[var(--ink-700)]"
+            >
               Name
             </label>
             <input
@@ -135,7 +137,7 @@ export function RenameViewDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               aria-invalid={duplicate || undefined}
-              aria-describedby={duplicate ? errorId : undefined}
+              aria-describedby={noteId}
               className={cn(
                 "h-8 w-full rounded-[6px] border bg-[var(--surface-card)] px-2.5 text-[13px] text-[var(--ink-900)] transition-colors duration-200 outline-none",
                 duplicate
@@ -143,21 +145,27 @@ export function RenameViewDialog({
                   : "border-[var(--border-field)] focus:border-[var(--blue)]",
               )}
             />
-            {duplicate && (
-              <p
-                id={errorId}
-                role="alert"
-                className="text-[11px]"
-                style={{ color: "var(--error)" }}
-              >
-                {shared
+            {/* One line under the field: what a rename reaches, until the
+                name is taken — then the same line says so, in red (boards
+                Final-14 / Final-15). It is always the field's description,
+                and announced only when it turns into the error. */}
+            <p
+              id={noteId}
+              role={duplicate ? "alert" : undefined}
+              className={cn(
+                "m-0 text-[11px]",
+                duplicate ? "text-[var(--error)]" : "text-[var(--ink-500)]",
+              )}
+            >
+              {duplicate
+                ? shared
                   ? `The team already has a view called “${trimmed}”.`
-                  : `You already have a view called “${trimmed}”.`}
-              </p>
-            )}
+                  : `You already have a view called “${trimmed}”.`
+                : RENAME_NOTE}
+            </p>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-1">
+          <div className="-mx-4 flex items-center justify-end gap-3 border-t border-[var(--border-hairline)] px-4 pt-3">
             <button
               type="button"
               onClick={() => onOpenChange(false)}

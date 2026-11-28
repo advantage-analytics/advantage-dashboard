@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
-import { EMPTY_VIZ_FILTERS } from "@/components/dashboard/matches/match-detail/shots/viz-model";
+import { saveViewKeeps } from "@/components/dashboard/matches/match-detail/shots/save-view-keeps";
+import {
+  courtEndsFor,
+  EMPTY_VIZ_FILTERS,
+  type VizFilters,
+} from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import {
   applyIdOrder,
   bandVisibility,
@@ -17,6 +22,8 @@ import {
   rowToSavedViewRow,
   savedViewScopeLine,
   savedViewsCountFact,
+  sharedNameClashMessage,
+  sharedViewTag,
   tileDataKey,
   validateVizInput,
   type SavedViewDbRow,
@@ -154,7 +161,6 @@ test("validateVizInput preserves Zones on every cut", () => {
   for (const cut of [
     "serve",
     "returnPlacement",
-    "returnContact",
     "rallyPlacement",
     "rallyPosition",
   ]) {
@@ -162,6 +168,40 @@ test("validateVizInput preserves Zones on every cut", () => {
       validateVizInput({ cut, chart: "zones", filters: {} }),
     ).toMatchObject({ cut, chart: "zones" });
   }
+});
+
+test("a stored returnContact is still a view: Returns in Contact, chart kept", () => {
+  // Rows saved before Returns became one chart carry the old id and no
+  // `ends`. They load, as Returns with its view set to Contact.
+  for (const chart of ["scatter", "heat", "zones"]) {
+    expect(
+      validateVizInput({ cut: "returnContact", chart, filters: {} }),
+    ).toEqual({
+      cut: "returnPlacement",
+      chart,
+      filters: { ...EMPTY_VIZ_FILTERS, ends: "contact" },
+    });
+  }
+  expect(
+    rowToSavedView(
+      dbRow({ cut: "returnContact", filters: { player: "opponent" } }),
+    ),
+  ).toMatchObject({
+    cut: "returnPlacement",
+    filters: { player: "opponent", ends: "contact" },
+  });
+  // What a save writes today round-trips to the same view.
+  expect(
+    validateVizInput({
+      cut: "returnPlacement",
+      chart: "scatter",
+      filters: { ends: "contact" },
+    }),
+  ).toEqual({
+    cut: "returnPlacement",
+    chart: "scatter",
+    filters: { ...EMPTY_VIZ_FILTERS, ends: "contact" },
+  });
 });
 
 /* ── G3a: rallyPosition + heat ────────────────────────────────────────── */
@@ -180,12 +220,7 @@ test("validateVizInput accepts cut=rallyPosition with chart=scatter", () => {
 });
 
 test("validateVizInput accepts chart=heat on every cut, including rallyPosition", () => {
-  for (const cut of [
-    "serve",
-    "returnPlacement",
-    "returnContact",
-    "rallyPosition",
-  ]) {
+  for (const cut of ["serve", "returnPlacement", "rallyPosition"]) {
     const result = validateVizInput({ cut, chart: "heat", filters: {} });
     expect(result?.chart).toBe("heat");
     expect(result?.cut).toBe(cut);
@@ -225,6 +260,80 @@ test("validateVizInput never lets a stray filters.chart/cut/view key override th
     chart: "scatter",
     filters: EMPTY_VIZ_FILTERS,
   });
+});
+
+/* ── court ends (`filters.ends`) ─────────────────────────────────────────
+ * Placement · Contact · Both is stored inside the `filters` JSON — no column
+ * of its own — and only as a choice away from the cut's default. */
+
+test("filtersToParams writes filters.ends as the vends param", () => {
+  const params = filtersToParams({ ends: "contact", ball: ["first"] });
+  expect(params.get("vends")).toBe("contact");
+  expect(params.get("ends")).toBeNull();
+  expect(filtersToParams({ ends: null }).has("vends")).toBe(false);
+});
+
+test("a view's ends survives save and load inside the filters JSON", () => {
+  // Save: what the court holds is validated into the row's `filters`.
+  const saved = validateVizInput({
+    cut: "errors",
+    chart: "scatter",
+    filters: { ...EMPTY_VIZ_FILTERS, ball: ["first"], ends: "contact" },
+  });
+  expect(saved).toEqual({
+    cut: "errors",
+    chart: "scatter",
+    filters: { ...EMPTY_VIZ_FILTERS, ball: ["first"], ends: "contact" },
+  });
+  // The stored jsonb, as Postgres hands it back.
+  const stored: unknown = JSON.parse(JSON.stringify(saved!.filters));
+  expect((stored as { ends: unknown }).ends).toBe("contact");
+
+  // Load: the row maps back to the same view.
+  const view = rowToSavedView(
+    dbRow({ cut: "errors", chart: "scatter", filters: stored }),
+  );
+  expect(view?.filters).toEqual(saved!.filters);
+  expect(view?.filters.ends).toBe("contact");
+});
+
+test("an old saved row without the ends key loads at the cut's default", () => {
+  for (const cut of ["errors", "returnPlacement", "rallyPlacement"]) {
+    const view = rowToSavedView(
+      dbRow({ cut, chart: "scatter", filters: { ball: ["first"] } }),
+    );
+    expect(view?.filters.ends, cut).toBeNull();
+    expect(courtEndsFor(view!.cut, view!.filters), cut).toBe("placement");
+  }
+  const approaches = rowToSavedView(
+    dbRow({ cut: "approaches", chart: "scatter", filters: {} }),
+  );
+  expect(approaches?.filters.ends).toBeNull();
+  expect(courtEndsFor("approaches", approaches!.filters)).toBe("both");
+});
+
+test("a saved view never stores the cut's default, a Serves value or a garbage value", () => {
+  expect(
+    validateVizInput({
+      cut: "approaches",
+      chart: "scatter",
+      filters: { ends: "both" },
+    })?.filters.ends,
+  ).toBeNull();
+  expect(
+    validateVizInput({
+      cut: "serve",
+      chart: "scatter",
+      filters: { ends: "contact" },
+    })?.filters,
+  ).toEqual(EMPTY_VIZ_FILTERS);
+  expect(
+    validateVizInput({
+      cut: "errors",
+      chart: "scatter",
+      filters: { ends: "sideways" },
+    })?.filters.ends,
+  ).toBeNull();
 });
 
 /* ── rowToSavedView / rowToSavedViewRow ───────────────────────────────── */
@@ -803,4 +912,114 @@ test("savedViewScopeLine says a view is kept across matches, and for whom", () =
   expect(savedViewScopeLine("team", true)).toBe(
     "Saved for the team on every match and player profile.",
   );
+});
+
+/* ── saveViewKeeps ──────────────────────────────────────────────────────── */
+
+test("saveViewKeeps lists what a saved view keeps: chart and kind, the applied filters, the matches it reads and where it opens", () => {
+  const state = {
+    cut: "serve" as const,
+    chart: "scatter" as const,
+    filters: {
+      ...EMPTY_VIZ_FILTERS,
+      ball: ["first"],
+      pressure: ["break"],
+    } satisfies VizFilters,
+  };
+  expect(
+    saveViewKeeps({
+      ...state,
+      matches: { kind: "match" },
+      workspaceKind: "team",
+    }),
+  ).toEqual([
+    { term: "Chart", value: "Serve placement · Scatter" },
+    { term: "Shots", value: "1st · Break points" },
+    { term: "Matches", value: "This match" },
+    { term: "Opens on", value: "Every match and player profile" },
+  ]);
+
+  // The player page: the page's scope words, then where they come from.
+  const onPage = (words: string[]) =>
+    saveViewKeeps({
+      ...state,
+      matches: { kind: "page", words },
+      workspaceKind: "team",
+    })[2];
+  expect(onPage(["Won"])).toEqual({
+    term: "Matches",
+    value: "Won · From this page",
+  });
+  expect(onPage([])).toEqual({
+    term: "Matches",
+    value: "All matches · From this page",
+  });
+});
+
+test("saveViewKeeps names Returns' Contact or Both, and the cut's noun when no filter is on", () => {
+  const rows = (filters: typeof EMPTY_VIZ_FILTERS, chart: "scatter" | "heat") =>
+    saveViewKeeps({
+      cut: "returnPlacement",
+      chart,
+      filters,
+      matches: { kind: "match" },
+      workspaceKind: "personal",
+    });
+  const placement = rows(EMPTY_VIZ_FILTERS, "scatter");
+  expect(placement[0].value).toBe("Returns · Scatter");
+  expect(placement[1].value).toBe("All returns");
+  // A personal workspace has no player profiles.
+  expect(placement[3].value).toBe("Every match");
+  expect(
+    rows({ ...EMPTY_VIZ_FILTERS, ends: "contact" }, "scatter")[0].value,
+  ).toBe("Returns · Contact · Scatter");
+  expect(rows({ ...EMPTY_VIZ_FILTERS, ends: "both" }, "heat")[0].value).toBe(
+    "Returns · Both · Heat",
+  );
+});
+
+/* ── sharedViewTag / sharedNameClashMessage ─────────────────────────────── */
+
+test("sharedViewTag: a private view has no tag", () => {
+  expect(sharedViewTag({ mine: true, shared: false })).toBeNull();
+  expect(sharedViewTag({ mine: false, shared: false })).toBeNull();
+});
+
+test("sharedViewTag: the owner of a shared view reads Shared with team", () => {
+  expect(
+    sharedViewTag({ mine: true, shared: true, creatorName: "Maya Chen" }),
+  ).toBe("Shared with team");
+});
+
+test("sharedViewTag: a teammate reads who shared it", () => {
+  expect(
+    sharedViewTag({ mine: false, shared: true, creatorName: " Maya Chen " }),
+  ).toBe("Shared by Maya Chen");
+});
+
+test("sharedViewTag: an unnamed creator reads as a teammate", () => {
+  expect(sharedViewTag({ mine: false, shared: true })).toBe(
+    "Shared by a teammate",
+  );
+  expect(sharedViewTag({ mine: false, shared: true, creatorName: "" })).toBe(
+    "Shared by a teammate",
+  );
+});
+
+test("sharedNameClashMessage quotes the name with curly quotes", () => {
+  expect(sharedNameClashMessage("Break points")).toBe(
+    "A shared view is already called “Break points”. Rename yours first.",
+  );
+});
+
+test("the menu offers Share on a private view, Make private on a shared one, Delete last", () => {
+  for (const shared of [false, true]) {
+    const rows = manageMenuRows(
+      { mine: true, shared },
+      { workspaceKind: "team", role: "player" },
+    );
+    expect(rows).toContain(shared ? "unshare" : "share");
+    expect(rows).not.toContain(shared ? "share" : "unshare");
+    expect(rows.at(-1)).toBe("delete");
+  }
 });

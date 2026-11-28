@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { startStyledHarness } from "./fixtures/viz-styled-harness-server";
 
 /**
@@ -9,8 +9,37 @@ import { startStyledHarness } from "./fixtures/viz-styled-harness-server";
  * (`fixtures/viz-approach-lightbox-harness.tsx`).
  */
 
-/** `lightbox-court.tsx`'s `UNSELECTED_OPACITY`: a selection's siblings. */
+/** `lightbox-court.tsx`'s `UNSELECTED_OPACITY`: every other landing, while
+ *  one mark is selected or (on a court of pairs) pointed at. */
 const UNSELECTED_OPACITY = "0.4";
+/** `UNSELECTED_CONTACT_OPACITY`: every other contact ring. */
+const UNSELECTED_CONTACT_OPACITY = "0.6";
+
+/** A mark set back: a pair's two ends each carry their own opacity, a mark
+ *  drawn in one place carries it on its group. */
+async function expectSetBack(stage: Locator, id: string) {
+  const mark = stage.locator(`[data-viz-mark="${id}"]`);
+  if ((await mark.locator("[data-viz-mark-part]").count()) === 0) {
+    await expect(mark).toHaveAttribute("opacity", UNSELECTED_OPACITY);
+    return;
+  }
+  await expect(
+    mark.locator('[data-viz-mark-part="placement"]'),
+  ).toHaveAttribute("opacity", UNSELECTED_OPACITY);
+  await expect(mark.locator('[data-viz-mark-part="contact"]')).toHaveAttribute(
+    "opacity",
+    UNSELECTED_CONTACT_OPACITY,
+  );
+}
+
+/** A mark at full strength: no opacity on its group or on either end. */
+async function expectNotSetBack(stage: Locator, id: string) {
+  const mark = stage.locator(`[data-viz-mark="${id}"]`);
+  await expect(mark).not.toHaveAttribute("opacity", /.+/);
+  for (const part of await mark.locator("[data-viz-mark-part]").all()) {
+    await expect(part).not.toHaveAttribute("opacity", /.+/);
+  }
+}
 
 let origin: string;
 let close: () => Promise<void>;
@@ -89,12 +118,10 @@ test("selecting a pair rings both marks, draws it last and dims every other mark
 
   await expect(a).toHaveAttribute("aria-pressed", "true");
   await expect(a.locator("[data-viz-selected-ring]")).toHaveCount(2);
-  await expect(a).not.toHaveAttribute("opacity", /.+/);
+  await expectNotSetBack(stage, "pair-a");
+  // Every other landing sits back at 40%, every other contact ring at 60%.
   for (const id of ["pair-b", "solo-c", "pair-d"]) {
-    await expect(stage.locator(`[data-viz-mark="${id}"]`)).toHaveAttribute(
-      "opacity",
-      UNSELECTED_OPACITY,
-    );
+    await expectSetBack(stage, id);
   }
 
   // Drawn last among the marks: the layer's final element is the selected
@@ -160,7 +187,7 @@ test("keyboard roving treats a pair as one stop, and Enter or Space selects it",
   await expect(d).toHaveAttribute("aria-pressed", "true");
   await expect(d.locator("[data-viz-selected-ring]")).toHaveCount(2);
   await expect(b).toHaveAttribute("aria-pressed", "false");
-  await expect(b).toHaveAttribute("opacity", UNSELECTED_OPACITY);
+  await expectSetBack(stage, "pair-b");
   expect(errors).toEqual([]);
 });
 
@@ -291,7 +318,7 @@ test("a pair selected from a zoomed-in court is zoomed back out until both its m
 /* ── T17: the apron's words on the opened Approaches court ─────────────── */
 
 /** The dialog at its opening frame (`openAtHome`), from `query`. */
-async function openWith(page: Page, query: string) {
+async function openWith(page: Page, query: string, marks = 4) {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -300,7 +327,7 @@ async function openWith(page: Page, query: string) {
   const dialog = page.getByRole("dialog", { name: "Approaches" });
   await expect(dialog).toBeVisible();
   const stage = dialog.locator("[data-court-stage]");
-  await expect(stage.locator("[data-viz-mark]")).toHaveCount(4);
+  await expect(stage.locator("[data-viz-mark]")).toHaveCount(marks);
   return { stage, errors };
 }
 
@@ -339,6 +366,17 @@ for (const hand of ["right", "unknown"] as const) {
     const group = stage.locator("[data-approach-labels]");
     await expect(group).toHaveAttribute("font-family", "var(--font-mono)");
     await expect(group).toHaveAttribute("fill", "#FFFFFF");
+    // Plan §5: the court's one type — every word at one size, white at
+    // 78–90%.
+    const words = stage.locator("[data-approach-labels] text");
+    const sizes = new Set<string | null>();
+    for (let i = 0; i < (await words.count()); i++) {
+      sizes.add(await words.nth(i).getAttribute("font-size"));
+      const opacity = Number(await words.nth(i).getAttribute("fill-opacity"));
+      expect(opacity).toBeGreaterThanOrEqual(0.78);
+      expect(opacity).toBeLessThanOrEqual(0.9);
+    }
+    expect(sizes.size).toBe(1);
     expect(errors).toEqual([]);
   });
 }
@@ -487,3 +525,345 @@ for (const viewport of VIEWPORTS) {
     expect([...returns.errors, ...errors]).toEqual([]);
   });
 }
+
+/* ── Plan §5: the court prints names only ─────────────────────────────── */
+
+test("a band label is its name with the range on its own line beneath, and no figures", async ({
+  page,
+}) => {
+  const { stage, errors } = await openBanded(
+    page,
+    "returnPlacement",
+    VIEWPORTS[0],
+  );
+  const bands = stage.locator("[data-viz-bands] [data-viz-band]");
+  const n = await bands.count();
+  expect(n).toBeGreaterThan(0);
+  for (let i = 0; i < n; i++) {
+    const band = bands.nth(i);
+    const name = band.locator("[data-viz-band-label]");
+    const range = band.locator("[data-viz-band-range]");
+    const nameText = (await name.textContent()) ?? "";
+    const rangeText = (await range.textContent()) ?? "";
+    // "DEEP" / "0–9 FT": the name holds no figure, the range is its own line.
+    expect(nameText).toMatch(/^[A-Z ]+$/);
+    expect(rangeText).toMatch(/^\d+–\d+ FT$/);
+    expect(await name.getAttribute("x")).toBe(await range.getAttribute("x"));
+    const nameBox = (await name.boundingBox())!;
+    const rangeBox = (await range.boundingBox())!;
+    expect(rangeBox.y).toBeGreaterThanOrEqual(nameBox.y + nameBox.height - 1);
+    // Right-aligned at the same edge.
+    expect(
+      Math.abs(nameBox.x + nameBox.width - (rangeBox.x + rangeBox.width)),
+    ).toBeLessThan(1);
+    // Mono caps at the 11px equivalent with 1.4px tracking, white at 78–90%.
+    const type = name.locator("..");
+    await expect(type).toHaveAttribute("font-family", "var(--font-mono)");
+    expect(Number(await type.getAttribute("font-size"))).toBeCloseTo(
+      (11 * 366) / 652,
+      2,
+    );
+    expect(Number(await type.getAttribute("letter-spacing"))).toBeCloseTo(
+      (1.4 * 366) / 652,
+      2,
+    );
+    for (const text of [name, range]) {
+      const opacity = Number(await text.getAttribute("fill-opacity"));
+      expect(opacity).toBeGreaterThanOrEqual(0.78);
+      expect(opacity).toBeLessThanOrEqual(0.9);
+    }
+  }
+  // Nothing the bands print is a rate or a count.
+  const words = await stage
+    .locator("[data-viz-bands] text")
+    .evaluateAll((nodes) => nodes.map((node) => node.textContent ?? ""));
+  for (const word of words) expect(word, word).not.toMatch(/%|·/);
+  expect(errors).toEqual([]);
+});
+
+/* ── T8: Placement · Contact · Both on every chart ───────────────────────
+ * The same four dots on the Errors court (`?cut=errors`), under each view
+ * (`?ends=`): three shots with a recorded contact and one (`solo-c`)
+ * without. Errors has no contact court of its own, so all three views are
+ * this one court's own drawing. */
+
+/** What a mark's glyph at `end` is painted with. */
+async function glyphPaint(mark: Locator, end: "placement" | "contact") {
+  return mark
+    .locator(`[data-viz-mark-glyph][data-viz-mark-end="${end}"] > *`)
+    .evaluate((node) => ({
+      tag: node.tagName.toLowerCase(),
+      fill: node.getAttribute("fill"),
+      fillOpacity: node.getAttribute("fill-opacity"),
+      stroke: node.getAttribute("stroke"),
+    }));
+}
+
+test("Errors in Both draws each shot's landing as a solid dot and its contact as a ring with a white middle", async ({
+  page,
+}) => {
+  const { stage, errors } = await openWith(page, "cut=errors&ends=both");
+  const stageBox = (await stage.boundingBox())!;
+
+  for (const id of PAIRS) {
+    const mark = stage.locator(`[data-viz-mark="${id}"]`);
+    await expect(mark.locator("[data-viz-mark-part]")).toHaveCount(2);
+    // Both ends are on the stage as the court opens: the whole length.
+    for (const part of ["contact", "placement"] as const) {
+      const box = (await mark
+        .locator(`[data-viz-mark-part="${part}"] [data-viz-mark-glyph]`)
+        .boundingBox())!;
+      expect(inside(box, stageBox), `${id} ${part}`).toBe(true);
+    }
+    // The contact is drawn in the near half, below its landing.
+    const landing = (await mark
+      .locator('[data-viz-mark-part="placement"] [data-viz-mark-glyph]')
+      .boundingBox())!;
+    const contact = (await mark
+      .locator('[data-viz-mark-part="contact"] [data-viz-mark-glyph]')
+      .boundingBox())!;
+    expect(contact.y).toBeGreaterThan(landing.y);
+  }
+
+  // A lost point's mark is red: its landing filled, its contact a red ring
+  // round a white middle, in the mark's own shape (a backhand's triangle).
+  const b = stage.locator('[data-viz-mark="pair-b"]');
+  const landing = await glyphPaint(b, "placement");
+  expect(landing.fill).toBe("var(--viz-bad)");
+  expect(landing.fillOpacity).toBeNull();
+  const ring = await glyphPaint(b, "contact");
+  expect(ring.tag).toBe("polygon");
+  expect(ring.stroke).toBe("var(--viz-bad)");
+  expect(ring.fill).toBe("#fff");
+  expect(Number(ring.fillOpacity)).toBeGreaterThanOrEqual(0.85);
+  expect(Number(ring.fillOpacity)).toBeLessThanOrEqual(0.9);
+  const circle = await glyphPaint(
+    stage.locator('[data-viz-mark="pair-a"]'),
+    "contact",
+  );
+  expect(circle.tag).toBe("circle");
+  expect(circle.fill).toBe("#fff");
+  expect(errors).toEqual([]);
+});
+
+test("Errors in Both: pointing at a shot joins its two ends with a dashed white line and sets the others back", async ({
+  page,
+}) => {
+  const { stage, errors } = await openWith(page, "cut=errors&ends=both");
+  const a = stage.locator('[data-viz-mark="pair-a"]');
+  await expect(stage.locator("[data-viz-pair-link]")).toHaveCount(0);
+
+  await a.locator('[data-viz-mark-part="placement"]').hover();
+  const link = a.locator("[data-viz-pair-link]");
+  await expect(link).toHaveCount(1);
+  await expect(link).toHaveAttribute("stroke-dasharray", "4 3");
+  await expect(link).toHaveAttribute("stroke", /^#fff(fff)?$/i);
+  await expect(link).toHaveAttribute("vector-effect", "non-scaling-stroke");
+  await expect(a.locator("[data-viz-pair-ring]")).toHaveCount(2);
+  // The line runs from one end's centre to the other's.
+  const ends = await a.evaluate((node) => {
+    const centre = (part: string) => {
+      const hit = node.querySelector(
+        `[data-viz-mark-part="${part}"] circle[fill="transparent"]`,
+      )!;
+      return [hit.getAttribute("cx"), hit.getAttribute("cy")];
+    };
+    const line = node.querySelector("[data-viz-pair-link]")!;
+    return {
+      contact: centre("contact"),
+      placement: centre("placement"),
+      from: [line.getAttribute("x1"), line.getAttribute("y1")],
+      to: [line.getAttribute("x2"), line.getAttribute("y2")],
+    };
+  });
+  expect(ends.from).toEqual(ends.contact);
+  expect(ends.to).toEqual(ends.placement);
+
+  // Other landings at 40%, other contact rings at 60%; the one read, full.
+  await expectNotSetBack(stage, "pair-a");
+  for (const id of ["pair-b", "solo-c", "pair-d"]) {
+    await expectSetBack(stage, id);
+  }
+
+  // Selecting keeps the line and the fade once the pointer has left.
+  await a.locator('[data-viz-mark-part="contact"]').click();
+  await page.mouse.move(2, 2);
+  await expect(a).toHaveAttribute("aria-pressed", "true");
+  await expect(a.locator("[data-viz-pair-link]")).toHaveCount(1);
+  await expectSetBack(stage, "pair-b");
+  expect(errors).toEqual([]);
+});
+
+test("Errors in Both: a shot with no recorded contact draws its landing alone, with no ring and no line", async ({
+  page,
+}) => {
+  const { stage, errors } = await openWith(page, "cut=errors&ends=both");
+  const c = stage.locator('[data-viz-mark="solo-c"]');
+  await expect(c.locator("[data-viz-mark-glyph]")).toHaveCount(1);
+  await expect(c.locator('[data-viz-mark-end="contact"]')).toHaveCount(0);
+  await expect(c.locator("[data-viz-mark-part]")).toHaveCount(0);
+  await c.hover();
+  await expect(page.locator("[data-viz-readout]")).toBeVisible();
+  await expect(stage.locator("[data-viz-pair-link]")).toHaveCount(0);
+  await expect(c.locator("[data-viz-pair-ring]")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("Errors in Both names its ends: PLACEMENT in the far apron's outer corner, CONTACT in the near one's, in the court's label type", async ({
+  page,
+}) => {
+  const { stage, errors } = await openWith(page, "cut=errors&ends=both");
+  const stageBox = (await stage.boundingBox())!;
+  const words = stage.locator("[data-court-end-labels] text");
+  await expect(words).toHaveCount(2);
+  // No lane names: those are Approaches' own.
+  await expect(stage.locator("[data-approach-labels]")).toHaveCount(0);
+
+  const placement = stage.locator('[data-court-end-label="placement"]');
+  const contact = stage.locator('[data-court-end-label="contact"]');
+  for (const [word, text] of [
+    [placement, "PLACEMENT"],
+    [contact, "CONTACT"],
+  ] as const) {
+    // Mono caps, the one court label size and tracking, white at 78–90%.
+    const shown = await word.evaluate((node) => ({
+      text: (node as SVGTextElement).textContent ?? "",
+      transform: getComputedStyle(node).textTransform,
+      family: node.parentElement!.getAttribute("font-family"),
+      size: node.getAttribute("font-size"),
+      tracking: node.parentElement!.getAttribute("letter-spacing"),
+      opacity: Number(node.getAttribute("fill-opacity")),
+    }));
+    expect(shown.text.toUpperCase()).toBe(text);
+    expect(shown.transform).toBe("uppercase");
+    expect(shown.family).toBe("var(--font-mono)");
+    expect(Number(shown.tracking) / Number(shown.size)).toBeCloseTo(
+      1.4 / 11,
+      3,
+    );
+    expect(shown.opacity).toBeGreaterThanOrEqual(0.78);
+    expect(shown.opacity).toBeLessThanOrEqual(0.9);
+    expect(inside((await word.boundingBox())!, stageBox), text).toBe(true);
+  }
+
+  // Either side of every mark: Placement above the highest landing, Contact
+  // below the lowest contact.
+  const glyphs = await stage
+    .locator("[data-viz-mark] [data-viz-mark-glyph]")
+    .evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const r = node.getBoundingClientRect();
+        return { top: r.top, bottom: r.bottom };
+      }),
+    );
+  const p = (await placement.boundingBox())!;
+  const c = (await contact.boundingBox())!;
+  expect(p.y + p.height).toBeLessThanOrEqual(
+    Math.min(...glyphs.map((g) => g.top)),
+  );
+  expect(c.y).toBeGreaterThanOrEqual(Math.max(...glyphs.map((g) => g.bottom)));
+  // In the outer left corners, set from the left edge — not centred over
+  // the baselines, where the long landings and deep contacts gather.
+  await expect(stage.locator("[data-court-end-labels]")).toHaveAttribute(
+    "text-anchor",
+    "start",
+  );
+  const middle = stageBox.x + stageBox.width / 2;
+  expect(p.x + p.width).toBeLessThan(middle);
+  expect(c.x + c.width).toBeLessThan(middle);
+  expect(Math.abs(p.x - c.x)).toBeLessThan(1);
+  expect(errors).toEqual([]);
+});
+
+// The words used to sit centred just past each baseline, which is where a
+// real court's marks gather — long landings behind the far baseline,
+// contacts struck from behind the near one — so the marks covered them.
+// `?deep=1` puts a pair there; no word may share any mark's ground.
+for (const cut of ["errors", "returnPlacement", "rallyPlacement"] as const) {
+  test(`${cut} in Both keeps PLACEMENT and CONTACT clear of every mark, inside the stage`, async ({
+    page,
+  }) => {
+    const { stage, errors } = await openWith(
+      page,
+      `cut=${cut}&ends=both&deep=1`,
+      5,
+    );
+    const stageBox = (await stage.boundingBox())!;
+    const words = stage.locator("[data-court-end-labels] text");
+    await expect(words).toHaveCount(2);
+    const wordBoxes = await words.evaluateAll((nodes) =>
+      nodes.map((node) => {
+        const r = node.getBoundingClientRect();
+        return {
+          text: node.textContent ?? "",
+          box: { x: r.x, y: r.y, width: r.width, height: r.height },
+        };
+      }),
+    );
+    // Every drawn end of every mark: landing glyphs and contact rings.
+    const markBoxes = await stage
+      .locator("[data-viz-mark] [data-viz-mark-glyph]")
+      .evaluateAll((nodes) =>
+        nodes.map((node) => {
+          const r = node.getBoundingClientRect();
+          return {
+            id:
+              node.closest("[data-viz-mark]")?.getAttribute("data-viz-mark") ??
+              "",
+            box: { x: r.x, y: r.y, width: r.width, height: r.height },
+          };
+        }),
+      );
+    expect(markBoxes.length).toBeGreaterThanOrEqual(9);
+    for (const word of wordBoxes) {
+      expect(inside(word.box, stageBox), word.text).toBe(true);
+      for (const mark of markBoxes) {
+        expect(overlaps(word.box, mark.box), `${word.text} / ${mark.id}`).toBe(
+          false,
+        );
+      }
+    }
+    expect(errors).toEqual([]);
+  });
+}
+
+test("Errors in Placement draws landings only, and in Contact contact marks only", async ({
+  page,
+}) => {
+  // Placement, the chart's default: four landings, nothing else.
+  const placement = await openWith(page, "cut=errors");
+  await expect(
+    placement.stage.locator('[data-viz-mark-end="placement"]'),
+  ).toHaveCount(4);
+  await expect(
+    placement.stage.locator('[data-viz-mark-end="contact"]'),
+  ).toHaveCount(0);
+  await expect(placement.stage.locator("[data-court-end-labels]")).toHaveCount(
+    0,
+  );
+
+  // Contact: a ring for each shot whose contact was recorded. The one with
+  // none is not drawn.
+  const contact = await openWith(page, "cut=errors&ends=contact", 3);
+  await expect(contact.stage.locator('[data-viz-mark="solo-c"]')).toHaveCount(
+    0,
+  );
+  await expect(
+    contact.stage.locator('[data-viz-mark-end="contact"]'),
+  ).toHaveCount(3);
+  await expect(
+    contact.stage.locator('[data-viz-mark-end="placement"]'),
+  ).toHaveCount(0);
+  await expect(contact.stage.locator("[data-viz-mark-part]")).toHaveCount(0);
+  const stageBox = (await contact.stage.boundingBox())!;
+  for (const id of PAIRS) {
+    const glyph = contact.stage.locator(
+      `[data-viz-mark="${id}"] [data-viz-mark-glyph]`,
+    );
+    expect(inside((await glyph.boundingBox())!, stageBox), id).toBe(true);
+  }
+  await expect(
+    contact.stage.locator("[data-court-end-labels] text"),
+  ).toHaveText(["Contact"]);
+  expect([...placement.errors, ...contact.errors]).toEqual([]);
+});

@@ -31,7 +31,16 @@ for (const cut of cuts) {
       viewId: "saved-zone",
     };
     const query = vizStateQuery(new URLSearchParams(), state);
-    expect(parseVizState(new URLSearchParams(query))).toMatchObject(state);
+    // Returns is one chart: the old contact id reads as Returns in Contact.
+    expect(parseVizState(new URLSearchParams(query))).toMatchObject(
+      cut === "returnContact"
+        ? {
+            ...state,
+            cut: "returnPlacement",
+            filters: { ...state.filters, ends: "contact" },
+          }
+        : state,
+    );
   });
   test(`${cut} bands read the exact filtered statistics including empties`, () => {
     for (const subject of [true, false])

@@ -20,6 +20,37 @@ import { rowToSavedView, validateVizInput } from "@/lib/data/saved-views-logic";
 import { DEFAULT_BANDS } from "@/lib/data/viz-bands";
 import { RALLY_POINTS, rallyShot } from "./fixtures/viz-rally-points";
 
+test("a rally landing carries its own contact: the Rally position mark of the same shot", () => {
+  for (const player1 of [true, false]) {
+    const placement = computeViz(
+      RALLY_POINTS,
+      "rallyPlacement",
+      EMPTY_VIZ_FILTERS,
+      player1,
+    );
+    const position = new Map(
+      computeViz(
+        RALLY_POINTS,
+        "rallyPosition",
+        EMPTY_VIZ_FILTERS,
+        player1,
+      ).dots.map((d) => [d.id, d]),
+    );
+    expect(placement.dots.length).toBeGreaterThan(0);
+    for (const dot of placement.dots) {
+      const contact = position.get(dot.id)!;
+      expect(dot.pair, dot.id).toEqual({
+        lateralM: contact.lateralM,
+        depthM: contact.depthM,
+      });
+    }
+    // The contact court's own marks are one end alone.
+    expect([...position.values()].every((d) => d.pair === undefined)).toBe(
+      true,
+    );
+  }
+});
+
 test("rally placement counts each role-resolved landing for either player at both ends", () => {
   for (const player1 of [true, false]) {
     const result = computeViz(
@@ -189,7 +220,10 @@ for (const chart of ["scatter", "heat"] as const) {
       "returnContact",
       "rallyPosition",
     ])
-      expect(rowToSavedView({ ...row, cut })?.cut).toBe(cut);
+      // The old contact id is stored still, and reads as Returns.
+      expect(rowToSavedView({ ...row, cut })?.cut).toBe(
+        cut === "returnContact" ? "returnPlacement" : cut,
+      );
   });
 }
 

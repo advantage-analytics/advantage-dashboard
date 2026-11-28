@@ -93,6 +93,7 @@ export function ProfileInsightCard({
   firstName,
   evidence,
   signature,
+  scopeNote = null,
 }: {
   /** The roster's own id (`profile.playerId`) — what the route resolves. */
   playerId: string;
@@ -102,6 +103,13 @@ export function ProfileInsightCard({
   evidence: EvidencePart[];
   /** `seasonInsightSignature(season)` — keys the cache with `playerId`. */
   signature: string;
+  /**
+   * Under the page's match scope: one quiet line saying the card is the
+   * WHOLE season's (`insightScopeNote`). The claim and the evidence are
+   * written from every analyzed match, never the scoped ones, so without it
+   * the card would read as a summary of the matches shown. Null: no scope.
+   */
+  scopeNote?: string | null;
 }) {
   const [state, setState] = useState<CardState>({ status: "loading" });
 
@@ -206,6 +214,15 @@ export function ProfileInsightCard({
         >
           <Parts parts={description ?? evidence} />
         </p>
+
+        {scopeNote && (
+          <p
+            data-insight-scope-note=""
+            className="text-[11px] leading-[1.6] text-[var(--ink-500)]"
+          >
+            {scopeNote}
+          </p>
+        )}
 
         <div className="mt-1 flex h-6 items-center gap-[7px] border-t border-[var(--border-hairline)] pt-2.5">
           <InsightMark />

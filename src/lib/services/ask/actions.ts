@@ -145,6 +145,13 @@ interface VizCut {
  * and set points on the serve cut under its pressure filter, rally bands on
  * the rally placement cut under its band. Null for a measure with no court —
  * a total, a winner count, a game.
+ *
+ * A break- or set-point measure takes that filter's "break" or "setMatch",
+ * never its "pressure": Pressure points are the points played at 30–30,
+ * 30–40, 40–30, deuce or an advantage (`isPressurePoint`), which is a
+ * different set of points from the ones these measures count. No measure
+ * counts those yet; `figureVisualizationsHref` carries the value like any
+ * other when one does.
  */
 function vizCutFor(key: string): VizCut | null {
   const serve: VizCut = { cut: "serve", pressure: [], rally: [] };

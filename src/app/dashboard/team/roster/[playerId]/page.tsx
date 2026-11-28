@@ -15,6 +15,7 @@ import {
 import {
   getPlayerSeason,
   getPlayerSeasonCourts,
+  scopePlayerSeason,
   seasonOpponentCount,
 } from "@/lib/data/player-season-server";
 import {
@@ -42,6 +43,10 @@ import {
   ProfileViewWhen,
 } from "@/components/dashboard/team/player-profile/profile-frame";
 import { ProfileActions } from "@/components/dashboard/team/player-profile/profile-actions";
+import {
+  MatchScopeShowAll,
+  ProfileMatchScope,
+} from "@/components/dashboard/team/player-profile/profile-match-scope";
 import { ProfileBodySlot } from "@/components/dashboard/team/player-profile/profile-body-deferred";
 import { ProfileStatisticsView } from "@/components/dashboard/team/player-profile/profile-statistics-view";
 import {
@@ -51,6 +56,7 @@ import {
 import { ProfileVisualizationsView } from "@/components/dashboard/team/player-profile/profile-visualizations-view";
 import {
   AnalyzedCountPending,
+  MatchScopePickerPending,
   ProfileStatisticsPanePending,
   ProfileVisualizationsPanePending,
 } from "@/components/dashboard/loading/player-profile-pending";
@@ -59,6 +65,11 @@ import {
   buildSeasonCards,
   buildSeasonLightbox,
   buildSeasonViewCards,
+  matchScopeSummary,
+  parseSeasonMatchScope,
+  scopeSeasonMatches,
+  type SeasonScopeMatch,
+  seasonMatchOptions,
   parseSeasonVizState,
   type SeasonCard,
 } from "@/lib/data/player-season-viz";
@@ -70,6 +81,7 @@ import { askEntryHref } from "@/lib/services/ask/entry";
 import { otherPlayer } from "@/components/dashboard/matches/match-detail/match-filters/panel-draft";
 import { VerifiedMark } from "@/components/dashboard/matches/verified-mark";
 import { loginRedirectPath } from "@/lib/auth/request-path";
+import type { SeasonFilters } from "@/components/dashboard/matches/match-detail/shots/viz-url";
 
 /** `getPreferences` once per request, so the early start above and the
  *  Visualizations body share one read. */
@@ -118,6 +130,22 @@ const requestPreferences = cache(getPreferences);
  * the card's while one is open; the wall's own player is kept in the
  * browser meanwhile (`profile-visualizations-view.tsx`), and closing writes
  * it back, so the cards are recomputed for it then.
+ *
+ * ── The match scope ─────────────────────────────────────────────────────────
+ * `?sres=` / `?sopp=` / `?ssurf=` / `?sm=` (`parseSeasonMatchScope`,
+ * `viz-url.ts`) name which matches of the season the page is about: a
+ * result, an opponent hand, a surface, picked matches — the lightbox's
+ * `SeasonFilters` shape under the page's own names. ONE scope, read here,
+ * drives both bodies: Statistics is folded again over the kept matches
+ * (`scopePlayerSeason`) and the wall's cards — default, saved and the
+ * streamed other side — are built over the same ones (`buildSeasonCards`),
+ * always on the server. The loaders still read the whole season, so the
+ * scope costs no read and "N analyzed" stays the season's. The params are
+ * not viz keys, so the tab switch and every viz write carry them through.
+ * A card opened from the wall starts its own Matches row there (its
+ * `state.season`); from then on that row is the card's (`?vm=` …), and
+ * closing the card leaves the page's scope as it was. No scope in the URL
+ * is the whole season.
  *
  * ── One body per request ────────────────────────────────────────────────────
  * `?tab=` is read client-side for the switch (`ProfileViewWhen`, native
@@ -254,6 +282,10 @@ export default async function PlayerProfilePage({
   const matchesPlayed = profile.matchesPlayed;
   const opponentsCount = sides ? seasonOpponentCount(sides.own) : 0;
 
+  // Which matches both bodies are about (see "The match scope"); undefined
+  // is the whole season.
+  const matchScope = parseSeasonMatchScope(query);
+
   // Which body this request is for (see "One body per request"): the courts
   // on `?tab=visualizations`, the Statistics otherwise.
   const courtsOnly =
@@ -302,14 +334,28 @@ export default async function PlayerProfilePage({
                 className="text-micro tabular mt-[9px] flex min-h-[18px] items-center gap-1"
                 style={{ color: "var(--ink-700)" }}
               >
-                <span>
-                  {matchesPlayed} {matchesPlayed === 1 ? "match" : "matches"}
-                </span>
-                <Suspense fallback={<AnalyzedCountPending />}>
+                {/* Under a match scope the line becomes "Showing N of M
+                    analyzed matches", which needs the season, so the count
+                    of matches waits inside the boundary with it. */}
+                {matchScope === undefined && (
+                  <MatchesPlayed count={matchesPlayed} />
+                )}
+                <Suspense
+                  fallback={
+                    <>
+                      {matchScope !== undefined && (
+                        <MatchesPlayed count={matchesPlayed} />
+                      )}
+                      <AnalyzedCountPending />
+                    </>
+                  }
+                >
                   <AnalyzedCount
                     programId={active.id}
                     playerId={playerId}
                     courtsOnly={courtsOnly}
+                    matchScope={matchScope}
+                    matchesPlayed={matchesPlayed}
                   />
                 </Suspense>
               </p>
@@ -330,6 +376,16 @@ export default async function PlayerProfilePage({
                   { kind: "player", id: profile.playerId },
                 )}
                 askSubject={profile.firstName}
+                matchScope={
+                  <Suspense fallback={<MatchScopePickerPending />}>
+                    <MatchScopePicker
+                      programId={active.id}
+                      playerId={playerId}
+                      courtsOnly={courtsOnly}
+                      matchScope={matchScope}
+                    />
+                  </Suspense>
+                }
               />
             </MatchReportTitleActions>
           </MatchReportTitleRow>
@@ -359,6 +415,7 @@ export default async function PlayerProfilePage({
                       rosterPlayerId={profile.playerId}
                       playerName={profile.name}
                       firstName={profile.firstName}
+                      matchScope={matchScope}
                     />
                   </Suspense>
                 )
@@ -387,6 +444,7 @@ export default async function PlayerProfilePage({
                       workspaceName={active.name}
                       workspaceRole={active.role}
                       query={query}
+                      matchScope={matchScope}
                     />
                   </Suspense>
                 ) : null
@@ -399,29 +457,81 @@ export default async function PlayerProfilePage({
   );
 }
 
+/** The facts line's "N matches": the program's record, practice aside. */
+function MatchesPlayed({ count }: { count: number }) {
+  return (
+    <span>
+      {count} {count === 1 ? "match" : "matches"}
+    </span>
+  );
+}
+
+/** The season this request's body reads (`courtsOnly`), so the facts line and
+ *  the picker share its one read; null when the read fails — the body reports
+ *  that, with its retry. */
+function requestSeason(
+  programId: string,
+  playerId: string,
+  courtsOnly: boolean,
+) {
+  return (
+    courtsOnly
+      ? getPlayerSeasonCourts(programId, playerId)
+      : getPlayerSeason(programId, playerId)
+  ).catch(() => null);
+}
+
 /**
  * The facts line's "· N analyzed", once the season has landed. A season read
  * that fails is the body's to report (its retry); here it drops the clause
  * rather than print a count nobody measured. Reads the loader the body of
  * this request reads (`courtsOnly`), so the season is read once.
+ *
+ * Under a match scope that narrows the season (`matchScopeSummary`) the line
+ * is the scope instead: "Showing 4 of 24 analyzed matches · Won ·
+ * Left-handed", then "Show all", which clears it. A scope that keeps the
+ * whole season by saying nothing draws the unscoped line.
  */
 async function AnalyzedCount({
   programId,
   playerId,
   courtsOnly,
+  matchScope,
+  matchesPlayed,
 }: {
   programId: string;
   playerId: string;
   courtsOnly: boolean;
+  /** The page's match scope; undefined is the whole season. */
+  matchScope: SeasonFilters | undefined;
+  /** "N matches", drawn here when a scope kept it inside this boundary. */
+  matchesPlayed: number;
 }) {
-  const season = await (
-    courtsOnly
-      ? getPlayerSeasonCourts(programId, playerId)
-      : getPlayerSeason(programId, playerId)
-  ).catch(() => null);
-  if (!season) return null;
+  const season = await requestSeason(programId, playerId, courtsOnly);
+  const lead =
+    matchScope !== undefined ? <MatchesPlayed count={matchesPlayed} /> : null;
+  if (!season) return lead;
+  const scoped = matchScopeSummary(season.perMatch, matchScope);
+  if (scoped) {
+    return (
+      <span
+        data-match-scope-facts=""
+        className="inline-flex items-center gap-1"
+      >
+        <span>
+          Showing {scoped.shown} of {scoped.analyzed} analyzed{" "}
+          {scoped.analyzed === 1 ? "match" : "matches"}
+        </span>
+        {scoped.words.map((word) => (
+          <span key={word}>· {word}</span>
+        ))}
+        <MatchScopeShowAll />
+      </span>
+    );
+  }
   return (
     <>
+      {lead}
       <span>· {season.analyzed} analyzed</span>
       {/* How much of the season behind these figures a person checked.
           None is left out rather than printed as "0 verified". */}
@@ -436,6 +546,41 @@ async function AnalyzedCount({
 }
 
 /**
+ * The title row's "N of M matches" picker (`ProfileMatchScope`), once the
+ * season has landed: its rows are the season's analyzed matches
+ * (`seasonMatchOptions`, each counting 1 — the picker counts matches, not
+ * marks), built here so no point leaves the server. A season with no analyzed
+ * match has nothing to pick, and a season read that fails is the body's to
+ * report: both draw no picker rather than a "0 of 0" control that opens an
+ * empty list.
+ */
+async function MatchScopePicker({
+  programId,
+  playerId,
+  courtsOnly,
+  matchScope,
+}: {
+  programId: string;
+  playerId: string;
+  courtsOnly: boolean;
+  /** The page's match scope; undefined is the whole season. */
+  matchScope: SeasonFilters | undefined;
+}) {
+  const season = await requestSeason(programId, playerId, courtsOnly);
+  if (!season || season.perMatch.length === 0) return null;
+  return (
+    <ProfileMatchScope
+      matches={seasonMatchOptions(season.perMatch, () => 1)}
+      // The bodies' own count (`scopeSeasonMatches`), so "N of M" and the
+      // facts line's "Showing N of M" never disagree.
+      shown={
+        scopeSeasonMatches<SeasonScopeMatch>(season.perMatch, matchScope).length
+      }
+    />
+  );
+}
+
+/**
  * The Statistics tab's body: the season, awaited here and nowhere above, then
  * `ProfileStatisticsView` inside the tab's panel. Null season is an id that
  * names nobody, which the page has already 404ed on.
@@ -445,6 +590,14 @@ async function AnalyzedCount({
  * card shows under the streamed claim are the same objects the Head to head
  * table draws, never the model's. `rosterPlayerId` is the roster's own id,
  * which is what `/api/player-insight` resolves.
+ *
+ * Under a match scope the cards are the scoped fold (`scopePlayerSeason`).
+ * The insight card stays the WHOLE season's — its evidence line and its
+ * signature both: `/api/player-insight` writes its claim from the whole
+ * season, and a scoped evidence line under it would put two seasons on one
+ * card (and spend a model call per scope). So that the card stays honest
+ * beside scoped figures, it is handed the whole season's count and prints
+ * its scope note ("Covers all 3 analyzed matches, not just the 2 shown.").
  */
 async function ProfileStatisticsBody({
   programId,
@@ -452,15 +605,19 @@ async function ProfileStatisticsBody({
   rosterPlayerId,
   playerName,
   firstName,
+  matchScope,
 }: {
   programId: string;
   playerId: string;
   rosterPlayerId: string;
   playerName: string;
   firstName: string;
+  /** The page's match scope; undefined is the whole season. */
+  matchScope: SeasonFilters | undefined;
 }) {
-  const season = await getPlayerSeason(programId, playerId);
-  if (!season) return null;
+  const whole = await getPlayerSeason(programId, playerId);
+  if (!whole) return null;
+  const season = scopePlayerSeason(whole, matchScope);
   return (
     <ProfileViewWhen view="statistics">
       <ProfileStatisticsView
@@ -470,8 +627,15 @@ async function ProfileStatisticsBody({
         analyzed={season.analyzed}
         groups={season.groups}
         tallies={season.tallies}
-        evidence={buildSeasonEvidence(season)}
-        insightSignature={seasonInsightSignature(season)}
+        evidence={buildSeasonEvidence(whole)}
+        insightSignature={seasonInsightSignature(whole)}
+        // The card is the whole season's: under a scope it says so.
+        seasonAnalyzed={whole.analyzed}
+        scopeEmpty={
+          matchScope !== undefined &&
+          season.analyzed === 0 &&
+          whole.analyzed > 0
+        }
       />
     </ProfileViewWhen>
   );
@@ -499,6 +663,7 @@ async function ProfileVisualizationsBody({
   workspaceName,
   workspaceRole,
   query,
+  matchScope,
 }: {
   programId: string;
   playerId: string;
@@ -511,6 +676,8 @@ async function ProfileVisualizationsBody({
   /** The viewer's role in the program: who may rename or delete a view. */
   workspaceRole: ProgramRole;
   query: Record<string, string | string[] | undefined>;
+  /** The page's match scope; undefined is the whole season. */
+  matchScope: SeasonFilters | undefined;
 }) {
   const [season, bandSettings, preferences, savedViews] = await Promise.all([
     getPlayerSeasonCourts(programId, playerId),
@@ -530,6 +697,10 @@ async function ProfileVisualizationsBody({
   // player is kept in the browser meanwhile (`profile-visualizations-view.tsx`)
   // and closing writes it back here, so the cards are recomputed for it.
   const side = state.filters.player;
+  const scopeEmpty =
+    matchScope !== undefined &&
+    season.analyzed > 0 &&
+    scopeSeasonMatches(season.perMatch, matchScope).length === 0;
   // The player switch's two words, and the subject word of an opened card's
   // subtitle: "You" only when the viewer is this player.
   const chipLabels = seasonPlayerChipLabels(playerName, isSelf);
@@ -547,7 +718,12 @@ async function ProfileVisualizationsBody({
           setTimeout(() => {
             try {
               resolve(
-                buildSeasonCards(season.perMatch, otherPlayer(side), bands),
+                buildSeasonCards(
+                  season.perMatch,
+                  otherPlayer(side),
+                  bands,
+                  matchScope,
+                ),
               );
             } catch (error) {
               reject(error);
@@ -561,10 +737,18 @@ async function ProfileVisualizationsBody({
         playerName={playerName}
         firstName={firstName}
         chipLabels={chipLabels}
-        analyzed={season.analyzed}
+        // A scope that keeps no match draws the day-zero wall, its sentence
+        // saying so, as the Statistics tab draws its cards.
+        analyzed={scopeEmpty ? 0 : season.analyzed}
+        scopeEmpty={scopeEmpty}
         side={side}
-        cards={buildSeasonCards(season.perMatch, side, bands)}
-        savedCards={buildSeasonViewCards(season.perMatch, savedViews, bands)}
+        cards={buildSeasonCards(season.perMatch, side, bands, matchScope)}
+        savedCards={buildSeasonViewCards(
+          season.perMatch,
+          savedViews,
+          bands,
+          matchScope,
+        )}
         lightbox={buildSeasonLightbox(
           season.perMatch,
           state,

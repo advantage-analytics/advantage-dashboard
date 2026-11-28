@@ -36,6 +36,11 @@ import {
   type NetGameTally,
 } from "@/components/dashboard/matches/match-detail/match-filters/net-game";
 import { rallyLengthBandOf } from "@/components/dashboard/matches/match-detail/match-filters/model";
+import {
+  scopePlayerSeason,
+  type PlayerSeason,
+} from "@/lib/data/player-season-server";
+import { parseSeasonMatchScope } from "@/lib/data/player-season-viz";
 
 /**
  * The player profile's season fold (`lib/data/player-season.ts`): the match
@@ -1164,4 +1169,107 @@ test("foldSeasonTallies folds the five in one call", () => {
   expect(tallies.outcomes).toEqual(seasonOutcomes(SEASON));
   expect(tallies.netGame).toEqual(seasonNetGame(SEASON));
   expect(tallies.rallyBands).toEqual(seasonRallyBands(SEASON));
+});
+
+/* ── The player page's match scope (plan §9) ─────────────────────────────── */
+
+test.describe("scopePlayerSeason: the Statistics body under the page's match scope", () => {
+  // `getPlayerSeason`'s answer for the two matches: A won on clay against a
+  // lefty, B lost on a hard court against a right-hander.
+  const SCORED: SeasonMatch[] = [
+    {
+      ...MATCH_A,
+      won: true,
+      opponentHand: "left",
+      courtType: "Clay Court",
+      verified: true,
+    },
+    {
+      ...MATCH_B,
+      won: false,
+      opponentHand: "right",
+      courtType: "Outdoor Hard Court",
+    },
+  ];
+  const WHOLE: PlayerSeason = {
+    analyzed: 2,
+    verified: 1,
+    matchesPlayed: 5,
+    opponentsCount: 4,
+    groups: foldSeasonRows(SCORED),
+    tallies: foldSeasonTallies(SCORED),
+    perMatch: SCORED,
+  };
+  const scoped = (query: string) =>
+    scopePlayerSeason(
+      WHOLE,
+      parseSeasonMatchScope(
+        Object.fromEntries(
+          [...new Set(new URLSearchParams(query).keys())].map((key) => [
+            key,
+            new URLSearchParams(query).getAll(key),
+          ]),
+        ),
+      ),
+    );
+
+  test("no scope in the URL is the season itself — the same object, nothing folded again", () => {
+    expect(scoped("")).toBe(WHOLE);
+    expect(scoped("tab=visualizations&cut=serve&vm=a")).toBe(WHOLE);
+  });
+
+  test("a picked match: the unpicked match's points leave every Statistics figure", () => {
+    const season = scoped("sm=a");
+    // "Total points won": the whole season pools both matches' points; the
+    // scoped figure is A's 42 of 70 alone — B's have left it.
+    const total = (groups: SeasonGroup[]) =>
+      row(groups, "Total points won").you;
+    expect(total(season.groups).detail).toBe("42/70");
+    expect(total(WHOLE.groups).detail).not.toBe("42/70");
+    expect(total(WHOLE.groups).matches).toBe(2);
+    expect(total(season.groups).matches).toBe(1);
+    expect(season.groups).toEqual(foldSeasonRows([SCORED[0]]));
+    expect(season.tallies).toEqual(foldSeasonTallies([SCORED[0]]));
+    expect(season.tallies.outcomes).not.toEqual(WHOLE.tallies.outcomes);
+    expect(season.perMatch.map((m) => m.matchId)).toEqual(["a"]);
+    expect(season.analyzed).toBe(1);
+    expect(season.verified).toBe(1);
+    // The rail's counts are the program's record, not the scope's.
+    expect(season.matchesPlayed).toBe(5);
+    expect(season.opponentsCount).toBe(4);
+  });
+
+  test("result, opponent hand and surface each keep the matches the lightbox's Matches sheet would", () => {
+    for (const [query, kept] of [
+      ["sres=won", ["a"]],
+      ["sres=lost", ["b"]],
+      ["sopp=right", ["b"]],
+      ["sopp=left", ["a"]],
+      ["ssurf=clay", ["a"]],
+      ["ssurf=hard", ["b"]],
+      ["sres=won&ssurf=hard", []],
+      ["sm=a&sm=b", ["a", "b"]],
+      ["sres=lost&sm=a&sm=b", ["b"]],
+    ] as const) {
+      const season = scoped(query);
+      expect(
+        season.perMatch.map((m) => m.matchId),
+        query,
+      ).toEqual(kept);
+      expect(season.analyzed, query).toBe(kept.length);
+      expect(season.groups, query).toEqual(
+        foldSeasonRows(
+          SCORED.filter((m) => (kept as readonly string[]).includes(m.matchId)),
+        ),
+      );
+    }
+  });
+
+  test("an id that is no match of this season is ignored, never an empty season; garbage reads as no scope", () => {
+    expect(scoped("sm=nobody")).toBe(WHOLE);
+    expect(scoped("sres=drew&sopp=both&ssurf=carpet")).toBe(WHOLE);
+    expect(scoped("sm=nobody&sm=b").perMatch.map((m) => m.matchId)).toEqual([
+      "b",
+    ]);
+  });
 });

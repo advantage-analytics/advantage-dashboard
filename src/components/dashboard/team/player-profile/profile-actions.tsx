@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MessageSquare, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
@@ -27,7 +27,12 @@ const ICON_BUTTON =
   "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[var(--radius-button)] text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)]";
 
 /**
- * The pane title row's action slot (`MatchReportTitleActions`): Ask, then ⋯.
+ * The pane title row's action slot (`MatchReportTitleActions`): the match
+ * picker, Ask, then ⋯.
+ *
+ * **N of M matches** (`matchScope`) comes first: the page's match scope
+ * (`profile-match-scope.tsx`), streamed in by the page once the season has
+ * landed, so it arrives as a slot rather than as data this component waits on.
  *
  * Both quiet controls are the match report's own (`report-title-row.tsx`,
  * `report-more-menu.tsx`): borderless 32px icon buttons with a dark tooltip,
@@ -62,6 +67,7 @@ export function ProfileActions({
   roster,
   askHref = null,
   askSubject,
+  matchScope = null,
 }: {
   /** `self`: the viewer's own page. `staff`: someone with roster rights. `viewer`: a teammate. */
   mode: "self" | "staff" | "viewer";
@@ -79,6 +85,8 @@ export function ProfileActions({
   askHref?: string | null;
   /** The player's first name, for the tooltip's words; "your matches" on the viewer's own page. */
   askSubject?: string;
+  /** The "N of M matches" picker, drawn before Ask; null draws none. */
+  matchScope?: ReactNode;
 }) {
   const router = useRouter();
   const { active, viewer } = useWorkspace();
@@ -108,6 +116,8 @@ export function ProfileActions({
 
   return (
     <div className="flex shrink-0 items-center gap-1">
+      {matchScope}
+
       {askHref && (
         <ChromeTooltip label={askLabel}>
           <Link

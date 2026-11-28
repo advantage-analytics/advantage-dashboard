@@ -45,10 +45,44 @@ const match = {
 
 const watch = window.location.search.includes("fixture=watch");
 const watchAll = window.location.search.includes("fixture=watchall");
-const points = [...ASYMMETRIC_SERVES, ...RALLY_POINTS].map((point, i) =>
-  watchAll || (watch && point.id === "p1-high-0-0")
-    ? { ...point, videoTime: 42 + i }
-    : point,
+// `?fixture=returns`: every serve Blake Rivera lands, Avery Kim returns in —
+// against first and second serves both — so the Returns cuts have marks.
+const returns = window.location.search.includes("fixture=returns");
+const withReturn = (point: (typeof ASYMMETRIC_SERVES)[number]) => {
+  if (!returns || point.serverIsPlayer1 || point.shots?.length !== 1)
+    return point;
+  // The returner stands at the end opposite the server, past the baseline.
+  const highEnd = point.shots[0].contactY! > 11.885;
+  return {
+    ...point,
+    secondShotType: "Forehand",
+    secondShotResult: "In",
+    secondShotContactX: 0.5,
+    secondShotContactY: highEnd ? -0.5 : 24.3,
+    secondShotLandingX: -1.5,
+    // …and lands deep on the server's half.
+    secondShotLandingY: highEnd ? 11.885 + 7 : 11.885 - 7,
+  };
+};
+// `?fixture=nocontact`: each point's deep rally shot has its landing but no
+// recorded contact (its contact x is missing), as some vendor rows do.
+const noContact = window.location.search.includes("fixture=nocontact");
+const withoutContact = (point: (typeof RALLY_POINTS)[number]) =>
+  noContact
+    ? {
+        ...point,
+        shots: point.shots.map((s) =>
+          s.id.endsWith("-p1-deep") ? { ...s, contactX: null } : s,
+        ),
+      }
+    : point;
+const points = [...ASYMMETRIC_SERVES, ...RALLY_POINTS.map(withoutContact)].map(
+  (point, i) => {
+    const p = withReturn(point);
+    return watchAll || (watch && p.id === "p1-high-0-0")
+      ? { ...p, videoTime: 42 + i }
+      : p;
+  },
 );
 
 /** Saved views: a Saved collection to open from, a second view to go

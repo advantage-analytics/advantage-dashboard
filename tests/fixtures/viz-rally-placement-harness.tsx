@@ -14,6 +14,7 @@ import {
   computeViz,
   computeVizStats,
   bandZonesFor,
+  drawnCut,
 } from "@/components/dashboard/matches/match-detail/shots/viz-model";
 import { RALLY_POINTS } from "./viz-rally-points";
 
@@ -46,7 +47,9 @@ function Harness() {
   const [contactHidden, setContactHidden] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [bands, setBands] = useState<BandSettings>(DEFAULT_BANDS);
-  const cut = state.cut ?? "rallyPosition";
+  // The court drawn, as the lightbox reads it: Returns in Contact is the
+  // contact court (`drawnCut`).
+  const cut = drawnCut(state.cut ?? "rallyPosition", state.filters);
   const points =
     cut === "returnPlacement" || cut === "returnContact"
       ? RETURN_POINTS

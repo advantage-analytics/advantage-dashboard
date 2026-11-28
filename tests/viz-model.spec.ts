@@ -7,6 +7,8 @@ import {
   collapseErrorFilter,
   computeViz,
   computeVizStats,
+  foldedMatchFilters,
+  pointMatchesPressure,
   orderStatRows,
   errorKindOf,
   filterKeysFor,
@@ -24,7 +26,9 @@ import {
 } from "@/components/dashboard/matches/match-detail/shots/default-cuts";
 import { buildDefaultTiles } from "@/components/dashboard/matches/match-detail/shots/default-tiles";
 import {
+  OPTIONS,
   activeFilterEntries,
+  parseVizState,
   vizStateQuery,
   type VizState,
 } from "@/components/dashboard/matches/match-detail/shots/viz-url";
@@ -403,6 +407,30 @@ test.describe("computeViz — return cuts", () => {
     expect(place.dots[0].depthM).not.toBe(contact.dots[0].depthM);
     expect(place.zoneStats).toBeNull();
     expect(place.noun).toBe("returns");
+  });
+
+  test("a return's landing carries where it was struck; the contact court's mark is one end alone", () => {
+    const place = computeViz([ret], "returnPlacement", EMPTY_VIZ_FILTERS, true);
+    const contact = computeViz([ret], "returnContact", EMPTY_VIZ_FILTERS, true);
+    expect(place.dots[0].pair).toEqual({
+      lateralM: contact.dots[0].lateralM,
+      depthM: contact.dots[0].depthM,
+    });
+    expect(contact.dots[0].pair).toBeUndefined();
+
+    const noContact = {
+      ...ret,
+      secondShotContactX: null,
+      secondShotContactY: null,
+    } as MatchPoint;
+    const alone = computeViz(
+      [noContact],
+      "returnPlacement",
+      EMPTY_VIZ_FILTERS,
+      true,
+    );
+    expect(alone.dots).toHaveLength(1);
+    expect(alone.dots[0].pair).toBeUndefined();
   });
 
   test("return dots carry metres, not the legacy pixel frame", () => {
@@ -2361,6 +2389,101 @@ test.describe("computeViz — rallyPosition cut", () => {
     expect(r.dots.map((d) => d.id)).toEqual(["bp-shot"]);
   });
 
+  test("Pressure points is the score the point was played at, never a break, set or match point elsewhere", () => {
+    const rally = (id: string, over: Partial<MatchPoint>) =>
+      point({
+        ...over,
+        shots: [
+          shot({ shotNumber: 2, isPlayer1: false, id: `${id}-return` }),
+          shot({ shotNumber: 3, isPlayer1: true, id }),
+        ],
+      });
+    const pts = [
+      rally("30-30", { pointScoreRaw: "30-30" }),
+      rally("30-40", { pointScoreRaw: "30-40", isBreakPoint: true }),
+      rally("40-30", { pointScoreRaw: "40-30" }),
+      rally("deuce", { pointScoreRaw: "40-40" }),
+      rally("ad-in", { pointScoreRaw: "AD-40" }),
+      rally("ad-out", { pointScoreRaw: "40-AD", isBreakPoint: true }),
+      rally("bp-15-40", { pointScoreRaw: "15-40", isBreakPoint: true }),
+      rally("sp-40-15", { pointScoreRaw: "40-15", isSetPoint: true }),
+      rally("mp-40-0", { pointScoreRaw: "40-0", isMatchPoint: true }),
+      rally("calm", { pointScoreRaw: "15-15" }),
+      rally("unread", { pointScoreRaw: null }),
+      rally("tiebreak", { pointScoreRaw: "3-3", gameScore: "6-6" }),
+    ];
+    const shown = (pressure: VizFilters["pressure"]) =>
+      computeViz(
+        pts,
+        "rallyPosition",
+        { ...EMPTY_VIZ_FILTERS, pressure },
+        true,
+      ).dots.map((d) => d.id);
+
+    const scores = ["30-30", "30-40", "40-30", "deuce", "ad-in", "ad-out"];
+    expect(shown(["pressure"])).toEqual(scores);
+    // The other two options read the flags, as before.
+    expect(shown(["break"])).toEqual(["30-40", "ad-out", "bp-15-40"]);
+    expect(shown(["setMatch"])).toEqual(["sp-40-15", "mp-40-0"]);
+    // Either/or within the group.
+    expect(shown(["pressure", "setMatch"])).toEqual([
+      ...scores,
+      "sp-40-15",
+      "mp-40-0",
+    ]);
+    for (const p of pts) {
+      expect(pointMatchesPressure(p, "pressure")).toBe(
+        scores.includes(p.shots?.[1]?.id ?? ""),
+      );
+    }
+  });
+
+  test('Pressure points travels the URL, reads "Pressure points" and folds to the Video tab\'s Score › Pressure', () => {
+    expect(Object.entries(OPTIONS.pressure)).toEqual([
+      ["pressure", "Pressure points"],
+      ["break", "Break points"],
+      ["setMatch", "Set & match points"],
+    ]);
+
+    const filters: VizFilters = {
+      ...EMPTY_VIZ_FILTERS,
+      pressure: ["setMatch", "pressure"],
+    };
+    const state: VizState = {
+      cut: "serve",
+      chart: "scatter",
+      filters,
+      viewId: null,
+    };
+    const query = new URLSearchParams(
+      vizStateQuery(new URLSearchParams(), state),
+    );
+    expect(query.getAll("pressure")).toEqual(["setMatch", "pressure"]);
+    // Read back in canonical (`OPTIONS`) order, whatever order it was picked in.
+    expect(parseVizState(query).filters.pressure).toEqual([
+      "pressure",
+      "setMatch",
+    ]);
+    expect(activeFilterEntries(state)).toEqual([
+      { key: "pressure", value: "setMatch", label: "Set & match points" },
+      { key: "pressure", value: "pressure", label: "Pressure points" },
+    ]);
+
+    // The advanced fold names the same points: Score › Pressure is the same
+    // predicate, and the other two keep their flags.
+    const fold = foldedMatchFilters(filters);
+    expect(fold.folded).toEqual(["pressure"]);
+    expect(fold.match.scoreType).toEqual([
+      "setPoint",
+      "matchPoint",
+      "pressure",
+    ]);
+    expect(
+      foldedMatchFilters({ ...EMPTY_VIZ_FILTERS, pressure: ["pressure"] }).match
+        .scoreType,
+    ).toEqual(["pressure"]);
+  });
+
   test("the ball filter reads the serve-frame meaning (first/second serve point)", () => {
     const firstServePoint = point({
       firstShotType: "First Serve",
@@ -2908,7 +3031,7 @@ test.describe("errors cut on judged vs unjudged matches", () => {
     expect(tile().name).toBe("Unforced errors");
   });
 
-  test("applied strip: the collapsed option is one Errors token, and judged words are unchanged", () => {
+  test("applied strip: the collapsed option is one Rally errors token, and judged words are unchanged", () => {
     const state: VizState = {
       cut: "errors",
       chart: "scatter",
@@ -2921,9 +3044,12 @@ test.describe("errors cut on judged vs unjudged matches", () => {
     const unjudged = activeFilterEntries(state, undefined, {
       errorSplitJudged: false,
     });
-    expect(unjudged.map((e) => e.label)).toEqual(["Errors", "Double faults"]);
+    expect(unjudged.map((e) => e.label)).toEqual([
+      "Rally errors",
+      "Double faults",
+    ]);
     expect(unjudged[0].values).toEqual(["unforced", "forced"]);
-    // A saved view's lone "forced" still reads Errors, and is not rewritten.
+    // A saved view's lone "forced" still reads Rally errors, and is not rewritten.
     const forcedOnly: VizState = {
       ...state,
       filters: { ...state.filters, error: ["forced"] },
@@ -2931,7 +3057,12 @@ test.describe("errors cut on judged vs unjudged matches", () => {
     expect(
       activeFilterEntries(forcedOnly, undefined, { errorSplitJudged: false }),
     ).toEqual([
-      { key: "error", value: "forced", values: ["forced"], label: "Errors" },
+      {
+        key: "error",
+        value: "forced",
+        values: ["forced"],
+        label: "Rally errors",
+      },
     ]);
     expect(forcedOnly.filters.error).toEqual(["forced"]);
     for (const opts of [{ errorSplitJudged: true }, undefined]) {

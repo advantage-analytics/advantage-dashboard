@@ -37,6 +37,8 @@ import {
   type StatKpi,
   type StatRow,
   type VizBandZones,
+  chartView,
+  drawnCut,
   type VizDot,
   type VizFilters,
   type VizResult,
@@ -47,6 +49,7 @@ import {
   activeFilterEntries,
   errorOptionsFor,
   normalizeSeasonFilters,
+  parseMatchScope,
   parseVizState,
   sameFilterValue,
   seasonMatchKept,
@@ -587,34 +590,42 @@ function seasonCard(
     viewId: string | null;
   },
   bands: SeasonVizBands,
+  /** The page's match scope `perMatch` was already narrowed to: what the
+   *  opened card's Matches row starts at (`VizState.season`). */
+  season?: SeasonFilters,
 ): SeasonCard {
+  // What the card opens is the chart (`chartView`: "Return contact" opens
+  // Returns in Contact); what it draws is that chart's court (`drawnCut`).
+  const view = chartView(card.cut, card.filters);
+  const cut = drawnCut(view.cut, view.filters);
   const parts = perMatch.map((m) =>
-    seasonPart(m, card.cut, card.filters, card.chart, bands),
+    seasonPart(m, cut, view.filters, card.chart, bands),
   );
   const { result, stats } = foldSeasonParts(
-    card.cut,
-    card.filters,
+    cut,
+    view.filters,
     parts,
     perMatch.length,
   );
   return {
     key: card.key,
-    cut: card.cut,
+    cut,
     chart: card.chart,
     name: card.name,
     subject: card.filters.player,
     dots: result.dots.map(wallDot),
     summary: wallSummaryFor(
-      card.cut,
+      cut,
       result,
       stats,
       depthBandRows(bands.bands, bands.unit),
     ),
     state: {
-      cut: card.cut,
+      cut: view.cut,
       chart: card.chart,
-      filters: card.filters,
+      filters: view.filters,
       viewId: card.viewId,
+      ...(season ? { season } : {}),
     },
     total: result.total,
   };
@@ -624,16 +635,26 @@ function seasonCard(
  * The wall's five cards for `side` over `perMatch` — the redesign's default
  * cuts (`defaultCutsFor` by the season's judged rule), each match computed
  * with its own seat and context, then merged. In wall order.
+ *
+ * `scope` is the page's match scope (`parseSeasonMatchScope`): the cards are
+ * folded over the matches it keeps, and each card's `state` carries it as
+ * `season`, so the card it opens starts its Matches row there. The judged
+ * rule stays the WHOLE season's — the one the page parses the URL with and
+ * the opened card is built under — so a card and the court it opens are the
+ * same cut. Omitted, the whole season, exactly as before.
  */
 export function buildSeasonCards(
   perMatch: readonly SeasonVizMatch[],
   side: PlayerFilter,
   bands: SeasonVizBands,
+  scope?: SeasonFilters,
 ): SeasonCard[] {
   const judged = seasonErrorSplitJudged(perMatch);
+  const season = seasonScopeFilters(perMatch, scope);
+  const scoped = keepingScope(perMatch, season);
   return defaultCutsFor(judged).map((cut) =>
     seasonCard(
-      perMatch,
+      scoped,
       {
         key: `${side}:${cut.cut}`,
         cut: cut.cut,
@@ -643,6 +664,7 @@ export function buildSeasonCards(
         viewId: null,
       },
       bands,
+      season,
     ),
   );
 }
@@ -676,11 +698,15 @@ export function buildSeasonViewCards(
   perMatch: readonly SeasonVizMatch[],
   views: readonly SavedView[],
   bands: SeasonVizBands,
+  /** The page's match scope, as `buildSeasonCards` takes it. */
+  scope?: SeasonFilters,
 ): SeasonCard[] {
   const judged = seasonErrorSplitJudged(perMatch);
+  const season = seasonScopeFilters(perMatch, scope);
+  const scoped = keepingScope(perMatch, season);
   return views.map((view) =>
     seasonCard(
-      perMatch,
+      scoped,
       {
         key: `view:${view.id}`,
         cut: view.cut,
@@ -690,6 +716,7 @@ export function buildSeasonViewCards(
         viewId: view.id,
       },
       bands,
+      season,
     ),
   );
 }
@@ -702,7 +729,7 @@ export function buildSeasonViewCards(
  */
 export const SEASON_CUT_LABEL: Record<Cut, string> = {
   serve: "Serve placement",
-  returnPlacement: "Return placement",
+  returnPlacement: "Returns",
   returnContact: "Return contact",
   rallyPosition: "Rally position",
   rallyPlacement: "Rally placement",
@@ -746,7 +773,7 @@ export function filterOptionPatches(
     for (const zone of ["t", "body", "wide"] as const)
       patches.push({ zone: [zone] });
   if (keys.has("pressure"))
-    for (const pressure of ["break", "setMatch"] as const)
+    for (const pressure of ["pressure", "break", "setMatch"] as const)
       patches.push({ pressure: [pressure] });
   if (keys.has("error"))
     for (const option of errorOptionsFor(errorSplitJudged))
@@ -855,6 +882,8 @@ export type SeasonDotPoint = [number, number, number, number, number];
 /** Everything the season's lightbox container hands `VizLightboxShell`,
  *  computed on the server. Plain data — no points, no functions, no Sets. */
 export interface SeasonLightboxData {
+  /** The court drawn (`drawnCut`): `returnContact` for Returns in Contact,
+   *  whose chart — what the URL and a saved view name — is Returns. */
   cut: Cut;
   chart: Chart;
   /** The URL's filters, as the server read them (`parseVizState` with the
@@ -996,7 +1025,7 @@ export function appliedSeasonFilters(
 /** Whether one match is drawn under `applied`: its hand (`hand: true`) and
  *  its tick (`ticks: true`), each tested only when asked. */
 function seasonMatchPasses(
-  m: SeasonVizMatch,
+  m: SeasonScopeMatch,
   applied: SeasonFilters,
   { hand = true, ticks = true }: { hand?: boolean; ticks?: boolean } = {},
 ): boolean {
@@ -1014,6 +1043,156 @@ function seasonMatchPasses(
   if (ticks && applied.matches.length > 0)
     return applied.matches.includes(m.matchId);
   return true;
+}
+
+/** What the match filters read off a match — the season's courts and the
+ *  Statistics fold (`SeasonMatch`) both carry it. */
+export type SeasonScopeMatch = Pick<
+  SeasonVizMatch,
+  "matchId" | "opponentHand" | "won" | "courtType"
+>;
+
+/**
+ * The page's match scope narrowed to this season, canonical — what the
+ * scoped bodies were computed under and what an opened card's Matches row
+ * starts at. `undefined` when it keeps every match by saying nothing: no
+ * scope in the URL, or one whose only content is ids that are not matches of
+ * this season (untrusted, ignored — `appliedSeasonFilters`).
+ */
+export function seasonScopeFilters(
+  perMatch: readonly SeasonScopeMatch[],
+  scope: SeasonFilters | undefined,
+): SeasonFilters | undefined {
+  if (!scope) return undefined;
+  return normalizeSeasonFilters(appliedSeasonFilters(perMatch, scope));
+}
+
+/**
+ * The matches of `perMatch` the page's match scope keeps, in their order —
+ * the lightbox's own rule (`seasonMatchPasses`), so a scope and the Matches
+ * row it seeds keep the same matches. No scope returns `perMatch` itself:
+ * the whole season, untouched.
+ */
+export function scopeSeasonMatches<T extends SeasonScopeMatch>(
+  perMatch: readonly T[],
+  scope: SeasonFilters | undefined,
+): readonly T[] {
+  return keepingScope(perMatch, seasonScopeFilters(perMatch, scope));
+}
+
+/** `perMatch` narrowed by an already-applied scope (no scope: untouched). */
+function keepingScope<T extends SeasonScopeMatch>(
+  perMatch: readonly T[],
+  applied: SeasonFilters | undefined,
+): readonly T[] {
+  if (!applied) return perMatch;
+  return perMatch.filter((m) => seasonMatchPasses(m, applied));
+}
+
+/** An applied scope's result, hand and surface in the strip's words. */
+function appliedFilterWords(applied: SeasonFilters): string[] {
+  const words: string[] = [];
+  if (applied.result != null) words.push(SEASON_RESULT_PHRASE[applied.result]);
+  if (applied.opponentHand !== null)
+    words.push(OPPONENT_HAND_PHRASE[applied.opponentHand]);
+  if (applied.surface != null)
+    words.push(SEASON_SURFACE_PHRASE[applied.surface]);
+  return words;
+}
+
+/** What a Matches row reads off a match — the courts' season
+ *  (`SeasonVizMatch`) and the Statistics fold (`SeasonMatch`) both carry it. */
+export type SeasonOptionMatch = Pick<
+  SeasonVizMatch,
+  | "matchId"
+  | "date"
+  | "opponent"
+  | "won"
+  | "score"
+  | "opponentHand"
+  | "courtType"
+>;
+
+/**
+ * Every match of `perMatch` as a Matches row (`SeasonMatchOption`), newest
+ * first (`compareMatchDays`) — the one builder behind the lightbox's Matches
+ * sheet and the player page's "N of M matches" picker. `countOf(i)` is what
+ * `perMatch[i]` adds to the sum the list's Show button names: its marks under
+ * the live shot filters in the lightbox, 1 on the page (it counts matches).
+ */
+export function seasonMatchOptions(
+  perMatch: readonly SeasonOptionMatch[],
+  countOf: (index: number) => number,
+): SeasonMatchOption[] {
+  return perMatch
+    .map((m, i) => ({
+      id: m.matchId,
+      opponentName: m.opponent ?? "Opponent",
+      date: m.date ?? null,
+      count: countOf(i),
+      won: m.won ?? null,
+      score: m.score ?? null,
+      hand: opponentHandOf(m),
+      surface: seasonSurfaceOf(m.courtType),
+    }))
+    .sort((a, b) => compareMatchDays(b.date, a.date));
+}
+
+/** The player page's facts line under a match scope: "Showing N of M analyzed
+ *  matches" and what narrows it. */
+export interface MatchScopeSummary {
+  /** The matches the scope keeps. */
+  shown: number;
+  /** Every analyzed match of the season. */
+  analyzed: number;
+  /** The scope's result, hand and surface in the Matches menus' words
+   *  ("Won", "Left-handed", "Clay"); picked matches are in `shown`. */
+  words: string[];
+}
+
+/**
+ * The page's match scope as its facts line states it, or null when the scope
+ * keeps the whole season by saying nothing (`seasonScopeFilters`: no scope,
+ * or only ids that are not matches of this season) — the line then reads as
+ * it does unscoped.
+ */
+export function matchScopeSummary(
+  perMatch: readonly SeasonScopeMatch[],
+  scope: SeasonFilters | undefined,
+): MatchScopeSummary | null {
+  const applied = seasonScopeFilters(perMatch, scope);
+  if (!applied) return null;
+  const words = appliedFilterWords(applied);
+  return {
+    shown: keepingScope(perMatch, applied).length,
+    analyzed: perMatch.length,
+    words,
+  };
+}
+
+/**
+ * The page's match scope in the strip's words, for the Save popover's
+ * Matches row ("Won · Left-handed · 2 matches"): the result, hand and
+ * surface, then the ticked matches that are matches of this season
+ * (`options`, the Matches sheet's rows — an unknown `?sm=` id is ignored).
+ * Empty when the scope keeps the whole season.
+ */
+export function matchScopeWords(
+  options: readonly Pick<SeasonMatchOption, "id">[],
+  scope: SeasonFilters | undefined,
+): string[] {
+  const known = new Set(options.map((o) => o.id));
+  const applied = normalizeSeasonFilters(
+    scope && {
+      ...scope,
+      matches: scope.matches.filter((id) => known.has(id)),
+    },
+  );
+  if (!applied) return [];
+  const words = appliedFilterWords(applied);
+  const n = applied.matches.length;
+  if (n > 0) words.push(`${n} ${n === 1 ? "match" : "matches"}`);
+  return words;
 }
 
 const mm = (metres: number) => Math.round(metres * 1000) / 1000;
@@ -1112,13 +1291,34 @@ export function parseSeasonVizState(
   searchParams: Record<string, string | string[] | undefined>,
   errorSplitJudged: boolean,
 ): VizState {
+  return parseVizState(searchParamsOf(searchParams), {
+    errorSplitJudged,
+    season: true,
+  });
+}
+
+/**
+ * The player page's match scope (`?sres=`, `?sopp=`, `?ssurf=`, `?sm=` —
+ * `parseMatchScope`) from a page's `searchParams` record, or `undefined`
+ * when the URL names none.
+ */
+export function parseSeasonMatchScope(
+  searchParams: Record<string, string | string[] | undefined>,
+): SeasonFilters | undefined {
+  return parseMatchScope(searchParamsOf(searchParams));
+}
+
+/** A page's `searchParams` record as `URLSearchParams`, repeats kept. */
+function searchParamsOf(
+  searchParams: Record<string, string | string[] | undefined>,
+): URLSearchParams {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(searchParams)) {
     if (value === undefined) continue;
     for (const v of Array.isArray(value) ? value : [value])
       params.append(key, v);
   }
-  return parseVizState(params, { errorSplitJudged, season: true });
+  return params;
 }
 
 /**
@@ -1146,8 +1346,12 @@ export function buildSeasonLightbox(
    */
   subjectWords: SeasonVizNames = names,
 ): SeasonLightboxData | null {
-  const cut = state.cut;
-  if (cut === null || perMatch.length === 0) return null;
+  // The chart the URL names, and the court it draws (`drawnCut`): Returns
+  // in Contact is computed, banded and sent as the contact court. The card
+  // and saved-view baselines below go by the chart.
+  const chartCut = state.cut;
+  if (chartCut === null || perMatch.length === 0) return null;
+  const cut = drawnCut(chartCut, state.filters);
   const judged = seasonErrorSplitJudged(perMatch);
   const filters = state.filters;
 
@@ -1245,13 +1449,13 @@ export function buildSeasonLightbox(
     baseViewId !== null
       ? (views.find((v) => v.id === baseViewId) ?? null)
       : null;
-  const defaultCut = defaultCutsFor(judged).find((c) => c.cut === cut);
+  const defaultCut = defaultCutsFor(judged).find((c) => c.cut === chartCut);
   let baseline: {
     name: string;
     filters: VizFilters;
     keys: (keyof VizFilters)[];
   } | null = null;
-  if (baseView !== null && baseView.cut === cut) {
+  if (baseView !== null && baseView.cut === chartCut) {
     const viewFilters: VizFilters = {
       ...seasonViewFilters(baseView, judged),
       player: filters.player,
@@ -1262,6 +1466,8 @@ export function buildSeasonLightbox(
       keys: (Object.keys(EMPTY_VIZ_FILTERS) as (keyof VizFilters)[]).filter(
         (key) =>
           key !== "player" &&
+          // Which ends the court draws is not a filter of the view.
+          key !== "ends" &&
           !sameFilterValue(key, viewFilters, EMPTY_VIZ_FILTERS),
       ),
     };
@@ -1306,6 +1512,8 @@ export function buildSeasonLightbox(
   const filterPhrases = activeFilterEntries(state, names, {
     errorSplitJudged: judged,
     bandLabels: bands,
+    // "Kim won", as the legend and the chips say it.
+    winnerNames: subjectWords,
   })
     .filter(
       (entry) =>
@@ -1324,29 +1532,16 @@ export function buildSeasonLightbox(
       filterPhrases.push(`${LOOSENED_LABEL[key] ?? "Filter"}: any`);
   // The season's own filters close the sentence: "Won · Lefties · Clay ·
   // 2 matches".
-  if (applied.result != null)
-    filterPhrases.push(SEASON_RESULT_PHRASE[applied.result]);
-  if (applied.opponentHand !== null)
-    filterPhrases.push(OPPONENT_HAND_PHRASE[applied.opponentHand]);
-  if (applied.surface != null)
-    filterPhrases.push(SEASON_SURFACE_PHRASE[applied.surface]);
+  filterPhrases.push(...appliedFilterWords(applied));
   if (applied.matches.length > 0)
     filterPhrases.push(
       `${applied.matches.length} ${applied.matches.length === 1 ? "match" : "matches"}`,
     );
 
-  const matchOptions: SeasonMatchOption[] = perMatch
-    .map((m, i) => ({
-      id: m.matchId,
-      opponentName: m.opponent ?? "Opponent",
-      date: m.date ?? null,
-      count: allParts[i].result.count,
-      won: m.won ?? null,
-      score: m.score ?? null,
-      hand: opponentHandOf(m),
-      surface: seasonSurfaceOf(m.courtType),
-    }))
-    .sort((a, b) => compareMatchDays(b.date, a.date));
+  const matchOptions = seasonMatchOptions(
+    perMatch,
+    (i) => allParts[i].result.count,
+  );
 
   const subjectName = filters.player === "you" ? names.you : names.opponent;
   const subjectWord =
@@ -1371,8 +1566,9 @@ export function buildSeasonLightbox(
       activeFilterEntries(state).some(
         (entry) => entry.key !== "player" && !floorHeld(entry.key),
       ),
-    title: baseline !== null && onCard ? baseline.name : SEASON_CUT_LABEL[cut],
-    subtitle: `${SEASON_CUT_LABEL[cut]} · ${subjectWord} · ${matches} ${matches === 1 ? "match" : "matches"} · ${lightboxCountLine(
+    title:
+      baseline !== null && onCard ? baseline.name : SEASON_CUT_LABEL[chartCut],
+    subtitle: `${SEASON_CUT_LABEL[chartCut]} · ${subjectWord} · ${matches} ${matches === 1 ? "match" : "matches"} · ${lightboxCountLine(
       cut,
       result,
       stats,

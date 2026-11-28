@@ -1,6 +1,7 @@
 import { NetGameBody } from "@/components/dashboard/matches/match-detail/net-game-body";
 import { SEASON_OPPONENTS_LABEL } from "@/components/dashboard/team/player-profile/season-head-to-head-card";
 import { surname } from "@/lib/data/match-utils";
+import { matchReadiness } from "./season-empty";
 import type { SeasonNetGame } from "@/lib/data/player-season";
 
 /**
@@ -34,21 +35,26 @@ import type { SeasonNetGame } from "@/lib/data/player-season";
 export function seasonNetEmptySentence(
   playerName: string,
   analyzed: number,
+  scopeEmpty = false,
 ): string {
   return analyzed === 0
-    ? `Net points add up here once one of ${surname(playerName)}'s matches is analyzed.`
+    ? `Net points add up here once one of ${surname(playerName)}'s matches ${matchReadiness(scopeEmpty)}.`
     : "Neither side came to the net in these matches.";
 }
 
 export function SeasonNetGameCard({
   playerName,
   analyzed,
+  scopeEmpty = false,
   netGame,
 }: {
   /** The player's full name; the first row shows their surname. */
   playerName: string;
   /** Matches with points — what `netGame` was summed from. */
   analyzed: number;
+  /** The page's match scope keeps no match: the empty sentence says so
+   *  (`analyzed` is 0 then, as on day zero). */
+  scopeEmpty?: boolean;
   /** `seasonNetGame()` — both sides' tallies and whether lobs were known. */
   netGame: SeasonNetGame;
 }) {
@@ -60,7 +66,7 @@ export function SeasonNetGameCard({
       youName={surname(playerName)}
       oppName={SEASON_OPPONENTS_LABEL}
       hasLobs={netGame.hasLobs}
-      emptySentence={seasonNetEmptySentence(playerName, analyzed)}
+      emptySentence={seasonNetEmptySentence(playerName, analyzed, scopeEmpty)}
     />
   );
 }

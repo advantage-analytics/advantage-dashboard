@@ -7,6 +7,7 @@ import {
   applyMatchFilters,
   buildFilterContext,
   filtersEqual,
+  isPressurePoint,
   matchFiltersQuery,
   optionAvailability,
   parseMatchFilters,
@@ -275,30 +276,71 @@ test("Custom › Contact and Landed in test the one shot, by its own end", () =>
 
 /* ── Score ──────────────────────────────────────────────────────────────── */
 
-test("Pressure = raw 30-30 or 40-40, or a break/set/match point", () => {
+test("Pressure = the raw score alone: 30-30, 30-40, 40-30, deuce and every advantage", () => {
   const points = [
     pt({ id: "30-30", pointScoreRaw: "30-30" }),
+    pt({ id: "30-40", pointScoreRaw: "30-40" }),
+    pt({ id: "40-30", pointScoreRaw: "40-30" }),
     pt({ id: "40-40", pointScoreRaw: "40 - 40" }),
+    pt({ id: "ad-in", pointScoreRaw: "AD-40" }),
+    pt({ id: "ad-out", pointScoreRaw: " 40 - ad " }),
+    // A break point AT a pressure score is one, by its score.
+    pt({ id: "bp-30-40", pointScoreRaw: "30-40", isBreakPoint: true }),
+    // A break, set or match point at any other score is not.
     pt({ id: "bp", pointScoreRaw: "15-40", isBreakPoint: true }),
     pt({ id: "sp", pointScoreRaw: "40-15", isSetPoint: true }),
     pt({ id: "mp", pointScoreRaw: "40-0", isMatchPoint: true }),
     pt({ id: "calm", pointScoreRaw: "15-30" }),
-    // A null raw score is unknown — the defaulted `pointScore` must not help.
+    // A null raw score is unknown — the defaulted `pointScore` must not help,
+    // and neither do the point's flags.
     pt({ id: "unknown", pointScoreRaw: null, pointScore: "0-0" }),
-    // A tiebreak 3-3 is not 30-30.
+    pt({ id: "unknown-mp", pointScoreRaw: null, isMatchPoint: true }),
+    // No tiebreak point: 3-3 is not 30-30, and a 6-6 game is the tiebreak
+    // whatever its count reads, set point or not.
     pt({ id: "tb", pointScoreRaw: "3-3", gameScore: "6-6" }),
+    pt({
+      id: "tb-sp",
+      pointScoreRaw: "6-5",
+      gameScore: "6-6",
+      isSetPoint: true,
+    }),
+    pt({ id: "tb-40-40", pointScoreRaw: "40-40", gameScore: "6 - 6" }),
   ];
   expect(run(points, { scoreType: ["pressure"] })).toEqual([
     "30-30",
+    "30-40",
+    "40-30",
     "40-40",
-    "bp",
-    "sp",
-    "mp",
+    "ad-in",
+    "ad-out",
+    "bp-30-40",
   ]);
-  expect(run(points, { scoreType: ["breakpoint"] })).toEqual(["bp"]);
+  for (const point of points) {
+    expect(isPressurePoint(point), point.id).toBe(
+      run([point], { scoreType: ["pressure"] }).length === 1,
+    );
+  }
+  // Break, set and match points are their own options, at whatever score.
+  expect(run(points, { scoreType: ["breakpoint"] })).toEqual([
+    "bp-30-40",
+    "bp",
+  ]);
+  expect(run(points, { scoreType: ["pressure", "matchPoint"] })).toEqual([
+    "30-30",
+    "30-40",
+    "40-30",
+    "40-40",
+    "ad-in",
+    "ad-out",
+    "bp-30-40",
+    "mp",
+    "unknown-mp",
+  ]);
   expect(run(points, { scoreType: ["setPoint", "matchPoint"] })).toEqual([
     "sp",
     "mp",
+    "unknown-mp",
+    "tb-sp",
   ]);
 });
 

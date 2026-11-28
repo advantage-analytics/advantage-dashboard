@@ -161,7 +161,15 @@ export function panelSections(
               ? o.value === "you"
                 ? names.you
                 : names.opponent
-              : optionLabel(group.key, o.value, labels),
+              : group.key === "resultOutcome"
+                ? // "Point won by": the winner's name, never Won | Lost —
+                  // the court's Won | Lost is the CHARTED player's, and
+                  // Outcome's was always yours, so "Lost" on an opponent's
+                  // chart read as the opposite of what it filtered.
+                  o.value === "won"
+                  ? names.you
+                  : names.opponent
+                : optionLabel(group.key, o.value, labels),
           }));
         if (options.length === 0) continue;
       }
@@ -218,7 +226,10 @@ export function sectionSummary(
   const parts: string[] = [];
   for (const group of section.groups) {
     for (const value of appliedValues(draft, group.key)) {
-      if (PLAYER_KEYS.has(group.key)) {
+      if (group.key === "resultOutcome") {
+        // Named for the winner, as the panel's options are.
+        parts.push(`${value === "won" ? names.you : names.opponent} won`);
+      } else if (PLAYER_KEYS.has(group.key)) {
         const shown = group.invertPlayer
           ? otherPlayer(value as PlayerSide)
           : (value as PlayerSide);

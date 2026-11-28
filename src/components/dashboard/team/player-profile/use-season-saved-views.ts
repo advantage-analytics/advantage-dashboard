@@ -11,6 +11,7 @@ import {
 } from "@/app/dashboard/matches/(detail)/[matchId]/saved-views-actions";
 import type { SavedViewAction } from "@/components/dashboard/matches/match-detail/shots/saved-view-title-menu";
 import type { SavedViewRow } from "@/lib/data/saved-views-server";
+import { sharedNameClashMessage } from "@/lib/data/saved-views-logic";
 
 const STATUS_MS = 6000;
 const FAILED = "Couldn't save that change";
@@ -23,8 +24,15 @@ export interface SeasonSavedViewActions {
   removed: ReadonlySet<string>;
   /** The line above the Saved cards: what just happened, and its Undo.
    *  `failed`: a change the server refused, as opposed to one that landed
-   *  ("Deleted …") — the open view repeats only the refusals. */
-  status: { text: string; undo?: () => void; failed?: boolean } | null;
+   *  ("Deleted …") — the open view repeats only the refusals.
+   *  `renameFirst`: sharing met a shared view with the same name, so the
+   *  open view offers Rename beside it. */
+  status: {
+    text: string;
+    undo?: () => void;
+    failed?: boolean;
+    renameFirst?: boolean;
+  } | null;
   dismissStatus: () => void;
   run: (action: SavedViewAction, view: SavedViewRow) => void;
 }
@@ -56,15 +64,20 @@ export function useSeasonSavedViews(): SeasonSavedViewActions {
     [],
   );
 
-  function say(text: string, undo?: () => void, failed = false) {
+  function say(
+    text: string,
+    undo?: () => void,
+    failed = false,
+    renameFirst = false,
+  ) {
     if (timer.current) clearTimeout(timer.current);
-    setStatus({ text, undo, failed });
+    setStatus({ text, undo, failed, renameFirst });
     timer.current = setTimeout(() => setStatus(null), STATUS_MS);
   }
 
   /** A change the server refused. */
-  function fail(text: string) {
-    say(text, undefined, true);
+  function fail(text: string, renameFirst = false) {
+    say(text, undefined, true, renameFirst);
   }
 
   function dismissStatus() {
@@ -147,11 +160,8 @@ export function useSeasonSavedViews(): SeasonSavedViewActions {
       startTransition(async () => {
         const result = await setSavedViewShared(view.id, shared);
         if (!result.ok) {
-          fail(
-            shared && result.error === "duplicate_name"
-              ? `A shared view is already called "${view.name}". Rename yours first.`
-              : FAILED,
-          );
+          const clash = shared && result.error === "duplicate_name";
+          fail(clash ? sharedNameClashMessage(view.name) : FAILED, clash);
           return;
         }
         router.refresh();

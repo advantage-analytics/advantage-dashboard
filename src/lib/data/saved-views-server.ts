@@ -71,11 +71,68 @@ export const getSavedViews = cache(
 
     const viewerId = auth.user.id;
 
+    const dbRows = (rows ?? []) as SavedViewDbRow[];
+    const creatorNames = await sharedViewCreatorNames(
+      supabase,
+      accountId,
+      dbRows,
+      viewerId,
+    );
+
     const result: SavedViewRow[] = [];
-    for (const row of (rows ?? []) as SavedViewDbRow[]) {
+    for (const row of dbRows) {
       const mapped = rowToSavedViewRow(row, viewerId);
-      if (mapped) result.push(mapped);
+      if (!mapped) continue;
+      const creatorName =
+        mapped.shared && !mapped.mine
+          ? (creatorNames.get(row.created_by) ?? null)
+          : undefined;
+      result.push(
+        creatorName === undefined ? mapped : { ...mapped, creatorName },
+      );
     }
     return result;
   },
 );
+
+/**
+ * Display names for the creators of shared views the viewer did not make —
+ * what "Shared by <name>" says. `users` RLS is own-row only, so the names
+ * come through `program_roster`, which answers any member of the program
+ * (`user_program_ids()`). Only asked when such a view exists, so a personal
+ * workspace (no shared views) never calls it. A failed read leaves every
+ * name out: the tag falls back to "a teammate" rather than failing the tab.
+ */
+async function sharedViewCreatorNames(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  accountId: string,
+  rows: readonly SavedViewDbRow[],
+  viewerId: string,
+): Promise<Map<string, string>> {
+  const wanted = new Set(
+    rows
+      .filter((r) => r.shared && r.created_by !== viewerId)
+      .map((r) => r.created_by),
+  );
+  if (wanted.size === 0) return new Map();
+
+  const { data, error } = await supabase.rpc("program_roster", {
+    p_program_id: accountId,
+  });
+  if (error) {
+    console.error("[saved-views] could not read creator names", {
+      error: error.message,
+    });
+    return new Map();
+  }
+
+  const names = new Map<string, string>();
+  for (const row of (data ?? []) as {
+    user_id: string;
+    display_name: string | null;
+  }[]) {
+    const name = row.display_name?.trim();
+    if (name && wanted.has(row.user_id)) names.set(row.user_id, name);
+  }
+  return names;
+}

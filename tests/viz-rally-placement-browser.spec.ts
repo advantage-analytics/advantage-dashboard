@@ -178,7 +178,9 @@ test("fullscreen marks can be selected by pointer and keyboard", async ({
   const beneath = fullscreenMark("low-p1-deep");
   await top.click();
   await expect(top).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("fullscreen")).toContainText("Point won");
+  await expect(page.getByTestId("fullscreen")).toContainText(
+    "Forehand, point won",
+  );
   // A click on the SELECTED mark is its second click: the court hands it
   // back to `onSelect` (the lightbox watches it; this harness toggles), it
   // does not step the stack.

@@ -182,6 +182,24 @@ export function AnalyzedCountPending() {
 }
 
 /**
+ * The title row's "N of M matches" picker while the season loads
+ * (`profile-match-scope.tsx`): one bar in a 32px box the button's width, so
+ * Ask and ⋯ do not move when it lands. The page's own `<Suspense>` fallback,
+ * and drawn the same way in the route skeleton.
+ */
+export function MatchScopePickerPending() {
+  return (
+    <PendingRegion
+      label="match picker"
+      className="flex h-8 w-[118px] shrink-0 items-center px-2.5"
+      innerClassName="w-full"
+    >
+      <PendingBar className="h-2.5 w-full" />
+    </PendingRegion>
+  );
+}
+
+/**
  * The real `<h1>` — the view's name is in the URL before the player is
  * loaded — over the facts line ("N matches" a bar, then the analyzed clause),
  * with Ask, the one action every viewer has, as a 32px square.
@@ -207,6 +225,7 @@ function TitleRowPending({ view }: { view: ProfileView }) {
         </div>
       </div>
       <MatchReportTitleActions>
+        <MatchScopePickerPending />
         <PendingBar className="size-8 rounded-[var(--radius-button)]" />
       </MatchReportTitleActions>
     </MatchReportTitleRow>

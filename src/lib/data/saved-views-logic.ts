@@ -49,7 +49,17 @@ export interface SavedView {
  * reason: Undo must refuse to restore a view the caller didn't create. See
  * that function's doc comment.
  */
-export type SavedViewRow = SavedView & { shared: boolean; mine: boolean };
+export type SavedViewRow = SavedView & {
+  shared: boolean;
+  mine: boolean;
+  /**
+   * The creator's display name, for a shared view someone else made — what
+   * its tag says ("Shared by Maya Chen", `sharedViewTag`). Filled by
+   * `getSavedViews` from `program_roster`; absent on the viewer's own views
+   * and on every view a loader could not name.
+   */
+  creatorName?: string | null;
+};
 
 /** Columns read from `public.saved_views`, as `SAVED_VIEW_COLUMNS` selects them. */
 export interface SavedViewDbRow {
@@ -107,8 +117,11 @@ export function filtersToParams(filters: unknown): URLSearchParams {
       // silently fail to round-trip through `parseVizState`.
       const paramKey = key === "set" ? "vset" : paramFor(key);
 
-      if (key === "player") {
-        // The one scalar filter, old or new shape alike.
+      if (key === "player" || key === "ends") {
+        // The two scalars, old or new shape alike. `ends` (which ends of a
+        // shot the court draws) travels as `vends`; a row saved before it
+        // existed has no such key, and one saved at its cut's default stores
+        // null — both skipped above, both read back as the default.
         params.set(paramKey, String(value));
         continue;
       }
@@ -159,7 +172,10 @@ export function validateVizInput(input: {
 
   const parsed = parseVizState(params);
 
-  if (parsed.cut === null || parsed.cut !== input.cut) return null;
+  // `returnContact` is still a storable id: it reads as Returns in Contact
+  // (`chartView`), which is what comes back.
+  const asked = input.cut === "returnContact" ? "returnPlacement" : input.cut;
+  if (parsed.cut === null || parsed.cut !== asked) return null;
   // Stored chart types must survive URL normalization unchanged.
   if (input.chart !== parsed.chart) return null;
 
@@ -475,6 +491,34 @@ export function bandVisibility(
 ): BandVisibility {
   if (viewCount > 0) return "full";
   return hasStatus ? "status-only" : "hidden";
+}
+
+/**
+ * The refusal sharing a view meets when a shared view already holds its
+ * name (`setSavedViewShared`'s `duplicate_name`). One sentence for both
+ * places it is said — the match report's Saved wall (`saved-views-band.tsx`)
+ * and the season page's (`use-season-saved-views.ts`) — and the open view
+ * pairs it with a Rename action.
+ */
+export function sharedNameClashMessage(name: string): string {
+  return `A shared view is already called “${name}”. Rename yours first.`;
+}
+
+/**
+ * The tag beside an open shared view's title: "Shared with team" for its
+ * creator, "Shared by <name>" for a teammate (the creator's name as
+ * `getSavedViews` found it, or "a teammate" when it could not). A private
+ * view has no tag.
+ */
+export function sharedViewTag(view: {
+  shared: boolean;
+  mine: boolean;
+  creatorName?: string | null;
+}): string | null {
+  if (!view.shared) return null;
+  if (view.mine) return "Shared with team";
+  const name = view.creatorName?.trim();
+  return `Shared by ${name ? name : "a teammate"}`;
 }
 
 /** One row of the ⋯ tile menu, in the order `manage-tile-menu.tsx` draws them. */

@@ -1,25 +1,34 @@
 "use client";
 
+import { useState } from "react";
 import { MoveVertical } from "lucide-react";
 
 import {
+  FloatMenu,
   FloatMenuDivider,
   FloatMenuItem,
   FloatMenuLabel,
   FloatMenuNote,
 } from "@/components/ui/float-menu";
 import { formatDistanceValue } from "@/lib/format/distance";
-import { depthPresets, type DepthScheme } from "@/lib/data/viz-bands";
+import {
+  depthPresets,
+  type BandSettings,
+  type DepthScheme,
+} from "@/lib/data/viz-bands";
 import type { DistanceUnit } from "@/lib/format/distance";
 
 import { useVizBands } from "./viz-bands-context";
 import type { Cut } from "./viz-model";
 import { bandKindFor } from "./cut-kinds";
+import { VizMenuTrigger } from "./viz-labels";
 
 /**
- * The bands rows of the lightbox's chart menu (`chart-menu.tsx`) — once the
- * fullscreen viewer's own bottom-slab menu (Phase 2B, Task 3; spec Appendix
- * P2l), moved into the chart menu when the lightbox replaced the viewer.
+ * The lightbox's bands menu (`VizBandsMenu`, beside the legend) and its rows
+ * (`VizBandsMenuRows`) — once the fullscreen viewer's own bottom-slab menu
+ * (Phase 2B, Task 3; spec Appendix P2l), then a section of the chart menu,
+ * and split back out to its own trigger (plan 2026-11-25 §4, boards
+ * Returns-split / Returns-split-bands).
  *
  * It only exists on the three return cuts: `returnPlacement` reads DEPTH
  * bands (where the return landed, far half), `returnContact`/`rallyPosition`
@@ -88,7 +97,7 @@ function contactDividersLabel(
  * "Edit bands…" and the note saying whose bands they are. Renders nothing on
  * a cut without bands. `close` shuts the menu it sits in.
  */
-export function VizBandsMenuRows({
+function VizBandsMenuRows({
   cut,
   onEdit,
   close,
@@ -204,5 +213,77 @@ export function VizBandsMenuRows({
             : READ_ONLY_NOTE}
       </FloatMenuNote>
     </>
+  );
+}
+
+/**
+ * The current setting in words, for the trigger: "No bands", the depth
+ * preset's own label, "Custom" for dragged depth dividers, or the two
+ * contact dividers.
+ */
+function bandsChoiceLabel(
+  kind: "depth" | "contact",
+  bands: BandSettings,
+  contactHidden: boolean,
+  unit: DistanceUnit,
+): string {
+  if (kind === "contact") {
+    return contactHidden
+      ? "No bands"
+      : contactDividersLabel(unit, bands.contactDividersFt).toLowerCase();
+  }
+  if (bands.depthScheme === "none") return "No bands";
+  if (bands.depthScheme === "custom") return "Custom";
+  return (
+    depthPresets(unit).find((p) => p.scheme === bands.depthScheme)?.label ??
+    "Custom"
+  );
+}
+
+/**
+ * The bands menu beside the legend: a "Bands · <current choice>" trigger
+ * opening `VizBandsMenuRows`. Renders nothing on a cut without bands (serve,
+ * errors), so those charts draw no trigger at all. The menu is named for
+ * the bands it holds — "Depth bands" on a placement cut, "Contact bands" on
+ * a contact cut.
+ */
+export function VizBandsMenu({
+  cut,
+  onEditBands,
+}: {
+  cut: Cut;
+  /** Opens the band editor; without it "Edit bands…" is disabled. */
+  onEditBands?: () => void;
+}) {
+  const { bands, unit, contactHidden } = useVizBands();
+  const [open, setOpen] = useState(false);
+
+  const kind = bandKindFor(cut);
+  if (kind === null) return null;
+
+  return (
+    <FloatMenu
+      open={open}
+      onOpenChange={setOpen}
+      width={272}
+      side="top"
+      tone="light"
+      sideOffset={6}
+      align="start"
+      label={kind === "depth" ? "Depth bands" : "Contact bands"}
+      trigger={
+        <VizMenuTrigger
+          icon={MoveVertical}
+          label={`Bands · ${bandsChoiceLabel(kind, bands, contactHidden, unit)}`}
+          open={open}
+        />
+      }
+    >
+      <VizBandsMenuRows
+        cut={cut}
+        onEdit={onEditBands}
+        close={() => setOpen(false)}
+      />
+    </FloatMenu>
   );
 }

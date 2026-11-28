@@ -13,8 +13,13 @@ import {
   EMPTY_VIZ_FILTERS,
   chartAllowedOn,
   collapseErrorFilter,
+  COURT_ENDS,
+  courtEndsFor,
   filterKeysFor,
+  storedCourtEnds,
+  withCourtEnds,
   type Chart,
+  type CourtEnds,
   type Cut,
   type ErrorValue,
   type PlayerFilter,
@@ -76,6 +81,14 @@ export function sameView(
 
   if (current.cut !== candidate.cut) return false;
   if (current.chart !== candidate.chart) return false;
+  // Which ends the court draws, as resolved: a candidate that says nothing
+  // (a default tile, an old saved row) is its cut's default.
+  if (
+    courtEndsFor(candidate.cut, current.filters) !==
+    courtEndsFor(candidate.cut, candidate.filters)
+  ) {
+    return false;
+  }
 
   for (const key of filterKeysFor(candidate.cut)) {
     if (!sameFilterValue(key, current.filters, candidate.filters)) {
@@ -89,7 +102,8 @@ export function sameView(
 /**
  * Whether `a` and `b` agree on one `VizFilters` key: `player` by value,
  * `match` by `filtersEqual` (a candidate built before advanced filters
- * existed may carry none — read as EMPTY), every list group as a set.
+ * existed may carry none — read as EMPTY), `ends` as stored (absent reads
+ * as `null`, the cut's default), every list group as a set.
  */
 export function sameFilterValue(
   key: keyof VizFilters,
@@ -97,6 +111,7 @@ export function sameFilterValue(
   b: VizFilters,
 ): boolean {
   if (key === "player") return a.player === b.player;
+  if (key === "ends") return (a.ends ?? null) === (b.ends ?? null);
   if (key === "match") {
     return filtersEqual(
       a.match ?? EMPTY_VIZ_FILTERS.match,
@@ -130,8 +145,12 @@ function sameValues(a: readonly unknown[], b: readonly unknown[]): boolean {
  * enter the key, because none of them change WHICH court is drawn, only
  * what's plotted on it. Different whenever `cut` changes (a different
  * court shape), `filters.player` changes (a different subject's court —
- * "you" vs the opponent), or `viewId` changes (a different saved view,
- * even one that happens to share cut/player with the view left behind).
+ * "you" vs the opponent), `viewId` changes (a different saved view,
+ * even one that happens to share cut/player with the view left behind), or
+ * the ends the court draws change (`courtEndsFor`: Returns in Contact is a
+ * different court from Returns in Placement, and each needs its own tile).
+ * The ends enter resolved, so a state that leaves them unsaid and one that
+ * names the cut's default share a key; Serves, which has none, adds nothing.
  * `null` on the wall (`cut === null`): there is no single court to name.
  *
  * A `:draft` suffix when `state.draft === true` — the blank "Create
@@ -145,7 +164,9 @@ function sameValues(a: readonly unknown[], b: readonly unknown[]): boolean {
 export function viewIdentityKey(state: VizState): string | null {
   if (state.cut === null) return null;
   const draftSuffix = state.draft === true ? ":draft" : "";
-  return `${state.filters.player}:${state.cut}:${state.viewId ?? ""}${draftSuffix}`;
+  const ends = courtEndsFor(state.cut, state.filters);
+  const endsSuffix = ends === null ? "" : `:${ends}`;
+  return `${state.filters.player}:${state.cut}:${state.viewId ?? ""}${endsSuffix}${draftSuffix}`;
 }
 
 /**
@@ -347,18 +368,111 @@ export function withoutSeasonFilters(state: VizState): VizState {
   return next;
 }
 
+/** The four URL params one set of match filters travels as. */
+interface SeasonFilterParams {
+  hand: string;
+  result: string;
+  surface: string;
+  match: string;
+}
+
+const LIGHTBOX_SEASON_PARAMS: SeasonFilterParams = {
+  hand: SEASON_HAND_PARAM,
+  result: SEASON_RESULT_PARAM,
+  surface: SEASON_SURFACE_PARAM,
+  match: SEASON_MATCH_PARAM,
+};
+
 function parseSeasonFilters(
   params: URLSearchParams,
+  names: SeasonFilterParams = LIGHTBOX_SEASON_PARAMS,
 ): SeasonFilters | undefined {
-  const hand = params.get(SEASON_HAND_PARAM);
+  const hand = params.get(names.hand);
   return normalizeSeasonFilters({
     opponentHand: OPPONENT_HAND_FILTERS.includes(hand as OpponentHandFilter)
       ? (hand as OpponentHandFilter)
       : null,
-    result: params.get(SEASON_RESULT_PARAM) as SeasonResultFilter | null,
-    surface: params.get(SEASON_SURFACE_PARAM) as SeasonSurface | null,
-    matches: params.getAll(SEASON_MATCH_PARAM),
+    result: params.get(names.result) as SeasonResultFilter | null,
+    surface: params.get(names.surface) as SeasonSurface | null,
+    matches: params.getAll(names.match),
   });
+}
+
+/** `season`, canonical (ids sorted, so one selection is one query string
+ *  whatever order the ticks came in), written onto `params` under `names`. */
+function writeSeasonFilters(
+  params: URLSearchParams,
+  season: SeasonFilters | null | undefined,
+  names: SeasonFilterParams,
+): void {
+  const canonical = normalizeSeasonFilters(season);
+  if (!canonical) return;
+  if (canonical.opponentHand !== null)
+    params.set(names.hand, canonical.opponentHand);
+  if (canonical.result) params.set(names.result, canonical.result);
+  if (canonical.surface) params.set(names.surface, canonical.surface);
+  for (const id of canonical.matches) params.append(names.match, id);
+}
+
+/* ── The player page's match scope ──────────────────────────────────────── */
+
+/**
+ * The player page's own match scope (plan §9, decision C4): which matches of
+ * the season BOTH of its bodies — Statistics and the Visualizations wall —
+ * are computed from. The same shape as the lightbox's `SeasonFilters`, under
+ * its own names, for two reasons:
+ *
+ * - `?vopp=` / `?vres=` / `?vsurf=` / `?vm=` are viz keys (`VIZ_KEYS`): the
+ *   store deletes them on every write and never writes them on the wall, so a
+ *   scope under those names would be gone the moment a card closed or the
+ *   wall's You | Opponent was pressed. These four are NOT viz keys, so
+ *   `vizStateQuery` carries them through like `tab`, and the tab switch
+ *   (`profileViewQuery`) carries every parameter.
+ * - An opened card keeps its own Matches row. It STARTS at the page's scope
+ *   (the wall's cards carry it into `VizState.season` —
+ *   `buildSeasonCards`), and a reader may then widen or narrow that one card
+ *   without rewriting the page's scope under it.
+ */
+export const SCOPE_HAND_PARAM = "sopp";
+export const SCOPE_RESULT_PARAM = "sres";
+export const SCOPE_SURFACE_PARAM = "ssurf";
+export const SCOPE_MATCH_PARAM = "sm";
+
+const MATCH_SCOPE_PARAMS: SeasonFilterParams = {
+  hand: SCOPE_HAND_PARAM,
+  result: SCOPE_RESULT_PARAM,
+  surface: SCOPE_SURFACE_PARAM,
+  match: SCOPE_MATCH_PARAM,
+};
+
+/** Every param the page's match scope travels as. */
+export const MATCH_SCOPE_KEYS: readonly string[] =
+  Object.values(MATCH_SCOPE_PARAMS);
+
+/** The URL's match scope, canonical (`normalizeSeasonFilters`), or
+ *  `undefined` when the URL names none — the whole season. Garbage reads as
+ *  none; an id is shape-checked only, and the server keeps the ones that are
+ *  matches of this season (`scopeSeasonMatches`). */
+export function parseMatchScope(
+  params: URLSearchParams,
+): SeasonFilters | undefined {
+  return parseSeasonFilters(params, MATCH_SCOPE_PARAMS);
+}
+
+/**
+ * `params` with the match scope set to `scope` — every other parameter kept,
+ * ids sorted so one scope is one query string. `undefined` (or a scope with
+ * nothing on) clears it: the bare URL is the whole season. Returns a new
+ * string; `params` is never mutated.
+ */
+export function matchScopeQuery(
+  params: URLSearchParams,
+  scope: SeasonFilters | null | undefined,
+): string {
+  const next = new URLSearchParams(params.toString());
+  for (const key of MATCH_SCOPE_KEYS) next.delete(key);
+  writeSeasonFilters(next, scope, MATCH_SCOPE_PARAMS);
+  return next.toString();
 }
 
 /* ── Parse & serialize helper ──────────────────────────────────────────── */
@@ -375,7 +489,11 @@ export const OPTIONS = {
   ball: { first: "1st", second: "2nd" },
   court: { deuce: "Deuce", ad: "Ad" },
   zone: { t: "T", body: "Body", wide: "Wide" },
-  pressure: { break: "Break points", setMatch: "Set & match points" },
+  pressure: {
+    pressure: "Pressure points",
+    break: "Break points",
+    setMatch: "Set & match points",
+  },
   result: { won: "Won", lost: "Lost", ace: "Aces" },
   rally: { short: "1–4 shots", medium: "5–8 shots", long: "9+ shots" },
   error: {
@@ -459,7 +577,7 @@ function modelValueFor(key: string, word: string): string | null {
  * The word for the one option an unjudged match's Error type offers in place
  * of Unforced / Forced (`errorOptionsFor`), and its applied-strip token.
  */
-export const UNJUDGED_ERRORS_LABEL = "Errors";
+export const UNJUDGED_ERRORS_LABEL = "Rally errors";
 
 /** One Error type pill: the values it toggles together, and its word. */
 export interface ErrorOption {
@@ -487,6 +605,19 @@ export function errorOptionsFor(errorSplitJudged: boolean): ErrorOption[] {
   ];
 }
 
+/**
+ * An Error type option as an Errors toolbar chip: short beside "All" (the
+ * Errors board reads All · Unforced · Forced · Double faults). The strip,
+ * the wall's card names and Advanced filters keep the full words.
+ */
+export function errorChipLabel(option: ErrorOption): string {
+  if (option.values.length === 1) {
+    if (option.values[0] === "unforced") return "Unforced";
+    if (option.values[0] === "forced") return "Forced";
+  }
+  return option.label;
+}
+
 const ORDER = [
   "player",
   "ball",
@@ -511,6 +642,13 @@ const ORDER = [
 export const VIZ_MATCH_FILTERS_PARAM = "vf";
 
 /**
+ * The URL param `VizFilters.ends` travels as: `placement`, `contact` or
+ * `both`. Never `view` — that is the saved-view id. Written only when the
+ * value is not the cut's default (`storedCourtEnds`), and never on Serves.
+ */
+export const COURT_ENDS_PARAM = "vends";
+
+/**
  * The URL param a filter key travels as. `error` is namespaced to `verr`
  * for the same reason `set` is to `vset` (below): a bare `?error=` is the
  * kind of name an auth or redirect flow puts on the page, and every viz
@@ -522,6 +660,7 @@ const NAMESPACED_PARAMS: Readonly<Record<string, string>> = {
   entry: "ventry",
   approachTo: "vto",
   approachDir: "vdir",
+  ends: COURT_ENDS_PARAM,
 };
 
 export function paramFor(key: string): string {
@@ -581,6 +720,7 @@ const VIZ_KEYS = [
   // `&fullscreen=1` link is cleaned off the URL by the next update.
   "fullscreen",
   VIZ_MATCH_FILTERS_PARAM,
+  COURT_ENDS_PARAM,
   ...ORDER.map(paramFor),
 ];
 
@@ -758,7 +898,9 @@ export function parseVizState(
     cutParam === "errors" ||
     cutParam === "approaches"
   ) {
-    cut = cutParam;
+    // Returns is one chart: the old contact id reads as Returns, and
+    // `parseFilters` sets its ends to Contact (`chartView`).
+    cut = cutParam === "returnContact" ? "returnPlacement" : cutParam;
   }
 
   // Stays "scatter" — the default — when the requested chart is unknown, the
@@ -900,28 +1042,31 @@ export function vizStateQuery(
     if (match) next.set(VIZ_MATCH_FILTERS_PARAM, match);
   }
 
-  // The season's own filters, canonical (ids sorted) so one selection is
-  // one query string whatever order the ticks came in.
-  const season = normalizeSeasonFilters(state.season);
-  if (season) {
-    if (season.opponentHand !== null)
-      next.set(SEASON_HAND_PARAM, season.opponentHand);
-    if (season.result) next.set(SEASON_RESULT_PARAM, season.result);
-    if (season.surface) next.set(SEASON_SURFACE_PARAM, season.surface);
-    for (const id of season.matches) next.append(SEASON_MATCH_PARAM, id);
-  }
+  // Which ends the court draws: only a choice away from the cut's default,
+  // so one court is one query string. Serves never writes one.
+  const ends = storedCourtEnds(state.cut, state.filters.ends);
+  if (ends !== null) next.set(COURT_ENDS_PARAM, ends);
+
+  // The season's own filters.
+  writeSeasonFilters(next, state.season, LIGHTBOX_SEASON_PARAMS);
 
   return next.toString();
 }
 
 /**
  * Every filter key back to `EMPTY_VIZ_FILTERS` — `player` included — and
- * `viewId` cleared, keeping `cut`/`chart` as-is. The one "Clear"/"Clear all"
+ * `viewId` cleared, keeping `cut`/`chart` as-is, and `ends` too: which ends
+ * the court draws is not a filter, so clearing filters leaves it alone. The one "Clear"/"Clear all"
  * behavior both `applied-strip.tsx` and `filters-popover.tsx` need, pulled
  * out here so the two don't carry verbatim copies of the same object spread.
  */
 export function clearedFilters(state: VizState): VizState {
-  return { ...state, filters: EMPTY_VIZ_FILTERS, viewId: null };
+  const ends = state.filters.ends ?? null;
+  return {
+    ...state,
+    filters: ends === null ? EMPTY_VIZ_FILTERS : { ...EMPTY_VIZ_FILTERS, ends },
+    viewId: null,
+  };
 }
 
 /**
@@ -997,6 +1142,10 @@ function withoutWinningFilters(filters: VizFilters): VizFilters {
  * since those still mean something off serve.
  */
 export function carryFilters(filters: VizFilters, nextCut: Cut): VizFilters {
+  // Which ends the court draws carries as a choice, re-read against the new
+  // cut: dropped on Serves, and dropped where it is that cut's own default
+  // (Both, carried onto Approaches). Unsaid stays unsaid — each cut's default.
+  filters = withCourtEnds(filters, nextCut, filters.ends ?? null);
   // Error kinds only mean something on the errors cut.
   if (nextCut !== "errors" && filters.error?.length) {
     filters = { ...filters, error: [] };
@@ -1086,6 +1235,10 @@ export function activeFilterEntries(
     /** Contact and Landed in name the viewer's bands ("return struck 0–5
      *  ft behind"). Omitted, the default bands in feet. */
     bandLabels?: FilterBandLabels;
+    /** The player chips' words (`PlayerChipLabels`) for who won a point,
+     *  so a Result token reads as the legend beside it does ("Park won",
+     *  "You won"). Omitted, `names`. */
+    winnerNames?: PhraseNames;
   } = {},
 ): ActiveFilterEntry[] {
   if (state.cut === null) {
@@ -1126,8 +1279,21 @@ export function activeFilterEntries(
     }
 
     const values = state.filters[key] as readonly string[];
+    const chip = options.winnerNames ?? names;
+    const winners =
+      key === "result"
+        ? state.filters.player === "you"
+          ? { won: chip.you, lost: chip.opponent }
+          : { won: chip.opponent, lost: chip.you }
+        : null;
     for (const value of values) {
-      result.push({ key, value, label: getLabel(key, value) });
+      // Won / Lost are the CHARTED player's (as the legend's are), so the
+      // token names who won the point — "Kim won", never a bare "Won".
+      const label =
+        winners && (value === "won" || value === "lost")
+          ? `${winners[value]} won`
+          : getLabel(key, value);
+      result.push({ key, value, label });
     }
   }
 
@@ -1229,6 +1395,16 @@ function parseFilters(params: URLSearchParams, cut: Cut | null): VizFilters {
   }
 
   filters.match = parseMatchFilters(params.get(VIZ_MATCH_FILTERS_PARAM));
+
+  // Which ends the court draws. The wall has no court, so no value; on a
+  // cut, `storedCourtEnds` keeps only a real choice away from its default.
+  const endsParam = params.get(COURT_ENDS_PARAM);
+  if (cut !== null && COURT_ENDS.includes(endsParam as CourtEnds)) {
+    filters.ends = storedCourtEnds(cut, endsParam as CourtEnds);
+  }
+  // `cut=returnContact` is Returns in Contact, whatever else the link says:
+  // the id never carried a choice of ends, it was the choice.
+  if (params.get("cut") === "returnContact") filters.ends = "contact";
 
   return filters;
 }
