@@ -17,7 +17,9 @@ import {
 } from "react";
 import {
   labelProgress,
+  isLetServe,
   isMissedResult,
+  isReplayedServe,
   liveShotsInOrder,
   orderLabelShots,
   type LabelErrorKind,
@@ -3800,7 +3802,25 @@ export function LabelConsole({
       const shot = keyShot((s) => patchFor(s) !== null);
       const patch = shot && patchFor(shot);
       if (!shot || !patch) return false;
-      requestPatchShot(shot.id, patch);
+      // L again takes a let back. Unless the serve is still one hit again (a
+      // first serve its landing reads out), the swings the let removed
+      // before the replay come back with it (`deadBallRun`), after the let's
+      // own write has landed — as N does for a miss.
+      const owner = pointOfShot(points, shot.id);
+      const run =
+        owner &&
+        isLetServe(shot) &&
+        "result" in patch &&
+        !isReplayedServe({ stroke: shot.stroke, result: patch.result ?? null })
+          ? deadBallRun(owner.shots, shot.id, drawsGhosts(marks))
+          : [];
+      if (!owner || run.length === 0) {
+        requestPatchShot(shot.id, patch);
+        return true;
+      }
+      void patchShot(shot.id, patch).then((saved) => {
+        if (saved) restoreShots(owner.id, run);
+      });
       return true;
     };
     // N calls the selected stroke Net, and again gives it back the result its

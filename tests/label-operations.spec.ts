@@ -466,6 +466,37 @@ test.describe("dead balls after a ball marked out", () => {
     ]);
     // They go as hit after a fault.
     expect(deadBallReason("first_serve")).toBe("dead_ball_after_fault");
+
+    // Taking the let back puts back exactly what it took: the run stops at
+    // the replay, and only while every stroke before it is a fault tombstone.
+    const removed = marked("let").map((r) =>
+      r.id === "l-2" || r.id === "l-3"
+        ? {
+            ...r,
+            status: "deleted" as const,
+            statusBeforeDelete: "kept" as const,
+            deleteReason: "dead_ball_after_fault" as const,
+          }
+        : r,
+    );
+    expect(deadBallRun(removed, "l-1", true)).toEqual(["l-2", "l-3"]);
+    // A stroke deleted for another reason, or one still live: nothing.
+    expect(
+      deadBallRun(
+        removed.map((r) =>
+          r.id === "l-3" ? { ...r, deleteReason: "not_a_stroke" as const } : r,
+        ),
+        "l-1",
+        true,
+      ),
+    ).toEqual([]);
+    expect(
+      deadBallRun(
+        removed.map((r) => (r.id === "l-3" ? rows[2] : r)),
+        "l-1",
+        true,
+      ),
+    ).toEqual([]);
   });
 
   test("a second serve newly out or in the net is a double fault: the strokes after it go and the ending follows; a first serve's fault takes nothing", () => {
