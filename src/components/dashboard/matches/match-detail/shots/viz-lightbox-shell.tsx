@@ -98,7 +98,7 @@ import {
   editorContext,
 } from "./viz-bands-editor";
 import type { VizBandsOverlayProps } from "./viz-bands-overlay";
-import { legendItemsFor } from "./viz-labels";
+import { legendItemsFor, withOutcomeNames } from "./viz-labels";
 import { isMarkRovingKey } from "./viz-mark-roving";
 import { notDrawnNote } from "./wall-summary";
 import {
@@ -1000,7 +1000,12 @@ export function VizLightboxShell({
           many: approachNoun(filters.entry, 2),
         }
       : undefined;
-  const legend = legendItemsFor(cut, chart);
+  // Named for who won the point, by the player chips' words ("JR won").
+  const legend = withOutcomeNames(
+    legendItemsFor(cut, chart),
+    player?.value,
+    player?.labels,
+  );
   const heat = chart === "heat";
 
   function clearFilters() {
@@ -1012,7 +1017,12 @@ export function VizLightboxShell({
   // The strip's sentence: the host's filters, then the legend's pick and a
   // Statistics row — so nothing narrows or widens the court unseen.
   const phrases = [...filterPhrases];
-  if (legendPick !== null) phrases.push(LEGEND_WORD[legendPick]);
+  if (legendPick !== null)
+    // A won / lost pick says who won, in the legend's own words ("Kim won").
+    phrases.push(
+      legend.find((item) => item.key === legendPick)?.label ??
+        LEGEND_WORD[legendPick],
+    );
   if (activeStatPick !== null) phrases.push(activeStatPick.label);
   useEffect(() => {
     phrasesRef.current = phrases;

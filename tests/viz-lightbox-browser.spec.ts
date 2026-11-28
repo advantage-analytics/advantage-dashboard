@@ -52,7 +52,9 @@ test("a reader who is not the player sees two surnames, never You: the wall's ch
   await page.goto(`${origin}/?tab=shots&observer=1`);
   const wallChips = page.locator('[role="group"][aria-label="Player"] button');
   await expect(wallChips).toHaveText(["Kim", "Rivera"]);
-  await expect(page.getByRole("button", { name: "You" })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "You", exact: true }),
+  ).toHaveCount(0);
   await expect(wallChips.first()).toHaveAttribute("aria-pressed", "true");
 
   await page.getByRole("link", { name: /^All serves, Avery Kim/ }).click();
@@ -61,7 +63,7 @@ test("a reader who is not the player sees two surnames, never You: the wall's ch
   await expect(
     dialog.locator('[role="group"][aria-label="Player"] button'),
   ).toHaveText(["Kim", "Rivera"]);
-  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
   await expect(page).toHaveURL(/player=opponent/);
   await expect(dialog).toContainText("Serve placement · Rivera ·");
 });
@@ -72,16 +74,15 @@ test("a player switched inside the lightbox does not leak onto the wall", async 
   await page.goto(`${origin}/?tab=shots&cut=serve&ball=first`);
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
   await expect(page).toHaveURL(/player=opponent/);
   await expect(dialog).toContainText("Serve placement · Rivera");
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page).not.toHaveURL(/player=opponent/);
-  await expect(page.getByRole("button", { name: "You" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(
+    page.getByRole("button", { name: "You", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
 });
 
 test("Watch these N points follows the marks and needs a playable video", async ({
@@ -229,16 +230,16 @@ test("the legend filters by outcome, one key at a time, and the strip says so", 
   const legend = dialog.getByRole("group", { name: "Filter by outcome" });
   const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
   const all = await marks.count();
-  const won = legend.getByRole("button", { name: /^Won/ });
+  const won = legend.getByRole("button", { name: / won\b/ }).first();
   const wonCount = Number((await won.textContent())!.replace(/\D/g, ""));
   await won.click();
   await expect(won).toHaveAttribute("aria-pressed", "true");
   await expect(marks).toHaveCount(wonCount);
-  await expect(legend.getByRole("button", { name: /^Lost/ })).toHaveClass(
-    /opacity-35/,
-  );
+  await expect(
+    legend.getByRole("button", { name: / won\b/ }).nth(1),
+  ).toHaveClass(/opacity-35/);
   const strip = dialog.locator("[data-viz-filter-strip]");
-  await expect(strip).toContainText("Won");
+  await expect(strip).toContainText(/\S+ won/);
   await expect(strip).toContainText(/\d+ of \d+ points?/);
   await expect(
     strip.getByRole("button", { name: "Clear filter" }),
@@ -807,16 +808,17 @@ test("the legend's pick survives a You / Opponent switch but not a cut change", 
   await page.goto(`${origin}/?tab=shots&cut=serve`);
   const dialog = page.getByRole("dialog");
   const legend = dialog.getByRole("group", { name: "Filter by outcome" });
-  await legend.getByRole("button", { name: /^Won/ }).click();
-  await expect(legend.getByRole("button", { name: /^Won/ })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  await dialog.getByRole("button", { name: "Rivera" }).click();
-  await expect(legend.getByRole("button", { name: /^Won/ })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await legend
+    .getByRole("button", { name: / won\b/ })
+    .first()
+    .click();
+  await expect(
+    legend.getByRole("button", { name: / won\b/ }).first(),
+  ).toHaveAttribute("aria-pressed", "true");
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
+  await expect(
+    legend.getByRole("button", { name: / won\b/ }).first(),
+  ).toHaveAttribute("aria-pressed", "true");
   // A different cut under the same card (the chart menu's Placement →
   // Contact does this; a Back/Forward entry does too) lets go of it.
   await page.evaluate(() => {
@@ -824,10 +826,9 @@ test("the legend's pick survives a You / Opponent switch but not a cut change", 
     window.dispatchEvent(new PopStateEvent("popstate"));
   });
   await expect(dialog).toContainText("Rally placement");
-  await expect(legend.getByRole("button", { name: /^Won/ })).toHaveAttribute(
-    "aria-pressed",
-    "false",
-  );
+  await expect(
+    legend.getByRole("button", { name: / won\b/ }).first(),
+  ).toHaveAttribute("aria-pressed", "false");
   const marks = dialog.locator("[data-court-stage] [data-viz-mark]");
   await expect(marks).toHaveCount(6);
 });
@@ -887,7 +888,7 @@ test("1 · a filter edit or a player switch keeps the lightbox mounted: popover,
   await page.keyboard.press("Enter");
   const dialog = page.getByRole("dialog", { name: "All serves" });
   const legend = dialog.getByRole("group", { name: "Filter by outcome" });
-  const won = legend.getByRole("button", { name: /^Won/ });
+  const won = legend.getByRole("button", { name: / won\b/ }).first();
   await won.click();
   await dialog.getByRole("button", { name: "Filters" }).click();
   const panel = page.getByRole("dialog", { name: "Filter the court" });
@@ -897,7 +898,7 @@ test("1 · a filter edit or a player switch keeps the lightbox mounted: popover,
   await expect(won).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("Escape");
   await dialog.getByRole("button", { name: "Statistics" }).click();
-  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
   await expect(won).toHaveAttribute("aria-pressed", "true");
   await expect(
     dialog.getByRole("button", { name: "Statistics" }),
@@ -969,7 +970,7 @@ test("7 · a filter the panel doesn't edit (a link's Result) is named in the str
   await page.goto(`${origin}/?tab=shots&cut=serve&result=won`);
   const dialog = page.getByRole("dialog");
   const strip = dialog.locator("[data-viz-filter-strip]");
-  await expect(strip).toContainText("Won");
+  await expect(strip).toContainText(/\S+ won/);
   await strip.getByRole("button", { name: "Clear filter" }).click();
   await expect(strip).toHaveCount(0);
   await expect(page).not.toHaveURL(/result=won/);
@@ -982,7 +983,10 @@ test("4 · a legend or Statistics pick is dropped on a switch, not hidden until 
   await page.goto(`${origin}/?tab=shots&cut=serve`);
   const dialog = page.getByRole("dialog");
   const legend = dialog.getByRole("group", { name: "Filter by outcome" });
-  await legend.getByRole("button", { name: /^Won/ }).click();
+  await legend
+    .getByRole("button", { name: / won\b/ })
+    .first()
+    .click();
   const go = (q: string) =>
     page.evaluate((query) => {
       window.history.pushState(null, "", `/?tab=shots&${query}`);
@@ -992,10 +996,9 @@ test("4 · a legend or Statistics pick is dropped on a switch, not hidden until 
   await expect(dialog).toContainText("Rally placement");
   await go("cut=serve");
   await expect(dialog).toContainText("Serve placement");
-  await expect(legend.getByRole("button", { name: /^Won/ })).toHaveAttribute(
-    "aria-pressed",
-    "false",
-  );
+  await expect(
+    legend.getByRole("button", { name: / won\b/ }).first(),
+  ).toHaveAttribute("aria-pressed", "false");
   // A Statistics row, You → Opponent → You.
   await dialog.getByRole("button", { name: "Statistics" }).click();
   const row = dialog
@@ -1003,8 +1006,8 @@ test("4 · a legend or Statistics pick is dropped on a switch, not hidden until 
     .first();
   await row.click();
   await expect(row).toHaveAttribute("aria-pressed", "true");
-  await dialog.getByRole("button", { name: "Rivera" }).click();
-  await dialog.getByRole("button", { name: "You" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
+  await dialog.getByRole("button", { name: "You", exact: true }).click();
   await expect(
     dialog.locator('button[aria-pressed="true"][aria-label$="points won"]'),
   ).toHaveCount(0);
@@ -1021,7 +1024,8 @@ test("5 · a legend pick is let go on a switch to Heat, so nothing narrows the c
   const all = await marks.count();
   await dialog
     .getByRole("group", { name: "Filter by outcome" })
-    .getByRole("button", { name: /^Won/ })
+    .getByRole("button", { name: / won\b/ })
+    .first()
     .click();
   await dialog.getByRole("button", { name: "Scatter" }).click();
   await page.getByRole("menuitemradio", { name: /Heat/ }).click();
@@ -1038,7 +1042,7 @@ test("6 · an edited saved view closes back onto the Saved collection", async ({
   const dialog = page.getByRole("dialog", { name: "Saved serve" });
   await expect(dialog).toBeVisible();
   // An edit writes viewId: null.
-  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
   await expect(page).not.toHaveURL(/view=sv1/);
   await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
   await expect(
@@ -1161,7 +1165,7 @@ test("R3·5 · Watch names the player in the Video strip when the points are the
 }) => {
   await page.goto(`${origin}/?tab=shots&cut=serve&ball=first&fixture=watchall`);
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
   await expect(page).toHaveURL(/player=opponent/);
   await dialog.getByRole("button", { name: /^Watch these/ }).click();
   await expect(page).toHaveURL(/tab=film/);
@@ -1184,7 +1188,7 @@ test("R3·3 · Watch → Video → Back keeps the wall's player and collection",
   await page.goto(`${origin}/?tab=shots&fixture=watchall`);
   const dialog = page.getByRole("dialog");
   // The Opponent's wall, a card of theirs, and Watch.
-  await page.getByRole("button", { name: "Rivera" }).click();
+  await page.getByRole("button", { name: "Rivera", exact: true }).click();
   await page.getByRole("link", { name: /^All serves, Blake Rivera/ }).click();
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: /^Watch these/ }).click();
@@ -1195,17 +1199,16 @@ test("R3·3 · Watch → Video → Back keeps the wall's player and collection",
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Close" }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Rivera" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  await expect(
+    page.getByRole("button", { name: "Rivera", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   // An edited saved view (no `view=` left in its URL) still closes on Saved.
   await page.getByRole("button", { name: "Saved", exact: true }).click();
   // The Saved wall shows one player's views: "Saved serve" is one of yours.
   await page.getByRole("button", { name: "You", exact: true }).click();
   await page.getByRole("link", { name: /Saved serve/ }).click();
   await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
   await expect(page).not.toHaveURL(/view=sv1/);
   await dialog.getByRole("button", { name: /^Watch these/ }).click();
   await expect(page).toHaveURL(/tab=film/);
@@ -1229,7 +1232,8 @@ test("R3·4 · Back/Forward between two saved views starts each fresh: pane, zoo
   // Everything that is the view's own: a pick, a zoom, the Points pane.
   await first
     .getByRole("group", { name: "Filter by outcome" })
-    .getByRole("button", { name: /^Won/ })
+    .getByRole("button", { name: / won\b/ })
+    .first()
     .click();
   await first.getByRole("button", { name: "Zoom in" }).click();
   await first.getByRole("button", { name: "Points", exact: true }).click();
@@ -1260,7 +1264,8 @@ test("R3·4 · Back/Forward between two saved views starts each fresh: pane, zoo
   await expect(
     first
       .getByRole("group", { name: "Filter by outcome" })
-      .getByRole("button", { name: /^Won/ }),
+      .getByRole("button", { name: / won\b/ })
+      .first(),
   ).toHaveAttribute("aria-pressed", "false");
 });
 
@@ -1292,7 +1297,8 @@ test("R3·7 · a saved view is its own baseline: nothing applied on open, and Cl
   // …and a legend pick on top. Clear lets go of both, back on the view.
   await dialog
     .getByRole("group", { name: "Filter by outcome" })
-    .getByRole("button", { name: /^Won/ })
+    .getByRole("button", { name: / won\b/ })
+    .first()
     .click();
   await strip.getByRole("button", { name: "Clear filter" }).click();
   await expect(strip).toHaveCount(0);
@@ -1488,7 +1494,7 @@ test("R6·2 · Clear for the other player keeps the reader's chart: the view doe
   await page.setViewportSize({ width: 1512, height: 982 });
   await page.goto(`${origin}/?tab=shots&cut=serve&view=sv1`);
   const dialog = page.getByRole("dialog", { name: "Saved serve" });
-  await dialog.getByRole("button", { name: "Rivera" }).click();
+  await dialog.getByRole("button", { name: "Rivera", exact: true }).click();
   await dialog.getByRole("button", { name: "Scatter" }).click();
   await page.getByRole("menuitemradio", { name: /Heat/ }).click();
   await expect(page).toHaveURL(/chart=heat/);

@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 import {
   fitPillCount,
   legendItemsFor,
+  wallLegendItems,
+  withOutcomeNames,
 } from "@/components/dashboard/matches/match-detail/shots/viz-labels";
 
 test("fitPillCount returns the full count when every pill fits", () => {
@@ -120,5 +122,42 @@ test.describe("legendItemsFor", () => {
     ]);
     expect(items.find((i) => i.label === "Backhand")!.glyph).toBe("triangle");
     expect(new Set(items.map((i) => i.key)).size).toBe(items.length);
+  });
+});
+
+test.describe("the outcome legend names who won the point", () => {
+  const labels = { you: "Shi", opponent: "JR" };
+  const words = (items: { key: string; label: string }[]) =>
+    items
+      .filter((i) => ["won", "lost", "miss"].includes(i.key))
+      .map((i) => i.label);
+
+  test("on the opponent's chart, green is their win and red is yours", () => {
+    expect(
+      words(
+        withOutcomeNames(
+          legendItemsFor("serve", "scatter"),
+          "opponent",
+          labels,
+        ),
+      ),
+    ).toEqual(["JR won", "Shi won", "Out"]);
+  });
+
+  test("on your own chart, green is yours", () => {
+    expect(
+      words(
+        withOutcomeNames(legendItemsFor("serve", "scatter"), "you", labels),
+      ),
+    ).toEqual(["Shi won", "JR won", "Out"]);
+  });
+
+  test("the wall's legend follows its player chip; with no chip it is unchanged", () => {
+    expect(words(wallLegendItems("opponent", labels))).toEqual([
+      "JR won",
+      "Shi won",
+      "Out",
+    ]);
+    expect(words(wallLegendItems())).toEqual(["Won", "Lost", "Out"]);
   });
 });

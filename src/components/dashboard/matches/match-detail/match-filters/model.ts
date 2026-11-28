@@ -544,8 +544,11 @@ export const MATCH_FILTER_SECTIONS: readonly {
     id: "result",
     label: "Result",
     groups: [
-      { key: "resultOutcome", label: "Outcome", note: "from your side" },
-      { key: "resultPlayer", label: "Hit by", note: "the last shot" },
+      // Named for the winner ("Point won by: Shi | JR"), never Won | Lost:
+      // one screen held two points of view (Won/Lost on the court is the
+      // charted player's; this was always yours).
+      { key: "resultOutcome", label: "Point won by" },
+      { key: "resultPlayer", label: "Last shot hit by" },
       { key: "resultShot", label: "Shot" },
       { key: "resultEnding", label: "Ending" },
       { key: "resultMissed", label: "Missed" },

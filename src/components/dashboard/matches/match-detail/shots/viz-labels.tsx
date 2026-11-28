@@ -2,7 +2,8 @@
 
 import type { LucideIcon } from "lucide-react";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import type { Cut, Chart, VizFilters } from "./viz-model";
+import type { Cut, Chart, PlayerFilter, VizFilters } from "./viz-model";
+import type { PlayerChipLabels } from "./player-chip-labels";
 import { filterKeysFor } from "./viz-model";
 import { sameFilterValue, type VizState } from "./viz-url";
 import { ACE_STAR_FILL } from "./court-art";
@@ -166,8 +167,40 @@ export function legendItemsFor(cut: Cut, chart: Chart): LegendItem[] {
  * trio and the ace star from the serve card, the two stroke shapes from the
  * return, rally and errors cards.
  */
-export function wallLegendItems(): LegendItem[] {
-  return [...OUTCOME_ITEMS, ACE_ITEM, FOREHAND_ITEM, BACKHAND_ITEM];
+export function wallLegendItems(
+  player?: PlayerFilter,
+  labels?: PlayerChipLabels,
+): LegendItem[] {
+  return withOutcomeNames(
+    [...OUTCOME_ITEMS, ACE_ITEM, FOREHAND_ITEM, BACKHAND_ITEM],
+    player,
+    labels,
+  );
+}
+
+/**
+ * The outcome keys named for who won the point (canvas "Won and lost: whose
+ * side?", option A): the charted player's green reads "JR won", the red
+ * "Shi won" — never Won | Lost, which read as the report player's side on
+ * an opponent's chart (Result › Outcome was always theirs). The names are
+ * the player chips' (`PlayerChipLabels`: "You" only for the player the
+ * report is about). No player or labels: the items as they are.
+ */
+export function withOutcomeNames(
+  items: LegendItem[],
+  player: PlayerFilter | undefined,
+  labels: PlayerChipLabels | undefined,
+): LegendItem[] {
+  if (!player || !labels) return items;
+  const subject = player === "you" ? labels.you : labels.opponent;
+  const other = player === "you" ? labels.opponent : labels.you;
+  return items.map((item) =>
+    item.key === "won"
+      ? { ...item, label: `${subject} won` }
+      : item.key === "lost"
+        ? { ...item, label: `${other} won` }
+        : item,
+  );
 }
 
 /**

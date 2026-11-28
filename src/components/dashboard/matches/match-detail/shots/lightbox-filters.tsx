@@ -633,7 +633,9 @@ export function LegendFilter({
             </span>
           );
         }
-        const label = LEGEND_PICKS.find((p) => p.key === key)!.label;
+        // The item's own word: Won | Lost arrive named for the winner
+        // (`withOutcomeNames`), the rest as `LEGEND_PICKS` says them.
+        const label = item.label;
         const on = pick === key;
         return (
           <button

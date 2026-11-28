@@ -68,6 +68,7 @@ import {
   matchScopeSummary,
   parseSeasonMatchScope,
   scopeSeasonMatches,
+  type SeasonScopeMatch,
   seasonMatchOptions,
   parseSeasonVizState,
   type SeasonCard,
@@ -572,7 +573,9 @@ async function MatchScopePicker({
       matches={seasonMatchOptions(season.perMatch, () => 1)}
       // The bodies' own count (`scopeSeasonMatches`), so "N of M" and the
       // facts line's "Showing N of M" never disagree.
-      shown={scopeSeasonMatches(season.perMatch, matchScope).length}
+      shown={
+        scopeSeasonMatches<SeasonScopeMatch>(season.perMatch, matchScope).length
+      }
     />
   );
 }

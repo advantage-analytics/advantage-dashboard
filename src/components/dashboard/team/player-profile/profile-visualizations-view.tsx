@@ -397,7 +397,7 @@ function SeasonWall({
             aria-label="Legend"
             className="flex flex-wrap items-center gap-x-[14px] gap-y-[6px]"
           >
-            {wallLegendItems().map((item) => (
+            {wallLegendItems(player, chipLabels).map((item) => (
               <LegendMark key={item.key} item={item} />
             ))}
           </div>

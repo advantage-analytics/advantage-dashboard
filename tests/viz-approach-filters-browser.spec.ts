@@ -518,22 +518,30 @@ test("an Approach to wing and a legend pick narrow the Points pane to the count 
   // A legend pick (Won): the pane's N is the Won key's count, which counts
   // the undrawn approaches too, so Won + Lost is the KPI's.
   const legend = dialog.getByRole("group", { name: "Filter by outcome" });
-  const keyCount = async (name: string) =>
+  // The outcome keys name who won the point: the charted player's first.
+  const keyCount = async (nth: number) =>
     Number(
       /(\d+)\s*$/.exec(
         (await legend
-          .getByRole("button", { name: new RegExp(`^${name}`) })
+          .getByRole("button", { name: / won\b/ })
+          .nth(nth)
           .textContent()) ?? "",
       )![1],
     );
-  const won = await keyCount("Won");
-  const lost = await keyCount("Lost");
+  const won = await keyCount(0);
+  const lost = await keyCount(1);
   expect(won + lost).toBe(all);
   await showPoints(dialog);
-  await legend.getByRole("button", { name: /^Won/ }).click();
+  await legend
+    .getByRole("button", { name: / won\b/ })
+    .first()
+    .click();
   await expect(pointRows(dialog)).toHaveCount(won);
   expect((await paneCount(dialog))[0]).toBe(won);
-  await legend.getByRole("button", { name: /^Won/ }).click();
+  await legend
+    .getByRole("button", { name: / won\b/ })
+    .first()
+    .click();
   await expect(pointRows(dialog)).toHaveCount(all);
 
   // An Approach to wing: an undrawn approach has no wing, so the KPI and
