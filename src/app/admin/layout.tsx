@@ -1,5 +1,6 @@
 import { AdminHeader } from "@/components/admin/admin-header";
 import { AdminScrollRoot } from "@/components/admin/admin-scroll-root";
+import { MobileGate } from "@/components/dashboard/mobile-gate";
 import { loadAdminNav } from "@/lib/data/admin-nav-server";
 import { getInitials } from "@/lib/data/match-utils";
 import { requireAdminOrNotFound } from "@/lib/services/programs/admin-guard";
@@ -75,6 +76,10 @@ export default async function AdminLayout({
     // peek-drawer rail stay put — see that file for why, and for how it keeps
     // Back/Forward scroll positions.
     <AdminScrollRoot className="flex flex-col overflow-x-hidden bg-[var(--surface-card)]">
+      {/* Phones get the dashboard's "bigger screen" gate. Mounted only while
+          shown: /admin/labels hosts the label console, whose keys go quiet
+          while any alertdialog is in the document. */}
+      <MobileGate subject="the admin console" mountOnlyWhenShown />
       <AdminHeader nav={nav} viewer={viewer} />
       {/* No padding or max-width here: each page renders its own `AdminPage`
           column, so the Requests page can seat its peek drawer beside that
