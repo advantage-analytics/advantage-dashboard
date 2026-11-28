@@ -234,17 +234,20 @@ export async function readPlanBilling(
   }
 }
 
-/** The two `users` columns a paid plan's hours window is read from. */
+/**
+ * The two `users` columns a paid plan's hours window is read from, under the
+ * `Workspace` field names they spread onto.
+ */
 export interface PlanWindowFacts {
   /** `users.plan_period_start`, an ISO instant: the window's anchor. */
-  periodStart: string | null;
+  planPeriodStart: string | null;
   /** `users.plan_status`; `past_due` is a window with no plan hours. */
-  status: string | null;
+  planStatus: string | null;
 }
 
 export const NO_PLAN_WINDOW: PlanWindowFacts = {
-  periodStart: null,
-  status: null,
+  planPeriodStart: null,
+  planStatus: null,
 };
 
 /**
@@ -279,8 +282,8 @@ export async function readPlanWindow(
       plan_status?: string | null;
     } | null;
     return {
-      periodStart: row?.plan_period_start ?? null,
-      status: row?.plan_status ?? null,
+      planPeriodStart: row?.plan_period_start ?? null,
+      planStatus: row?.plan_status ?? null,
     };
   } catch (error) {
     console.error("[plans] could not read the plan period", {

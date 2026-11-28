@@ -844,25 +844,17 @@ export function buildCheckoutView(input: {
 
 /* ---------- Pay yearly ---------- */
 
-/** `Apr 29, 2028`, UTC, from a `YYYY-MM-DD` day. Null when unreadable. */
-function dayWithYear(day: string): string | null {
-  const date = new Date(`${day}T00:00:00Z`);
+/**
+ * `Feb 14`, or `Apr 29, 2028` with the year, UTC, from an ISO day or instant.
+ * Null when unreadable.
+ */
+export function utcDayLabel(iso: string, withYear: boolean): string | null {
+  const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
-
-/** `Feb 14`, UTC, from a `YYYY-MM-DD` day. Null when unreadable. */
-function dayNoYear(day: string): string | null {
-  const date = new Date(`${day}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
+    ...(withYear ? { year: "numeric" } : {}),
     timeZone: "UTC",
   });
 }
@@ -919,7 +911,7 @@ function payYearlyView(input: {
       quote.creditBaseCents < quote.oldPeriodPriceCents
         ? `, of the ${formatUsdCents(quote.creditBaseCents)} you paid this month`
         : "";
-    const next = dayWithYear(quote.nextBillingDay);
+    const next = utcDayLabel(quote.nextBillingDay, true);
     aside =
       `Your credit is the smaller of what's left of your ${current.name} month: ` +
       `${plural(quote.daysLeft, "day", "days")} (${formatUsdCents(quote.daysCreditCents)}) or ` +
@@ -985,16 +977,17 @@ function scheduledChangeView(input: {
   const to = coachPlan(change.to.plan);
   const wasYearly = account.period === "yearly";
   // A year's renewal is far enough off to want its year.
-  const on =
-    (wasYearly
-      ? dayWithYear(change.effectiveOn)
-      : dayNoYear(change.effectiveOn)) ?? "renewal";
+  const on = utcDayLabel(change.effectiveOn, wasYearly) ?? "renewal";
   const toPrice =
     change.to.period === "yearly"
       ? `${usd(to.yearly)} a year`
       : `${usd(to.monthly)} a month`;
   const periodOnly = change.to.plan === current.id;
   const currentHours = current.hours ?? 0;
+  const offer = {
+    offer: `${current.name} · ${hoursLeftLabel(account.planLeftSeconds)} left this month`,
+    offerDetail: account.resetsOn ? `Hours reset ${account.resetsOn}` : "",
+  };
 
   return {
     scene: "change",
@@ -1004,20 +997,14 @@ function scheduledChangeView(input: {
           figure: change.to.period,
           trail: ".",
           body: `${to.name} at ${toPrice} from ${on}. Your hours stay ${to.hours ?? 0} a month.`,
-          offer: `${current.name} · ${hoursLeftLabel(account.planLeftSeconds)} left this month`,
-          offerDetail: account.resetsOn
-            ? `Hours reset ${account.resetsOn}`
-            : "",
+          ...offer,
         }
       : {
           lead: "Move down to",
           figure: to.name,
           trail: ".",
           body: `${to.hours ?? 0} hours of match video a month, about ${to.matches} matches, from ${on}.`,
-          offer: `${current.name} · ${hoursLeftLabel(account.planLeftSeconds)} left this month`,
-          offerDetail: account.resetsOn
-            ? `Hours reset ${account.resetsOn}`
-            : "",
+          ...offer,
         },
     periodPills: false,
     radioLabel: "Plan",
@@ -1139,14 +1126,15 @@ export function purchaseNote(result: CheckoutResult): {
 } {
   if (result.kind === "hours") {
     const until = new Date(result.expiresAt);
-    const lasts = Number.isNaN(until.getTime())
-      ? ""
-      : `They last until ${until.toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-          timeZone: "UTC",
-        })}. `;
+    // One hour is "it": "1 extra hour added. They last…" did not agree.
+    const verb = result.hours === 1 ? "It lasts" : "They last";
+    const day = until.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      timeZone: "UTC",
+    });
+    const lasts = Number.isNaN(until.getTime()) ? "" : `${verb} until ${day}. `;
     return {
       lead: `${hoursName(result.hours)} added.`,
       rest: `${lasts}A receipt is on its way to your email.`,

@@ -18,6 +18,7 @@
 import { formatHoursLong, isUnlimitedCap } from "@/lib/data/usage-format";
 import {
   hoursLeftLabel,
+  utcDayLabel,
   type CheckoutMode,
   type ScheduledChange,
 } from "./checkout-view";
@@ -102,17 +103,6 @@ export interface PlanPageView {
   rows: PlanPageRow[];
 }
 
-function day(iso: string, withYear: boolean): string | null {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    ...(withYear ? { year: "numeric" } : {}),
-    timeZone: "UTC",
-  });
-}
-
 function hoursCard(input: PlanPageInput): PlanPageView["hours"] {
   const { planLeftSeconds: left, extraSeconds: extra, resetsOn } = input;
   if (isUnlimitedCap(input.capSeconds)) {
@@ -154,7 +144,7 @@ function hoursCard(input: PlanPageInput): PlanPageView["hours"] {
   }
   if (extra > 0) {
     const expires = input.nextExtraExpiresAt
-      ? day(input.nextExtraExpiresAt, true)
+      ? utcDayLabel(input.nextExtraExpiresAt, true)
       : null;
     return {
       figure,
@@ -176,7 +166,7 @@ function isPastDue(input: Pick<PlanPageInput, "plan" | "billing">): boolean {
 
 /** `Feb 14`, or `Jan 14, 2028` for a change a year's renewal brings. */
 function changeDay(change: ScheduledChange, withYear: boolean): string {
-  return day(`${change.effectiveOn}T00:00:00Z`, withYear) ?? "renewal";
+  return utcDayLabel(change.effectiveOn, withYear) ?? "renewal";
 }
 
 /** "first month half off". */
@@ -209,7 +199,9 @@ export function buildPlanPage(input: PlanPageInput): PlanPageView {
     const current = coachPlan(plan);
     const yearly = billing.period === "yearly";
     const pastDue = isPastDue(input);
-    const renews = billing.periodEnd ? day(billing.periodEnd, yearly) : null;
+    const renews = billing.periodEnd
+      ? utcDayLabel(billing.periodEnd, yearly)
+      : null;
     const price = usd(yearly ? current.yearly : current.monthly);
     const tail = renews ? ` · Renews ${renews} at ${price}` : "";
     const upgrade: PlanPageAction | undefined =

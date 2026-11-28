@@ -590,6 +590,12 @@ export interface HoursLeft {
    * null when nothing comes back. Absent from an older answer.
    */
   resetsOn?: string | null;
+  /**
+   * `QuotaPeek.pastDue`, always a boolean: a subscriber's plan hours are
+   * waiting on a failed payment. Absent from an older answer, which says
+   * nothing either way.
+   */
+  pastDue?: boolean;
 }
 
 /**

@@ -119,6 +119,145 @@ test("a plan that lands after the dialog gave up waiting is picked up from the r
   expect(h.current.quotaPlanId).toBe("coach-pro");
 });
 
+test.describe("a failed payment fixed in another tab", () => {
+  const PAID = {
+    workspaceId: "user",
+    remainingSeconds: 7200,
+    capSeconds: 7200,
+    creditSeconds: 0,
+    grantedSeconds: 0,
+    nextCreditExpiresAt: null,
+    resetsOn: null,
+    pastDue: false,
+  };
+
+  /** A Coach subscriber, payment failed, stopped at the trim step's paywall. */
+  async function pastDueAtPaywall(
+    hoursLeftReads: NonNullable<
+      Parameters<typeof uploadWizardHarness>[0]
+    >["hoursLeftReads"],
+  ) {
+    delete process.env[ON_SALE];
+    const h = uploadWizardHarness({
+      quotaCapSeconds: 7200,
+      props: { initialProvider: "splitstep" },
+      workspace: { plan: "coach", planStatus: "past_due" },
+      hoursLeftReads,
+    });
+    await h.flush();
+    expect(h.current.quotaPastDue).toBe(true);
+    expect(h.current.quotaFreeSeconds).toBe(0);
+    h.current.handleTrimChange(0, 1200);
+    h.render();
+    h.current.handleTrimContinue();
+    h.render();
+    expect(h.current.paywall).toEqual({ neededSeconds: 1200 });
+    return h;
+  }
+
+  /** What a reload would lose: the answers, the step and the picked video. */
+  const formState = (h: Awaited<ReturnType<typeof pastDueAtPaywall>>) => ({
+    formData: h.current.formData,
+    step: h.current.step,
+    uploadedFile: h.current.uploadedFile,
+    selectedProvider: h.current.selectedProvider,
+  });
+
+  test("the re-read lifts the flag and brings the plan's hours back, form untouched", async () => {
+    const h = await pastDueAtPaywall([PAID]);
+    const before = formState(h);
+
+    // Back from the portal tab: the paywall is closed by hand.
+    h.current.closeAddHours();
+    await h.flush();
+
+    expect(h.hoursLeftCallCount).toBe(1);
+    expect(h.current.quotaPastDue).toBe(false);
+    expect(h.current.quotaFreeSeconds).toBe(7200);
+    expect(h.current.quotaPlanId).toBe("coach");
+    expect(h.current.paywall).toBeNull();
+    // The same objects, not equal copies: nothing was reset or remounted.
+    expect(h.current.formData).toBe(before.formData);
+    expect(formState(h)).toEqual(before);
+    expect(h.current.formData.videoEndSeconds).toBe(1200);
+
+    // And the trim step now lets the same twenty minutes through.
+    h.current.handleTrimContinue();
+    h.render();
+    expect(h.current.paywall).toBeNull();
+    expect(h.current.step).toBe("match");
+  });
+
+  test("the tab coming back asks the same question", async () => {
+    const h = await pastDueAtPaywall([PAID]);
+    await h.current.refreshPastDue();
+    await h.flush();
+    expect(h.current.quotaPastDue).toBe(false);
+    expect(h.current.quotaFreeSeconds).toBe(7200);
+    // The dialog was not closed for them, and is not asked about again.
+    expect(h.current.paywall).toEqual({ neededSeconds: 1200 });
+    await h.current.refreshPastDue();
+    expect(h.hoursLeftCallCount).toBe(1);
+  });
+
+  for (const [name, read] of [
+    ["a 503", "error"],
+    ["no connection", "offline"],
+    [
+      "a payment still failing",
+      { ...PAID, remainingSeconds: 0, pastDue: true },
+    ],
+    [
+      "an older answer with no word on the payment",
+      { ...PAID, pastDue: undefined },
+    ],
+    ["another workspace's answer", { ...PAID, workspaceId: "team-a" }],
+  ] as const) {
+    test(`${name} leaves the wizard as it was`, async () => {
+      const h = await pastDueAtPaywall([read]);
+      const before = formState(h);
+      await h.current.refreshPastDue();
+      await h.flush();
+      expect(h.hoursLeftCallCount).toBe(1);
+      expect(h.current.quotaPastDue).toBe(true);
+      expect(h.current.quotaFreeSeconds).toBe(0);
+      expect(h.current.error).toBeNull();
+      expect(h.current.paywall).toEqual({ neededSeconds: 1200 });
+      expect(h.current.formData).toBe(before.formData);
+      expect(formState(h)).toEqual(before);
+    });
+  }
+
+  test("an account that is not past due is never asked about", async () => {
+    const h = await atPaywall({ onSale: false, plan: "coach" });
+    h.current.closeAddHours();
+    await h.current.refreshPastDue();
+    await h.flush();
+    expect(h.hoursLeftCallCount).toBe(0);
+  });
+
+  test("it runs on focus and on the tab becoming visible, and never navigates", () => {
+    const hook = readFileSync(
+      "src/components/dashboard/matches/new-match-wizard/useUploadMatchWizard.ts",
+      "utf8",
+    );
+    expect(hook).toMatch(
+      /if \(!open \|\| !quotaPastDue\) return;[\s\S]*?if \(document\.visibilityState === "visible"\) void refreshPastDue\(\);[\s\S]*?addEventListener\("visibilitychange", onVisible\);\s*window\.addEventListener\("focus", onVisible\);/,
+    );
+    const body = hook.slice(
+      hook.indexOf("const refreshPastDue = useCallback("),
+      hook.indexOf("const openAddHours = useCallback("),
+    );
+    expect(body).toContain('fetch("/api/splitstep/hours-left"');
+    expect(body).not.toMatch(/router\.|location\.|reload/);
+
+    // The route says it, as a boolean, from the peek the uploads refuse on.
+    expect(
+      readFileSync("src/app/api/splitstep/hours-left/route.ts", "utf8"),
+    ).toContain("pastDue: peek.pastDue === true,");
+  });
+});
+
 test.describe("wiring", () => {
   const dir = "src/components/dashboard/matches/new-match-wizard";
   const read = (file: string) => readFileSync(`${dir}/${file}`, "utf8");

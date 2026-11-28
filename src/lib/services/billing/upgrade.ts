@@ -92,7 +92,7 @@ import {
   type PaidPlanId,
 } from "@/lib/stripe/prices";
 import { SIGN_IN_REFUSAL, refuse, type BillingResult } from "./http";
-import type { CheckoutUser } from "./checkout";
+import { planProductName, type CheckoutUser } from "./checkout";
 import {
   readBillingUser,
   subscriptionPeriod,
@@ -759,6 +759,9 @@ export async function executeUpgrade(params: {
         proration_behavior: "none",
         billing_cycle_anchor: "now",
         payment_behavior: "error_if_incomplete",
+        // Checkout named the subscription after the plan it started on;
+        // Stripe's portal prints that beside the new price unless it follows.
+        description: planProductName(target.plan, target.period),
         metadata: { ...subscription.metadata, upgrade_attempt: attempt },
       },
       { idempotencyKey: `${attempt}:update` },

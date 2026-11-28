@@ -1293,7 +1293,7 @@ async function resolveAutoRetryWorkspace(params: {
       // The owner's plan and its period, which decide the hours a retry
       // draws from January 1, 2027 — see `Workspace.plan`.
       plan: (owner?.plan as string | null | undefined) ?? null,
-      ...(await ownerPlanWindow(supabase, userId)),
+      ...(await readPlanWindow(supabase, userId)),
       programStatus: null,
       playersCanUpload: false,
       uploadPolicy: "everyone",
@@ -1378,13 +1378,4 @@ async function resolveAutoRetryWorkspace(params: {
     // link is the sole reader, and it never sees this object.
     myPlayerId: null,
   };
-}
-
-/** The owner's hours window and payment state, as `Workspace` carries them. */
-async function ownerPlanWindow(
-  supabase: SupabaseClient,
-  userId: string,
-): Promise<Pick<Workspace, "planPeriodStart" | "planStatus">> {
-  const facts = await readPlanWindow(supabase, userId);
-  return { planPeriodStart: facts.periodStart, planStatus: facts.status };
 }

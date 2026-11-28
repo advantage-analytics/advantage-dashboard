@@ -512,6 +512,39 @@ test.describe("Upgrade", () => {
     expect(refused.problem).toBe("Update your card before upgrading.");
     expect(refused.rows.map((r) => r.id)).toEqual(["current"]);
   });
+  test("five minutes after subscribing: the 30 days printed are the 30 days credited", () => {
+    // The test-mode run: a half-off $75 month, upgraded at once. Counted to
+    // the second this read "$74.99 credit for your 30 days left" and
+    // "Continue to pay $225.01".
+    const fresh: PreviewState = {
+      status: "ready",
+      preview: {
+        ...quoteUpgrade({
+          from: "coach",
+          to: "coach-pro",
+          period: "monthly",
+          periodStart: new Date("2027-04-14T00:00:00Z"),
+          periodEnd: new Date("2027-05-14T00:00:00Z"),
+          now: new Date("2027-04-14T00:05:00Z"),
+          usedSeconds: 0,
+          paidForPeriodCents: 7500,
+        }),
+        period: "monthly",
+      },
+    };
+    const v = view(
+      { kind: "upgrade" },
+      { ...COACH, planLeftSeconds: 5 * H },
+      { preview: fresh },
+    );
+    const row = v.rows.find((r) => r.id === "upgrade");
+    expect(row?.line).toBe(
+      "10 fresh hours today · $75 credit for your 30 days left",
+    );
+    expect(row?.price).toBe("$225");
+    expect(v.primary).toBe("Continue to pay $225");
+    expect(v.action).toEqual({ kind: "upgrade", payTodayCents: 22500 });
+  });
 });
 
 test.describe("A refused upgrade", () => {
@@ -645,6 +678,18 @@ test.describe("small words", () => {
     ).toEqual({
       lead: "2 extra hours added.",
       rest: "They last until Jan 5, 2028. A receipt is on its way to your email.",
+    });
+    // One hour is "it": "1 extra hour added. They last…" did not agree.
+    expect(
+      purchaseNote({
+        kind: "hours",
+        hours: 1,
+        seconds: 3600,
+        expiresAt: "2027-11-28T10:00:00Z",
+      }),
+    ).toEqual({
+      lead: "1 extra hour added.",
+      rest: "It lasts until Nov 28, 2027. A receipt is on its way to your email.",
     });
     expect(
       purchaseNote({ kind: "plan", plan: "coach", period: "monthly" }),

@@ -30,7 +30,10 @@ import {
   formatUsdCents,
   type PlanPeriod,
 } from "@/lib/billing/plans";
-import { requestBillingPortal } from "@/lib/billing/portal-client";
+import {
+  PORTAL_TAB_BLOCKED,
+  openBillingPortalTab,
+} from "@/lib/billing/portal-client";
 import { advButton } from "@/lib/ui/adv-button";
 import { cn } from "@/lib/utils";
 
@@ -165,6 +168,38 @@ export function PlanCheckoutDialog({
   );
 }
 
+/**
+ * The dialog's one error line. With `portalUrl` (the browser blocked the
+ * billing tab) the sentence is followed by the address as a link, in the
+ * place "Update card" held in the aside this line stands in for.
+ */
+export function CheckoutProblemLine({
+  message,
+  portalUrl,
+}: {
+  message: string;
+  portalUrl?: string | null;
+}) {
+  return (
+    <p role="alert" className="text-[12px] leading-[1.6] text-[var(--error)]">
+      {message}
+      {portalUrl && (
+        <>
+          {" "}
+          <a
+            href={portalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[var(--blue)] hover:text-[var(--blue-hover)]"
+          >
+            Open billing ↗
+          </a>
+        </>
+      )}
+    </p>
+  );
+}
+
 /** What Stripe's embedded form is opened for: a new plan, or extra hours. */
 type PaidAction = Extract<CheckoutAction, { kind: "plan" | "hours" }>;
 
@@ -221,6 +256,8 @@ function PlanCheckoutContent({
     startPending ? { kind: "pending" } : { kind: "choose" },
   );
   const [problem, setProblem] = useState<string | null>(initialProblem ?? null);
+  /** The portal's address when no tab could be opened for it. */
+  const [portalUrl, setPortalUrl] = useState<string | null>(null);
   const [fetched, setFetched] = useState<PreviewState>(
     wantsPreview && !previewOverride
       ? { status: "loading" }
@@ -410,21 +447,21 @@ function PlanCheckoutContent({
 
   /**
    * Stripe's portal in a NEW tab: the wizard behind this dialog holds an
-   * in-memory video, so this page must not navigate away. The tab is opened
-   * in the click itself (a popup opened after the request would be blocked)
-   * and pointed at the portal once its address is known.
+   * in-memory video, so this page must not navigate away. When the browser
+   * will not open one, the error line says so and carries the address as a
+   * link, which a click of the user's own always opens.
    */
   const openCardPortal = async () => {
     setProblem(null);
-    const tab = window.open("", "_blank");
-    const answer = await requestBillingPortal();
-    if (answer.ok && tab) {
-      tab.location.replace(answer.url);
+    setPortalUrl(null);
+    const answer = await openBillingPortalTab();
+    if (answer.kind === "opened") return;
+    if (answer.kind === "blocked") {
+      setPortalUrl(answer.url);
+      setProblem(PORTAL_TAB_BLOCKED);
       return;
     }
-    tab?.close();
-    if (answer.ok) window.open(answer.url, "_blank", "noopener");
-    else setProblem(answer.message);
+    setProblem(answer.message);
   };
 
   const onPrimary = () => {
@@ -537,12 +574,10 @@ function PlanCheckoutContent({
           </div>
 
           {(problem ?? view.problem) ? (
-            <p
-              role="alert"
-              className="text-[12px] leading-[1.6] text-[var(--error)]"
-            >
-              {problem ?? view.problem}
-            </p>
+            <CheckoutProblemLine
+              message={problem ?? view.problem ?? ""}
+              portalUrl={problem === PORTAL_TAB_BLOCKED ? portalUrl : null}
+            />
           ) : (
             view.aside && (
               <ConfirmAside>

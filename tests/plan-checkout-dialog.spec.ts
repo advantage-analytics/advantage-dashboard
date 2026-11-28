@@ -7,7 +7,12 @@ import type {
   CheckoutMode,
   PreviewState,
 } from "@/lib/billing/checkout-view";
+import { readFileSync } from "node:fs";
 import { planHoursSeconds } from "@/lib/billing/plans";
+import {
+  PORTAL_TAB_BLOCKED,
+  openBillingPortalTab,
+} from "@/lib/billing/portal-client";
 import { quoteUpgrade } from "@/lib/billing/upgrade";
 import { createLoader } from "./fixtures/vm-modules";
 
@@ -63,9 +68,13 @@ const stubs = {
   "@/components/ui/live-dots": { LiveDots: () => null },
 };
 
-const { PlanCheckoutDialog } = createLoader({ stubs }).load(
-  "src/components/dashboard/billing/plan-checkout-dialog.tsx",
-) as {
+const { PlanCheckoutDialog, CheckoutProblemLine } = createLoader({
+  stubs,
+}).load("src/components/dashboard/billing/plan-checkout-dialog.tsx") as {
+  CheckoutProblemLine: React.ComponentType<{
+    message: string;
+    portalUrl?: string | null;
+  }>;
   PlanCheckoutDialog: React.ComponentType<{
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -420,4 +429,116 @@ test("MOCK, yearly → monthly: Pay monthly, switching at the year's renewal", (
     "Your year is paid through Jan 14, 2028. Nothing is charged today.",
   );
   expect(html).toContain("Switch on Jan 14, 2028");
+});
+
+test.describe("Update card when the browser will not open a tab", () => {
+  const URL = "https://billing.stripe.com/p/session/test_123";
+  const granted = async () => ({ ok: true as const, url: URL });
+
+  function fakeTab() {
+    const tab = {
+      opener: {} as unknown,
+      closed: false,
+      replaced: [] as string[],
+      openerWhenPointed: undefined as unknown,
+      close() {
+        tab.closed = true;
+      },
+      location: {
+        replace(url: string) {
+          tab.openerWhenPointed = tab.opener;
+          tab.replaced.push(url);
+        },
+      },
+    };
+    return tab;
+  }
+
+  test("a blocked pop-up hands back the address instead of trying a second one", async () => {
+    let opens = 0;
+    const answer = await openBillingPortalTab(() => {
+      opens++;
+      return null;
+    }, granted);
+    expect(answer).toEqual({ kind: "blocked", url: URL });
+    expect(opens).toBe(1);
+  });
+
+  test("the tab that opens is cut off from this page before it is pointed at the portal", async () => {
+    const tab = fakeTab();
+    const answer = await openBillingPortalTab(() => tab, granted);
+    expect(answer).toEqual({ kind: "opened" });
+    expect(tab.replaced).toEqual([URL]);
+    expect(tab.openerWhenPointed).toBeNull();
+  });
+
+  test("a tab closed while the address was on its way counts as blocked", async () => {
+    const tab = fakeTab();
+    const answer = await openBillingPortalTab(
+      () => tab,
+      async () => {
+        tab.close();
+        return granted();
+      },
+    );
+    expect(answer).toEqual({ kind: "blocked", url: URL });
+    expect(tab.replaced).toEqual([]);
+  });
+
+  test("a portal that cannot be had closes the blank tab and says why", async () => {
+    const tab = fakeTab();
+    const answer = await openBillingPortalTab(
+      () => tab,
+      async () => ({ ok: false, message: "Billing couldn't open." }),
+    );
+    expect(answer).toEqual({
+      kind: "failed",
+      message: "Billing couldn't open.",
+    });
+    expect(tab.closed).toBe(true);
+  });
+
+  test("the error line carries the sentence and the address as a real link", () => {
+    const html = renderToStaticMarkup(
+      el(CheckoutProblemLine, { message: PORTAL_TAB_BLOCKED, portalUrl: URL }),
+    ).replace(/&#x27;/g, "'");
+    expect(html).toMatch(/^<p role="alert"[^>]*>.*<\/p>$/);
+    expect(html).toContain("Billing couldn't open in a new tab.");
+    const link = html.match(/<a [^>]*>(.*?)<\/a>/)!;
+    expect(link[1]).toBe("Open billing ↗");
+    expect(link[0]).toContain(`href="${URL}"`);
+    expect(link[0]).toContain('target="_blank"');
+    expect(link[0]).toContain('rel="noopener noreferrer"');
+    // The quiet link "Update card" is drawn with, in the line it stood in.
+    expect(link[0]).toContain(
+      'class="text-[var(--blue)] hover:text-[var(--blue-hover)]"',
+    );
+  });
+
+  test("any other problem is the sentence alone", () => {
+    const html = renderToStaticMarkup(
+      el(CheckoutProblemLine, {
+        message: "Update your card before upgrading.",
+      }),
+    );
+    expect(html).not.toContain("<a ");
+    expect(draw(NEEDED, COACH_SPENT, { refusal: "No." })).not.toContain(
+      "Open billing",
+    );
+  });
+
+  test("the dialog draws the link only beside the blocked sentence, in the error line's own slot", () => {
+    const source = readFileSync(
+      "src/components/dashboard/billing/plan-checkout-dialog.tsx",
+      "utf8",
+    );
+    expect(source).toContain(
+      "portalUrl={problem === PORTAL_TAB_BLOCKED ? portalUrl : null}",
+    );
+    expect(source).toMatch(
+      /if \(answer\.kind === "blocked"\) \{\s*setPortalUrl\(answer\.url\);\s*setProblem\(PORTAL_TAB_BLOCKED\);/,
+    );
+    // One open, inside the click: no second `window.open` after an await.
+    expect(source).not.toContain("window.open(");
+  });
 });

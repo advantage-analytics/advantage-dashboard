@@ -174,8 +174,8 @@ test.describe("a player's hours window", () => {
       error: null,
     }));
     expect(await readPlanWindow(client, "u1")).toEqual({
-      periodStart: "2027-01-14T00:00:00+00:00",
-      status: "past_due",
+      planPeriodStart: "2027-01-14T00:00:00+00:00",
+      planStatus: "past_due",
     });
     expect(selects).toEqual([["users", "plan_period_start, plan_status"]]);
   });

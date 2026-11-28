@@ -32,6 +32,12 @@
  * proration only counts days, which is why the server computes this and
  * hands Stripe the figure (`services/billing/upgrade.ts`).
  *
+ * TIME is counted in WHOLE DAYS, a part day as one: `daysLeft` of
+ * `periodDays`. The dialog prints "your 30 days left", so the share is that
+ * same count — measured to the second, upgrading five minutes after
+ * subscribing credited $74.99 of a $75 month and charged a cent more than the
+ * difference between the plans.
+ *
  * A yearly plan's hours come as twelve monthly slices that do not carry
  * over. Its "period's plan hours" are all twelve: the slices that have not
  * started count in full, the current one by what is left of it, and the past
@@ -141,8 +147,13 @@ export interface UpgradeQuote {
    */
   daysCreditCents: number;
   hoursCreditCents: number;
-  /** Days of the current period left; a part day counts as one. */
+  /**
+   * Days of the current period left; a part day counts as one, never more
+   * than `periodDays`. The time share is exactly `daysLeft / periodDays`.
+   */
   daysLeft: number;
+  /** The current period's length in whole days. */
+  periodDays: number;
   /** Plan seconds left in the current hours slice — what the meter shows. */
   hoursLeftSeconds: number;
   /** The new plan's full price for one period. */
@@ -207,6 +218,10 @@ export function quoteUpgrade(input: UpgradeInput): UpgradeQuote {
 
   const totalMs = Math.max(0, periodEnd.getTime() - periodStart.getTime());
   const leftMs = clamp(periodEnd.getTime() - now.getTime(), 0, totalMs);
+  // Whole days, a part day as one: the number the dialog prints is the
+  // number the credit is a share of.
+  const periodDays = Math.round(totalMs / DAY_MS);
+  const daysLeft = clamp(Math.ceil(leftMs / DAY_MS), 0, periodDays);
 
   const sliceSeconds = planHoursSeconds(from);
   const used = Number.isFinite(input.usedSeconds) ? input.usedSeconds : 0;
@@ -219,10 +234,10 @@ export function quoteUpgrade(input: UpgradeInput): UpgradeQuote {
     ? futureSlices(periodStart, now) * sliceSeconds + hoursLeftSeconds
     : hoursLeftSeconds;
 
-  // leftMs / totalMs  <=  hoursLeft / hoursTotal, cross-multiplied. A tie is
-  // "days"; a period or plan with nothing in it has a zero share.
-  const timeN = BigInt(leftMs);
-  const timeD = BigInt(totalMs);
+  // daysLeft / periodDays  <=  hoursLeft / hoursTotal, cross-multiplied. A
+  // tie is "days"; a period or plan with nothing in it has a zero share.
+  const timeN = BigInt(daysLeft);
+  const timeD = BigInt(periodDays);
   const hoursN = BigInt(periodHoursLeftSeconds);
   const hoursD = BigInt(periodHoursSeconds);
   const daysIsSmaller =
@@ -249,7 +264,8 @@ export function quoteUpgrade(input: UpgradeInput): UpgradeQuote {
     creditBasis,
     daysCreditCents,
     hoursCreditCents,
-    daysLeft: Math.ceil(leftMs / DAY_MS),
+    daysLeft,
+    periodDays,
     hoursLeftSeconds,
     newPeriodPriceCents,
     oldPeriodPriceCents,

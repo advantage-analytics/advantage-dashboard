@@ -89,8 +89,7 @@ function personalWorkspace(
     videoHoursOverride,
     // The owner's plan and its period — see `Workspace.plan`.
     plan: viewer.plan,
-    planPeriodStart: planWindow.periodStart,
-    planStatus: planWindow.status,
+    ...planWindow,
     // No program row, so no status to carry — see `Workspace.programStatus`.
     programStatus: null,
     // A program-wide policy about *other* people, in a workspace whose only
