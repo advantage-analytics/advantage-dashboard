@@ -379,7 +379,7 @@ export function planPricing(
   return { dueCents: monthly * 100, wasCents: null, then: "a month" };
 }
 
-/** `About 3 verified matches a month · 5 hours of match video · every match verified`. */
+/** `About 3 verified matches a month · 5 hours of match video`. */
 function planLine(plan: PaidPlan): string {
   const hours = planHoursLine(plan);
   return hours ? `${planHeadline(plan)} · ${hours}` : planHeadline(plan);

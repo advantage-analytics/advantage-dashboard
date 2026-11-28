@@ -539,7 +539,7 @@ export function SettingsPlanPending() {
             label={planFor(viewer.plan).name}
             description={
               paid
-                ? "About 3 verified matches a month · 5 hours of match video · every match verified · Renews Feb 14 at $150"
+                ? "About 3 verified matches a month · 5 hours of match video"
                 : "Free for SwingVision users · 20 Ask questions a month · Player from $150, 30% off your first month"
             }
             control={

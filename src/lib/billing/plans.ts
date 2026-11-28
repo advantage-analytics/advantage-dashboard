@@ -233,16 +233,29 @@ export function planHeadline(id: PersonalPlanId): string {
     : `About ${matches} verified ${matches === 1 ? "match" : "matches"} a month`;
 }
 
+/** `5 hours of match video`; the hours a plan carries, as a phrase. */
+function hoursPhrase(hours: number): string {
+  return `${hours} ${hours === 1 ? "hour" : "hours"} of match video`;
+}
+
 /**
- * The line under the headline: `5 hours of match video · every match
- * verified`. Null for Free, which has no hours.
+ * The line under the headline, the second of a plan row's two facts: `5
+ * hours of match video`. Null for Free, which has no hours.
  */
 export function planHoursLine(id: PersonalPlanId): string | null {
+  const { hours } = personalPlan(id);
+  return hours === null ? null : hoursPhrase(hours);
+}
+
+/**
+ * The full approved sub-copy, for the landing handoff and the docs: `5 hours
+ * of match video · every match verified`. A plan row is too narrow for it and
+ * shows `planHoursLine`. Null for Free.
+ */
+export function planSubCopy(id: PersonalPlanId): string | null {
   const { hours, verified } = personalPlan(id);
   if (hours === null) return null;
-  return `${hours} ${hours === 1 ? "hour" : "hours"} of match video${
-    verified ? " · every match verified" : ""
-  }`;
+  return `${hoursPhrase(hours)}${verified ? " · every match verified" : ""}`;
 }
 
 /* ---------- College programs: priced by the season ---------- */

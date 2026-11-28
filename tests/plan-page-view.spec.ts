@@ -182,7 +182,7 @@ test.describe("Plan rows", () => {
     const [plan, , extra, billing] = buildPlanPage(PLAYER).rows;
     expect(plan.pill).toBe("Monthly");
     expect(plan.description).toBe(
-      "About 3 verified matches a month · 5 hours of match video · every match verified · Renews Feb 14 at $150",
+      "About 3 verified matches a month · 5 hours of match video",
     );
     expect(plan.action).toMatchObject({
       tone: "primary",
@@ -215,7 +215,7 @@ test.describe("Plan rows", () => {
     expect(plan.pill).toBe("Yearly");
     // A yearly renewal is far enough off to need its year.
     expect(plan.description).toBe(
-      "About 6 verified matches a month · 10 hours of match video · every match verified · Renews Feb 14, 2027 at $3,300",
+      "About 6 verified matches a month · 10 hours of match video",
     );
   });
 
@@ -342,7 +342,7 @@ test.describe("Plan rows", () => {
       mock: { kind: "change-plan", change },
     }).rows[0];
     expect(offered.description).toBe(
-      "About 6 verified matches a month · 10 hours of match video · every match verified · Renews Feb 14 at $300",
+      "About 6 verified matches a month · 10 hours of match video",
     );
     expect(offered.action).toEqual({
       kind: "quiet",

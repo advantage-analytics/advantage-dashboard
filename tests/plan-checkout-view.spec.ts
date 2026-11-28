@@ -191,7 +191,7 @@ test.describe("Choose a plan", () => {
       [
         "player",
         "Player",
-        "About 3 verified matches a month · 5 hours of match video · every match verified",
+        "About 3 verified matches a month · 5 hours of match video",
         "$150",
         "$105",
         "then $150 a month",
@@ -199,7 +199,7 @@ test.describe("Choose a plan", () => {
       [
         "player-pro",
         "Player Pro",
-        "About 6 verified matches a month · 10 hours of match video · every match verified",
+        "About 6 verified matches a month · 10 hours of match video",
         "$300",
         "$210",
         "then $300 a month",
@@ -271,7 +271,7 @@ test.describe("Upload paywall, a Free player", () => {
       ["hours", "2 extra hours", "$70", "Or pay for just this match"],
     ]);
     expect(v.rows[0].line).toBe(
-      "About 3 verified matches a month · 5 hours of match video · every match verified",
+      "About 3 verified matches a month · 5 hours of match video",
     );
     expect(v.rows[2].line).toBe(
       "$35 an hour (about $60 per extra match) · No plan · Last 12 months",
@@ -444,7 +444,7 @@ test.describe("Upgrade", () => {
         "current",
         "Player",
         "Your plan",
-        "About 3 verified matches a month · 5 hours of match video · every match verified",
+        "About 3 verified matches a month · 5 hours of match video",
         "$150",
         "a month",
       ],
@@ -852,7 +852,7 @@ test.describe("Pay yearly", () => {
         id: "current",
         name: "Player, monthly",
         pill: "Your plan",
-        line: "About 3 verified matches a month · 5 hours of match video · every match verified",
+        line: "About 3 verified matches a month · 5 hours of match video",
         price: "$150",
         then: "a month",
         selectable: false,
@@ -1015,7 +1015,7 @@ test.describe("MOCK: a change at renewal", () => {
         id: "current",
         name: "Player Pro",
         pill: "Your plan",
-        line: "About 6 verified matches a month · 10 hours of match video · every match verified",
+        line: "About 6 verified matches a month · 10 hours of match video",
         price: "$300",
         then: "a month",
         selectable: false,
@@ -1047,7 +1047,7 @@ test.describe("MOCK: a change at renewal", () => {
       ["Player, monthly", "$150 a month from Jan 14, 2028", "$0"],
       [
         "Player, yearly",
-        "About 3 verified matches a month · 5 hours of match video · every match verified",
+        "About 3 verified matches a month · 5 hours of match video",
         "$1,650",
       ],
     ]);

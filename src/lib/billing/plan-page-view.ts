@@ -194,11 +194,6 @@ export function buildPlanPage(input: PlanPageInput): PlanPageView {
     const current = personalPlan(plan);
     const yearly = billing.period === "yearly";
     const pastDue = isPastDue(input);
-    const renews = billing.periodEnd
-      ? utcDayLabel(billing.periodEnd, yearly)
-      : null;
-    const price = usd(yearly ? current.yearly : current.monthly);
-    const tail = renews ? ` · Renews ${renews} at ${price}` : "";
     const upgrade: PlanPageAction | undefined =
       plan === "player"
         ? {
@@ -219,7 +214,7 @@ export function buildPlanPage(input: PlanPageInput): PlanPageView {
       ...(billing.period ? { pill: yearly ? "Yearly" : "Monthly" } : {}),
       description: pastDue
         ? PLAN_PAST_DUE_LINE
-        : `${planHeadline(plan)} · ${planHoursLine(plan) ?? ""}${tail}`,
+        : `${planHeadline(plan)} · ${planHoursLine(plan)}`,
       ...(action ? { action } : {}),
     };
 

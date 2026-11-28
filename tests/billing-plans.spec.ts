@@ -34,6 +34,7 @@ import {
   personalPlanIdFrom,
   planHeadline,
   planHoursLine,
+  planSubCopy,
   planHoursSeconds,
   plansBeginMonth,
   plansHaveBegun,
@@ -95,11 +96,17 @@ test.describe("personal plans", () => {
     expect(planHeadline("free")).toBe("Free for SwingVision users");
     expect(planHoursLine("free")).toBeNull();
     expect(planHeadline("player")).toBe("About 3 verified matches a month");
-    expect(planHoursLine("player")).toBe(
+    expect(planHoursLine("player")).toBe("5 hours of match video");
+    expect(planHeadline("player-pro")).toBe("About 6 verified matches a month");
+    expect(planHoursLine("player-pro")).toBe("10 hours of match video");
+  });
+
+  test("the full approved sub-copy stays whole for the landing handoff", () => {
+    expect(planSubCopy("free")).toBeNull();
+    expect(planSubCopy("player")).toBe(
       "5 hours of match video · every match verified",
     );
-    expect(planHeadline("player-pro")).toBe("About 6 verified matches a month");
-    expect(planHoursLine("player-pro")).toBe(
+    expect(planSubCopy("player-pro")).toBe(
       "10 hours of match video · every match verified",
     );
   });

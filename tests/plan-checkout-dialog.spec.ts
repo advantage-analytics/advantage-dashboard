@@ -188,8 +188,8 @@ test("Choose a plan: the band, the pills, both plans with the full price struck 
   expect(radios(html)).toEqual([
     "Monthly",
     "Yearly · 1 month free",
-    "PlayerAbout 3 verified matches a month · 5 hours of match video · every match verified$150$105then $150 a month",
-    "Player ProAbout 6 verified matches a month · 10 hours of match video · every match verified$300$210then $300 a month",
+    "PlayerAbout 3 verified matches a month · 5 hours of match video$150$105then $150 a month",
+    "Player ProAbout 6 verified matches a month · 10 hours of match video$300$210then $300 a month",
   ]);
   expect(texts(html, /<s [^>]*>(.*?)<\/s>/g)).toEqual(["$150", "$300"]);
   expect(html).toContain("Not now");
@@ -203,8 +203,8 @@ test("Upload paywall, Free: the two plans, then extra hours for just this match"
     "This match needs 1h 52m.",
   ]);
   expect(radios(html)).toEqual([
-    "PlayerAbout 3 verified matches a month · 5 hours of match video · every match verified$150$105then $150 a month",
-    "Player ProAbout 6 verified matches a month · 10 hours of match video · every match verified$300$210then $300 a month",
+    "PlayerAbout 3 verified matches a month · 5 hours of match video$150$105then $150 a month",
+    "Player ProAbout 6 verified matches a month · 10 hours of match video$300$210then $300 a month",
     "2 extra hours$35 an hour (about $60 per extra match) · No plan · Last 12 months$70",
   ]);
   expect(html.indexOf("Or pay for just this match")).toBeGreaterThan(
