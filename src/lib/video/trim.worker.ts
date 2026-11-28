@@ -348,7 +348,15 @@ scope.onmessage = async (event: MessageEvent<TrimWorkerRequest>) => {
               d.reason === "undecodable_source_codec" ||
               d.reason === "no_encodable_target_codec",
           ));
-      post({ type: "skip", reason: noCodec ? "no-encoder" : "unsupported" });
+      post({
+        type: "skip",
+        reason: noCodec ? "no-encoder" : "unsupported",
+        discarded: lost.map((d) => ({
+          type: d.track.type,
+          codec: d.track.codec ?? null,
+          reason: d.reason,
+        })),
+      });
       return;
     }
 

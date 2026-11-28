@@ -90,6 +90,7 @@ import {
 import { holdTabAwake } from "@/lib/services/upload/tab-keep-awake";
 import { saveMatchThumbnail } from "@/lib/video/capture-thumbnail";
 import { discardPreparedVideo, prepareVideoForUpload } from "@/lib/video/trim";
+import { reportTrimSkip } from "@/lib/video/trim-telemetry";
 
 import {
   transferAttachment,
@@ -316,6 +317,8 @@ export interface AttachmentFlowDeps {
   prepare: PrepareAttachmentVideo;
   /** Removes a cut from OPFS once its attempt has ended, however it ended. */
   discardPrepared: (storageName: string) => Promise<void>;
+  /** Records why the original went up uncut (`video_cut_skipped`). */
+  reportSkip: typeof reportTrimSkip;
   /** The kept window for a marked first point. Seam for a shorter pad. */
   trimWindow: typeof defaultAttachmentTrimWindow;
   transfer: typeof transferAttachment;
@@ -398,6 +401,7 @@ function resolveDeps(
   return {
     prepare: overrides?.prepare ?? prepareVideoForUpload,
     discardPrepared: overrides?.discardPrepared ?? discardPreparedVideo,
+    reportSkip: overrides?.reportSkip ?? reportTrimSkip,
     trimWindow: overrides?.trimWindow ?? defaultAttachmentTrimWindow,
     transfer: overrides?.transfer ?? transferAttachment,
     updateAlignment: overrides?.updateAlignment ?? updateAlignment,
@@ -772,6 +776,15 @@ export function useAttachmentFlow(
                 settle({ status: "idle" });
                 return;
               }
+            }
+
+            if (!prepared?.trimmed) {
+              // The original goes up whole: say why, durably.
+              deps.reportSkip(prepared ?? { reason: "failed" }, {
+                surface: "attachment",
+                matchId,
+                fileSizeBytes: picked.sizeBytes,
+              });
             }
 
             if (prepared?.trimmed) {

@@ -1,5 +1,17 @@
 import type { PreparedMode, TrimSkipReason } from "./trim-plan";
 
+/**
+ * A video or audio track Mediabunny would not carry into the cut, as facts a
+ * telemetry event may hold: the track kind, its codec (null when Mediabunny
+ * could not name it — Apple's spatial `apac` reads that way) and Mediabunny's
+ * own `DiscardedTrack` reason slug. Never a file name.
+ */
+export interface TrimDiscardedTrack {
+  type: string;
+  codec: string | null;
+  reason: string;
+}
+
 /** Main thread → trim worker. */
 export type TrimWorkerRequest =
   | {
@@ -25,5 +37,11 @@ export type TrimWorkerResponse =
       durationSeconds: number;
       mode: PreparedMode;
     }
-  | { type: "skip"; reason: TrimSkipReason; detail?: string }
+  | {
+      type: "skip";
+      reason: TrimSkipReason;
+      detail?: string;
+      /** Tracks the conversion would have dropped, when that is the reason. */
+      discarded?: TrimDiscardedTrack[];
+    }
   | { type: "cancelled" };

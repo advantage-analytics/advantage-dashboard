@@ -24,6 +24,8 @@ export interface AttachmentFlowHarnessWindow {
   prepareCalls: AttachmentFlowPrepareCall[];
   /** Every `discardPrepared` call, by storage name. */
   discardCalls: string[];
+  /** Every `video_cut_skipped` the flow's real `reportSkip` would have sent. */
+  skipEvents: { event: string; properties: Record<string, unknown> }[];
   /**
    * Resolves a `prepare=hold` cut. Before it is called the fake has reported
    * 50% progress and is waiting, so the trimming phase can be observed.

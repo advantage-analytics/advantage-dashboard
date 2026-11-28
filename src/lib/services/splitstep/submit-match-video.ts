@@ -18,6 +18,7 @@ import {
   discardPreparedVideo,
   prepareVideoForUpload,
 } from "@/lib/video/trim";
+import { reportTrimSkip } from "@/lib/video/trim-telemetry";
 
 // Re-exported so callers (and the spec covering it) can import the
 // submit-refusal → error_code mapping from this file too; see
@@ -377,11 +378,13 @@ export async function uploadAndSubmitVideo({
             );
           }
           file = prepared.file;
-        } else if (prepared.reason !== "whole-clip") {
-          console.info(
-            "Uploading the original video without cutting it:",
-            prepared.reason,
-          );
+        } else {
+          reportTrimSkip(prepared, {
+            surface: "wizard",
+            matchId,
+            jobId,
+            fileSizeBytes: prepared.file.size,
+          });
         }
       } finally {
         window.clearInterval(heartbeat);
