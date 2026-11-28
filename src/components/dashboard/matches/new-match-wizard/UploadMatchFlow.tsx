@@ -1,5 +1,4 @@
 "use client";
-
 /**
  * UploadMatchFlow — full-page wizard for creating a match.
  *
@@ -15,6 +14,7 @@
  * about how the state behind it is managed.
  */
 
+import dynamic from "next/dynamic";
 import { AdminFileSubmissionStatus } from "./AdminFileSubmissionStatus";
 import { useAdminWizardMode } from "./admin-mode";
 import {
@@ -32,6 +32,7 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { PinnedLineBar } from "./PinnedLineBar";
 import { StartOverDialog } from "./StartOverDialog";
 import { AddHoursDialog } from "@/components/dashboard/credits/add-hours-dialog";
+import { usePlanBilling } from "@/components/dashboard/billing/use-plan-billing";
 import { SubjectBar } from "./SubjectBar";
 import { UploadMatchSuccess } from "./UploadMatchSuccess";
 import {
@@ -70,6 +71,16 @@ import {
   trackUploadStarted,
   trackUploadStepViewed,
 } from "./upload-analytics";
+
+// Rendered only while plans are on sale (`plansActive`): loaded then, so an
+// uploader before launch never downloads the checkout.
+const PlanCheckoutDialog = dynamic(
+  () =>
+    import("@/components/dashboard/billing/plan-checkout-dialog").then(
+      (loaded) => loaded.PlanCheckoutDialog,
+    ),
+  { ssr: false },
+);
 
 /** Where the flow returns to when it is dismissed or finished. */
 const PERSONAL_EXIT_HREF = "/dashboard/matches";
@@ -369,6 +380,13 @@ function UploadWizardPage() {
       quotaFreeSeconds,
       quotaCreditSeconds,
       freeHoursReturnOn,
+      plansActive,
+      quotaPlanId,
+      quotaAllowanceKind,
+      quotaPastDue,
+      quotaResetsOn,
+      handlePurchase,
+      syncPlan,
     },
     view: {
       title,
@@ -380,7 +398,20 @@ function UploadWizardPage() {
     actions,
     meta: { contentRef, exitHref, preset, onSwitchPreset, workspaceKind },
   } = useUploadWizard();
-  const { active: workspace } = useWorkspace();
+  const { active: workspace, viewer } = useWorkspace();
+
+  // The subscription facts the plan checkout dialog shows (billing period,
+  // first-month offer), and the plan itself after a payment that had not
+  // shown up yet. Read only once plans are on sale, and again each time the
+  // paywall opens or closes.
+  const planBilling = usePlanBilling(
+    viewer.id,
+    plansActive,
+    `${paywall !== null}:${paymentPending}`,
+  );
+  useEffect(() => {
+    if (planBilling) syncPlan(planBilling.plan, planBilling.periodStart);
+  }, [planBilling, syncPlan]);
 
   // Where a visitor who never finishes got to. `trackUploadStepViewed` sends
   // one view per step and source, so the file arriving sends nothing: that is
@@ -480,26 +511,66 @@ function UploadWizardPage() {
       {step === "file" && <FileStep />}
       {step === "trim" && <TrimStep />}
       {step === "match" && <MatchStep />}
-      <AddHoursDialog
-        open={paywall !== null}
-        onOpenChange={(open) => {
-          if (!open) closeAddHours();
-        }}
-        neededSeconds={paywall?.neededSeconds}
-        freeRemainingSeconds={quotaFreeSeconds ?? 0}
-        creditSeconds={quotaCreditSeconds}
-        resetsOn={freeHoursReturnOn}
-        // Closing IS going back to the trim: the dialog sits over it.
-        onShortenTrim={
-          step === "trim" && paywall?.neededSeconds !== undefined
-            ? () => undefined
-            : undefined
-        }
-        sendsAfterPay={step === "trim"}
-        onCreditsAdded={handleCreditsAdded}
-        paymentPending={paymentPending}
-        onPaymentPending={handlePaymentPending}
-      />
+      {plansActive ? (
+        <PlanCheckoutDialog
+          open={paywall !== null}
+          onOpenChange={(open) => {
+            if (!open) closeAddHours();
+          }}
+          // At Send, the video's cost is the question. Opened from the file
+          // step there is no video priced yet: a Free player chooses a plan,
+          // a subscriber adds hours.
+          mode={
+            paywall?.neededSeconds !== undefined
+              ? { kind: "paywall", neededSeconds: paywall.neededSeconds }
+              : quotaPlanId === "free"
+                ? { kind: "choose" }
+                : { kind: "hours" }
+          }
+          account={{
+            plan: quotaPlanId,
+            period: planBilling?.period ?? null,
+            planLeftSeconds: quotaFreeSeconds ?? 0,
+            extraSeconds: quotaCreditSeconds,
+            resetsOn: quotaAllowanceKind === "plan" ? quotaResetsOn : null,
+            firstMonthEligible: planBilling
+              ? !planBilling.everSubscribed
+              : false,
+            pastDue: quotaPastDue,
+          }}
+          // Closing IS going back to the trim: the dialog sits over it.
+          onShortenTrim={
+            step === "trim" && paywall?.neededSeconds !== undefined
+              ? () => undefined
+              : undefined
+          }
+          sendsAfterPay={step === "trim"}
+          onDone={handlePurchase}
+          paymentPending={paymentPending}
+          onPaymentPending={handlePaymentPending}
+        />
+      ) : (
+        <AddHoursDialog
+          open={paywall !== null}
+          onOpenChange={(open) => {
+            if (!open) closeAddHours();
+          }}
+          neededSeconds={paywall?.neededSeconds}
+          freeRemainingSeconds={quotaFreeSeconds ?? 0}
+          creditSeconds={quotaCreditSeconds}
+          resetsOn={freeHoursReturnOn}
+          // Closing IS going back to the trim: the dialog sits over it.
+          onShortenTrim={
+            step === "trim" && paywall?.neededSeconds !== undefined
+              ? () => undefined
+              : undefined
+          }
+          sendsAfterPay={step === "trim"}
+          onCreditsAdded={handleCreditsAdded}
+          paymentPending={paymentPending}
+          onPaymentPending={handlePaymentPending}
+        />
+      )}
       {startOverStep && subjectName && (
         <StartOverDialog
           open={startOverOpen}

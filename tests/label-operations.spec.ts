@@ -15,6 +15,7 @@ import {
   deadBallReason,
   deadBallRun,
   deadBallsAfterMiss,
+  shotsRemovedAfter,
   destinationServerIn,
   gameServer,
   applyPointMove,
@@ -397,6 +398,74 @@ test.describe("dead balls after a ball marked out", () => {
     expect(
       deadBallsAfterMiss(more(5), "s-return", { result: "out" }, called, true),
     ).toEqual([]);
+  });
+
+  test("a let, or a first serve newly faulted, takes the swings before the next serve, and only those", () => {
+    const P = "p-0001";
+    const rows = [
+      labelShot("l-1", P, {
+        hitter: "p1",
+        stroke: "first_serve",
+        result: "in",
+        videoTime: 10,
+      }),
+      labelShot("l-2", P, { hitter: "p2", stroke: "backhand", videoTime: 11 }),
+      labelShot("l-3", P, { hitter: "p1", stroke: "forehand", videoTime: 12 }),
+      labelShot("l-4", P, {
+        hitter: "p1",
+        stroke: "first_serve",
+        result: "in",
+        videoTime: 30,
+      }),
+      labelShot("l-5", P, { hitter: "p2", stroke: "forehand", videoTime: 31 }),
+    ];
+    const was = { result: "in" as const };
+    const marked = (result: "let" | "out") =>
+      rows.map((r) => (r.id === "l-1" ? { ...r, result } : r));
+    const ids = (shots: LabelShot[]) => shots.map((s) => s.id);
+    // L on the serve: the backhand and forehand go; the replay and its return stay.
+    expect(
+      ids(
+        deadBallsAfterMiss(marked("let"), "l-1", was, { result: "let" }, true),
+      ),
+    ).toEqual(["l-2", "l-3"]);
+    // A first serve marked out does the same.
+    expect(
+      ids(
+        deadBallsAfterMiss(marked("out"), "l-1", was, { result: "out" }, true),
+      ),
+    ).toEqual(["l-2", "l-3"]);
+    // Already a let, or no serve after it yet: nothing.
+    expect(
+      deadBallsAfterMiss(
+        marked("let"),
+        "l-1",
+        { result: "let" },
+        { result: "let" },
+        true,
+      ),
+    ).toEqual([]);
+    expect(
+      deadBallsAfterMiss(
+        marked("let").slice(0, 3),
+        "l-1",
+        was,
+        { result: "let" },
+        true,
+      ),
+    ).toEqual([]);
+    // "Remove N" after a let stops at the replay; after a rally ball it takes everything.
+    expect(ids(shotsRemovedAfter(marked("let"), "l-1", true))).toEqual([
+      "l-2",
+      "l-3",
+    ]);
+    expect(ids(shotsRemovedAfter(rows, "l-2", true))).toEqual([
+      "l-3",
+      "l-4",
+      "l-5",
+    ]);
+    // They go as hit after a fault.
+    expect(deadBallReason("first_serve")).toBe("dead_ball_after_fault");
   });
 
   test("a second serve newly out or in the net is a double fault: the strokes after it go and the ending follows; a first serve's fault takes nothing", () => {

@@ -130,6 +130,14 @@ reads the two upload flows and fails on one.
   Messages are written lead-first so this needs no second field: `NoticeText`
   (`new-match-wizard/NoticeText.tsx`) splits at the first full stop, and the
   video validator's messages all open with the problem ("Frame rate too low.").
+- **One line, never wrapped** (2026-11-26, design owner). A strip at its
+  column's width holds one line: the lead sentence, one short follow-up, and
+  at most one trailing action link ("See plans →"). If it wraps, cut words:
+  move the detail to the control or step it is about (a reset date already
+  in the composer, a price already in the dialog), never let the strip grow a
+  second line. `truncate` on the text span is the guard against a narrow
+  viewport, not the fix for long copy. A refusal that genuinely needs two
+  sentences of instruction is a dialog or an inline `Notice`, not a strip.
 - The red strip is the **danger** family, not `--error`. `--error` (#FF453A)
   stays the inline field-error red; a strip is not a field, and the footer's
   `MissingFieldsPill` beside it was already danger-red.

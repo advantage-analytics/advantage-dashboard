@@ -6,11 +6,12 @@ import { join, resolve } from "node:path";
 import * as nextWebpack from "next/dist/compiled/webpack/webpack";
 
 /**
- * "Show me" under a saved answer (`ask-show.tsx`) in a real browser, through
- * `tests/fixtures/ask-show-harness.tsx`: one status region for the
- * component's whole life (busy, then the outcome), focus handed to the
- * result once the button unmounts, and the several-matches list capped as
- * the sources are. `ask-show.spec.ts` holds the route and `show.ts`.
+ * "Watch the points" under a saved answer (`ask-show.tsx`) in a real
+ * browser, through `tests/fixtures/ask-show-harness.tsx`: the points load
+ * with the answer, so one click goes into the film; the line holds its place
+ * while they load; a refusal keeps a retry and a way into the film; and the
+ * several-matches list opens from one line, capped as the sources are.
+ * `ask-show.spec.ts` holds the route and `show.ts`.
  */
 
 const webpack = (
@@ -94,64 +95,84 @@ async function openFixture(page: Page, query: string) {
 }
 
 const region = (page: Page) => page.locator("[data-ask-show]");
-const status = (page: Page) => region(page).locator("[data-ask-show-status]");
 
-test("one status region from the start: busy while the points are found", async ({
+test("loads with the answer: busy, the line held in place and dimmed, no button to press", async ({
   page,
 }) => {
   await openFixture(page, "?case=slow");
-  await expect(region(page).getByRole("status")).toHaveCount(1);
-  await expect(status(page)).toHaveText("");
-  await expect(region(page)).not.toHaveAttribute("aria-busy", /.*/);
-
-  await page.getByRole("button", { name: "Show me these points" }).click();
-  await expect(status(page)).toHaveText("Finding the points");
   await expect(region(page)).toHaveAttribute("aria-busy", "true");
-  // The busy mark is the region's, not the button's, and still one status.
-  await expect(
-    page.getByRole("button", { name: "Show me these points" }),
-  ).not.toHaveAttribute("aria-busy", /.*/);
-  await expect(region(page).getByRole("status")).toHaveCount(1);
+  await expect(page.locator("[data-ask-show-placeholder]")).toHaveText(
+    "Watch these points",
+  );
+  await expect(page.getByRole("button")).toHaveCount(0);
+  await expect(page.getByRole("link")).toHaveCount(0);
 });
 
-test("one match: the count is announced and focus moves to the point list", async ({
+test("one match: one link straight into the film, no second click", async ({
   page,
 }) => {
   await openFixture(page, "?case=match");
-  await page.getByRole("button", { name: "Show me these points" }).click();
-  await expect(status(page)).toHaveText("3 points found");
+  const watch = page.getByRole("link", { name: /^Watch .*3 points/ });
+  await expect(watch).toHaveAttribute(
+    "href",
+    "/dashboard/matches/match-1?tab=film&pn=3%2C7%2C12",
+  );
   await expect(region(page)).not.toHaveAttribute("aria-busy", /.*/);
-  await expect(
-    page.getByRole("heading", { name: "All 3 points in this match" }),
-  ).toBeFocused();
+  await expect(page.locator("[data-ask-show-placeholder]")).toHaveCount(0);
+  await expect(page.getByRole("button")).toHaveCount(0);
 });
 
-test("a refusal: the alert, the button for a retry, and a way into the match's film", async ({
+test("an answer far down the conversation asks for nothing until it scrolls near", async ({
+  page,
+}) => {
+  await openFixture(page, "?case=far");
+  const posts = () =>
+    page.evaluate(
+      () => (window as unknown as { __askShowPosts: number }).__askShowPosts,
+    );
+  await expect(page.locator("[data-ask-show-placeholder]")).toHaveCount(1);
+  await expect(region(page)).not.toHaveAttribute("aria-busy", /.*/);
+  expect(await posts()).toBe(0);
+  await region(page).scrollIntoViewIfNeeded();
+  await expect(
+    page.getByRole("link", { name: /^Watch .*3 points/ }),
+  ).toBeVisible();
+  expect(await posts()).toBe(1);
+});
+
+test("a refusal: the alert, Try again, and a way into the match's film", async ({
   page,
 }) => {
   await openFixture(page, "?case=fail");
-  await page.getByRole("button", { name: "Show me these points" }).click();
   await expect(page.getByRole("alert")).toHaveText(
     "The points could not be read. Try again.",
   );
-  await expect(
-    page.getByRole("button", { name: "Show me these points" }),
-  ).toBeEnabled();
+  const retry = page.getByRole("button", { name: "Try again" });
+  await expect(retry).toBeEnabled();
   await expect(
     page.getByRole("link", { name: "Open the match's video" }),
   ).toHaveAttribute("href", "/dashboard/matches/match-1?tab=film");
+
+  // Trying again asks once more; refused again, it says so again.
+  await retry.click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "The points could not be read. Try again.",
+  );
 });
 
-test("several matches: the first two, then All N opens the rest in place", async ({
+test("several matches: one line counts the points, opens the first two, then All N", async ({
   page,
 }) => {
   await openFixture(page, "?case=matches");
-  await page.getByRole("button", { name: "Show me these points" }).click();
-  await expect(status(page)).toHaveText("Points in 17 matches");
+  const line = page.getByRole("button", {
+    name: "Watch 170 points across 17 matches",
+  });
+  await expect(line).toHaveAttribute("aria-expanded", "false");
   const list = page.locator("[data-ask-show-matches]");
-  await expect(
-    list.getByRole("heading", { name: "Points in 17 matches" }),
-  ).toBeFocused();
+  await expect(list.getByRole("listitem")).toHaveCount(0);
+
+  await line.click();
+  await expect(line).toHaveAttribute("aria-expanded", "true");
   await expect(list.getByRole("listitem")).toHaveCount(2);
 
   const all = list.getByRole("button", { name: "All 17" });
@@ -162,4 +183,15 @@ test("several matches: the first two, then All N opens the rest in place", async
   await expect(first).toHaveAttribute("aria-expanded", "true");
   await first.click();
   await expect(list.getByRole("listitem")).toHaveCount(2);
+});
+
+test("three matches open whole: every row, no All N", async ({ page }) => {
+  await openFixture(page, "?case=three");
+  const line = page.getByRole("button", {
+    name: "Watch 9 points across 3 matches",
+  });
+  await line.click();
+  const list = page.locator("[data-ask-show-matches]");
+  await expect(list.getByRole("listitem")).toHaveCount(3);
+  await expect(list.getByRole("button", { name: /^All / })).toHaveCount(0);
 });

@@ -44,10 +44,12 @@ import {
   isMissedResult,
   isNonPointEnding,
   isLetServe,
+  isReplayedServe,
   isServeStroke,
   isWithdrawnAdd,
   liveShotsInOrder,
   orderLabelShots,
+  strokesBeforeNextServe,
   type LabelPoint,
   type LabelShot,
   type LabelSide,
@@ -617,8 +619,8 @@ export function serveByReceiver(
  * coordinates read out or net (`deriveShotResult`). The seed stores a first
  * serve as in when a rally follows it with no second serve — it must have
  * been — but keeps the vendor's bounce, which is often the wrong one; the
- * publish writes such a serve as in with no landing and no placement
- * (apply.ts) until the bounce is placed in the box. Measured 2026-10-11 over the checked points of six
+ * publish writes such a serve as in with the landing as placed (apply.ts),
+ * so place the bounce in the box if that is where it went. Measured 2026-10-11 over the checked points of six
  * hand-labelled sessions: 60 such serves, the landing re-placed on 5. A
  * quiet hint, never counted: the score is right either way. The first such
  * serve in video order; a let is replayed and not read.
@@ -860,6 +862,69 @@ export function serveAfterServeIn(
       scope: "shot",
       params: { shotId: live[i].id },
     };
+  }
+  return null;
+}
+
+/**
+ * "Hit before the serve?": a let, or a first serve that missed, followed by
+ * live strokes that are not serves and then the same server's next serve —
+ * swings at a ball nobody was playing (`strokesBeforeNextServe`). Pressing L
+ * or marking the fault now takes them in the same write (operations.ts
+ * `deadBallsAfterMiss`); this asks about rows written before that, and about
+ * a let or fault the seed or a combine brought in. The first such serve in
+ * video order; "Remove N" takes the strokes (`writeLabelShotsRemoveAfter`
+ * reads the same rule off a replayed serve).
+ */
+export function hitBeforeServe(
+  point: Pick<LabelPoint, "shots">,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "hit_before_serve" }> | null {
+  const live = liveShotsInOrder(point, ghosts);
+  for (const [i, shot] of live.entries()) {
+    if (!isReplayedServe(shot)) continue;
+    const strokes = strokesBeforeNextServe(live.slice(i + 1), shot.hitter);
+    if (strokes.length === 0) continue;
+    return {
+      code: "hit_before_serve",
+      tier: "hint",
+      scope: "shot",
+      params: { shotId: shot.id, strokes: strokes.map((s) => s.id) },
+    };
+  }
+  return null;
+}
+
+/**
+ * "First serve after a let?": a live serve typed `second_serve` with no
+ * missed serve before it in the point, only a let — a let is replayed with
+ * the serve it interrupted, so after a first serve's let comes a first serve.
+ * The first such serve in video order; the action retypes it
+ * (`{ stroke: "first_serve" }`). The inverse of "Second serve?".
+ */
+export function firstServeAfterLet(
+  point: Pick<LabelPoint, "shots">,
+  ghosts: boolean,
+): Extract<LabelMark, { code: "first_serve_after_let" }> | null {
+  let faulted = false;
+  let let_ = false;
+  for (const shot of liveShotsInOrder(point, ghosts)) {
+    if (!isServeStroke(shot.stroke)) continue;
+    if (isLetServe(shot)) {
+      // A let on a second serve replays a second serve.
+      if (shot.stroke === "first_serve") let_ = true;
+      else faulted = true;
+      continue;
+    }
+    if (shot.stroke === "second_serve" && let_ && !faulted) {
+      return {
+        code: "first_serve_after_let",
+        tier: "hint",
+        scope: "shot",
+        params: { shotId: shot.id },
+      };
+    }
+    if (isMissedResult(shot.result)) faulted = true;
   }
   return null;
 }
@@ -1200,8 +1265,10 @@ export function openHintMarks(
     endingStale(point, ghosts),
     endingContradiction(point, ghosts),
     secondServeAsFirst(point, ghosts),
+    firstServeAfterLet(point, ghosts),
     lastLandingMissing(point, ghosts),
     serveAfterServeIn(point, ghosts),
+    hitBeforeServe(point, ghosts),
     servesFromBothSides(point, ghosts),
     serveLandingHint(point, ghosts),
     placementMissing(point, ghosts),
@@ -1443,6 +1510,8 @@ export const REVIEW_ITEMS: readonly ReviewItemDef[] = [
     question: REVIEW_ITEM_QUESTION[3],
     codes: [
       "second_serve_as_first",
+      "first_serve_after_let",
+      "hit_before_serve",
       "first_serve_fault_alone",
       "serve_by_receiver",
       "second_serve_called_out",

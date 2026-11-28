@@ -17,6 +17,9 @@ import * as adminApproval from "@/lib/admin/uploads/approval";
 import * as quota from "@/lib/services/splitstep/quota";
 import * as draftTarget from "@/lib/wizard/draft-target";
 import { secondsLeft } from "@/lib/data/usage-format";
+import * as billingPlans from "@/lib/billing/plans";
+import * as planCopy from "@/lib/billing/plan-copy";
+import * as userPlan from "@/lib/user/plan";
 import type {
   UseUploadMatchWizardProps,
   UseUploadMatchWizardReturn,
@@ -48,7 +51,7 @@ export function rosterRow(
     email: null,
     role: "player",
     lineup_spot: null,
-    managed_by: "coach",
+    managed_by: "player",
     ...overrides,
   };
 }
@@ -115,6 +118,13 @@ export function uploadWizardHarness(
     quotaCapSeconds?: number;
     /** A personal player's credits, from `readCreditBalance`. Defaults to 0. */
     creditSeconds?: number;
+    /**
+     * Successive answers of `/api/splitstep/hours-left`, the past-due
+     * re-read, consumed in call order with the last one held. `"error"` is a
+     * 503, `"offline"` a rejected fetch. Unset, the route answers the generic
+     * `{ success: true }`, which says nothing about the payment.
+     */
+    hoursLeftReads?: (Record<string, unknown> | "error" | "offline")[];
   } = {},
 ) {
   const slots: any[] = [];
@@ -256,6 +266,7 @@ export function uploadWizardHarness(
   // consumes the next entry of `programStatusReads`, holding the last one
   // once exhausted, so a spec can script "unknown, then active" for a Retry.
   let rosterRpcCallCount = 0;
+  let hoursLeftCallCount = 0;
   let programStatusCallCount = 0;
   const programStatusReads = options.programStatusReads ?? [
     (active.programStatus ?? "active") as
@@ -371,9 +382,29 @@ export function uploadWizardHarness(
       currentBillingMonth: () => "2026-09",
       freeHoursReturnOn: () => "Oct 1",
     },
+    // The resolver the meter reads: the harness's cap, on a fixed calendar
+    // month, keyed the month way (before January 1, 2027).
+    "@/lib/services/splitstep/allowance": {
+      // The one rule of the real resolver these specs need beside the cap:
+      // a failed renewal keeps the plan and holds no plan hours.
+      allowanceFor: (billed: Partial<Workspace>) => ({
+        ...(billed.planStatus === "past_due"
+          ? { kind: "plan", capSeconds: 0, pastDue: true }
+          : { kind: "beta", capSeconds: options.quotaCapSeconds ?? 7200 }),
+        windowStart: new Date("2026-09-01T00:00:00Z"),
+        windowEnd: new Date("2026-10-01T00:00:00Z"),
+        windowed: false,
+        billingMonth: "2026-09-01",
+      }),
+      allowanceResetsOn: () => "Oct 1",
+    },
     "@/lib/services/splitstep/quota": {
       accountTypeFor: () => "user",
       monthlyCapSecondsFor: () => options.quotaCapSeconds ?? 7200,
+      // Pure, so the real ones: the month filter and the team's total read
+      // go to the harness's own Supabase mock.
+      scopeToAllowance: quota.scopeToAllowance,
+      readProgramUsedSeconds: quota.readProgramUsedSeconds,
       // Pure, so the real one.
       sumUsedSeconds: quota.sumUsedSeconds,
       readCreditBalance: async () => ({
@@ -385,6 +416,12 @@ export function uploadWizardHarness(
     // so the real clamp — the meter's remaining figure is what several of
     // these specs assert on.
     "@/lib/data/usage-format": { formatResetDate: () => "Oct 1", secondsLeft },
+    // Pure, so the real ones: the plan a workspace is on, and whether plans
+    // are on sale (which decides the paywall the wizard opens).
+    "@/lib/billing/plans": billingPlans,
+    // Pure too: the words a team's footer meter closes with from January 1.
+    "@/lib/billing/plan-copy": planCopy,
+    "@/lib/user/plan": userPlan,
     // Pure string constant shared with the admin upload file route's own 500
     // body; the hook string-matches it verbatim.
     "@/lib/admin/uploads/types": {
@@ -496,8 +533,17 @@ export function uploadWizardHarness(
         this.onload?.();
       }
     },
-    fetch: async (url: string, init: { body: string }) =>
-      url.startsWith("/api/admin/") && options.adminFetch
+    fetch: async (url: string, init: { body: string }) => {
+      if (url === "/api/splitstep/hours-left" && options.hoursLeftReads) {
+        const reads = options.hoursLeftReads;
+        const read = reads[Math.min(hoursLeftCallCount, reads.length - 1)];
+        hoursLeftCallCount++;
+        if (read === "offline") throw new TypeError("Failed to fetch");
+        return read === "error"
+          ? { ok: false, json: async () => ({ error: "Could not read usage" }) }
+          : { ok: true, json: async () => read };
+      }
+      return url.startsWith("/api/admin/") && options.adminFetch
         ? options.adminFetch(url, init)
         : {
             ok: true,
@@ -507,7 +553,8 @@ export function uploadWizardHarness(
                     success: true,
                   })
                 : { success: true },
-          },
+          };
+    },
   });
   const props: UseUploadMatchWizardProps = {
     open: true,
@@ -545,6 +592,9 @@ export function uploadWizardHarness(
     },
     get rosterRpcCallCount() {
       return rosterRpcCallCount;
+    },
+    get hoursLeftCallCount() {
+      return hoursLeftCallCount;
     },
     workspace,
     props,

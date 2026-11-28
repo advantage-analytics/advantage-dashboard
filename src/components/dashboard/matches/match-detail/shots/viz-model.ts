@@ -14,6 +14,7 @@ import { netPathX } from "../net-crossing";
 import {
   countedShots,
   isFeedShotType,
+  isLetResult,
   isServeShotType,
   pickRallyShots,
   pickServeShotBy,
@@ -506,7 +507,10 @@ function resolvedServe(p: MatchPoint) {
  * played serve was the second.
  */
 function firstServeStruck(p: MatchPoint) {
-  const serves = (p.shots ?? []).filter((s) => isServeShotType(s.shotType));
+  // A let is no serve struck: it is replayed, and draws on no court.
+  const serves = (p.shots ?? []).filter(
+    (s) => isServeShotType(s.shotType) && !isLetResult(s.result),
+  );
   if (serves.length === 0) {
     // No serve rows: the flattened fields are the played serve, which is
     // the first serve only when it is labelled one.

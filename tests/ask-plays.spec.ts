@@ -11,6 +11,7 @@ import {
   asksForWinningPlays,
   buildLosingPlaysAnswer,
   buildWinningPlaysAnswer,
+  courtOfPlaysSql,
   isLosingPlaysSql,
   isWinningPlaysSql,
   rallyLengthOf,
@@ -21,10 +22,14 @@ import {
   losingPlaysSql,
   losingPlaysSubject,
   losingPlaysVoice,
+  playsCourtOf,
+  playsFilterPhrase,
+  ASK_SHORT_RALLY,
 } from "@/lib/services/ask/plays";
 import type { AskPromptTag } from "@/lib/services/ask/prompts";
 import { plusOneBreakdownAsked } from "@/lib/services/ask/serve-plus-one";
 import { checkAskSql } from "@/lib/services/ask/sql-guard";
+import { ASK_VISUAL_WATCH_PREFIX } from "@/lib/services/ask/tree";
 
 /**
  * Offline spec for losing plays — "What are Eli's losing plays?". The answer
@@ -891,4 +896,95 @@ test("which patterns to keep going to is the winning plays", () => {
   expect(asksForWinningPlays("which shots keep going into the net")).toBe(
     false,
   );
+});
+
+test.describe("plays narrowed to a rally length or a side", () => {
+  const SCOPE = "select match_id from ask.matches";
+
+  test("both queries take the filters, pass the guard, and are read back as the server's own", () => {
+    for (const subject of ["mine", "opponent"] as const) {
+      for (const [rally, court] of [
+        [ASK_SHORT_RALLY, null],
+        [null, "Ad"],
+        [ASK_SHORT_RALLY, "Deuce"],
+      ] as const) {
+        for (const sql of [
+          losingPlaysSql(subject, rally, court),
+          winningPlaysSql(subject, rally, court),
+        ]) {
+          expect(checkAskSql({ scopeSql: SCOPE, sql })).toEqual({ ok: true });
+          expect(rallyLengthOfPlaysSql(sql)).toEqual(rally);
+          expect(courtOfPlaysSql(sql)).toBe(court);
+        }
+        expect(isLosingPlaysSql(losingPlaysSql(subject, rally, court))).toBe(
+          true,
+        );
+        expect(isWinningPlaysSql(winningPlaysSql(subject, rally, court))).toBe(
+          true,
+        );
+      }
+    }
+  });
+
+  test("with no filter the queries are what they were", () => {
+    expect(losingPlaysSql("mine", null, null)).toBe(losingPlaysSql("mine"));
+    expect(courtOfPlaysSql(losingPlaysSql("mine"))).toBeNull();
+    expect(losingPlaysSql("mine")).not.toContain("p.court");
+  });
+
+  test("the losing plays narrow the shots' miss rates to the same points", () => {
+    const sql = losingPlaysSql("mine", null, "Ad");
+    expect(sql).toContain(
+      "and (s.match_id, s.point_number) in (\n    select p.match_id, p.point_number from ask.point_plays p",
+    );
+    expect(sql.match(/and p\.court = 'Ad'/g)).toHaveLength(2);
+  });
+
+  test("the filter is said in words", () => {
+    expect(playsFilterPhrase(null, null)).toBe("");
+    expect(playsFilterPhrase(ASK_SHORT_RALLY, "Ad")).toBe(
+      " in rallies of up to four shots on the ad side",
+    );
+    expect(playsFilterPhrase(null, "Deuce")).toBe(" on the deuce side");
+    const voice = losingPlaysVoice("mine", null);
+    const text = buildLosingPlaysAnswer(ROWS, voice, 1, null, "Ad") ?? "";
+    expect(text.split("\n")[0]).toContain(" on the ad side");
+    // The Video filter has no side, so the narrowed tree links nothing.
+    expect(text).not.toContain(ASK_VISUAL_WATCH_PREFIX);
+    expect(buildLosingPlaysAnswer(ROWS, voice, 1) ?? "").toContain(
+      ASK_VISUAL_WATCH_PREFIX,
+    );
+  });
+
+  test("a side is read only when named as a side or a court", () => {
+    expect(playsCourtOf("on the ad side")).toBe("Ad");
+    expect(playsCourtOf("from the advantage court")).toBe("Ad");
+    expect(playsCourtOf("on the deuce side")).toBe("Deuce");
+    expect(playsCourtOf("at deuce")).toBeNull();
+    expect(playsCourtOf("deuce side and ad side")).toBeNull();
+  });
+
+  test("the body's counts say the filter too, and a match left out is not called shotless", () => {
+    const voice = losingPlaysVoice("mine", null);
+    const narrowed = buildLosingPlaysAnswer(ROWS, voice, 3, null, "Ad") ?? "";
+    expect(narrowed).toMatch(
+      /points you lost on the ad side|lost \{\{r\d+\.shots\}\} points on the ad side/,
+    );
+    expect(narrowed).toContain("no recorded shot on the ad side");
+    expect(narrowed).not.toContain("no shot-by-shot data");
+    const whole = buildLosingPlaysAnswer(ROWS, voice, 3) ?? "";
+    expect(whole).toContain("no shot-by-shot data");
+  });
+
+  test("a team's plays over several players speak of the team, never 'you'", () => {
+    expect(losingPlaysVoice("mine", null, true)).toMatchObject({
+      name: "the team",
+      possessive: "the team's",
+      second: false,
+    });
+    expect(losingPlaysVoice("mine", null, false).name).toBe("you");
+    expect(losingPlaysVoice("mine", "Avery Zzseed", true).name).toBe(
+      "Avery Zzseed",
+    );
+  });
 });

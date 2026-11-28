@@ -1,3 +1,4 @@
+import { claimOnPlans } from "@/lib/billing/claim-copy";
 import {
   PILOT_ENDS_AT,
   formatPilotEnd,
@@ -6,29 +7,79 @@ import {
 } from "../splitstep/config";
 
 /**
- * Pilot terms — the version a coach must have accepted before a team can be
+ * Team terms — the version a coach must have accepted before a team can be
  * created or claimed.
  *
- * The version literal lives in exactly two places that name each other:
+ * There are two, and which one a coach is shown depends on when and for whom
+ * (`termsVersionFor()`):
  *
- *   * `PILOT_TERMS_VERSION` here
- *   * `public.current_pilot_terms_version()`, last replaced by
- *     `supabase/migrations/20261108084005_pilot_terms_version_3.sql`
+ *   * `PILOT_TERMS_VERSION` — the fall pilot's terms. Every claim before
+ *     `PLANS_BEGIN`, and after it a claim for a program on a running pilot.
+ *   * `TEAM_TERMS_VERSION` — the terms of a team with no free hours. Every
+ *     other claim from `PLANS_BEGIN`.
  *
- * Bump both in the same change (the SQL side is a new migration replacing
- * the function body). A `pilot_terms_acceptances` row whose `terms_version`
- * is not the current one counts as no acceptance — a new version means every
- * coach accepts again before their next creation or claim.
+ * Each literal lives in exactly two places that name each other:
  *
- * The terms' copy itself joins this module with the terms screen (T4), so
- * that the words a coach accepted and the version they accepted under can
- * never drift apart.
+ *   * `PILOT_TERMS_VERSION` here and `public.current_pilot_terms_version()`,
+ *     last replaced by `supabase/migrations/20261108084005_pilot_terms_version_3.sql`
+ *   * `TEAM_TERMS_VERSION` here and `public.accepted_terms_versions()`, in
+ *     `supabase/migrations/20261126100000_plans_2027_team_terms.sql`
+ *
+ * Bump both sides in the same change (the SQL side is a new migration
+ * replacing the function body). A `pilot_terms_acceptances` row whose
+ * `terms_version` is not the one the coach is being shown counts as no
+ * acceptance — a new version means every coach accepts again before their
+ * next creation or claim.
+ *
+ * The database accepts either live version (`assert_pilot_terms_accepted`);
+ * which of the two a given claim needs is decided here, on the server, by
+ * `pilot-terms-server.ts`. Until the team-terms migration is applied the
+ * database knows only the pilot version, and that module keeps serving it.
+ *
+ * The terms' copy itself is in this module with the versions, so that the
+ * words a coach accepted and the version they accepted under can never drift
+ * apart.
  */
 export const PILOT_TERMS_VERSION = "2026-fall-pilot-3";
 
+/** The terms for a claim from `PLANS_BEGIN` by a team not on a running pilot. */
+export const TEAM_TERMS_VERSION = "2027-team-1";
+
+export type TermsVersion =
+  typeof PILOT_TERMS_VERSION | typeof TEAM_TERMS_VERSION;
+
+/**
+ * Which terms a claim is made under: the pilot's before `PLANS_BEGIN` and for
+ * a program whose pilot is running, the team terms otherwise. A team that
+ * does not exist yet (the custom flow) is on no pilot.
+ */
+export function termsVersionFor({
+  now = new Date(),
+  pilotRunning = false,
+}: {
+  now?: Date;
+  pilotRunning?: boolean;
+} = {}): TermsVersion {
+  return claimOnPlans({ now, pilotRunning })
+    ? TEAM_TERMS_VERSION
+    : PILOT_TERMS_VERSION;
+}
+
+/**
+ * Whether the version a terms screen rendered is the one this claim is made
+ * under. Anything else — the other live version included — is refused with
+ * the copy's `refused` sentence, and nothing is recorded.
+ */
+export function isShownTermsVersion(
+  rendered: unknown,
+  expected: TermsVersion,
+): boolean {
+  return typeof rendered === "string" && rendered === expected;
+}
+
 /**
  * SQLSTATE the program-creating RPCs raise when the acting user holds no
- * acceptance for `PILOT_TERMS_VERSION` — `supabase/migrations/
+ * acceptance at a live version — `supabase/migrations/
  * *_pilot_terms_enforcement.sql` documents the choice. The server actions
  * around `create_custom_program`, `complete_program_claim` and
  * `complete_program_claim_with_token` map it to the `"terms-not-accepted"`
@@ -168,11 +219,7 @@ export function pilotTermsCopy({
         tone: "ink",
         segments: [
           {
-            text:
-              // Terms 2.1 §6, Privacy 1.5 §3 and §10: the video analysis
-              // provider trains on every video it receives, junior teams'
-              // included.
-              "We may use pilot usage and data to improve Advantage. Our video analysis provider uses match video, including video from high school and junior teams, to improve its analysis models.",
+            text: DATA_USE_TERM,
           },
         ],
       },
@@ -185,6 +232,23 @@ export function pilotTermsCopy({
         ],
       },
     ],
+    ...sharedTermsCopy(flow),
+    micro: "Free. No card on file.",
+  };
+}
+
+/**
+ * What both versions say in the same words: the one statement the coach
+ * makes, the button, and the refusal when the version shown is not the one
+ * the claim is made under.
+ */
+function sharedTermsCopy(
+  flow: PilotTermsFlow,
+): Pick<
+  PilotTermsCopy,
+  "confirmation" | "button" | "pendingButton" | "refused"
+> {
+  return {
     confirmation:
       flow === "college"
         ? "I can add players to this program and upload match video of them, and my players agree to be filmed and to have their stats analyzed."
@@ -194,8 +258,73 @@ export function pilotTermsCopy({
     button:
       flow === "college" ? "Accept and continue" : "Accept and create team",
     pendingButton: flow === "college" ? "Accepting" : "Creating",
-    micro: "Free. No card on file.",
     refused:
       "These terms changed while you were reading. Accept the current version to continue.",
   };
+}
+
+/**
+ * Terms 2.1 §6, Privacy 1.5 §3 and §10: the video analysis provider trains on
+ * every video it receives, junior teams' included. One sentence, the same in
+ * both versions word for word.
+ */
+const DATA_USE_TERM =
+  "We may use pilot usage and data to improve Advantage. Our video analysis provider uses match video, including video from high school and junior teams, to improve its analysis models.";
+
+/**
+ * The copy for `TEAM_TERMS_VERSION` (approved 2026-11-26): a team from
+ * `PLANS_BEGIN` that is on no pilot. It promises no hours and names no date,
+ * so it takes no quota tier — one blue line (what setting up costs and what
+ * video needs) where the pilot has two, then the same two ink lines with the
+ * pilot's "monthly hours" swapped for plans and prices.
+ */
+export function teamTermsCopy({
+  flow,
+}: {
+  flow: PilotTermsFlow;
+}): PilotTermsCopy {
+  const noun = flow === "college" ? "program" : "team";
+  return {
+    title: "Team terms",
+    intro: `You accept these once for this ${noun}. Your staff and players won't be asked.`,
+    terms: [
+      {
+        tone: "blue",
+        segments: [
+          {
+            text:
+              "Setting up is free. Video analysis needs a plan, billed by invoice; hours start when the plan is set and unused hours expire when it ends." +
+              (flow === "team"
+                ? " SwingVision imports are free and unlimited."
+                : ""),
+          },
+        ],
+      },
+      { tone: "ink", segments: [{ text: DATA_USE_TERM }] },
+      {
+        tone: "ink",
+        segments: [
+          {
+            text: "We may change plans and prices for a later season, and we'll tell you first.",
+          },
+        ],
+      },
+    ],
+    ...sharedTermsCopy(flow),
+    micro: "Free to set up. No card on file.",
+  };
+}
+
+/**
+ * The copy for the version a screen is about to render. The one function the
+ * terms pages call, so a page cannot pair one version's id with the other's
+ * words.
+ */
+export function termsCopyFor(
+  version: TermsVersion,
+  input: { flow: PilotTermsFlow; accountType: AccountType },
+): PilotTermsCopy {
+  return version === TEAM_TERMS_VERSION
+    ? teamTermsCopy({ flow: input.flow })
+    : pilotTermsCopy(input);
 }

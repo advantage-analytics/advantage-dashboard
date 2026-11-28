@@ -2,11 +2,14 @@ import { expect, test } from "@playwright/test";
 
 import {
   HAND_LABELLED_FLAG,
+  LET_REPLAYED_FLAG,
   OFF_VIDEO_FLAG,
   buildAppliedRows,
+  isLetPointRow,
   countedServeIndex,
   expectedStats,
-  letsLeftOutLine,
+  LET_RESULT,
+  letsAndDroppedLines,
   pointInsertRow,
   pointScoreOf,
   resultTypeOf,
@@ -108,7 +111,7 @@ test.describe("vocabulary: the seed's mappings, inverted", () => {
     for (const result of ["in", "out", "net"] as const) {
       expect(labelShotResult(shotResultOf(result))).toBe(result);
     }
-    expect(shotResultOf("let")).toBeNull();
+    expect(shotResultOf("let")).toBe(LET_RESULT);
     expect(shotResultOf(null)).toBeNull();
 
     for (const spin of ["topspin", "flat", "backspin", "sidespin"] as const) {
@@ -201,7 +204,7 @@ function session(): LabelPoint[] {
       (p) => [shot(p, "p2", "forehand", "in", { status: "deleted" })],
       { status: "deleted", statusBeforeDelete: "unchanged" },
     ),
-    // A replayed let as its own row: never written.
+    // A replayed let as its own row: written flagged, counted as nothing.
     pt(4, null, "let_replayed", (p) => [shot(p, "p1", "first_serve", "let")]),
     // 30–15: an error, around a ghost, a deleted stroke and a restored ghost.
     pt(5, "p2", "error", (p) => [
@@ -251,16 +254,25 @@ function build(points = session()) {
   return buildAppliedRows({ points, adScoring: true, bestOf: 3 });
 }
 
+/** The rows that are points: a replayed let (`isLetPointRow`) left out. */
+function counted(built: { points: AppliedPointRow[] }): AppliedPointRow[] {
+  return built.points.filter((p) => !isLetPointRow(p));
+}
+
 test.describe("buildAppliedRows", () => {
-  test("skips tombstones and let_replayed / not_a_point rows", () => {
-    const { points, problems, warnings } = build();
+  test("skips tombstones and not_a_point rows; a replayed let is written flagged", () => {
+    const built = build();
+    const { points, problems, warnings } = built;
     expect(problems).toEqual([]);
     expect(warnings).toEqual([]);
     expect(points.map((p) => p.pointIndex)).toEqual([
-      0, 1, 2, 5, 6, 7, 8, 9, 10,
+      0, 1, 2, 4, 5, 6, 7, 8, 9, 10,
     ]);
     expect(points.map((p) => p.point_number)).toEqual([
-      1, 2, 3, 4, 5, 6, 7, 8, 9,
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+    ]);
+    expect(counted(built).map((p) => p.pointIndex)).toEqual([
+      0, 1, 2, 5, 6, 7, 8, 9, 10,
     ]);
 
     const notAPoint = session().map((p) =>
@@ -270,7 +282,7 @@ test.describe("buildAppliedRows", () => {
   });
 
   test("maps every ending to its result_type", () => {
-    expect(build().points.map((p) => p.result_type)).toEqual([
+    expect(counted(build()).map((p) => p.result_type)).toEqual([
       "Ace",
       "Double Fault",
       "Forehand Winner",
@@ -284,7 +296,7 @@ test.describe("buildAppliedRows", () => {
   });
 
   test("scores each point from the scoreboard, server-first", () => {
-    const { points } = build();
+    const points = counted(build());
     expect(points.map((p) => p.point_score)).toEqual([
       "0-0",
       "15-0",
@@ -311,14 +323,16 @@ test.describe("buildAppliedRows", () => {
     ).toEqual(["30-40"]);
   });
 
-  test("a let serve is not written: it neither counts nor shifts the serve", () => {
+  test("a let serve is written at shot 0 as Let: it neither counts nor shifts the serve", () => {
     const point = build().points[2];
-    expect(point.shots.map((s) => s.shot_type)).toEqual([
-      "First Serve",
-      "Backhand",
-      "Forehand",
+    expect(
+      point.shots.map((s) => [s.shot_number, s.shot_type, s.result, s.zone]),
+    ).toEqual([
+      [0, "First Serve", "Let", null],
+      [1, "First Serve", "In", point.shots[1].zone],
+      [2, "Backhand", "In", point.shots[2].zone],
+      [3, "Forehand", "In", point.shots[3].zone],
     ]);
-    expect(point.shots.map((s) => s.shot_number)).toEqual([1, 2, 3]);
     expect(point.rally_length).toBe(3);
     // The clip window still opens on the let.
     expect(point.video_time).toBe(104);
@@ -326,7 +340,7 @@ test.describe("buildAppliedRows", () => {
   });
 
   test("a deleted stroke and an unrestored ghost are left out; a restored one is kept", () => {
-    const point = build().points[3];
+    const point = counted(build())[3];
     expect(
       point.shots.map((s) => [s.shot_number, s.shot_type, s.result]),
     ).toEqual([
@@ -347,20 +361,25 @@ test.describe("buildAppliedRows", () => {
   });
 
   test("rows are derived, flagged hand_labelled, and oriented p1 = player1", () => {
-    const { points } = build();
+    const points = counted(build());
     for (const point of points) {
       expect(point.flags).toEqual([HAND_LABELLED_FLAG]);
       expect(point.derived).toBe(true);
       for (const s of point.shots) expect(s.derived).toBe(true);
     }
     const rally = points[2];
-    expect(rally.shots.map((s) => s.is_player1)).toEqual([true, false, true]);
+    expect(rally.shots.map((s) => s.is_player1)).toEqual([
+      true,
+      true,
+      false,
+      true,
+    ]);
     expect(rally.server_is_player1).toBe(true);
     expect(rally.won_by_player1).toBe(true);
   });
 
   test("zones: a serve by landing, a rally ball by direction", () => {
-    const { points } = build();
+    const points = counted(build());
     expect(points[5].shots[0].zone).toBe("T");
     expect(points[8].shots[0].zone).toBe("Wide");
     // Struck from +x, landing on -x: crosscourt.
@@ -431,10 +450,10 @@ test.describe("buildAppliedRows", () => {
     });
   });
 
-  test("an in serve whose landing is outside the box is written in, with no landing and no zone", () => {
+  test("an in serve whose landing is outside the box is written in, its landing and zone kept", () => {
     // Hit from behind the baseline on +x; the far service box ends 6.4 m
-    // past the net, so y 23 is long. The seed keeps such a serve in when a
-    // rally followed it: the landing is the vendor's wrong bounce.
+    // past the net, so y 23 is long. The call is the labeller's and the
+    // landing is what they placed: both go out as labelled.
     const placed = (landingY: number) =>
       build([
         pt(0, "p1", "ace", (p) => [
@@ -446,13 +465,14 @@ test.describe("buildAppliedRows", () => {
           }),
         ]),
       ]).points[0].shots[0];
-    expect(placed(23)).toMatchObject({
+    const long = placed(23);
+    expect(long).toMatchObject({
       result: "In",
-      landing_x: null,
-      landing_y: null,
-      zone: null,
+      landing_x: -1,
+      landing_y: 23,
       contact_x: 1,
     });
+    expect(long.zone).not.toBeNull();
     // The same serve with its bounce in the box keeps both.
     const inBox = placed(16);
     expect(inBox.landing_y).toBe(16);
@@ -616,11 +636,19 @@ test.describe("a point with no ending stored", () => {
   });
 });
 
-test.describe("lets left out", () => {
+test.describe("lets kept, strokes before the serve dropped", () => {
   test("the build counts live let serves on applied points only", () => {
-    expect(build().letsLeftOut).toBe(1);
-    expect(letsLeftOutLine(1)).toContain("lets left out: 1");
-    expect(letsLeftOutLine(0)).toContain("lets left out: 0");
+    // The applied point's let, and the replayed let point's own serve.
+    expect(build().letsKept).toBe(2);
+    expect(build().letPointsKept).toBe(1);
+    const lines = letsAndDroppedLines({
+      letsKept: 1,
+      letPointsKept: 3,
+      droppedBeforeServe: 2,
+    });
+    expect(lines[0]).toContain("lets kept: 1");
+    expect(lines[1]).toContain("let points kept: 3");
+    expect(lines[2]).toContain("strokes before the serve dropped: 2");
   });
 
   test("a tombstoned let and a let on a deleted point are not counted", () => {
@@ -642,7 +670,145 @@ test.describe("lets left out", () => {
         { status: "deleted" },
       ),
     ];
-    expect(build(points).letsLeftOut).toBe(0);
+    expect(build(points).letsKept).toBe(0);
+  });
+
+  test("strokes played on after a let are dropped; the let and the replay stay", () => {
+    clock = 100;
+    id = 0;
+    const built = build([
+      pt(0, "p1", "ace", (p) => [
+        shot(p, "p1", "first_serve", "let"),
+        shot(p, "p2", "backhand", "in"),
+        shot(p, "p1", "forehand", "in"),
+        shot(p, "p1", "first_serve", "in"),
+      ]),
+    ]);
+    const point = built.points[0];
+    expect(
+      point.shots.map((s) => [s.shot_number, s.shot_type, s.result]),
+    ).toEqual([
+      [0, "First Serve", "Let"],
+      [1, "First Serve", "In"],
+    ]);
+    expect(point.rally_length).toBe(1);
+    expect(built.droppedBeforeServe).toBe(2);
+    expect(built.letsKept).toBe(1);
+    // The clip still opens on the let.
+    expect(point.video_time).toBe(101);
+  });
+
+  test("the preview counts the serve after a let, not the let", () => {
+    clock = 100;
+    id = 0;
+    const built = build([
+      pt(0, "p1", "ace", (p) => [
+        shot(p, "p1", "first_serve", "let"),
+        shot(p, "p1", "first_serve", "in"),
+      ]),
+    ]);
+    const stats = expectedStats(built.points);
+    expect(stats.p1.firstServes).toBe(1);
+    expect(stats.p1.firstServesIn).toBe(1);
+  });
+
+  test("a swing at a fault is dropped; the fault stays at shot 0", () => {
+    clock = 100;
+    id = 0;
+    const built = build([
+      pt(0, "p1", "ace", (p) => [
+        shot(p, "p1", "first_serve", "out"),
+        shot(p, "p2", "forehand", "out"),
+        shot(p, "p1", "second_serve", "in"),
+      ]),
+    ]);
+    expect(
+      built.points[0].shots.map((s) => [s.shot_number, s.shot_type]),
+    ).toEqual([
+      [0, "First Serve"],
+      [1, "Second Serve"],
+    ]);
+    expect(built.droppedBeforeServe).toBe(1);
+  });
+});
+
+test.describe("a replayed let point", () => {
+  /** p1 serves 15–0, the point is played and replayed as a let, then an ace. */
+  function letSession(): LabelPoint[] {
+    clock = 100;
+    id = 0;
+    return [
+      pt(0, "p1", "ace", (p) => [shot(p, "p1", "first_serve", "in")]),
+      // Played out, then called a let: a winner the labeller seeded stays a
+      // label, never a point.
+      pt(1, "p2", "let_replayed", (p) => [
+        shot(p, "p1", "first_serve", "in", { landingX: 0.3, landingY: 18 }),
+        shot(p, "p2", "forehand", "in"),
+        shot(p, "p1", "backhand", "out"),
+      ]),
+      pt(2, "p1", "ace", (p) => [shot(p, "p1", "first_serve", "in")]),
+    ];
+  }
+
+  test("is written whole, flagged, with its strokes and no pressure", () => {
+    const built = build(letSession());
+    expect(built.problems).toEqual([]);
+    expect(built.points.map((p) => p.point_number)).toEqual([1, 2, 3]);
+    const let_ = built.points[1];
+    expect(isLetPointRow(let_)).toBe(true);
+    expect(let_.flags).toEqual([HAND_LABELLED_FLAG, LET_REPLAYED_FLAG]);
+    expect(let_.result_type).toBe(LET_RESULT);
+    expect(
+      let_.is_break_point || let_.is_set_point || let_.is_match_point,
+    ).toBe(false);
+    expect(let_.rally_length).toBeNull();
+    expect(let_.errorKind).toBeNull();
+    // NOT NULL, a placeholder: the server, whatever the label's winner.
+    expect(let_.server_is_player1).toBe(true);
+    expect(let_.won_by_player1).toBe(true);
+    expect(
+      let_.shots.map((s) => [s.shot_number, s.shot_type, s.result]),
+    ).toEqual([
+      [1, "First Serve", "In"],
+      [2, "Forehand", "In"],
+      [3, "Backhand", "Out"],
+    ]);
+    expect(let_.video_time).toBe(102);
+    expect(let_.duration).toBe(2);
+  });
+
+  test("moves no score: it and the point that replays it start at 15–0", () => {
+    const { points } = build(letSession());
+    expect(points.map((p) => p.point_score)).toEqual(["0-0", "15-0", "15-0"]);
+    expect(points.map((p) => p.game_score)).toEqual(["0-0", "0-0", "0-0"]);
+  });
+
+  test("the preview counts nothing of it but its written shots", () => {
+    const withLet = expectedStats(build(letSession()).points);
+    const without = expectedStats(
+      build(letSession().filter((p) => p.ending !== "let_replayed")).points,
+    );
+    expect(withLet.points).toBe(2);
+    expect(withLet.shots).toBe(without.shots + 3);
+    expect(withLet.p1).toEqual(without.p1);
+    expect(withLet.p2).toEqual(without.p2);
+    expect(withLet.games).toBe(without.games);
+  });
+
+  test("a let with no server is a problem, not a row", () => {
+    const points = letSession().map((p) =>
+      p.pointIndex === 1 ? { ...p, server: null } : p,
+    );
+    const built = build(points);
+    expect(built.problems).toEqual(["point 2 (a let): no server"]);
+    expect(built.points.some(isLetPointRow)).toBe(false);
+  });
+
+  test("its insert row carries the flag and no extra columns", () => {
+    const row = pointInsertRow("m-1", build(letSession()).points[1]);
+    expect(row.flags).toEqual([HAND_LABELLED_FLAG, LET_REPLAYED_FLAG]);
+    expect(row.result_type).toBe("Let");
+    expect(Object.keys(row)).not.toContain("labelPointId");
   });
 });
 
@@ -716,12 +882,14 @@ test.describe("buildAppliedRows with a start score", () => {
   const fromStart = () => session().filter((p) => p.pointIndex !== 9);
 
   test("point, game and set scores are counted from the start", () => {
-    const { points, problems, warnings } = buildAppliedRows({
+    const built = buildAppliedRows({
       points: fromStart(),
       adScoring: true,
       bestOf: 3,
       start,
     });
+    const { problems, warnings } = built;
+    const points = counted(built);
     expect(problems).toEqual([]);
     expect(warnings).toEqual([]);
     expect(points.map((p) => p.point_score)).toEqual([
@@ -746,12 +914,14 @@ test.describe("buildAppliedRows with a start score", () => {
   });
 
   test("the pressure flags read the start: set and match points at 5–0 and a set up, no break point", () => {
-    const { points } = buildAppliedRows({
-      points: fromStart(),
-      adScoring: true,
-      bestOf: 3,
-      start,
-    });
+    const points = counted(
+      buildAppliedRows({
+        points: fromStart(),
+        adScoring: true,
+        bestOf: 3,
+        start,
+      }),
+    );
     const pressure = points.map((p) => [
       p.point_score,
       p.is_break_point,

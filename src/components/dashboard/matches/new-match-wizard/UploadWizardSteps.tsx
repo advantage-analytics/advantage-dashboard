@@ -19,9 +19,15 @@ import { TrimStepContent } from "./TrimStepContent";
 import { useAddSelfOffer } from "./useAddSelfOffer";
 import { useUploadWizard } from "./UploadWizardProvider";
 import { WizardNotice } from "./WizardNotice";
-import { XCircle } from "lucide-react";
+import { ArrowRight, Info, XCircle } from "lucide-react";
+import {
+  fileStepHoursNote,
+  type FileStepHoursNote,
+} from "@/lib/billing/checkout-view";
+import { formatHoursLong } from "@/lib/data/usage-format";
 import { advButton } from "@/lib/ui/adv-button";
-import { errorStripCls, noteIconCls } from "./styles";
+import { cn } from "@/lib/utils";
+import { errorStripCls, noteIconCls, noteStripCls } from "./styles";
 
 /**
  * The wizard's four step bodies and the notices that sit beside them. Each is
@@ -184,7 +190,22 @@ export function FileStep() {
     handleFileChange,
     handleRemoveFile,
     handleRemoveVideo,
+    plansActive,
+    quotaPlanId,
+    quotaPastDue,
+    remainingQuotaSeconds,
+    openAddHours,
   } = wizard;
+
+  // Hours are the news on this step in two cases only — see
+  // `fileStepHoursNote()`. Never on the import path: an export is free.
+  const hoursNote = fileStepHoursNote({
+    enabled: plansActive && isProcessingProvider,
+    plan: quotaPlanId,
+    remainingSeconds: remainingQuotaSeconds,
+    videoSeconds: uploadedFile ? videoProbe?.durationSeconds : null,
+    pastDue: quotaPastDue,
+  });
 
   const onDragOver = useCallback(
     (e: React.DragEvent<HTMLDivElement>) => {
@@ -216,29 +237,37 @@ export function FileStep() {
 
   return (
     <div className="flex flex-col gap-9">
-      <FileStepContent
-        kind={isProcessingProvider ? "processing" : "import"}
-        selectedProvider={selectedProvider}
-        subjectFirstName={view.subjectFirstName}
-        uploadedFile={uploadedFile}
-        probe={videoProbe}
-        warnings={isProcessingProvider ? videoWarnings : []}
-        notes={isProcessingProvider ? videoNotes : []}
-        notices={isProcessingProvider ? videoNotices : []}
-        busy={isProbing || isUploading || parsingState.isParsing}
-        error={uploadError}
-        parsingState={parsingState}
-        formData={formData}
-        acceptString={acceptString}
-        isOver={isOver}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={isProcessingProvider ? onVideoDrop : handleDrop}
-        onFileChange={
-          isProcessingProvider ? onVideoFileChange : handleFileChange
-        }
-        onRemove={isProcessingProvider ? handleRemoveVideo : handleRemoveFile}
-      />
+      {/* One column, so the hours note sits 24px above the drop zone and the
+          step body is the same element whether or not there is a note. */}
+      <div className="flex flex-col gap-6">
+        <FileHoursNote note={hoursNote} onSeePlans={openAddHours} />
+        <FileStepContent
+          kind={isProcessingProvider ? "processing" : "import"}
+          selectedProvider={selectedProvider}
+          subjectFirstName={view.subjectFirstName}
+          uploadedFile={uploadedFile}
+          probe={videoProbe}
+          warnings={isProcessingProvider ? videoWarnings : []}
+          notes={isProcessingProvider ? videoNotes : []}
+          notices={isProcessingProvider ? videoNotices : []}
+          busy={isProbing || isUploading || parsingState.isParsing}
+          error={uploadError}
+          parsingState={parsingState}
+          formData={formData}
+          acceptString={acceptString}
+          isOver={isOver}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={isProcessingProvider ? onVideoDrop : handleDrop}
+          onFileChange={
+            isProcessingProvider ? onVideoFileChange : handleFileChange
+          }
+          onRemove={isProcessingProvider ? handleRemoveVideo : handleRemoveFile}
+          // One grey strip per place: the hours note stands in for the
+          // "Nothing is uploading yet" strip rather than stacking above it.
+          hideIdleNote={hoursNote.kind !== "none"}
+        />
+      </div>
       <OutOfHoursNotice />
       <IdentityQuestion />
       <WizardEligibilityNotice />
@@ -247,9 +276,85 @@ export function FileStep() {
 }
 
 /**
+ * The file step's one-line hours note, once plans are on sale: grey, because
+ * nothing is wrong and nothing is refused here — paying happens at Send. One
+ * line, never wrapped; "See plans" opens the checkout dialog in place, so a
+ * video already picked stays picked.
+ */
+/** The note `fileStepHoursNote()` calls for, in the wizard's words. */
+export function FileHoursNote({
+  note,
+  onSeePlans,
+}: {
+  note: FileStepHoursNote;
+  onSeePlans: () => void;
+}) {
+  if (note.kind === "no-hours") {
+    return (
+      <HoursNote
+        lead="No video hours yet."
+        rest="You'll choose a plan or buy hours before it's analyzed."
+        onSeePlans={() => onSeePlans()}
+      />
+    );
+  }
+  if (note.kind === "past-due") {
+    return (
+      <HoursNote
+        lead="Your last payment failed."
+        rest="Update your card to get this month's hours."
+      />
+    );
+  }
+  if (note.kind === "too-long") {
+    return (
+      <HoursNote
+        lead={`This video is longer than your ${formatHoursLong(note.leftSeconds)} left.`}
+        rest="Trim it first; you can add hours before it's sent."
+      />
+    );
+  }
+  return null;
+}
+
+function HoursNote({
+  lead,
+  rest,
+  onSeePlans,
+}: {
+  lead: string;
+  rest: string;
+  onSeePlans?: () => void;
+}) {
+  return (
+    <div className={noteStripCls} role="status">
+      <Info
+        className={cn(noteIconCls, "text-[var(--ink-400)]")}
+        strokeWidth={1.5}
+        aria-hidden
+      />
+      <span className="min-w-0 flex-1 truncate">
+        <span className="font-medium text-[var(--ink-900)]">{lead}</span> {rest}
+      </span>
+      {onSeePlans && (
+        <button
+          type="button"
+          onClick={onSeePlans}
+          className="inline-flex shrink-0 cursor-pointer items-center gap-1 text-[12px] text-[var(--blue)] hover:text-[var(--blue-hover)]"
+        >
+          See plans
+          <ArrowRight className="size-3" strokeWidth={1.75} aria-hidden />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
  * B4 in the Credit Packs Mockups (docs/plans/2027-player-pricing.md): a personal player with no free hours and no
  * credits hears it on the file step, before anyone waits on an upload — with
- * the one way forward. Never on the import path (SwingVision is free), never
+ * the one way forward. Before plans are on sale only (`plansActive` hands the
+ * step to `FileHoursNote`). Never on the import path (SwingVision is free), never
  * for a team, and not while the reading is still loading.
  */
 function OutOfHoursNotice() {
@@ -260,10 +365,14 @@ function OutOfHoursNotice() {
       freeHoursReturnOn,
       openAddHours,
       canBuyCredits,
+      plansActive,
     },
   } = useUploadWizard();
 
   if (
+    // Once plans are on sale the file step says it with the grey hours note
+    // above the drop zone instead; this is the beta's credit-pack notice.
+    plansActive ||
     !canBuyCredits ||
     !isProcessingProvider ||
     remainingQuotaSeconds === undefined ||

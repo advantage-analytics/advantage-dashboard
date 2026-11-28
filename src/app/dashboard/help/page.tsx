@@ -23,6 +23,13 @@ import {
   PLAN_HREF,
   packPerHour,
 } from "@/lib/services/credits/packs";
+import {
+  EXTRA_HOUR_PRICE,
+  EXTRA_HOUR_VALIDITY_MONTHS,
+  personalPlan,
+  plansHaveBegun,
+  usd,
+} from "@/lib/billing/plans";
 
 export const metadata = { title: "Help" };
 
@@ -628,25 +635,57 @@ export default function HelpCenterPage() {
 
               <div className={`${blockDividerClass} flex flex-col gap-2.5`}>
                 <span className={blockLabelClass}>Video hours</span>
-                <p className={proseClass}>
-                  Each month includes {getMonthlyCapHours("individual")} free
-                  hours for your personal uploads (
-                  {PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS} for pilot players),
-                  through {formatPilotEnd()}. Past that, credit packs start at{" "}
-                  {packPerHour(CREDIT_PACKS[0])} on{" "}
-                  <Link href={PLAN_HREF} className={linkClass}>
-                    Settings › Plan
-                  </Link>{" "}
-                  and last {CREDIT_VALIDITY_MONTHS} months; free hours are used
-                  first. A match uses the length of its trim, taken when you
-                  submit. A failed or cancelled analysis gives the hours back.
-                  Team uploads draw on the program&apos;s hours, never yours.
-                  What&apos;s left is on{" "}
-                  <Link href="/dashboard/settings/usage" className={linkClass}>
-                    Settings › Usage
-                  </Link>
-                  .
-                </p>
+                {plansHaveBegun() ? (
+                  // From January 1, 2027: the plans' own figures, from the
+                  // plan module — nothing here is typed.
+                  <p className={proseClass}>
+                    {personalPlan("player").name} includes{" "}
+                    {personalPlan("player").hours} hours of match video a month
+                    and {personalPlan("player-pro").name}{" "}
+                    {personalPlan("player-pro").hours}; the{" "}
+                    {personalPlan("free").name} plan has none. Extra hours are{" "}
+                    {usd(EXTRA_HOUR_PRICE)} each on{" "}
+                    <Link href={PLAN_HREF} className={linkClass}>
+                      Settings › Plan
+                    </Link>
+                    , last {EXTRA_HOUR_VALIDITY_MONTHS} months and are used
+                    after your plan&apos;s hours, which don&apos;t carry over to
+                    the next month. A match uses the length of its trim, taken
+                    when you submit. A failed or cancelled analysis gives the
+                    hours back. Team uploads draw on the team&apos;s hours,
+                    never yours. What&apos;s left is on{" "}
+                    <Link
+                      href="/dashboard/settings/usage"
+                      className={linkClass}
+                    >
+                      Settings › Usage
+                    </Link>
+                    .
+                  </p>
+                ) : (
+                  <p className={proseClass}>
+                    Each month includes {getMonthlyCapHours("individual")} free
+                    hours for your personal uploads (
+                    {PILOT_INDIVIDUAL_MONTHLY_CAP_HOURS} for pilot players),
+                    through {formatPilotEnd()}. Past that, credit packs start at{" "}
+                    {packPerHour(CREDIT_PACKS[0])} on{" "}
+                    <Link href={PLAN_HREF} className={linkClass}>
+                      Settings › Plan
+                    </Link>{" "}
+                    and last {CREDIT_VALIDITY_MONTHS} months; free hours are
+                    used first. A match uses the length of its trim, taken when
+                    you submit. A failed or cancelled analysis gives the hours
+                    back. Team uploads draw on the program&apos;s hours, never
+                    yours. What&apos;s left is on{" "}
+                    <Link
+                      href="/dashboard/settings/usage"
+                      className={linkClass}
+                    >
+                      Settings › Usage
+                    </Link>
+                    .
+                  </p>
+                )}
               </div>
             </section>
 

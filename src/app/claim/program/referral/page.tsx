@@ -8,6 +8,7 @@ import {
 import { ReferralLink } from "@/components/claim/referral-link";
 import { advButton } from "@/lib/ui/adv-button";
 import { requestOrigin } from "@/lib/request-origin";
+import { claimOnPlans, referralBody } from "@/lib/billing/claim-copy";
 
 export const metadata = { title: "Program not found" };
 
@@ -78,7 +79,9 @@ export default async function ProgramReferralPage({
             ? `${school} isn't on Advantage yet`
             : "That program isn't on Advantage yet"
         }
-        body="Team workspaces are free for collegiate programs during the pilot, and a coach has to set one up. Send them this and keep going on your own account."
+        // No program is known here (the school is a search term), so the
+        // date alone picks the wording.
+        body={referralBody("referral", claimOnPlans())}
         bodyMax="56ch"
       />
 

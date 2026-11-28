@@ -1,24 +1,18 @@
 "use client";
 
-import {
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { useId, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   ArrowUpRight,
   Bookmark,
   Download,
   Grid2x2,
+  MoreHorizontal,
   Pin,
+  PinOff,
   Play,
   Share2,
   User,
-  Users,
   type LucideIcon,
 } from "lucide-react";
 import type { SavedView } from "@/lib/data/saved-views-logic";
@@ -29,6 +23,12 @@ import {
 } from "@/lib/services/ask/actions";
 import { PERSONAL_ASK_SCOPE, type AskScope } from "@/lib/services/ask/scope";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  FloatMenu,
+  FloatMenuDivider,
+  FloatMenuItem,
+} from "@/components/ui/float-menu";
+import { ChromeTooltip } from "@/components/dashboard/shared/chrome-tooltip";
 import { advField } from "@/lib/ui/adv-field";
 import { cn } from "@/lib/utils";
 
@@ -61,8 +61,8 @@ export interface AskActionCardsProps {
   pinId: string | null;
   /**
    * Pin and unpin, as the page wires the server actions. Omitted when the
-   * answer has no saved id yet (nothing to pin to), in which case the card
-   * says so and its button waits.
+   * answer has no saved id yet (nothing to pin to), in which case the row
+   * says so and waits.
    */
   onPin?: () => Promise<AskPinOutcome>;
   onUnpin?: (pinId: string) => Promise<boolean>;
@@ -70,17 +70,19 @@ export interface AskActionCardsProps {
   onSaveView?: (draft: AskSavedViewDraft) => Promise<AskSaveViewOutcome>;
 }
 
-const ASK_ACTIONS_COPY = {
-  label: "Next steps",
+export const ASK_ACTIONS_COPY = {
+  label: "More for this answer",
+  tooltip: "More",
   pin: "Pin to Home",
   pinning: "Pinning…",
   pinned: {
-    personal: "On your Home page",
-    team: "On the team Home",
+    personal: "Pinned to your Home page",
+    team: "Pinned to the team Home",
   },
   openHome: "Open Home",
-  unpin: "Unpin",
+  unpin: "Unpin from Home",
   unpinning: "Unpinning…",
+  unpinned: "Unpinned",
   pinWaits: "Available once the answer is saved",
   pinFailed: {
     forbidden: "This answer can't be pinned.",
@@ -89,9 +91,10 @@ const ASK_ACTIONS_COPY = {
     invalid: "Could not pin that. Try again.",
   },
   unpinFailed: "Could not unpin that. Try again.",
-  save: "Save view",
+  save: "Save as a view",
+  saveConfirm: "Save view",
   saved: "Saved",
-  openView: "Open the view",
+  openView: "Open the saved view",
   saveTitle: "Save this view?",
   saveDescription:
     "The court and its filters are kept under Visualizations on every match.",
@@ -113,18 +116,10 @@ const HOME_HREF: Record<AskScope["kind"], string> = {
 };
 
 /**
- * The row's one voice: 12px ink that darkens on hover, as the title row's
- * quiet link and the point list's Clear all — never a button, never blue.
- * The answer above is the content; what it offers next is a footnote the
- * reader can act on, not a second surface competing with it.
- */
-const ACTION =
-  "inline-flex cursor-pointer items-center gap-1.5 text-[12px] whitespace-nowrap text-[var(--ink-600)] transition-colors duration-[var(--duration-hover)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none disabled:cursor-default disabled:text-[var(--text-disabled)]";
-/**
- * One glyph per action, before its words, in the row's own ink: the film
- * room's play mark for the film, the pin for Home, the court grid for the
- * Visualizations tab, the bookmark for a saved view, and the arrow for a
- * page the action leaves for. 12px, stroke 1.5 — the sidebar's weight.
+ * One glyph per action, before its words, in the menu's quiet ink: the play
+ * mark for the film, the court grid for the Visualizations tab, the pin for
+ * Home, the bookmark for a saved view, the download for the file, and the
+ * arrow for a page the action leaves for.
  */
 const ACTION_ICON: Record<AskAction["kind"], LucideIcon> = {
   watch: Play,
@@ -133,69 +128,74 @@ const ACTION_ICON: Record<AskAction["kind"], LucideIcon> = {
   save_view: Bookmark,
   export: Download,
   share: Share2,
-  open_match: ArrowUpRight,
   open_player: User,
-  open_opponent: Users,
 };
 
-/** The CSV download; the data URL is built once per file, not on every render. */
-function ExportLink({
-  action,
+const MENU_ICON = "size-[13px] shrink-0 text-[var(--ink-400)]";
+
+/** A menu row that is a link: `FloatMenuItem`'s light row, as an anchor. */
+const MENU_LINK =
+  "flex cursor-pointer items-start gap-2.5 rounded-[7px] px-2.5 py-[7px] text-left transition-colors duration-100 hover:bg-[var(--surface-subtle)] focus-visible:bg-[var(--surface-subtle)] focus-visible:outline-none";
+
+function MenuLinkBody({
+  icon: Icon,
+  children,
 }: {
-  action: Extract<AskAction, { kind: "export" }>;
+  icon: LucideIcon;
+  children: ReactNode;
 }) {
-  const href = useMemo(() => askCsvDataUrl(action.file), [action.file]);
   return (
-    <a href={href} download={action.file.filename} className={ACTION}>
-      <Glyph icon={ACTION_ICON.export} />
-      {action.label}
-    </a>
+    <>
+      <span className="mt-[3px] w-3 shrink-0">
+        <Icon className={MENU_ICON} strokeWidth={1.5} aria-hidden="true" />
+      </span>
+      <span className="min-w-0 flex-1 text-[12px] text-[var(--ink-900)]">
+        {children}
+      </span>
+    </>
   );
 }
 
 function Glyph({ icon: Icon }: { icon: LucideIcon }) {
-  return (
-    <Icon className="size-3 shrink-0" strokeWidth={1.5} aria-hidden="true" />
-  );
+  return <Icon className={MENU_ICON} strokeWidth={1.5} aria-hidden="true" />;
 }
 
-/** A line that reports a state ("On your Home page") beside the actions. */
-const STATUS = "text-[12px] whitespace-nowrap text-[var(--ink-700)]";
-
-/**
- * Each control's one status region, mounted for the control's whole life and
- * its text changed in place: a region that mounts already holding its text
- * is often not announced. The visible line beside it is plain text.
- */
-function ControlStatus({ children }: { children: string }) {
+/** The CSV download; the data URL is built once per file, not on every render. */
+function ExportRow({
+  action,
+  onDone,
+}: {
+  action: Extract<AskAction, { kind: "export" }>;
+  onDone: () => void;
+}) {
+  const href = useMemo(() => askCsvDataUrl(action.file), [action.file]);
   return (
-    <span role="status" className="sr-only">
-      {children}
-    </span>
-  );
-}
-const PROBLEM = "text-[11px] text-[var(--danger-text)]";
-
-/** The filter strip's separator, between one action and the next. */
-function Dot() {
-  return (
-    <span
-      aria-hidden="true"
-      className="size-[3px] shrink-0 rounded-full bg-[var(--ink-300)]"
-    />
+    <a
+      role="menuitem"
+      href={href}
+      download={action.file.filename}
+      onClick={onDone}
+      data-ask-action="export"
+      className={MENU_LINK}
+    >
+      <MenuLinkBody icon={ACTION_ICON.export}>{action.label}</MenuLinkBody>
+    </a>
   );
 }
 
 /**
- * What the answer offers to do next, as one quiet line above its sign-off
- * (`AskAnswer`'s `actions` slot, between "Show me" and the signature):
- * each action a text control in reading order, the filter strip's dot
- * between them. Nothing executes on render — a link action is a link, a
- * pin or a save runs only on a click and only through the page's server
- * action with the app's own confirmation, and an export is a `data:` link
- * the browser downloads. No cards: the answer is the content, and the
- * thread is one white surface (cards never nest, and the answer is not a
- * card).
+ * Everything the answer offers beyond watching its points, behind one ⋯ on
+ * the signature's row (`AskAnswer`'s `actions` slot, after the thumbs):
+ * see it on the court, pin it to Home, save the court as a view, download
+ * the chart's rows, share the match, open the player. The answer is the
+ * content, and "Watch the points" above is the one next step left in view;
+ * a row of five equal text actions competed with both.
+ *
+ * Nothing executes on render — a link action is a link, a pin or a save
+ * runs only on a pick and only through the page's server action with the
+ * app's own confirmation, and an export is a `data:` link the browser
+ * downloads. What a pick changes is said in a status region beside the ⋯;
+ * a refusal is an alert there.
  *
  * Keep this file's imports clear of `next/navigation` and server actions:
  * the page hands in callbacks, and an offline harness renders this.
@@ -208,95 +208,30 @@ export function AskActionCards({
   onUnpin,
   onSaveView,
 }: AskActionCardsProps) {
-  if (actions.length === 0) return null;
-  return (
-    <ul
-      aria-label={ASK_ACTIONS_COPY.label}
-      data-ask-actions=""
-      className="flex list-none flex-wrap items-center gap-x-2.5 gap-y-1.5 p-0"
-    >
-      {actions.map((action, index) => (
-        <li
-          key={action.kind}
-          data-ask-action={action.kind}
-          className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1"
-        >
-          {index > 0 && <Dot />}
-          {action.kind === "pin" ? (
-            <PinControl
-              scopeKind={scope.kind}
-              pinId={pinId}
-              onPin={onPin}
-              onUnpin={onUnpin}
-            />
-          ) : action.kind === "save_view" ? (
-            <SaveViewControl action={action} onSaveView={onSaveView} />
-          ) : action.kind === "export" ? (
-            <ExportLink action={action} />
-          ) : (
-            <Link href={action.href} className={ACTION}>
-              <Glyph icon={ACTION_ICON[action.kind]} />
-              {action.label}
-            </Link>
-          )}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/**
- * Pin, then "On your Home page · Open Home · Unpin" in its place. The
- * control is disabled while the answer has no saved id, with a line saying
- * why: a control that refuses on click is worse than one that waits.
- */
-function PinControl({
-  scopeKind,
-  pinId,
-  onPin,
-  onUnpin,
-}: Pick<AskActionCardsProps, "pinId" | "onPin" | "onUnpin"> & {
-  scopeKind: AskScope["kind"];
-}) {
+  const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<"pin" | "unpin" | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
-  // The control the click lived on unmounts with the state it changed (Pin
-  // becomes "Open Home", Unpin becomes Pin): move focus to its successor
-  // once the page's new `pinId` has drawn it, never on a pin read from the
-  // saved conversation.
-  const moved = useRef<"pinned" | "unpinned" | null>(null);
-  const openHomeRef = useRef<HTMLAnchorElement>(null);
-  const pinRef = useRef<HTMLButtonElement>(null);
-  // Armed before the request — the page may commit the new `pinId` before
-  // the request's promise settles here — and disarmed on a refusal.
-  const settleFocus = () => {
-    if (pinId && moved.current === "pinned") {
-      moved.current = null;
-      openHomeRef.current?.focus();
-    } else if (!pinId && pending === null && moved.current === "unpinned") {
-      // Pin is disabled until the request settles; focus it once enabled.
-      moved.current = null;
-      pinRef.current?.focus();
-    }
-  };
-  useEffect(settleFocus, [pinId, pending]);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saved, setSaved] = useState<SavedView | null>(null);
+  if (actions.length === 0) return null;
+
+  const close = () => setOpen(false);
+  const saveAction = actions.find(
+    (action): action is Extract<AskAction, { kind: "save_view" }> =>
+      action.kind === "save_view",
+  );
 
   async function pin() {
     if (!onPin || pending) return;
+    close();
     setPending("pin");
     setProblem(null);
-    moved.current = "pinned";
     try {
       const outcome = await onPin();
-      if (outcome.ok) {
-        setAnnouncement(ASK_ACTIONS_COPY.pinned[scopeKind]);
-      } else {
-        moved.current = null;
-        setProblem(ASK_ACTIONS_COPY.pinFailed[outcome.error]);
-      }
+      if (outcome.ok) setAnnouncement(ASK_ACTIONS_COPY.pinned[scope.kind]);
+      else setProblem(ASK_ACTIONS_COPY.pinFailed[outcome.error]);
     } catch {
-      moved.current = null;
       setProblem(ASK_ACTIONS_COPY.pinFailed.failed);
     }
     setPending(null);
@@ -304,133 +239,200 @@ function PinControl({
 
   async function unpin() {
     if (!onUnpin || !pinId || pending) return;
+    close();
     setPending("unpin");
     setProblem(null);
-    moved.current = "unpinned";
     let done = false;
     try {
       done = await onUnpin(pinId);
     } catch {
       done = false;
     }
-    if (done) {
-      setAnnouncement("");
-    } else {
-      moved.current = null;
-      setProblem(ASK_ACTIONS_COPY.unpinFailed);
-    }
+    if (done) setAnnouncement(ASK_ACTIONS_COPY.unpinned);
+    else setProblem(ASK_ACTIONS_COPY.unpinFailed);
     setPending(null);
   }
 
-  return (
-    <>
-      <ControlStatus>{announcement}</ControlStatus>
-      {pinId ? (
-        <PinnedRow
-          scopeKind={scopeKind}
-          openHomeRef={openHomeRef}
-          pending={pending}
-          canUnpin={Boolean(onUnpin)}
-          onUnpin={() => void unpin()}
-          problem={problem}
-        />
-      ) : (
-        <>
-          <button
-            ref={pinRef}
-            type="button"
-            onClick={() => void pin()}
-            disabled={!onPin || pending !== null}
-            className={ACTION}
-          >
-            <Glyph icon={ACTION_ICON.pin} />
-            {pending === "pin"
-              ? ASK_ACTIONS_COPY.pinning
-              : ASK_ACTIONS_COPY.pin}
-          </button>
-          {!onPin && (
-            <span className="text-[11px] text-[var(--ink-500)]">
-              {ASK_ACTIONS_COPY.pinWaits}
-            </span>
-          )}
-          {problem && (
-            <span role="alert" className={PROBLEM}>
-              {problem}
-            </span>
-          )}
-        </>
-      )}
-    </>
+  // The export and the links leave the answer; the stateful rows come first
+  // in reading order, then a rule, then the ways out.
+  const exits = actions.filter(
+    (action) =>
+      action.kind === "export" ||
+      action.kind === "share" ||
+      action.kind === "open_player" ||
+      action.kind === "watch",
   );
-}
+  const inPlace = actions.filter((action) => !exits.includes(action));
 
-/** "On your Home page · Open Home · Unpin": a pinned answer's row. */
-function PinnedRow({
-  scopeKind,
-  openHomeRef,
-  pending,
-  canUnpin,
-  onUnpin,
-  problem,
-}: {
-  scopeKind: AskScope["kind"];
-  openHomeRef: RefObject<HTMLAnchorElement | null>;
-  pending: "pin" | "unpin" | null;
-  canUnpin: boolean;
-  onUnpin: () => void;
-  problem: string | null;
-}) {
+  function row(action: AskAction) {
+    switch (action.kind) {
+      case "pin":
+        if (pinId) {
+          return (
+            <span key="pin" className="flex flex-col">
+              <Link
+                role="menuitem"
+                href={HOME_HREF[scope.kind]}
+                onClick={close}
+                data-ask-action="open_home"
+                className={MENU_LINK}
+              >
+                <MenuLinkBody icon={ArrowUpRight}>
+                  {ASK_ACTIONS_COPY.openHome}
+                </MenuLinkBody>
+              </Link>
+              <FloatMenuItem
+                label={
+                  pending === "unpin"
+                    ? ASK_ACTIONS_COPY.unpinning
+                    : ASK_ACTIONS_COPY.unpin
+                }
+                icon={<Glyph icon={PinOff} />}
+                disabled={!onUnpin || pending !== null}
+                onSelect={() => void unpin()}
+              />
+            </span>
+          );
+        }
+        return (
+          <FloatMenuItem
+            key="pin"
+            label={
+              pending === "pin"
+                ? ASK_ACTIONS_COPY.pinning
+                : ASK_ACTIONS_COPY.pin
+            }
+            description={onPin ? undefined : ASK_ACTIONS_COPY.pinWaits}
+            icon={<Glyph icon={Pin} />}
+            disabled={!onPin || pending !== null}
+            onSelect={() => void pin()}
+          />
+        );
+      case "save_view":
+        if (saved) {
+          return (
+            <Link
+              key="save_view"
+              role="menuitem"
+              href={`${action.href}&view=${encodeURIComponent(saved.id)}`}
+              onClick={close}
+              data-ask-action="open_view"
+              className={MENU_LINK}
+            >
+              <MenuLinkBody icon={ArrowUpRight}>
+                {ASK_ACTIONS_COPY.openView}
+              </MenuLinkBody>
+            </Link>
+          );
+        }
+        return (
+          <FloatMenuItem
+            key="save_view"
+            label={ASK_ACTIONS_COPY.save}
+            icon={<Glyph icon={ACTION_ICON.save_view} />}
+            disabled={!onSaveView}
+            onSelect={() => {
+              close();
+              setProblem(null);
+              setSaveOpen(true);
+            }}
+          />
+        );
+      case "export":
+        return <ExportRow key="export" action={action} onDone={close} />;
+      default:
+        return (
+          <Link
+            key={action.kind}
+            role="menuitem"
+            href={action.href}
+            onClick={close}
+            data-ask-action={action.kind}
+            className={MENU_LINK}
+          >
+            <MenuLinkBody icon={ACTION_ICON[action.kind]}>
+              {action.label}
+            </MenuLinkBody>
+          </Link>
+        );
+    }
+  }
+
   return (
-    <>
-      <span className={STATUS}>{ASK_ACTIONS_COPY.pinned[scopeKind]}</span>
-      <Link ref={openHomeRef} href={HOME_HREF[scopeKind]} className={ACTION}>
-        <Glyph icon={ArrowUpRight} />
-        {ASK_ACTIONS_COPY.openHome}
-      </Link>
-      <button
-        type="button"
-        onClick={onUnpin}
-        disabled={pending !== null || !canUnpin}
-        className={ACTION}
-      >
-        {pending === "unpin"
-          ? ASK_ACTIONS_COPY.unpinning
-          : ASK_ACTIONS_COPY.unpin}
-      </button>
+    <span data-ask-actions="" className="inline-flex items-center gap-2">
+      <ChromeTooltip label={ASK_ACTIONS_COPY.tooltip} side="top" hidden={open}>
+        <span className="inline-flex">
+          <FloatMenu
+            open={open}
+            onOpenChange={setOpen}
+            width={212}
+            align="start"
+            side="top"
+            label={ASK_ACTIONS_COPY.label}
+            trigger={
+              <button
+                type="button"
+                aria-label={ASK_ACTIONS_COPY.label}
+                aria-haspopup="menu"
+                aria-expanded={open}
+                className="flex size-7 cursor-pointer items-center justify-center rounded-[var(--radius-button)] text-[var(--ink-500)] transition-colors duration-200 hover:bg-[var(--surface-subtle)] hover:text-[var(--ink-900)] focus-visible:shadow-[var(--focus-ring)] focus-visible:outline-none touch:hit-area"
+              >
+                <MoreHorizontal
+                  className="size-[13px]"
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                />
+              </button>
+            }
+          >
+            {inPlace.map(row)}
+            {inPlace.length > 0 && exits.length > 0 && <FloatMenuDivider />}
+            {exits.map(row)}
+          </FloatMenu>
+        </span>
+      </ChromeTooltip>
+      <span role="status" className="sr-only">
+        {saved ? `${ASK_ACTIONS_COPY.saved} · ${saved.name}` : announcement}
+      </span>
       {problem && (
-        <span role="alert" className={PROBLEM}>
+        <span role="alert" className="text-[11px] text-[var(--danger-text)]">
           {problem}
         </span>
       )}
-    </>
+      {saveAction && (
+        <SaveViewDialog
+          action={saveAction}
+          open={saveOpen}
+          onOpenChange={setSaveOpen}
+          onSaveView={onSaveView}
+          onSaved={setSaved}
+        />
+      )}
+    </span>
   );
 }
 
 /**
- * "Save view" opens the one confirm shell with a name field; the save runs
- * on its action, never on the row's control. Once saved, the row links to
- * the view.
+ * The one confirm shell with a name field; the save runs on its action,
+ * never on the menu's row. Once saved, the row becomes "Open the saved view".
  */
-function SaveViewControl({
+function SaveViewDialog({
   action,
+  open,
+  onOpenChange,
   onSaveView,
+  onSaved,
 }: {
   action: Extract<AskAction, { kind: "save_view" }>;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   onSaveView?: AskActionCardsProps["onSaveView"];
+  onSaved: (view: SavedView) => void;
 }) {
   const nameId = useId();
-  const [open, setOpen] = useState(false);
   const [name, setName] = useState(action.view.name);
   const [pending, setPending] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const [saved, setSaved] = useState<SavedView | null>(null);
-  // The dialog would hand focus back to "Save view", which the save swaps
-  // for "Saved": "Open the view" takes it instead.
-  const justSaved = useRef(false);
-  const openViewRef = useRef<HTMLAnchorElement>(null);
-  useEffect(() => {
-    if (saved && justSaved.current) openViewRef.current?.focus();
-  }, [saved]);
 
   async function save() {
     if (!onSaveView || pending) return;
@@ -439,9 +441,8 @@ function SaveViewControl({
     try {
       const outcome = await onSaveView({ ...action.view, name });
       if (outcome.ok) {
-        justSaved.current = true;
-        setSaved(outcome.view);
-        setOpen(false);
+        onSaved(outcome.view);
+        onOpenChange(false);
       } else {
         setProblem(ASK_ACTIONS_COPY.saveFailed[outcome.error]);
       }
@@ -452,86 +453,42 @@ function SaveViewControl({
     setPending(false);
   }
 
-  const status = (
-    <ControlStatus>
-      {saved ? `${ASK_ACTIONS_COPY.saved} · ${saved.name}` : ""}
-    </ControlStatus>
-  );
-
-  if (saved) {
-    const href = `${action.href}&view=${encodeURIComponent(saved.id)}`;
-    return (
-      <>
-        {status}
-        <span className={STATUS}>
-          {ASK_ACTIONS_COPY.saved} · {saved.name}
-        </span>
-        <Link ref={openViewRef} href={href} className={ACTION}>
-          <Glyph icon={ArrowUpRight} />
-          {ASK_ACTIONS_COPY.openView}
-        </Link>
-      </>
-    );
-  }
-
   return (
-    <>
-      {status}
-      <button
-        type="button"
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        disabled={!onSaveView}
-        onClick={() => {
-          setProblem(null);
-          setOpen(true);
-        }}
-        className={ACTION}
-      >
-        <Glyph icon={ACTION_ICON.save_view} />
-        {ASK_ACTIONS_COPY.save}
-      </button>
-      <ConfirmDialog
-        open={open}
-        onOpenChange={(next) => {
-          setOpen(next);
-          if (!next) setProblem(null);
-        }}
-        title={ASK_ACTIONS_COPY.saveTitle}
-        description={ASK_ACTIONS_COPY.saveDescription}
-        confirmLabel={ASK_ACTIONS_COPY.save}
-        pendingLabel={ASK_ACTIONS_COPY.saving}
-        pending={pending}
-        error={problem}
-        onConfirm={() => void save()}
-        onCloseAutoFocus={(event) => {
-          if (!justSaved.current) return;
-          event.preventDefault();
-          openViewRef.current?.focus();
-        }}
-      >
-        <label htmlFor={nameId} className="flex min-w-0 flex-col gap-2">
-          <span className="text-[11px] text-[var(--ink-600)]">
-            {ASK_ACTIONS_COPY.saveName}
-          </span>
-          <input
-            id={nameId}
-            value={name}
-            maxLength={60}
-            autoComplete="off"
-            spellCheck={false}
-            data-focus-ring="none"
-            onChange={(event) => setName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void save();
-              }
-            }}
-            className={cn(advField("underline"), "w-full outline-none")}
-          />
-        </label>
-      </ConfirmDialog>
-    </>
+    <ConfirmDialog
+      open={open}
+      onOpenChange={(next) => {
+        onOpenChange(next);
+        if (!next) setProblem(null);
+      }}
+      title={ASK_ACTIONS_COPY.saveTitle}
+      description={ASK_ACTIONS_COPY.saveDescription}
+      confirmLabel={ASK_ACTIONS_COPY.saveConfirm}
+      pendingLabel={ASK_ACTIONS_COPY.saving}
+      pending={pending}
+      error={problem}
+      onConfirm={() => void save()}
+    >
+      <label htmlFor={nameId} className="flex min-w-0 flex-col gap-2">
+        <span className="text-[11px] text-[var(--ink-600)]">
+          {ASK_ACTIONS_COPY.saveName}
+        </span>
+        <input
+          id={nameId}
+          value={name}
+          maxLength={60}
+          autoComplete="off"
+          spellCheck={false}
+          data-focus-ring="none"
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void save();
+            }
+          }}
+          className={cn(advField("underline"), "w-full outline-none")}
+        />
+      </label>
+    </ConfirmDialog>
   );
 }

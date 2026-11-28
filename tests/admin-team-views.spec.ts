@@ -28,7 +28,7 @@ test.describe("admin team views", () => {
   test("each other view names its own cards", () => {
     expect(teamViewFrom("people").cards).toEqual(["people", "contacts"]);
     expect(teamViewFrom("schedule").cards).toEqual(["schedule"]);
-    expect(teamViewFrom("usage").cards).toEqual(["pilot", "usage"]);
+    expect(teamViewFrom("usage").cards).toEqual(["pilot", "plan", "usage"]);
   });
 
   test("every old sub-route slug lands on a view", () => {

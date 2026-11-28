@@ -24,10 +24,13 @@ function fakeClient(pointsRows: Record<string, unknown>[]): SupabaseClient {
         return {
           select: () => ({
             eq: () => ({
+              // point_id, shot_number, video_time, id.
               order: () => ({
                 order: () => ({
                   order: () => ({
-                    range: async () => ({ data: [], error: null }),
+                    order: () => ({
+                      range: async () => ({ data: [], error: null }),
+                    }),
                   }),
                 }),
               }),

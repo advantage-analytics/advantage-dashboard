@@ -37,7 +37,12 @@ import {
   adminSetPilotEligible,
   adminSetPilotEnd,
 } from "@/lib/services/programs/admin-team-actions";
-import { getMonthlyCapSeconds } from "@/lib/services/splitstep/config";
+import { PILOT_LATEST_END } from "@/lib/billing/plans";
+import { pilotIsRunning } from "@/lib/services/splitstep/allowance";
+import {
+  formatPilotEnd,
+  getMonthlyCapSeconds,
+} from "@/lib/services/splitstep/config";
 import { advButton } from "@/lib/ui/adv-button";
 import { actionRejected } from "@/lib/ui/action-rejected";
 import type { AdminTeamPilot } from "@/lib/data/admin-team-server";
@@ -56,10 +61,13 @@ import type { ProgramOrgType } from "@/lib/workspace/types";
  * the console reading further into a team than the job needs.
  *
  * **The pilot is a per-program fact now, not a constant.** Every date here
- * comes from `data.pilot` — T1's four `programs.pilot_*` columns — and this
- * file deliberately imports neither `PILOT_ENDS_AT` nor `formatPilotEnd()`.
- * Those are the old site-wide display string; printing them beside a program
- * whose row says something else would state a date the database does not hold.
+ * comes from `data.pilot` — T1's four `programs.pilot_*` columns — and never
+ * from the old site-wide `PILOT_ENDS_AT`: printing that beside a program whose
+ * row says something else would state a date the database does not hold. The
+ * one use of `formatPilotEnd()` is the Grant dialog's sentence about the date
+ * `admin_set_pilot_eligible` itself stamps when the program has none, which
+ * is that constant; from January 1, 2027 the sentence says to set a date
+ * instead, because the stamped one has passed.
  *
  * Severity rides the fill exactly as it does on the staff-facing card — blue,
  * amber from 80%, red at the cap — with a word beside the figure, never colour
@@ -73,6 +81,7 @@ export function PilotUsageCard({
   orgType,
   pilotEligible,
   teamPool,
+  plansBegun = false,
 }: {
   programId: string;
   /** Named in the End pilot confirm, so the question has an object. */
@@ -92,6 +101,12 @@ export function PilotUsageCard({
    * quota module is not a client import.
    */
   teamPool: boolean;
+  /**
+   * `plansHaveBegun()`, decided on the server. From then a team draws the
+   * pool only while its own pilot is running, so the header says whether it
+   * is, and granting the pool says what date that hangs on.
+   */
+  plansBegun?: boolean;
 }) {
   const router = useRouter();
   // Computed once per render — `endsValue` and `ChangeEndDate`'s date floor
@@ -110,6 +125,16 @@ export function PilotUsageCard({
   // end, so `End pilot` would be a no-op that still looks consequential, and
   // the date control starts one rather than changing one.
   const noPilot = !pilot.endsOn && !pilot.approvedAt && !ended;
+  // Whether the pilot is drawing hours today, by the program's own dates —
+  // the same test the allowance resolver applies from January 1, 2027.
+  const running = pilotIsRunning(
+    {
+      pilotEligible,
+      pilotEndsOn: pilot.endsOn,
+      pilotEndedAt: pilot.endedAt,
+    },
+    new Date(`${today}T00:00:00Z`),
+  );
 
   return (
     <SettingsCard className="gap-0 bg-[var(--surface-card)] py-6">
@@ -117,7 +142,9 @@ export function PilotUsageCard({
         trailing={
           <span className="text-[11px] text-[var(--ink-500)]">
             {pilot.endsOn
-              ? `Through ${formatDay(pilot.endsOn)}`
+              ? plansBegun && !running
+                ? `Not running · ${formatDay(pilot.endsOn)}`
+                : `Through ${formatDay(pilot.endsOn)}`
               : noPilot
                 ? "No pilot"
                 : "No end date set"}
@@ -224,6 +251,12 @@ export function PilotUsageCard({
             programId={programId}
             programName={programName}
             eligible={pilotEligible}
+            endsOn={
+              pilot.endsOn !== null && pilot.endsOn >= today
+                ? pilot.endsOn
+                : null
+            }
+            plansBegun={plansBegun}
             onChanged={() => router.refresh()}
           />
         </div>
@@ -233,7 +266,7 @@ export function PilotUsageCard({
 }
 
 /** One fact line — label left at ink-500, value right at ink-900. */
-function Kv({ label, value }: { label: string; value: string }) {
+export function Kv({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex min-h-9 items-center justify-between gap-4 py-1.5">
       <dt className="text-[12px] text-[var(--ink-500)]">{label}</dt>
@@ -558,11 +591,16 @@ function PoolAccess({
   programId,
   programName,
   eligible,
+  endsOn,
+  plansBegun,
   onChanged,
 }: {
   programId: string;
   programName: string;
   eligible: boolean;
+  /** The program's own pilot end date when it has not passed, else null. */
+  endsOn: string | null;
+  plansBegun: boolean;
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -652,8 +690,12 @@ function PoolAccess({
               figure it shares today.
             </p>
             <p>
-              You are recorded as the approver if nobody is yet, and the pilot
-              end date is set to Dec 31, 2026 if none is set or it has passed.
+              You are recorded as the approver if nobody is yet.{" "}
+              {endsOn
+                ? `The pilot keeps its end date, ${formatDay(endsOn)}.`
+                : plansBegun
+                  ? `Set the pilot's end date from this card afterwards: the pool counts only while the pilot is running, and no pilot runs past ${formatDay(PILOT_LATEST_END)}.`
+                  : `The pilot end date is set to ${formatPilotEnd()}, since none is set or it has passed.`}
             </p>
           </ConfirmProse>
           <ConfirmAside>

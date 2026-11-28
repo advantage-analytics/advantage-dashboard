@@ -14,8 +14,19 @@ import { WidgetBoundary } from "@/components/dashboard/loading/widget-boundary";
 import { HomeTitle } from "@/components/dashboard/home-feed/home-title";
 import {
   PilotCard,
+  PlanHomeCard,
   pilotDaysLeft,
 } from "@/components/dashboard/home-feed/pilot-card";
+import {
+  homeCardView,
+  planStandingFor,
+  plansApplyTo,
+} from "@/lib/billing/plan-copy";
+import { readPlanBilling } from "@/lib/billing/plan-fields";
+import { utcToday } from "@/lib/data/match-day";
+import { createClient } from "@/lib/supabase/server";
+import { isPaidPlan } from "@/lib/user/plan";
+import type { Workspace } from "@/lib/workspace/types";
 import {
   StartCards,
   type StartCard,
@@ -61,9 +72,21 @@ export default async function Home() {
     </Link>
   );
   const greeting = timeOfDayGreeting(new Date().getHours());
-  // Once the pilot is over there is no card, and the cards take the row.
-  const pilot =
-    pilotDaysLeft() < 0
+  // Once plans apply to this player (January 1, or a plan bought before it)
+  // the card is their plan and its hours. Until then it is the beta's card,
+  // which goes when the beta does, and the cards take the row.
+  const pilot = plansApplyTo(active)
+    ? region(
+        "Plan",
+        <PilotPending />,
+        <PlanBanner
+          feed={feed}
+          usage={usage}
+          active={active}
+          name={viewer.name}
+        />,
+      )
+    : pilotDaysLeft() < 0
       ? null
       : region(
           "Beta",
@@ -146,6 +169,46 @@ async function Banner({
       capSeconds={used.capSeconds}
       creditSeconds={used.creditSeconds}
       analyzed={analyzed}
+    />
+  );
+}
+
+/** The plan's card: the same footprint, the plan's own words. */
+async function PlanBanner({
+  feed,
+  usage,
+  active,
+  name,
+}: {
+  feed: Feed;
+  usage: ReturnType<typeof getPersonalUsage>;
+  active: Workspace;
+  name: string;
+}) {
+  // The first-month line is only for an account that has never subscribed, so
+  // a Free player's card asks; a subscriber's has no such line to decide.
+  const firstMonth = isPaidPlan(active.plan)
+    ? Promise.resolve(false)
+    : createClient()
+        .then((supabase) => readPlanBilling(supabase, active.id))
+        .then((billing) => !billing.everSubscribed);
+  const [{ analyzed }, used, firstMonthEligible] = await Promise.all([
+    feed,
+    usage,
+    firstMonth,
+  ]);
+  return (
+    <PlanHomeCard
+      view={homeCardView({
+        standing: planStandingFor(active),
+        owner: name,
+        usedSeconds: used.usedSeconds,
+        capSeconds: used.capSeconds,
+        creditSeconds: used.creditSeconds,
+        analyzed,
+        today: utcToday(),
+        firstMonthEligible,
+      })}
     />
   );
 }

@@ -88,15 +88,17 @@ export interface LLMCallOptions {
    */
   model?: string;
   /**
-   * Called once the call is answered, with the provider and model that
-   * answered it — the other provider's when the configured one failed and
-   * the call failed over. Ask records this as the stage's model, so a broken
-   * Claude setup does not show up as Claude runs answered by Gemini.
+   * Called once per call with the provider and model it ended on: the one
+   * that answered, or — when the configured provider failed — the other
+   * provider it failed over to, whether or not that one answered. Not called
+   * when the configured provider fails with no failover (it threw, and the
+   * caller knows). Ask records this as the stage's model, so a broken Claude
+   * setup does not show up as Claude runs answered by Gemini.
    */
   onServed?: (served: LLMServed) => void;
 }
 
-/** Who answered one call. `failover` is true when the configured provider failed first. */
+/** Where one call ended. `failover` is true when the configured provider failed first. */
 export interface LLMServed {
   provider: LLMProvider;
   model: string;
@@ -372,16 +374,14 @@ export function llmFailureFields(error: unknown): {
         : null,
     error_type: slug(record.type),
     error_code: slug(record.code),
-    // The SDKs' error classes all leave `.name` as "Error"; the class name
-    // (`BadRequestError`, `APIConnectionError`) is what tells them apart.
-    // Not minified: both SDKs are `serverExternalPackages`.
+    // An error's own name first when it has one (`TimeoutError`, `AbortError`
+    // on a DOMException); the SDKs' classes all leave `.name` as "Error", and
+    // for them the class name (`BadRequestError`, `APIConnectionError`) is
+    // what tells them apart. Not minified: both SDKs are
+    // `serverExternalPackages`.
     error_name:
       error instanceof Error
-        ? slug(
-            error.constructor.name !== "Error"
-              ? error.constructor.name
-              : error.name,
-          )
+        ? slug(error.name !== "Error" ? error.name : error.constructor.name)
         : null,
   };
 }
@@ -415,7 +415,6 @@ export async function runWithProviderFailover<T>(
   posthog: FailoverCapture | null = getPostHogClient(),
 ): Promise<T> {
   const { primary, secondary } = attempts;
-  let answered = primary;
   let result: T;
   try {
     result = await primary.run();
@@ -450,13 +449,23 @@ export async function runWithProviderFailover<T>(
       });
       flushAfterResponse(posthog);
     }
-    answered = secondary;
-    result = await secondary.run();
+    // Reported whether or not the secondary answers: a call that failed on
+    // both ended on the secondary, and that is the model the failover event
+    // names, so a run record should name it too.
+    try {
+      return await secondary.run();
+    } finally {
+      options.onServed?.({
+        provider: secondary.provider,
+        model: secondary.model,
+        failover: true,
+      });
+    }
   }
   options.onServed?.({
-    provider: answered.provider,
-    model: answered.model,
-    failover: answered !== primary,
+    provider: primary.provider,
+    model: primary.model,
+    failover: false,
   });
   return result;
 }

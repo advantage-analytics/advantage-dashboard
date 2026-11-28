@@ -416,6 +416,8 @@ export interface FakeLabelCall {
   in?: Record<string, readonly unknown[]>;
   /** `.not(column, "is", null)` — the column must be set; absent until asked. */
   notNull?: string[];
+  /** `.not(column, "cs", value)`: the let-point filter. */
+  notContains?: Record<string, unknown>;
   /** `.is(column, null)` — the column must be unset; absent until asked. */
   isNull?: string[];
 }
@@ -517,6 +519,11 @@ export function fakeLabelClient(
           return builder;
         },
         not: (column: string, operator: string, value: unknown) => {
+          // The let-point filter (let-points.ts `LET_POINT_FILTER`).
+          if (operator === "cs") {
+            call.notContains = { ...call.notContains, [column]: value };
+            return builder;
+          }
           if (operator !== "is" || value !== null) {
             throw new Error(`unexpected .not(${column}, ${operator})`);
           }

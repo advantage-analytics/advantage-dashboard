@@ -1,15 +1,16 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { trackServer } from "@/lib/analytics-server";
 import {
   completeClaim,
   completeClaimWithToken,
 } from "@/lib/services/programs/claim-actions";
-import { hasAcceptedCurrentPilotTermsForUser } from "@/lib/services/programs/pilot-terms-actions";
-import { hashToken } from "@/lib/services/programs/tokens";
+import {
+  hasAcceptedTermsForUser,
+  resolveClaimTerms,
+  type ClaimTerms,
+} from "@/lib/services/programs/pilot-terms-server";
 import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
 
 /**
@@ -48,23 +49,31 @@ import { WORKSPACE_COOKIE } from "@/lib/workspace/active-workspace-server";
  * already claimed" race into the user's problem. The RPC is idempotent for the
  * owner, so a refresh here is safe either way.
  *
- * ── Pilot terms first ────────────────────────────────────────────────────────
- * A claim makes the coach an owner, so it waits on the pilot terms. Before
- * either completion runs, a signed-in coach with no acceptance at the current
- * `PILOT_TERMS_VERSION` (read through the session client) is sent to
+ * ── Terms first ──────────────────────────────────────────────────────────────
+ * A claim makes the coach an owner, so it waits on the terms. Before either
+ * completion runs, a signed-in coach with no acceptance at the version this
+ * claim is made under (`resolveClaimTerms`, the resolver the terms screen
+ * and its accept use: the pilot's before January 1, 2027 and for a program on
+ * a running pilot, the team terms otherwise; read through the session
+ * client) is sent to
  * `/claim/[programKey]/terms`, carrying `?token=` when this request had one.
  * That screen's accept comes back HERE with the same token, and only that
  * return trip calls `completeClaim` / `completeClaimWithToken`. The detour is
  * taken only when there is a live claim for it to lead back to
- * (`pendingProgramKey`); anything else (no session, no pending row, the wrong
+ * (the resolver's `pendingKey`); anything else (no session, no pending row, the wrong
  * account, an expired link) falls straight through to the completion, which
  * already names each of those endings.
  *
- * This UI check is what enforces the order today. Once the enforcement
- * migration is live the RPCs refuse the same thing (`terms-not-accepted`),
- * and that refusal also lands on the terms screen, as frame C (`?refused=1`),
- * never on the failure screen's `restart`: the pending claim is untouched, so
- * accepting and coming back through here finishes it.
+ * This check is the courteous half. The completions ask the same question
+ * themselves before their RPC (`termsRefusal`), since a browser can call
+ * them without coming through here, and the database refuses a coach with no
+ * acceptance at all. Either refusal (`terms-not-accepted`) also lands on the
+ * terms screen, as frame C (`?refused=1`), never on the failure screen's
+ * `restart`: the pending claim is untouched, so accepting and coming back
+ * through here finishes it.
+ *
+ * If the database cannot say which terms apply, nothing is completed and the
+ * coach gets the failure screen's `failed`, with the pending claim intact.
  */
 export async function GET(request: Request) {
   const token = new URL(request.url).searchParams.get("token");
@@ -74,19 +83,30 @@ export async function GET(request: Request) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (user && !(await hasAcceptedCurrentPilotTermsForUser(user.id))) {
-    const programKey = await pendingProgramKey(user, token);
-    if (programKey) redirect(termsHref(programKey, token));
+  let terms: ClaimTerms | null = null;
+  if (user) {
+    try {
+      terms = await resolveClaimTerms(supabase, user, { token });
+    } catch {
+      // Logged where it failed. `redirect()` throws, so it stays outside.
+    }
+    if (!terms) redirect("/claim/verify/failed?reason=failed");
+    if (
+      terms.pendingKey &&
+      !(await hasAcceptedTermsForUser(user.id, terms.version))
+    ) {
+      redirect(termsHref(terms.pendingKey, token));
+    }
   }
 
   const result = token
     ? await completeClaimWithToken(token)
     : await completeClaim();
 
-  if (!result.ok && result.reason === "terms-not-accepted" && user) {
-    const programKey = await pendingProgramKey(user, token);
-    if (programKey) redirect(termsHref(programKey, token, true));
-  }
+  // The same claim the detour above looked at: a refused completion leaves
+  // the pending row as it was.
+  if (!result.ok && result.reason === "terms-not-accepted" && terms?.pendingKey)
+    redirect(termsHref(terms.pendingKey, token, true));
 
   // A code, never the copy — see `ClaimFailure`. The screen owns the wording.
   if (!result.ok) redirect(`/claim/verify/failed?reason=${result.reason}`);
@@ -152,50 +172,4 @@ function termsHref(
   if (refused) params.set("refused", "1");
   const query = params.size ? `?${params}` : "";
   return `/claim/${encodeURIComponent(programKey)}/terms${query}`;
-}
-
-/**
- * The program a live, finishable claim for this session is waiting on, or
- * null when there is none.
- *
- * The same row each completion would spend, found the same way: by token hash
- * and bound to this session for the signed-in link, by the session's own
- * verified address in the anonymous slot for the magic link. Read-only, and
- * deliberately narrower than the completions' checks. It answers only "is
- * there somewhere for the terms screen to lead back to", so that a coach
- * whose link has expired or belongs to another account is told that, rather
- * than being asked to accept terms for a claim that cannot finish.
- * `pending_claims` has no grants for `authenticated`, hence the admin client,
- * as in `claim-actions.ts`.
- */
-async function pendingProgramKey(
-  user: User,
-  token: string | null,
-): Promise<string | null> {
-  const db = createAdminClient();
-  const now = new Date();
-
-  if (token) {
-    if (!/^[A-Za-z0-9_-]{20,100}$/.test(token)) return null;
-    const tokenHash = hashToken(token);
-    const { data: row } = await db
-      .from("pending_claims")
-      .select("program_key, claimant_user_id, expires_at")
-      .eq("token_hash", tokenHash)
-      .maybeSingle();
-    if (!row || row.claimant_user_id !== user.id) return null;
-    if (new Date(row.expires_at as string) < now) return null;
-    return row.program_key as string;
-  }
-
-  const email = (user.email ?? "").trim().toLowerCase();
-  if (!email) return null;
-  const { data: row } = await db
-    .from("pending_claims")
-    .select("program_key, expires_at")
-    .eq("email", email)
-    .is("claimant_user_id", null)
-    .maybeSingle();
-  if (!row || new Date(row.expires_at as string) < now) return null;
-  return row.program_key as string;
 }

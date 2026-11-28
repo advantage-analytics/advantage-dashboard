@@ -7,7 +7,11 @@ import {
   type PreparedMode,
   type TrimSkipReason,
 } from "./trim-plan";
-import type { TrimWorkerRequest, TrimWorkerResponse } from "./trim-protocol";
+import type {
+  TrimDiscardedTrack,
+  TrimWorkerRequest,
+  TrimWorkerResponse,
+} from "./trim-protocol";
 
 /**
  * Cut the selected window out of a picked video before it is uploaded, and
@@ -46,7 +50,16 @@ export type PreparedVideo =
       /** OPFS name, for `discardPreparedVideo`. */
       storageName: string;
     }
-  | { trimmed: false; file: File; reason: TrimSkipReason };
+  | {
+      trimmed: false;
+      file: File;
+      reason: TrimSkipReason;
+      /**
+       * The video/audio tracks the conversion would have dropped, when that
+       * is why it was skipped. For `reportTrimSkip`; absent otherwise.
+       */
+      discarded?: TrimDiscardedTrack[];
+    };
 
 /**
  * The file to upload would be over `MAX_VIDEO_SIZE_BYTES`: it was picked that
@@ -181,7 +194,13 @@ async function prepareInBrowser(
         result.detail,
       );
     }
-    return { trimmed: false, file, reason };
+    const discarded =
+      result.type === "skip" && result.discarded?.length
+        ? result.discarded
+        : undefined;
+    return discarded
+      ? { trimmed: false, file, reason, discarded }
+      : { trimmed: false, file, reason };
   }
 
   try {

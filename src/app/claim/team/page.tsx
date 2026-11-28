@@ -1,5 +1,6 @@
 import { ClaimShell, ClaimHeading } from "@/components/claim/claim-shell";
 import { TeamKindChoice } from "@/components/claim/team-kind-choice";
+import { claimOnPlans, collegeCardFoot } from "@/lib/billing/claim-copy";
 
 export const metadata = { title: "Team type" };
 
@@ -24,7 +25,7 @@ export default function TeamForkPage() {
         body="Both get a shared workspace, a roster and one budget. They differ in how the team is confirmed."
         bodyMax="64ch"
       />
-      <TeamKindChoice />
+      <TeamKindChoice collegeFoot={collegeCardFoot(claimOnPlans())} />
     </ClaimShell>
   );
 }

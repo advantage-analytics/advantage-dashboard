@@ -2,6 +2,7 @@ import { cache } from "react";
 import { getAskPins } from "@/lib/data/ask-server";
 import { createClient } from "@/lib/supabase/server";
 import { getProgramUsage, type ProgramUsage } from "@/lib/data/usage-server";
+import type { AllowanceWorkspace } from "@/lib/services/splitstep/allowance";
 import { loadMatchAnalysis } from "@/lib/data/match-analysis-server";
 import { getRosterData } from "@/lib/data/team-roster-server";
 import { topMovers, type TopMover } from "@/lib/data/team-movers";
@@ -1501,7 +1502,7 @@ export const getTeamHomePresence = cache(async function getTeamHomePresence(
 export function getTeamHomeResources(
   programId: string,
   billingMonth: string,
-  tier: Pick<Workspace, "orgType" | "pilotEligible">,
+  tier: Omit<AllowanceWorkspace, "kind">,
 ) {
   return {
     usage: getProgramUsage(programId, billingMonth, tier),
@@ -1516,7 +1517,7 @@ export function getTeamHomeResources(
 export async function getTeamHomeData(
   programId: string,
   billingMonth: string,
-  tier: Pick<Workspace, "orgType" | "pilotEligible">,
+  tier: Omit<AllowanceWorkspace, "kind">,
 ): Promise<TeamHomeData> {
   const resources = getTeamHomeResources(programId, billingMonth, tier);
   const [usage, roster, schedule, analytics] = await Promise.all([

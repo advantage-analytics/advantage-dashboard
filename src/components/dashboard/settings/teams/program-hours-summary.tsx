@@ -7,6 +7,7 @@ import { YouPill } from "@/components/ui/you-pill";
 import type { ProgramUsage } from "@/lib/data/usage-server";
 import type { MemberRole } from "@/lib/data/team-settings-server";
 import {
+  daysUntil,
   daysUntilReset,
   formatHoursLong,
   formatResetDate,
@@ -102,8 +103,16 @@ export function ProgramHoursSummary({
   const fraction = usageFraction(usage.usedSeconds, usage.capSeconds);
   const severity = hoursSeverity(fraction);
   const left = Math.max(0, usage.capSeconds - usage.usedSeconds);
-  const resetDate = formatResetDate(usage.billingMonth);
-  const days = daysUntilReset(usage.billingMonth);
+  // The period the figures were read over: the allowance's own window (a
+  // season, a pilot month), which `getProgramUsage()` names. Null means
+  // nothing comes back — a team with no plan and no pilot.
+  const resetDate =
+    usage.resetsOn === undefined
+      ? formatResetDate(usage.billingMonth)
+      : usage.resetsOn;
+  const days = usage.windowEnd
+    ? daysUntil(usage.windowEnd)
+    : daysUntilReset(usage.billingMonth);
   const matches = usage.lines.reduce(
     (total, line) => total + line.matchCount,
     0,
@@ -119,9 +128,11 @@ export function ProgramHoursSummary({
           Program hours
         </span>
         <span className="flex-1" />
-        <span className="text-[11px] text-[var(--ink-500)]">
-          Resets {resetDate} · in {days} {days === 1 ? "day" : "days"}
-        </span>
+        {resetDate && (
+          <span className="text-[11px] text-[var(--ink-500)]">
+            Resets {resetDate} · in {days} {days === 1 ? "day" : "days"}
+          </span>
+        )}
       </div>
 
       <div className="flex flex-wrap items-baseline gap-2">
@@ -144,7 +155,9 @@ export function ProgramHoursSummary({
               aria-hidden="true"
             />
             {severity === "spent"
-              ? `Spent — uploads pause until ${resetDate}`
+              ? resetDate
+                ? `Spent — uploads pause until ${resetDate}`
+                : "Spent"
               : "Running low"}
           </span>
         )}
@@ -184,73 +197,111 @@ export function ProgramHoursSummary({
       </div>
 
       {open && (
-        <div className="flex flex-col border-t border-[var(--border-hairline)] pt-1">
-          {usage.lines.length === 0 ? (
-            <p className="py-2 text-[12px] text-[var(--ink-500)]">
-              No analysis hours used this month.
-            </p>
-          ) : (
-            usage.lines.map((line) => {
-              const share =
-                usage.usedSeconds > 0
-                  ? line.usedSeconds / usage.usedSeconds
-                  : 0;
-              const role = roles.get(line.userId);
-              return (
-                <div
-                  key={line.userId}
-                  className="flex items-center gap-3 border-b border-[var(--border-hairline)] py-2"
-                >
-                  <span className="flex min-w-0 flex-1 items-center gap-2">
-                    <span className="truncate text-[12px] text-[var(--ink-900)]">
-                      {line.name}
-                    </span>
-                    {role && (
-                      <span className="text-[11px] text-[var(--ink-500)]">
-                        {capitalize(role)}
-                      </span>
-                    )}
-                    {line.userId === viewerId && <YouPill />}
-                  </span>
-                  <span className="text-[11px] text-[var(--ink-500)]">
-                    {line.matchCount}{" "}
-                    {line.matchCount === 1 ? "match" : "matches"}
-                  </span>
-                  <span
-                    aria-hidden="true"
-                    className="h-1 w-[88px] shrink-0 overflow-hidden rounded-[2px]"
-                    style={{ background: "var(--blue-soft)" }}
-                  >
-                    <span
-                      className="block h-1 rounded-[2px]"
-                      style={{
-                        width: `${share * 100}%`,
-                        background: "var(--blue)",
-                      }}
-                    />
-                  </span>
-                  <span className="mono w-[56px] text-right text-[11px] text-[var(--ink-700)]">
-                    {formatHoursLong(line.usedSeconds)}
-                  </span>
-                </div>
-              );
-            })
-          )}
+        <HoursBreakdown
+          usage={usage}
+          pendingSeconds={pendingSeconds}
+          roles={roles}
+          viewerId={viewerId}
+          period="this month"
+          closing={`${HOURS_CLOSING_NOTE} · Pilot ends ${formatPilotEnd()}`}
+        />
+      )}
+    </SettingsCard>
+  );
+}
 
-          {pendingSeconds > 0 && (
-            <div className="flex items-center gap-3 py-[9px]">
-              <span className="min-w-0 flex-1 text-[11px] text-[var(--ink-500)]">
-                Includes {formatHoursLong(pendingSeconds)} reserved by jobs
-                still running
+/** The breakdown's closing sentence, which each hours card may extend. */
+export const HOURS_CLOSING_NOTE =
+  "Hours reserve at submit and reconcile on completion — a failed job gives them back. Players see their own line plus the team total.";
+
+/**
+ * The per-person breakdown a hours card unfolds in place: one row per person
+ * with an 88px share bar, ordered as the ledger returned them, then the
+ * in-flight total the meter already includes, then the closing note.
+ *
+ * Shared by this summary and the team page's Plan & hours card
+ * (`PlanHoursCard`), which feeds it the season's window instead of a month's
+ * — so `period` names the window the lines were read over.
+ */
+export function HoursBreakdown({
+  usage,
+  pendingSeconds,
+  roles,
+  viewerId,
+  period,
+  closing,
+}: {
+  usage: ProgramUsage;
+  pendingSeconds: number;
+  roles: ReadonlyMap<string, MemberRole>;
+  viewerId: string;
+  /** "this month" or "this season" — the empty line's own words. */
+  period: string;
+  closing: string;
+}) {
+  return (
+    <div className="flex flex-col border-t border-[var(--border-hairline)] pt-1">
+      {usage.lines.length === 0 ? (
+        <p className="py-2 text-[12px] text-[var(--ink-500)]">
+          No analysis hours used {period}.
+        </p>
+      ) : (
+        usage.lines.map((line) => {
+          const share =
+            usage.usedSeconds > 0 ? line.usedSeconds / usage.usedSeconds : 0;
+          const role = roles.get(line.userId);
+          return (
+            <div
+              key={line.userId}
+              className="flex items-center gap-3 border-b border-[var(--border-hairline)] py-2"
+            >
+              <span className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="truncate text-[12px] text-[var(--ink-900)]">
+                  {line.name}
+                </span>
+                {role && (
+                  <span className="text-[11px] text-[var(--ink-500)]">
+                    {capitalize(role)}
+                  </span>
+                )}
+                {line.userId === viewerId && <YouPill />}
+              </span>
+              <span className="text-[11px] text-[var(--ink-500)]">
+                {line.matchCount} {line.matchCount === 1 ? "match" : "matches"}
+              </span>
+              <span
+                aria-hidden="true"
+                className="h-1 w-[88px] shrink-0 overflow-hidden rounded-[2px]"
+                style={{ background: "var(--blue-soft)" }}
+              >
+                <span
+                  className="block h-1 rounded-[2px]"
+                  style={{
+                    width: `${share * 100}%`,
+                    background: "var(--blue)",
+                  }}
+                />
+              </span>
+              <span className="mono w-[56px] text-right text-[11px] text-[var(--ink-700)]">
+                {formatHoursLong(line.usedSeconds)}
               </span>
             </div>
-          )}
+          );
+        })
+      )}
 
-          <span className="border-t border-[var(--border-hairline)] pt-3 text-[11px] leading-[1.5] text-[var(--ink-500)]">
-            {`Hours reserve at submit and reconcile on completion — a failed job gives them back. Players see their own line plus the team total. · Pilot ends ${formatPilotEnd()}`}
+      {pendingSeconds > 0 && (
+        <div className="flex items-center gap-3 py-[9px]">
+          <span className="min-w-0 flex-1 text-[11px] text-[var(--ink-500)]">
+            Includes {formatHoursLong(pendingSeconds)} reserved by jobs still
+            running
           </span>
         </div>
       )}
-    </SettingsCard>
+
+      <span className="border-t border-[var(--border-hairline)] pt-3 text-[11px] leading-[1.5] text-[var(--ink-500)]">
+        {closing}
+      </span>
+    </div>
   );
 }

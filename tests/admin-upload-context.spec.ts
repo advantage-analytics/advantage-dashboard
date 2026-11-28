@@ -10,6 +10,8 @@ type Row = Record<string, unknown>;
 
 function harness() {
   const tables: Record<string, Row[]> = {
+    // No season plan: the team's hours are the beta's (the clock is 2026).
+    program_plans: [],
     programs: [
       {
         id: PROGRAM,

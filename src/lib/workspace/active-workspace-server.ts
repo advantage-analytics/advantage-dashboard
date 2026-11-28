@@ -9,6 +9,18 @@ import { getAuthUser } from "@/lib/supabase/auth-user-server";
 import { getInitials } from "@/lib/data/match-utils";
 import { isRecordingSource } from "@/app/onboarding/answers";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
+import type { ProgramPlanRef } from "@/lib/billing/plans";
+import {
+  VERSIONS_ABSENT_RETRY_MS,
+  isMissingTable,
+} from "@/lib/data/season-points-cache";
+import {
+  readPlanWindow,
+  toProgramPlanRef,
+  withHoursFrom,
+  type PlanWindowFacts,
+  type ProgramPlanRow,
+} from "@/lib/billing/plan-fields";
 import { PROGRAM_CRESTS_BUCKET } from "@/lib/data/teams-server";
 import type { ProgramStatus } from "@/lib/services/programs/claim-state";
 import type {
@@ -51,6 +63,7 @@ function personalWorkspace(
   individualPilot: boolean,
   unlimitedVideo: boolean,
   videoHoursOverride: number | null,
+  planWindow: PlanWindowFacts,
 ): Workspace {
   return {
     // Not an invention: `processing_usage` already keys an individual's
@@ -77,6 +90,9 @@ function personalWorkspace(
     unlimitedVideo,
     // `users.video_hours_override` — see `Workspace.videoHoursOverride`.
     videoHoursOverride,
+    // The owner's plan and its period — see `Workspace.plan`.
+    plan: viewer.plan,
+    ...planWindow,
     // No program row, so no status to carry — see `Workspace.programStatus`.
     programStatus: null,
     // A program-wide policy about *other* people, in a workspace whose only
@@ -133,6 +149,67 @@ async function claimedProfilesByProgram(
 }
 
 /**
+ * The season plan of every team the viewer can see one for —
+ * `program_plans`, keyed by `program_id`.
+ *
+ * Not filtered here: the table's own policy returns a member their teams'
+ * rows and nothing else, so this can run beside the membership read instead
+ * of after it. An admin gets every team's row, one per paying program, and
+ * the caller only looks up the ids it has a membership for.
+ *
+ * `note` and `set_by` are not asked for and could not be: no client holds a
+ * grant on them (`admin_get_program_plan` is the admin page's read).
+ *
+ * Never fatal, like `claimedProfilesByProgram`. `program_plans` arrives with
+ * `20261126060000_plans_2027_plan_model`, a migration applied by hand, and
+ * this code can be deployed before it: a missing table then reads as "no team
+ * has a plan", which is true until an admin can assign one, and is not worth
+ * a log line on every request. Any other failure is logged and degrades the
+ * same way. The missing-table branch can go once the migration is live.
+ */
+/**
+ * Until when `program_plans` counts as missing, per server instance: no
+ * query is sent before then, so a database without the plan-model migration
+ * costs one failed read every `VERSIONS_ABSENT_RETRY_MS`, not one per
+ * dashboard request. Applying the migration turns plans on within that,
+ * with no deploy (`season-points-cache.ts` does the same for its table).
+ */
+let programPlansAbsentUntil = 0;
+
+async function programPlansByProgram(
+  supabase: SupabaseClient,
+): Promise<Map<string, ProgramPlanRef>> {
+  if (Date.now() < programPlansAbsentUntil) return new Map();
+  // `hours_from` arrives with a later migration than the table: asked for,
+  // and done without where the column is not there yet — `withHoursFrom()`.
+  const { data, error } = await withHoursFrom((columns) =>
+    supabase.from("program_plans").select(columns),
+  );
+
+  if (error) {
+    if (isMissingTable(error)) {
+      programPlansAbsentUntil = Date.now() + VERSIONS_ABSENT_RETRY_MS;
+    } else {
+      console.error("[workspace] could not load program plans", {
+        error: error.message,
+      });
+    }
+    return new Map();
+  }
+
+  const byProgram = new Map<string, ProgramPlanRef>();
+  for (const row of (data ?? []) as unknown as (ProgramPlanRow & {
+    program_id: string;
+  })[]) {
+    // The CHECKs pin both value sets; a value this build does not know is a
+    // plan newer than this code, and reads as no plan rather than a guess.
+    const ref = toProgramPlanRef(row);
+    if (ref) byProgram.set(row.program_id, ref);
+  }
+  return byProgram;
+}
+
+/**
  * Team workspaces the viewer belongs to.
  *
  * Filtered to `userId` explicitly. RLS alone is NOT enough here: the select
@@ -153,15 +230,16 @@ async function listProgramWorkspaces(
   supabase: SupabaseClient,
   userId: string,
 ): Promise<Workspace[]> {
-  const [{ data, error }, claimedProfiles] = await Promise.all([
+  const [{ data, error }, claimedProfiles, programPlans] = await Promise.all([
     supabase
       .from("program_members")
       .select(
-        "role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, pilot_eligible, time_zone, crest_path, division)",
+        "role, upload_enabled, programs!inner(id, school_name, team, status, players_can_upload, upload_policy, events_policy, org_type, pilot_eligible, pilot_ends_on, pilot_ended_at, time_zone, crest_path, division)",
       )
       .eq("user_id", userId)
       .order("joined_at"),
     claimedProfilesByProgram(supabase, userId),
+    programPlansByProgram(supabase),
   ]);
 
   if (error) {
@@ -187,6 +265,8 @@ async function listProgramWorkspaces(
           events_policy: string;
           org_type: string;
           pilot_eligible: boolean;
+          pilot_ends_on: string | null;
+          pilot_ended_at: string | null;
           time_zone: string;
           crest_path: string | null;
           division: string | null;
@@ -212,6 +292,12 @@ async function listProgramWorkspaces(
         // NOT NULL with default false. The admin-granted half of the quota
         // tier: a custom org on the program pool — see `quotaTierFor()`.
         pilotEligible: program.pilot_eligible === true,
+        // Whether that pilot is still running — see `Workspace.pilotEndsOn`.
+        pilotEndsOn: program.pilot_ends_on,
+        pilotEndedAt: program.pilot_ended_at,
+        // The season plan an admin assigned, or null — see
+        // `Workspace.programPlan`.
+        programPlan: programPlans.get(program.id) ?? null,
         // NOT NULL with default 'UTC', so a program that never set one still
         // reads as a real zone. Rides on the workspace for the reason the
         // fields around it do: "what day is it for this program" has to be
@@ -368,7 +454,7 @@ export const getWorkspaceContext = cache(
     // why other members' names need a SECURITY DEFINER lookup rather than a
     // select from here.
     // Memberships depend only on the authenticated id, not the profile row.
-    const [{ data: row }, programs] = await Promise.all([
+    const [{ data: row }, programs, planWindow] = await Promise.all([
       supabase
         .from("users")
         .select(
@@ -377,6 +463,8 @@ export const getWorkspaceContext = cache(
         .eq("id", user.id)
         .single(),
       listProgramWorkspaces(supabase, user.id),
+      // Its own tolerant read — see `readPlanWindow`.
+      readPlanWindow(supabase, user.id),
     ]);
 
     const avatarPath = row?.avatar_path ?? null;
@@ -405,6 +493,7 @@ export const getWorkspaceContext = cache(
         row?.video_hours_override == null
           ? null
           : Number(row.video_hours_override),
+        planWindow,
       ),
       ...programs,
     ];

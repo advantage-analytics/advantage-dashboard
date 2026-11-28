@@ -174,17 +174,32 @@ export function wizardContinueBlocked(input: {
 export function quotaRefusal(input: {
   remainingSeconds: number | undefined;
   neededSeconds: number;
-  resetsOn: string;
+  /** The day the allowance turns over, or null when nothing comes back. */
+  resetsOn: string | null;
   workspaceKind: WorkspaceKind;
+  /**
+   * `VideoAllowance.kind` for the billed workspace. Two of them change the
+   * words: a `season` is counted over the season, not a month, and its hours
+   * do not reset; a team on `none` has no plan and no pilot, so it never had
+   * hours to use up. Left out, the sentence is the monthly one.
+   */
+  allowanceKind?: string;
 }): string | null {
   const { remainingSeconds, neededSeconds, resetsOn, workspaceKind } = input;
+  const season = input.allowanceKind === "season";
+  const period = season ? "season" : "month";
 
   if (remainingSeconds === undefined) return null;
 
   if (remainingSeconds <= 0) {
-    return workspaceKind === "team"
-      ? `Your team's analysis hours for this month are used up. They reset on ${resetsOn}.`
-      : `This month's analysis hours are used up. They reset on ${resetsOn}.`;
+    if (workspaceKind === "team" && input.allowanceKind === "none") {
+      return "Your team has no plan or video hours yet; its page in Settings › Teams says how to set one up.";
+    }
+    const used =
+      workspaceKind === "team"
+        ? `Your team's analysis hours for this ${period} are used up.`
+        : "This month's analysis hours are used up.";
+    return resetsOn && !season ? `${used} They reset on ${resetsOn}.` : used;
   }
 
   const neededWhole = Math.ceil(neededSeconds);
@@ -204,7 +219,7 @@ export function quotaRefusal(input: {
       remainingSeconds < 60 && remainingSpan === over
         ? `${Math.max(1, Math.floor(remainingSeconds))} sec`
         : remainingSpan;
-    return `This trim is ${over} over the ${remaining} left this month. Shorten the selection to continue.`;
+    return `This trim is ${over} over the ${remaining} left this ${period}. Shorten the selection to continue.`;
   }
 
   return null;

@@ -12,6 +12,7 @@ import { AdminPeopleList } from "@/components/admin/admin-people-card";
 import { AdminScheduleCard } from "@/components/admin/admin-schedule-card";
 import { AdminUsageCard } from "@/components/admin/admin-usage-card";
 import { PilotUsageCard } from "@/components/admin/pilot-usage-card";
+import { PlanCard } from "@/components/admin/plan-card";
 import { TeamLatestMatches } from "@/components/admin/team-latest-matches";
 import { TeamPageHeader } from "@/components/admin/team-page-header";
 import {
@@ -21,6 +22,7 @@ import {
   type TeamCardId,
 } from "@/components/admin/team-sections";
 import { getAdminTeam } from "@/lib/data/admin-team-server";
+import { plansHaveBegun } from "@/lib/billing/plans";
 import { conferenceOptionsFor } from "@/lib/services/programs/admin-program-actions";
 import { quotaTierFor } from "@/lib/services/splitstep/quota";
 import { emailOrigin } from "@/lib/site-url";
@@ -69,7 +71,7 @@ export async function generateMetadata({
  * width of the admin page like Matches and Teams (decided 2026-11-13).
  *
  * The cards the artboard has no place for stay behind `?view=`
- * (`team-sections.ts`): `schedule`, `usage` (Pilot + Usage — where `Add
+ * (`team-sections.ts`): `schedule`, `usage` (Pilot + Plan + Usage — where `Add
  * hours` goes), and `people` (the People list plus Contacts). Each renders
  * alone under the header with a link back. `roster`, `activity` (the log is
  * on the default view now) and any unknown value are the default — the old `/admin/teams/<id>/<slug>` routes
@@ -141,6 +143,7 @@ export default async function AdminTeamPage({
             pilot={data.pilot}
             orgType={data.program.orgType}
             pilotEligible={data.program.pilotEligible}
+            plansBegun={plansHaveBegun()}
             teamPool={
               quotaTierFor({
                 kind: "team",
@@ -148,6 +151,14 @@ export default async function AdminTeamPage({
                 pilotEligible: data.program.pilotEligible,
               }) === "program"
             }
+          />
+        );
+      case "plan":
+        return (
+          <PlanCard
+            programId={programId}
+            programName={data.program.schoolName}
+            plan={data.plan}
           />
         );
       case "usage":
@@ -167,6 +178,7 @@ export default async function AdminTeamPage({
       program={data.program}
       claim={data.claim}
       usage={data.usage}
+      pilot={data.pilot}
     />
   );
 

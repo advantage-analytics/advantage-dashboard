@@ -18,6 +18,7 @@ import { toClaimRole, type ClaimRoleValue } from "./claim-roles";
 import { nextClaimStatus, reviewReason, type ClaimStatus } from "./claim-state";
 import { getProgramOwner } from "./program-owner";
 import { TERMS_NOT_ACCEPTED_SQLSTATE } from "./pilot-terms";
+import { termsRefusal } from "./pilot-terms-server";
 import { wantsNotification } from "@/lib/services/notifications/should-notify";
 import { notifyAdminsReviewNeeded } from "@/lib/services/notifications/admin-review-mail";
 import {
@@ -704,10 +705,11 @@ export type ClaimFailure =
   | "taken"
   | "failed"
   /**
-   * No `pilot_terms_acceptances` row for the current `PILOT_TERMS_VERSION`
-   * (`./pilot-terms.ts`). Both completion RPCs raise
-   * `TERMS_NOT_ACCEPTED_SQLSTATE` once the enforcement migration is applied;
-   * the pending claim is left intact for a retry after the coach accepts.
+   * No `pilot_terms_acceptances` row at the version THIS claim is made under
+   * (`./pilot-terms.ts`). Both completions check that themselves before their
+   * RPC (`termsRefusal`), and the RPCs raise `TERMS_NOT_ACCEPTED_SQLSTATE`
+   * for a coach with no acceptance at any live version; either way the
+   * pending claim is left intact for a retry after the coach accepts.
    */
   | "terms-not-accepted"
   // The two endings only the signed-in token path can reach.
@@ -889,6 +891,13 @@ export async function completeClaim(): Promise<CompleteClaimResult> {
 
   if (!program) return { ok: false, reason: "unknown-program" };
 
+  // The terms this claim is made under, for the program it is FOR. Asked
+  // here and not only on the screens: this is a server action, so a browser
+  // can call it without ever seeing `/claim/verify`'s detour, and the
+  // database accepts either live version.
+  const refusal = await termsRefusal(supabase, user.id, pending.programKey);
+  if (refusal) return { ok: false, reason: refusal };
+
   // Against the verified session address, not the one typed into the form.
   const check = checkClaimEmail(email, program);
 
@@ -1064,6 +1073,15 @@ export async function completeClaimWithToken(
     .maybeSingle();
 
   if (!program) return { ok: false, reason: "unknown-program" };
+
+  // As in `completeClaim`: the terms of the program this token was issued
+  // for, checked here because a browser can call this action directly.
+  const refusal = await termsRefusal(
+    supabase,
+    user.id,
+    row.program_key as string,
+  );
+  if (refusal) return { ok: false, reason: refusal };
 
   // Against the address the token proved — the school one — never the login
   // address the session happens to carry.

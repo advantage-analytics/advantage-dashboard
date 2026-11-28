@@ -44,6 +44,7 @@ import {
   baselineIsWholeScope,
   compareMisfit,
   movesPreviousQuestion,
+  questionMeasures,
   compareColumn,
   compareKindOfSql,
   compareSql,
@@ -105,6 +106,8 @@ import {
   winningPlaysSql,
   rallyLengthOf,
   rallyLengthOfPlaysSql,
+  courtOfPlaysSql,
+  playsCourtOf,
   winningPlaysSubject,
   losingPlaysSql,
   losingPlaysSubject,
@@ -114,7 +117,6 @@ import {
   asksForServePlusOne,
   buildServePlusOneAnswer,
   continuesServePlusOne,
-  namesASide,
   plusOneSides,
   plusOneWithSides,
   servePlusOneRequest,
@@ -275,8 +277,9 @@ export interface AskModel {
   /** One tool turn (`getLLMToolTurn()`), for agent mode; absent, agent mode does not run. */
   toolTurn?: AskAgentToolTurn;
   /**
-   * The model that answered the stage's calls so far — the other provider's
-   * when one failed over — or undefined before any call answered. `plan`
+   * The model the stage's calls ended on so far — the other provider's when
+   * one failed over, even if that one failed too — or undefined before any
+   * call ended on a provider. `plan`
    * covers the plan, pattern and agent calls. The run record prefers this
    * to the model the stage was configured with.
    */
@@ -667,6 +670,57 @@ export function followUpShrank(
 }
 
 /**
+ * What a follow-up says when the planner, told once, still plans the query
+ * the previous answer ran: nothing new to show, said plainly, rather than the
+ * same answer again. The question is released like any other refusal.
+ */
+export const ASK_NOTHING_NEW_MESSAGE =
+  "That's everything these matches show on it. Ask about another part of the game, another player, or a different set of matches.";
+
+/** What the planner is told when a follow-up's plan is the previous query. */
+export const REPEATS_PREVIOUS_REASON =
+  "That is the previous question's query exactly: scope_sql and sql are unchanged, so the answer would be the previous answer again. The follow-up asks for something new. Change what it changes — the measure, the split, the period, the player or the matches — and keep the rest. If the follow-up only complains about the previous answer, plan the previous question again the way the complaint asks; if the views hold nothing more on it, reply with cannot_answer.";
+
+const sameText = (text: string) =>
+  text.toLowerCase().replace(/\s+/g, " ").trim();
+
+/**
+ * Whether `plan` runs the query the previous answer ran: the same scope and
+ * the same query, or the same one of the server's comparisons, or the
+ * review again. Whitespace and case are set aside.
+ */
+export function repeatsPreviousPlan(
+  previous: AskPreviousPlan | null,
+  plan: { scope_sql: string; sql: string },
+): boolean {
+  if (!previous) return false;
+  if (sameText(previous.scope_sql) !== sameText(plan.scope_sql)) return false;
+  if (previous.compare) return compareKindOfSql(plan.sql) === previous.compare;
+  if (previous.sql === null) return plan.sql === ASK_REVIEW_SQL;
+  return sameText(previous.sql) === sameText(plan.sql);
+}
+
+/**
+ * Whether `question` is the previous question asked again — the same words,
+ * punctuation and case aside. Asking again is allowed the same answer; a new
+ * question is not.
+ */
+export function asksPreviousQuestionAgain(
+  question: string,
+  conversation: readonly AskPromptTurn[],
+): boolean {
+  const last = [...conversation].reverse().find((turn) => turn.role === "user");
+  if (!last) return false;
+  const words = (text: string) =>
+    text
+      .replace(/\s*\(about: [^)]*\)\s*$/, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  return words(last.content) === words(question);
+}
+
+/**
  * Why a follow-up's scope reads as having dropped the previous turn's
  * player, or null: the previous scope filtered `player_name ilike`, the
  * question refers back with a pronoun, and the new scope names neither a
@@ -998,6 +1052,14 @@ export async function* askQuestion(
     let reviewText: string | null = null;
     let queried = false;
     let followUpRefusalRetried = false;
+    // A follow-up planned as the previous query: sent back once, and when the
+    // second plan is the same again, answered with ASK_NOTHING_NEW_MESSAGE.
+    let repeatSentBack = false;
+    const questionNamesMeasures = questionMeasures(input.question).length > 0;
+    const askedAgain = asksPreviousQuestionAgain(
+      input.question,
+      input.conversation,
+    );
     // A shot pattern, read once by the reading step (`pattern.ts`). Never in
     // mock mode: its plan is fixed and there is no model to read with.
     const patternAsked =
@@ -1189,17 +1251,23 @@ export async function* askQuestion(
           plusOne,
         );
       }
+      const questionSides = plusOneSides(input.question);
+      // The side a plays answer can narrow to: named as a side or a court.
+      // Any other mention of one ("at deuce", the score; "deuce and ad", a
+      // split) is the planner's, as it was before the plays took a side.
+      const playsCourt = playsCourtOf(input.question);
+      const playsTakeSide =
+        !questionSides.bySide &&
+        (questionSides.court === undefined || playsCourt !== null);
       // "What are Eli's losing plays?": strokes and directions, from the
       // shots. Only the planner's scope is kept — the fixed comparisons read
       // match totals and cannot say which shot a point was lost on.
       if (
         !patternAsked &&
         asksForLosingPlays(input.question) &&
-        // A side named ("on the ad side") is the planner's to answer: the
-        // fixed plays answers count the whole match and would drop it.
-        !namesASide(input.question) &&
-        // So is a rally length: the losing plays count every point.
-        rallyLengthOf(input.question) === null &&
+        // One side ("on the ad side") and a rally length narrow the plays
+        // query; a split by side ("deuce and ad") is the planner's.
+        playsTakeSide &&
         (step.ok || refused)
       ) {
         const subject = losingPlaysSubject(
@@ -1212,7 +1280,11 @@ export async function* askQuestion(
             scope_sql: step.ok
               ? step.plan.scope_sql
               : (tagScope ?? previous?.scope_sql ?? ASK_ALL_MATCHES_SCOPE),
-            sql: losingPlaysSql(subject),
+            sql: losingPlaysSql(
+              subject,
+              rallyLengthOf(input.question),
+              playsCourt,
+            ),
             asks_for_advice: step.ok ? step.plan.asks_for_advice : false,
           },
           false,
@@ -1225,9 +1297,8 @@ export async function* askQuestion(
       if (
         !patternAsked &&
         asksForWinningPlays(input.question) &&
-        // A side named ("on the ad side") is the planner's to answer: the
-        // fixed plays answers count the whole match and would drop it.
-        !namesASide(input.question) &&
+        // One side narrows the plays query; a split by side is the planner's.
+        playsTakeSide &&
         (step.ok || refused)
       ) {
         const subject = winningPlaysSubject(
@@ -1240,8 +1311,12 @@ export async function* askQuestion(
             scope_sql: step.ok
               ? step.plan.scope_sql
               : (tagScope ?? previous?.scope_sql ?? ASK_ALL_MATCHES_SCOPE),
-            // "Best plays in short rallies": only the points of that length.
-            sql: winningPlaysSql(subject, rallyLengthOf(input.question)),
+            // "Best plays in short rallies", "…on the ad side": only those points.
+            sql: winningPlaysSql(
+              subject,
+              rallyLengthOf(input.question),
+              playsCourt,
+            ),
             asks_for_advice: step.ok ? step.plan.asks_for_advice : false,
           },
           false,
@@ -1692,6 +1767,27 @@ export async function* askQuestion(
         step.compare !== null && !step.forced && !misfitSentBack
           ? compareMisfit(input.question)
           : null;
+      // A new question planned as the previous one's query: the answer
+      // would be the previous answer again. Told back once.
+      // One of the app's comparisons narrows its answer to the measures the
+      // question or the planner names ("and his return?"), so over the same
+      // scope it repeats only when neither names any.
+      const compareNarrowed =
+        step.compare !== null &&
+        (questionNamesMeasures ||
+          (Array.isArray(step.compare.measures) &&
+            step.compare.measures.length > 0));
+      // A plan the server chose itself (`forced`) is the server's decision,
+      // not the planner's to change: "as a table" keeps the breakdown.
+      const sameAsBefore =
+        !step.forced &&
+        !askedAgain &&
+        !compareNarrowed &&
+        repeatsPreviousPlan(input.previousPlan ?? null, step.plan);
+      // Sent back while an attempt is left to answer with; on the last one,
+      // or once told, it ends below as ASK_NOTHING_NEW_MESSAGE.
+      const repeated =
+        sameAsBefore && !repeatSentBack && attempt < MAX_PLAN_ATTEMPTS - 1;
       const check: typeof guard = !guard.ok
         ? guard
         : free && namesScopeCountColumn(step.plan.sql)
@@ -1700,15 +1796,22 @@ export async function* askQuestion(
             ? { ok: false, reason: foreignNameReason(foreign.core) }
             : misfit !== null
               ? { ok: false, reason: misfit }
-              : lostPlayer !== null
-                ? { ok: false, reason: lostPlayer }
-                : attempt === 0 &&
-                    free &&
-                    ignoresBigPoints(input.question, step.plan.sql)
-                  ? { ok: false, reason: BIG_POINTS_REASON }
-                  : guard;
+              : repeated
+                ? { ok: false, reason: REPEATS_PREVIOUS_REASON }
+                : lostPlayer !== null
+                  ? { ok: false, reason: lostPlayer }
+                  : attempt === 0 &&
+                      free &&
+                      ignoresBigPoints(input.question, step.plan.sql)
+                    ? { ok: false, reason: BIG_POINTS_REASON }
+                    : guard;
       if (guard.ok && foreign !== null) foreignSentBack = true;
       if (misfit !== null) misfitSentBack = true;
+      // Only when the repeat is what the planner was told: a plan sent back
+      // for another reason has not heard it, and keeps its one try.
+      if (!check.ok && check.reason === REPEATS_PREVIOUS_REASON) {
+        repeatSentBack = true;
+      }
       if (!check.ok) {
         if (fallback) {
           ({ plan, result } = fallback);
@@ -1725,6 +1828,19 @@ export async function* askQuestion(
           continue;
         }
         yield await fail("cannot_answer", cannotAnswer);
+        return;
+      }
+
+      // Told once (or out of attempts) and the previous query came back
+      // again: nothing new to say, and the previous answer is already on the
+      // screen above. An earlier attempt's result, when there is one, is a
+      // different answer and is used instead. Nothing runs either way.
+      if (sameAsBefore) {
+        if (fallback) {
+          ({ plan, result } = fallback);
+          break;
+        }
+        yield await fail("cannot_answer", ASK_NOTHING_NEW_MESSAGE);
         return;
       }
 
@@ -1889,14 +2005,23 @@ export async function* askQuestion(
         plan = step.plan;
         const rows = withScopeCount(ran.rows, ran.matches.length);
         const voice = subjectVoice(step.plays, ran.matches, team);
+        const rally = rallyLengthOfPlaysSql(step.plan.sql);
+        const court = courtOfPlaysSql(step.plan.sql);
         const written = step.winning
           ? buildWinningPlaysAnswer(
               rows,
               voice,
               ran.matches.length,
-              rallyLengthOfPlaysSql(step.plan.sql),
+              rally,
+              court,
             )
-          : buildLosingPlaysAnswer(rows, voice, ran.matches.length);
+          : buildLosingPlaysAnswer(
+              rows,
+              voice,
+              ran.matches.length,
+              rally,
+              court,
+            );
         result = { matches: ran.matches, rows: written === null ? [] : rows };
         if (written === null) {
           emptyReason = ASK_NO_SHOTS_MESSAGE;
@@ -2895,6 +3020,7 @@ function subjectVoice(
             : null,
       ),
     ),
+    team,
   );
 }
 

@@ -27,12 +27,14 @@ import {
 
 /** The `users` columns an allowance is computed from. */
 export const ALLOWANCE_COLUMNS =
-  "individual_pilot, is_admin, video_hours_override" as const;
+  "individual_pilot, is_admin, video_hours_override, plan" as const;
 
 interface AllowanceSource {
   individual_pilot: boolean | null;
   is_admin: boolean | null;
   video_hours_override: number | string | null;
+  /** `users.plan` — from January 1, 2027 the plan is what grants hours. */
+  plan?: string | null;
 }
 
 /**
@@ -54,6 +56,7 @@ export function personalAllowance(user: AllowanceSource): AccountAllowance {
       pilotEligible: false,
       unlimitedVideo: user.is_admin === true,
       videoHoursOverride: overrideHours,
+      plan: user.plan ?? null,
     }),
   };
 }

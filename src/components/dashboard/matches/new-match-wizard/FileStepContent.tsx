@@ -76,6 +76,11 @@ export interface FileStepContentProps {
    * in place of "Nothing is uploading yet" — it says when, too.
    */
   notices?: string[];
+  /**
+   * The step already carries a grey note above the drop zone (the hours
+   * note): leave out "Nothing is uploading yet", one grey strip per place.
+   */
+  hideIdleNote?: boolean;
   /** Probing a video, validating or reading an export. */
   busy: boolean;
   /** Why the file was refused. */
@@ -289,6 +294,7 @@ function FileStepContentImpl({
   warnings,
   notes = [],
   notices = [],
+  hideIdleNote = false,
   busy,
   error,
   parsingState,
@@ -555,20 +561,23 @@ function FileStepContentImpl({
             </div>
           ))}
 
-          {isVideo && warnings.length === 0 && notices.length === 0 && (
-            /* The honest thing about timing: nothing has left the machine. */
-            <div className={noteStripCls}>
-              <Info
-                className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"
-                strokeWidth={1.5}
-                aria-hidden="true"
-              />
-              <span>
-                Nothing is uploading yet. The upload starts when the match is
-                saved — trimming and details come first.
-              </span>
-            </div>
-          )}
+          {isVideo &&
+            warnings.length === 0 &&
+            notices.length === 0 &&
+            !hideIdleNote && (
+              /* The honest thing about timing: nothing has left the machine. */
+              <div className={noteStripCls}>
+                <Info
+                  className="mt-0.5 size-[13px] shrink-0 text-[var(--ink-400)]"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                />
+                <span>
+                  Nothing is uploading yet. The upload starts when the match is
+                  saved — trimming and details come first.
+                </span>
+              </div>
+            )}
 
           {parsingState.parseWarnings.map((w) => (
             <div key={w} className={warningStripCls}>

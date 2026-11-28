@@ -6,7 +6,8 @@ import {
 import type { AdminUploadBilling } from "@/lib/admin/uploads/types";
 import type { Workspace } from "@/lib/workspace/types";
 import type { RosterIdentity } from "@/lib/workspace/upload-eligibility";
-import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
+import { allowanceFor } from "@/lib/services/splitstep/allowance";
+import { windowArgs } from "@/lib/services/splitstep/quota";
 
 export interface AdminVideoAuthorization {
   jobId: string;
@@ -91,22 +92,37 @@ export async function reserveAdminVideoQuota(
     workspace: Workspace;
   },
 ): Promise<import("@/lib/services/splitstep/quota").QuotaReservation> {
-  const { currentBillingMonth, getMonthlyCapSeconds } =
+  const { getMonthlyCapSeconds } =
     await import("@/lib/services/splitstep/config");
   const personal = params.workspace.kind === "personal";
-  const { data, error } = await admin.rpc("admin_reserve_video_quota", {
-    p_actor_id: params.userId,
-    p_job_id: params.jobId,
-    p_seconds: params.seconds,
-    p_billing_month: currentBillingMonth(),
-    p_program_cap: getMonthlyCapSeconds("program"),
-    // A personal target's own figure (pilot, admin or the 2h default; the SQL
-    // lets the hours override win). Read by the RPC only when the stored
-    // billing is the player's; free never consults it.
-    p_individual_cap: personal
-      ? monthlyCapSecondsFor(params.workspace)
-      : getMonthlyCapSeconds("individual"),
-  });
+  // The target workspace's own allowance, from the resolver every meter
+  // reads. From January 1, 2027 it also names the window, and the window
+  // sibling of the RPC reserves: one cap, already the right one for the
+  // target, where the month-keyed RPC takes two and picks by org type.
+  const allowance = allowanceFor(params.workspace);
+  const { data, error } = allowance.windowed
+    ? await admin.rpc("admin_reserve_plan_video_quota", {
+        p_actor_id: params.userId,
+        p_job_id: params.jobId,
+        p_seconds: params.seconds,
+        ...windowArgs(allowance),
+        // Read by the RPC only when the stored billing is the player's or
+        // the target is a team; free never consults it.
+        p_cap_seconds: allowance.capSeconds,
+      })
+    : await admin.rpc("admin_reserve_video_quota", {
+        p_actor_id: params.userId,
+        p_job_id: params.jobId,
+        p_seconds: params.seconds,
+        p_billing_month: allowance.billingMonth,
+        p_program_cap: getMonthlyCapSeconds("program"),
+        // A personal target's own figure (pilot, admin or the 2h default; the
+        // SQL lets the hours override win). Read by the RPC only when the
+        // stored billing is the player's; free never consults it.
+        p_individual_cap: personal
+          ? allowance.capSeconds
+          : getMonthlyCapSeconds("individual"),
+      });
   const row = data?.[0];
   if (error || !row)
     return {

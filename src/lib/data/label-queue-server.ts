@@ -42,6 +42,11 @@ import {
   type UrgencyLevel,
 } from "@/lib/services/labels/queue";
 import {
+  isReviewEligible,
+  readReviewEligibility,
+  type ReviewEligibility,
+} from "@/lib/services/labels/review-eligibility";
+import {
   jobVideoSeconds,
   type JobVideoSpan,
 } from "@/lib/services/labels/video-seconds";
@@ -154,6 +159,12 @@ export interface LabelQueueSource {
   ownerEmails: ReadonlyMap<string, string | null>;
   /** When an admin added each job to To do (`label_todo`), by job id. */
   todo?: ReadonlyMap<string, string>;
+  /**
+   * Which jobs' matches were paid for and may be offered for To do
+   * (`readReviewEligibility`). Null or absent before `PLANS_BEGIN`: every
+   * job is then eligible.
+   */
+  reviewEligible?: ReviewEligibility | null;
   /** A stored avatar path as a url; the storage client's in production. */
   photoUrl: (avatarPath: string | null) => string | null;
 }
@@ -293,7 +304,7 @@ function toQueueJob(
   job: QueueJobRow,
   match: QueueMatchRow | undefined,
   session: QueueSessionRow | null | undefined,
-  source: Pick<LabelQueueSource, "ownerEmails" | "todo">,
+  source: Pick<LabelQueueSource, "ownerEmails" | "todo" | "reviewEligible">,
 ): LabelQueueJob {
   return {
     id: job.id,
@@ -305,6 +316,7 @@ function toQueueJob(
       ? (source.ownerEmails.get(match.created_by) ?? null)
       : null,
     addedAt: source.todo?.get(job.id) ?? null,
+    reviewEligible: isReviewEligible(source.reviewEligible, job.id),
     session: session
       ? {
           status: session.status,
@@ -663,7 +675,10 @@ export interface TodoCandidate {
 /**
  * Every analysed match nobody is labelling and nobody chose yet: the newest
  * completed job per match that `canAddToTodo` lets in, on a match not
- * already verified, newest results first (ties by job id). Pure.
+ * already verified, newest results first (ties by job id). From
+ * `PLANS_BEGIN` that leaves out a match that was not paid for
+ * (`source.reviewEligible`), and `addToLabelTodo` adds only what this
+ * returns, so the gate holds for an id a page sent by hand. Pure.
  */
 export function buildTodoCandidates(
   source: Omit<LabelQueueSource, "photoUrl">,
@@ -824,6 +839,26 @@ export async function readLabelSource(
 }
 
 /**
+ * `readLabelSource` for the two places that decide what may be ADDED to To
+ * do — the Not in To do list (`loadAdminLabels`) and the add itself
+ * (`addToLabelTodo`): the same rows, plus which of their matches were paid
+ * for (`readReviewEligibility`; nothing extra is read before `PLANS_BEGIN`).
+ * The boards do not need it: work already in or past To do is never gated.
+ */
+export async function readTodoSource(
+  db: AdminClient,
+  now: Date = new Date(),
+): Promise<Omit<LabelQueueSource, "photoUrl">> {
+  const source = await readLabelSource(db);
+  const reviewEligible = await readReviewEligibility(
+    db,
+    source.jobs.map((job) => job.id),
+    now,
+  );
+  return { ...source, reviewEligible };
+}
+
+/**
  * Read the queue: what an admin added to To do, plus work already past it,
  * filtered and sorted by `queue.ts`'s rules.
  *
@@ -964,7 +999,7 @@ export interface AdminLabelsDependencies {
 const labelsDefaults: AdminLabelsDependencies = {
   requireAdmin: () => requireAdminOrNotFound(),
   createAdminClient,
-  readSource: readLabelSource,
+  readSource: (db) => readTodoSource(db),
   readQueue: readLabelQueue,
 };
 

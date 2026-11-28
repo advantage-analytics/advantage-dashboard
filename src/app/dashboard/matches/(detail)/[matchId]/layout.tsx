@@ -93,7 +93,15 @@ async function MatchData({
     notFound();
   }
 
-  const { match, statsResult, points, keyMoments, insights, kpiHistory } = data;
+  const {
+    match,
+    statsResult,
+    points,
+    letPoints,
+    keyMoments,
+    insights,
+    kpiHistory,
+  } = data;
 
   return (
     <MatchDataProvider
@@ -107,6 +115,7 @@ async function MatchData({
       // `null` is a failed points read; `page.tsx` throws on it so the
       // error boundary replaces the page, and the provider never sees it.
       points={points ?? []}
+      letPoints={letPoints}
       keyMoments={keyMoments}
       insights={insights}
       kpiHistory={kpiHistory}

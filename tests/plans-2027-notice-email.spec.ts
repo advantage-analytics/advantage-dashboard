@@ -47,17 +47,17 @@ test.describe("general notice", () => {
     expect(html).toMatch(
       /<b [^>]*>Everything you&#39;ve already uploaded stays<\/b>/,
     );
-    expect(html).toMatch(/<b [^>]*>half off<\/b>/);
+    expect(html).toMatch(/<b [^>]*>30% off<\/b>/);
   });
 
   test("the text part carries the whole approved copy", () => {
     const text = msg().text;
     expect(text.split("\n")[0]).toBe("Free beta hours end December 31");
     expect(text).toContain(
-      "From January 1, analyzing a new match needs a plan or extra hours. Everything you've already uploaded stays: your matches, reports and film. SwingVision imports stay free. Your first month of a monthly plan is half off.",
+      "From January 1, analyzing a new match needs a plan or extra hours. Everything you've already uploaded stays: your matches, reports and film. SwingVision imports stay free. Your first month of a monthly plan is 30% off.",
     );
-    expect(text).toContain("Coach: $150 a month · 5h of match video");
-    expect(text).toContain("Coach Pro: $300 a month · 10h of match video");
+    expect(text).toContain("Player: $150 a month · 5h of match video");
+    expect(text).toContain("Player Pro: $300 a month · 10h of match video");
     expect(text).toContain("Extra hours: $35 each · last 12 months");
     expect(text).toContain(`Choose a plan:\n${SITE}/dashboard/settings/plan`);
     expect(text).toContain(

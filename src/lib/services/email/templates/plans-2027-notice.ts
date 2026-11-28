@@ -1,3 +1,11 @@
+import {
+  EXTRA_HOUR_PRICE,
+  EXTRA_HOUR_VALIDITY_MONTHS,
+  FIRST_MONTH_DISCOUNT_PERCENT,
+  personalPlan,
+  usd,
+  type PersonalPlanId,
+} from "@/lib/billing/plans";
 import { emailOrigin } from "@/lib/site-url";
 import {
   renderEmail,
@@ -23,20 +31,14 @@ import type { EmailMessage } from "../send";
  *    ends. DRAFTED in the same voice, NOT yet approved — the send script
  *    refuses to send it until `PILOT_NOTICE_APPROVED` is true.
  *
- * The prices are the landing site's (`advantage-landing/src/lib/plans.ts`).
- * Stage A moves them into `src/lib/billing/plans.ts`; until it exists they
- * live here, the one place this email reads them from.
+ * Every plan name, price, hour count and the first-month discount come from
+ * `src/lib/billing/plans.ts`; nothing here is typed. (Approved as "Coach /
+ * Coach Pro, half off"; the plans were renamed Player / Player Pro and the
+ * offer set to 30% before the send, which only swaps those words.)
  */
 
 /** Flip to true only once Cj has approved the pilot wording below. */
 export const PILOT_NOTICE_APPROVED = false;
-
-/** Figures quoted in the facts panel. Stage A replaces these with the plan module. */
-export const PLANS_2027_FACTS = {
-  coach: { monthly: 150, hours: 5 },
-  coachPro: { monthly: 300, hours: 10 },
-  extraHour: { price: 35, lastsMonths: 12 },
-} as const;
 
 const SUBJECT = "Free beta hours end December 31";
 const EYEBROW = "Plans from January 1";
@@ -62,7 +64,7 @@ export function plans2027NoticeEmail(
         {
           text: ": your matches, reports and film. SwingVision imports stay free. Your first month of a monthly plan is ",
         },
-        { text: "half off", strong: true },
+        { text: `${FIRST_MONTH_DISCOUNT_PERCENT}% off`, strong: true },
         { text: "." },
       ],
     ],
@@ -141,19 +143,19 @@ export function plans2027PilotNoticeEmail(
 }
 
 function planFacts(): EmailFact[] {
-  const { coach, coachPro, extraHour } = PLANS_2027_FACTS;
+  const plan = (id: PersonalPlanId): EmailFact => {
+    const { name, monthly, hours } = personalPlan(id);
+    return {
+      label: name,
+      value: `${usd(monthly)} a month · ${hours}h of match video`,
+    };
+  };
   return [
-    {
-      label: "Coach",
-      value: `$${coach.monthly} a month · ${coach.hours}h of match video`,
-    },
-    {
-      label: "Coach Pro",
-      value: `$${coachPro.monthly} a month · ${coachPro.hours}h of match video`,
-    },
+    plan("player"),
+    plan("player-pro"),
     {
       label: "Extra hours",
-      value: `$${extraHour.price} each · last ${extraHour.lastsMonths} months`,
+      value: `${usd(EXTRA_HOUR_PRICE)} each · last ${EXTRA_HOUR_VALIDITY_MONTHS} months`,
     },
   ];
 }

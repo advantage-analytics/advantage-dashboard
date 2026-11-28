@@ -43,6 +43,16 @@ export function isServeShotType(shotType: string | null | undefined): boolean {
   return shotType === "First Serve" || shotType === "Second Serve";
 }
 
+/**
+ * True for a let serve: a hand-labelled serve the server hit again, stored at
+ * shot_number 0 with `result` 'Let' (labels/apply.ts `LET_RESULT`). It is no
+ * serve of the point's — not a first serve struck, not a fault, no bounce of
+ * the match — so every reader that walks the serve rows itself skips it.
+ */
+export function isLetResult(result: string | null | undefined): boolean {
+  return result === "Let";
+}
+
 /** True for the `Feed` row SwingVision emits at shot_number=0. */
 export function isFeedShotType(shotType: string | null | undefined): boolean {
   return shotType === "Feed";

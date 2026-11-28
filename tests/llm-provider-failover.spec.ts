@@ -68,38 +68,42 @@ test("a failed primary call is one failover event, and the secondary answers", a
   const context = createLLMObservabilityContext("user-1");
   const served: LLMServed[] = [];
   const calls: string[] = [];
+  // Restored in `finally`, so a failure here cannot leave later specs in
+  // this worker with a silenced console.warn.
   const warnings = captureWarnings();
-
-  const result = await runWithProviderFailover(
-    {
-      primary: {
-        provider: "anthropic",
-        model: "claude-opus-5-5",
-        run: async () => {
-          calls.push("anthropic");
-          throw new BadRequestError();
+  let result: string;
+  try {
+    result = await runWithProviderFailover(
+      {
+        primary: {
+          provider: "anthropic",
+          model: "claude-opus-5-5",
+          run: async () => {
+            calls.push("anthropic");
+            throw new BadRequestError();
+          },
+        },
+        secondary: {
+          provider: "openai",
+          model: "gemini-3.5-flash-lite",
+          run: async () => {
+            calls.push("openai");
+            return REPLY;
+          },
         },
       },
-      secondary: {
-        provider: "openai",
-        model: "gemini-3.5-flash-lite",
-        run: async () => {
-          calls.push("openai");
-          return REPLY;
-        },
+      context,
+      {
+        span: "ask.plan",
+        model: "claude-sonnet-5-5",
+        onServed: (s) => served.push(s),
       },
-    },
-    context,
-    {
-      span: "ask.plan",
-      model: "claude-sonnet-5-5",
-      onServed: (s) => served.push(s),
-    },
-    "stream",
-    posthog.client as never,
-  );
-
-  warnings.restore();
+      "stream",
+      posthog.client as never,
+    );
+  } finally {
+    warnings.restore();
+  }
   expect(result).toBe(REPLY);
   // The server log keeps the message, so the cause can be read there.
   expect(warnings.calls).toHaveLength(1);
@@ -206,8 +210,9 @@ test("no secondary, or an aborted call: the error is thrown and no event is sent
   expect(posthog.captured).toHaveLength(0);
 });
 
-test("a secondary that fails too still leaves exactly one event", async () => {
+test("a secondary that fails too still leaves exactly one event, and reports where the call ended", async () => {
   const posthog = stubPostHog();
+  const served: LLMServed[] = [];
   await expect(
     runWithProviderFailover(
       {
@@ -230,11 +235,15 @@ test("a secondary that fails too still leaves exactly one event", async () => {
         },
       },
       createLLMObservabilityContext("user-4"),
-      { span: "home.insight" },
+      { span: "home.insight", onServed: (s) => served.push(s) },
       "stream",
       posthog.client as never,
     ),
   ).rejects.toThrow("down too");
+  // The run record then names the model the failover event names.
+  expect(served).toEqual([
+    { provider: "anthropic", model: "claude-opus-5-5", failover: true },
+  ]);
   expect(posthog.captured).toHaveLength(1);
   expect(posthog.captured[0].properties).toMatchObject({
     primary_provider: "google",
@@ -307,4 +316,8 @@ test("error_name is the SDK class, which the SDKs' own `.name` does not give", (
     error_name: "AuthenticationError",
   });
   expect(llmFailureFields(new Error("plain")).error_name).toBe("Error");
+  // An error that names itself keeps that name over its class's.
+  expect(
+    llmFailureFields(new DOMException("timed out", "TimeoutError")).error_name,
+  ).toBe("TimeoutError");
 });

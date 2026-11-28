@@ -222,6 +222,7 @@ export const SYNTHETIC_MATCH_DETAIL: MatchDetailData = {
     series: { firstServeIn: [58, 61, 64] },
   },
   foldUnreconciled: false,
+  letPoints: [],
 };
 
 /** The synthetic source's program, which a spec rewrites as a real one is. */

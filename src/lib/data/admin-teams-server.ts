@@ -14,8 +14,13 @@ import { crestUrl } from "@/lib/data/teams-server";
 import { pgQuoteValue } from "@/lib/data/postgrest-filter";
 import { USER_AVATARS_BUCKET } from "@/lib/user/avatar";
 import { loadNavSeen, type SeenState } from "@/lib/admin/seen-server";
-import { currentBillingMonth } from "@/lib/services/splitstep/config";
-import { monthlyCapSecondsFor } from "@/lib/services/splitstep/quota";
+import { readProgramPlanRefs } from "@/lib/billing/plan-fields";
+import { plansHaveBegun, type ProgramPlanRef } from "@/lib/billing/plans";
+import {
+  allowanceFor,
+  pilotIsRunning,
+  type VideoAllowance,
+} from "@/lib/services/splitstep/allowance";
 import type { ProgramOrgType } from "@/lib/workspace/types";
 
 /**
@@ -135,18 +140,20 @@ export interface AdminTeamRow {
    */
   openRequestCount: number;
   /**
-   * This calendar month's video, in seconds, on the program's ledger — the
-   * same rule the team detail loader's `readUsage` applies (and
-   * `reserve_processing_quota`, which is what refuses a submission):
+   * The video used in the program's current allowance window, in seconds —
+   * the same rule the team detail loader's `readUsage` applies (and the
+   * reservation, which is what refuses a submission):
    * `sum(coalesce(actual_seconds, reserved_seconds))` over the program's
-   * unreleased `processing_usage` rows for the billing month. Read for the
+   * unreleased `processing_usage` rows for the billing month, or from
+   * January 1, 2027 for the window its plan or pilot names. Read for the
    * whole page in one batched query; null when that read failed, so the cell
    * prints a dash rather than a confident zero.
    */
   videoUsedSeconds: number | null;
   /**
-   * The month's allowance, from `monthlyCapSecondsFor({ kind: 'team', … })`
-   * exactly as the team detail page computes it. Null together with
+   * That window's allowance, from `allowanceFor({ kind: 'team', … })` with
+   * the inputs the team detail page gives it (org type, the pilot's switch
+   * and dates, the season plan). Null together with
    * `videoUsedSeconds`: a cap with no usage beside it is half a fact.
    */
   videoCapSeconds: number | null;
@@ -247,6 +254,8 @@ interface RawProgramRow {
   state: string | null;
   status: string;
   pilot_eligible: boolean | null;
+  pilot_ends_on: string | null;
+  pilot_ended_at: string | null;
   crest_path: string | null;
   claimed_at: string | null;
   // A to-one embed (the FK lives on `programs`) comes back as an object or
@@ -268,6 +277,8 @@ const PROGRAMS_SELECT = `
   state,
   status,
   pilot_eligible,
+  pilot_ends_on,
+  pilot_ended_at,
   crest_path,
   claimed_at,
   owner:users!programs_owner_user_id_fkey(first_name,last_name,avatar_path),
@@ -315,10 +326,22 @@ function toAdminTeamRow(
   openRequestCount: number,
   avatarUrl: (path: string) => string,
   usedSeconds: Map<string, number> | null,
+  allowance: VideoAllowance,
 ): AdminTeamRow {
   const owner = ownerOf(row.owner);
   const claim = latestClaim(row.program_claims);
   const needsDecision = claim !== null && NEEDS_DECISION.has(claim.status);
+  const onPilot =
+    row.status === "active" &&
+    (!plansHaveBegun() ||
+      pilotIsRunning(
+        {
+          pilotEligible: row.pilot_eligible === true,
+          pilotEndsOn: row.pilot_ends_on,
+          pilotEndedAt: row.pilot_ended_at,
+        },
+        new Date(),
+      ));
 
   return {
     id: row.id,
@@ -339,8 +362,10 @@ function toAdminTeamRow(
     // `programStatusFor` in claim-state.ts — `active` only ever comes from
     // `objection_window` or `approved`, both already-decided claim states, so
     // the two conditions here cannot both be true for a real row.
-    plan:
-      row.status === "active" ? "pilot" : needsDecision ? "approve" : "none",
+    // From January 1, 2027 "pilot" is a fact about the program, not about
+    // being active: an admin put it on the pilot and its end date has not
+    // passed (`pilotIsRunning`). Until then every active program is on it.
+    plan: onPilot ? "pilot" : needsDecision ? "approve" : "none",
     pendingClaim:
       needsDecision && claim
         ? {
@@ -359,11 +384,7 @@ function toAdminTeamRow(
         : null,
     videoCapSeconds:
       usedSeconds && onAdvantageStatus(row.status)
-        ? monthlyCapSecondsFor({
-            kind: "team",
-            orgType: (row.org_type as ProgramOrgType | null) ?? null,
-            pilotEligible: row.pilot_eligible === true,
-          })
+        ? allowance.capSeconds
         : null,
   };
 }
@@ -489,32 +510,68 @@ async function openRequestCountsFor(
 }
 
 /**
- * This month's video seconds per program, for exactly the ids on one page —
- * one query, not one per row.
+ * One program's video allowance, from the resolver its own page and the
+ * reservation read (`allowanceFor()`), fed everything that page feeds it: the
+ * org type, the pilot's switch and dates, and the season plan. Fewer inputs
+ * and the list would print the beta's figure beside a team page that says
+ * something else.
+ */
+function teamAllowance(
+  row: RawProgramRow,
+  programPlan: ProgramPlanRef | null,
+): VideoAllowance {
+  return allowanceFor({
+    kind: "team",
+    orgType: (row.org_type as ProgramOrgType | null) ?? null,
+    pilotEligible: row.pilot_eligible === true,
+    pilotEndsOn: row.pilot_ends_on,
+    pilotEndedAt: row.pilot_ended_at,
+    programPlan,
+  });
+}
+
+/**
+ * Video seconds per program over each program's OWN allowance window, for
+ * exactly the ids on one page — one query, not one per row.
  *
- * The filter is `readUsage`'s in `admin-team-server.ts` verbatim, widened from
- * one `account_id` to the page's: `account_type = 'program'`, the current
- * `billing_month` (the calendar month, `currentBillingMonth()`), `not
- * released`, and each row counted as `actual_seconds ?? reserved_seconds`. A
- * list that showed a different total from the program's own page would be
- * worse than no total. A program with no rows is 0; a failed read is null for
- * the whole page, never a page of zeroes.
+ * The filter is `readUsage`'s in `admin-team-server.ts`, widened from one
+ * `account_id` to the page's: `account_type = 'program'`, `not released`,
+ * each row counted as `actual_seconds ?? reserved_seconds`, and scoped the
+ * way the allowance says — the calendar `billing_month` until January 1,
+ * 2027, and after it the rows created inside the program's window (a pilot
+ * month, a whole season). Windows differ by program, so the read spans the
+ * widest and each row is kept only inside its own program's. A list that
+ * showed a different total from the program's own page would be worse than
+ * no total. A program with no rows is 0; a failed read is null for the whole
+ * page, never a page of zeroes.
  */
 async function videoUsedSecondsFor(
   admin: SupabaseClient,
-  programIds: string[],
+  allowances: ReadonlyMap<string, VideoAllowance>,
 ): Promise<Map<string, number> | null> {
   const used = new Map<string, number>();
+  const programIds = [...allowances.keys()];
   if (programIds.length === 0) return used;
 
-  const { data, error } = await admin
+  const all = [...allowances.values()];
+  const windowed = all.some((allowance) => allowance.windowed);
+  let query = admin
     .from("processing_usage")
-    .select("account_id, reserved_seconds, actual_seconds")
+    .select("account_id, reserved_seconds, actual_seconds, created_at")
     .eq("account_type", "program")
-    .eq("billing_month", currentBillingMonth())
     .eq("released", false)
     .in("account_id", programIds);
+  if (windowed) {
+    const from = Math.min(...all.map((a) => a.windowStart.getTime()));
+    const to = Math.max(...all.map((a) => a.windowEnd.getTime()));
+    query = query
+      .gte("created_at", new Date(from).toISOString())
+      .lt("created_at", new Date(to).toISOString());
+  } else {
+    query = query.eq("billing_month", all[0].billingMonth);
+  }
 
+  const { data, error } = await query;
   if (error) {
     console.error("[admin teams] could not read program usage", {
       error: error.message,
@@ -526,7 +583,19 @@ async function videoUsedSecondsFor(
     account_id: string;
     reserved_seconds: number | null;
     actual_seconds: number | null;
+    created_at: string;
   }[]) {
+    const allowance = allowances.get(row.account_id);
+    if (!allowance) continue;
+    if (allowance.windowed) {
+      const at = Date.parse(row.created_at);
+      if (
+        at < allowance.windowStart.getTime() ||
+        at >= allowance.windowEnd.getTime()
+      ) {
+        continue;
+      }
+    }
     const seconds = row.actual_seconds ?? row.reserved_seconds ?? 0;
     used.set(row.account_id, (used.get(row.account_id) ?? 0) + seconds);
   }
@@ -633,10 +702,19 @@ export async function listAdminTeams({
   const page = hasMore ? allRows.slice(0, limit) : allRows;
 
   const pageIds = page.map((row) => row.id);
+  // The season plans first: they decide each row's cap and the window its
+  // usage is read over.
+  const programPlans = await readProgramPlanRefs(admin, pageIds);
+  const allowances = new Map(
+    page.map((row) => [
+      row.id,
+      teamAllowance(row, programPlans.get(row.id) ?? null),
+    ]),
+  );
   const [crestUrls, openRequestCounts, usedSeconds] = await Promise.all([
     Promise.all(page.map((row) => crestUrl(row.crest_path))),
     openRequestCountsFor(admin, pageIds),
-    videoUsedSecondsFor(admin, pageIds),
+    videoUsedSecondsFor(admin, allowances),
   ]);
 
   const avatars = admin.storage.from(USER_AVATARS_BUCKET);
@@ -648,6 +726,7 @@ export async function listAdminTeams({
       openRequestCounts.get(row.id) ?? 0,
       avatarUrl,
       usedSeconds,
+      allowances.get(row.id)!,
     ),
   );
 
