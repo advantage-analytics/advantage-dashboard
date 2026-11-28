@@ -1,6 +1,7 @@
 /**
  * The paid plans, from January 1, 2027 — the ONE place the dashboard writes a
- * price, an hour count, a match estimate, an Ask limit or a season date.
+ * price, an hour count, a match estimate, a roster cap, an Ask limit or a
+ * season date.
  *
  * These are the final 2027 figures (docs/plans/2027-pricing.md, "Final
  * pricing"). Pages, quota code, Stripe setup and emails read from here;
@@ -310,6 +311,13 @@ export type CollegePlan = {
   fullYear: Allowance;
   /** What the hours cover, as a coach would say it. */
   covers: string;
+  /**
+   * The roster cap: what `programs.seats` becomes when an admin puts a team
+   * on this plan (`admin_set_program_plan`). It counts what a seat counts:
+   * the players on the roster, with or without an account, plus open player
+   * invitations. Coaches and staff hold no seat.
+   */
+  rosterCap: number;
   /** Rush jobs included a season. None in any plan — see `RUSH_PRICE`. */
   rushIncluded: number;
   /** Hours a month that go at Priority. None in any plan. */
@@ -325,6 +333,7 @@ export const COLLEGE_PLANS: readonly CollegePlan[] = [
     spring: { price: 3000, hours: 80, matches: 45 },
     fullYear: { price: 4800, hours: 130, matches: 70 },
     covers: "Your top courts, every dual",
+    rosterCap: 25,
     rushIncluded: 0,
     priorityHours: null,
     priorityAddon: false,
@@ -335,6 +344,7 @@ export const COLLEGE_PLANS: readonly CollegePlan[] = [
     spring: { price: 7500, hours: 225, matches: 125 },
     fullYear: { price: 10500, hours: 325, matches: 180 },
     covers: "Nearly every singles match, every dual",
+    rosterCap: 25,
     rushIncluded: 0,
     priorityHours: null,
     priorityAddon: false,
@@ -345,11 +355,24 @@ export const COLLEGE_PLANS: readonly CollegePlan[] = [
     spring: { price: 12000, hours: 400, matches: 220 },
     fullYear: { price: 16500, hours: 550, matches: 305 },
     covers: "Every match, plus fall and practice",
+    rosterCap: 35,
     rushIncluded: 0,
     priorityHours: null,
     priorityAddon: false,
   },
 ];
+
+/**
+ * `programs.seats`' column default: the seats a team holds before any plan
+ * is set. `admin_set_program_plan` reads a team with no plan and this many
+ * seats as one nobody has set by hand.
+ */
+export const DEFAULT_ROSTER_SEATS = 25;
+
+/** `25 people` — a roster cap as the plan card and the landing site say it. */
+export function rosterCapLabel(cap: number): string {
+  return `${cap} ${cap === 1 ? "person" : "people"}`;
+}
 
 export function isCollegePlanId(value: unknown): value is CollegePlanId {
   return COLLEGE_PLANS.some((plan) => plan.id === value);

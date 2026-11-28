@@ -44,6 +44,8 @@ import {
   seasonAllowance,
   springExtendedEnd,
   usd,
+  DEFAULT_ROSTER_SEATS,
+  rosterCapLabel,
 } from "@/lib/billing/plans";
 import { isPaidPlan, isProPlan, planFor } from "@/lib/user/plan";
 
@@ -194,6 +196,7 @@ test.describe("college programs", () => {
         spring: { price: 3000, hours: 80, matches: 45 },
         fullYear: { price: 4800, hours: 130, matches: 70 },
         covers: "Your top courts, every dual",
+        rosterCap: 25,
         rushIncluded: 0,
         priorityHours: null,
         priorityAddon: false,
@@ -204,6 +207,7 @@ test.describe("college programs", () => {
         spring: { price: 7500, hours: 225, matches: 125 },
         fullYear: { price: 10500, hours: 325, matches: 180 },
         covers: "Nearly every singles match, every dual",
+        rosterCap: 25,
         rushIncluded: 0,
         priorityHours: null,
         priorityAddon: false,
@@ -214,6 +218,7 @@ test.describe("college programs", () => {
         spring: { price: 12000, hours: 400, matches: 220 },
         fullYear: { price: 16500, hours: 550, matches: 305 },
         covers: "Every match, plus fall and practice",
+        rosterCap: 35,
         rushIncluded: 0,
         priorityHours: null,
         priorityAddon: false,
@@ -264,6 +269,57 @@ test.describe("college programs", () => {
       ),
       "utf8",
     );
+    for (const plan of COLLEGE_PLANS) {
+      expect(sql).toMatch(
+        new RegExp(`when '${plan.id}'\\s+then ${plan.rushIncluded}\\b`),
+      );
+    }
+  });
+
+  test("the roster caps: Starter 25, Program 25, Elite 35", () => {
+    expect(
+      Object.fromEntries(
+        COLLEGE_PLANS.map((plan) => [plan.id, plan.rosterCap]),
+      ),
+    ).toEqual({ starter: 25, program: 25, elite: 35 });
+    expect(DEFAULT_ROSTER_SEATS).toBe(25);
+    expect(rosterCapLabel(25)).toBe("25 people");
+    expect(rosterCapLabel(1)).toBe("1 person");
+  });
+
+  test("the migration sets the same roster caps the module holds", () => {
+    // The latest definition of `admin_set_program_plan` and of
+    // `admin_clear_program_plan`.
+    const sql = readFileSync(
+      path.join(
+        process.cwd(),
+        "supabase/migrations/20261128060000_plans_2027_roster_caps.sql",
+      ),
+      "utf8",
+    );
+    // Each function's own cap list: one `('plan', n)` pair per plan, no more.
+    const lists = [
+      ...sql.matchAll(/from \(values ([^\n]+)\) as c \(plan_id, cap\);/g),
+    ];
+    expect(lists, "one cap list in each of the two functions").toHaveLength(2);
+    for (const list of lists) {
+      const pairs = [...list[1].matchAll(/\('([a-z_]+)', (\d+)\)/g)].map(
+        ([, id, cap]) => [id, Number(cap)],
+      );
+      expect(pairs).toEqual(
+        COLLEGE_PLANS.map((plan) => [plan.id, plan.rosterCap]),
+      );
+    }
+    // A team with no plan is measured against the column default.
+    expect(sql).toContain(
+      `coalesce(max(c.cap) filter (where v_has_plan and c.plan_id = v_cur.plan_id), ${DEFAULT_ROSTER_SEATS})`,
+    );
+    expect(sql).toContain(`and column_default = '${DEFAULT_ROSTER_SEATS}'`);
+    // Clearing a plan sends the seats it gave back to that same default.
+    expect(sql).toContain(
+      `v_to := case when v_seats = v_cap then ${DEFAULT_ROSTER_SEATS} else v_seats end;`,
+    );
+    // And it still stamps the rush counts, as the final-pricing body does.
     for (const plan of COLLEGE_PLANS) {
       expect(sql).toMatch(
         new RegExp(`when '${plan.id}'\\s+then ${plan.rushIncluded}\\b`),

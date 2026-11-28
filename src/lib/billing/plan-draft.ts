@@ -11,10 +11,13 @@
 
 import {
   COLLEGE_PLANS,
+  DEFAULT_ROSTER_SEATS,
   PLAN_TERM_LABELS,
+  collegePlan,
   defaultSeasonDates,
   isCollegePlanId,
   isPlanTerm,
+  rosterCapLabel,
   seasonAllowance,
   usd,
   type CollegePlan,
@@ -211,13 +214,73 @@ export function setProgramPlanArgs(
 
 /* ---------- What the card prints ---------- */
 
-/** `Spring $7,500 · 200 h · Full year $10,500 · 280 h` — a plan's menu line. */
+/**
+ * `Spring $7,500 · 225 h · Full year $10,500 · 325 h · 25 people` — a plan's
+ * menu line: each term's price and hours, then the roster cap.
+ */
 export function planOptionDescription(plan: CollegePlan): string {
   const side = (term: PlanTerm) => {
     const allowance = seasonAllowance(plan.id, term);
     return `${PLAN_TERM_LABELS[term]} ${usd(allowance.price)} · ${allowance.hours} h`;
   };
-  return `${side("spring")} · ${side("full_year")}`;
+  return `${side("spring")} · ${side("full_year")} · ${rosterCapLabel(plan.rosterCap)}`;
+}
+
+/* ---------- The roster cap ---------- */
+
+/**
+ * The seats a team holds once `planId` is saved: `admin_set_program_plan`'s
+ * rule, held here so the card can say what Save will do before it is pressed.
+ *
+ * Seats follow the plan unless somebody set them by hand. "By hand" is read
+ * off the number: seats that are not the cap of the plan the team is on now
+ * (or, with no plan, not the column default) were typed by an admin, and are
+ * left alone. `tests/database/plans-2027-roster-caps.test.mjs` proves the SQL
+ * side; `tests/billing-plans.spec.ts` holds the two to the same figures.
+ */
+export function seatsAfterPlan(
+  planId: CollegePlanId,
+  savedPlanId: CollegePlanId | null,
+  seats: number,
+): number {
+  const before = savedPlanId
+    ? collegePlan(savedPlanId).rosterCap
+    : DEFAULT_ROSTER_SEATS;
+  return seats === before ? collegePlan(planId).rosterCap : seats;
+}
+
+/**
+ * The seats a team holds once its plan is removed: `admin_clear_program_plan`'s
+ * rule, held here so the Remove plan dialog can say when the roster shrinks.
+ *
+ * Seats the plan gave (seats equal to its cap) go back to the column default;
+ * seats set by hand are left alone. So only Elite at 35 moves.
+ */
+export function seatsAfterClear(
+  savedPlanId: CollegePlanId,
+  seats: number,
+): number {
+  return seats === collegePlan(savedPlanId).rosterCap
+    ? DEFAULT_ROSTER_SEATS
+    : seats;
+}
+
+/**
+ * The Plan card's Roster row for the plan chosen in the menu: `35 people`,
+ * or `35 people · this team is set to 40` when the team's seats were set by
+ * hand and saving will leave them where they are. `seats` is null when the
+ * count could not be read, and the row then says the cap alone.
+ */
+export function rosterCapValue(
+  planId: CollegePlanId,
+  savedPlanId: CollegePlanId | null,
+  seats: number | null,
+): string {
+  const cap = collegePlan(planId).rosterCap;
+  const label = rosterCapLabel(cap);
+  if (seats === null) return label;
+  const after = seatsAfterPlan(planId, savedPlanId, seats);
+  return after === cap ? label : `${label} · this team is set to ${after}`;
 }
 
 /** The plan menu's options, in the order the plans are sold. */

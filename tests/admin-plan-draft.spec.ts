@@ -9,9 +9,12 @@ import {
   planNoteValue,
   planOptionDescription,
   planOptions,
+  rosterCapValue,
   savedPlanLabel,
   seasonDatesFor,
   seasonWindowLabel,
+  seatsAfterClear,
+  seatsAfterPlan,
   setProgramPlanArgs,
   withTerm,
   type PlanDraft,
@@ -258,13 +261,73 @@ test.describe("what the card prints", () => {
       expect(option?.label).toBe(plan.name);
       expect(option?.description).toBe(
         `${PLAN_TERM_LABELS.spring} ${usd(plan.spring.price)} · ${plan.spring.hours} h · ` +
-          `${PLAN_TERM_LABELS.full_year} ${usd(plan.fullYear.price)} · ${plan.fullYear.hours} h`,
+          `${PLAN_TERM_LABELS.full_year} ${usd(plan.fullYear.price)} · ${plan.fullYear.hours} h · ` +
+          `${plan.rosterCap} people`,
       );
     }
-    // One spelled out, so the shape itself is on record.
+    // Two spelled out, so the shape itself is on record.
     expect(planOptionDescription(collegePlan("program"))).toBe(
-      "Spring $7,500 · 225 h · Full year $10,500 · 325 h",
+      "Spring $7,500 · 225 h · Full year $10,500 · 325 h · 25 people",
     );
+    expect(planOptionDescription(collegePlan("elite"))).toBe(
+      "Spring $12,000 · 400 h · Full year $16,500 · 550 h · 35 people",
+    );
+  });
+
+  test("seats after a save: the cap, unless they were set by hand", () => {
+    // No plan yet, seats at the column default: the plan's cap.
+    expect(seatsAfterPlan("starter", null, 25)).toBe(25);
+    expect(seatsAfterPlan("elite", null, 25)).toBe(35);
+    // No plan yet, seats set by hand: kept.
+    expect(seatsAfterPlan("elite", null, 40)).toBe(40);
+    expect(seatsAfterPlan("elite", null, 12)).toBe(12);
+    // On a plan with seats at its cap: the new cap, up and down.
+    expect(seatsAfterPlan("elite", "program", 25)).toBe(35);
+    expect(seatsAfterPlan("starter", "elite", 35)).toBe(25);
+    expect(seatsAfterPlan("elite", "elite", 35)).toBe(35);
+    // On a plan with seats set by hand: kept.
+    expect(seatsAfterPlan("starter", "elite", 40)).toBe(40);
+    expect(seatsAfterPlan("elite", "elite", 25)).toBe(25);
+    expect(seatsAfterPlan("elite", "starter", 30)).toBe(30);
+  });
+
+  test("seats after the plan is removed: the default, unless they were set by hand", () => {
+    // Seats the plan gave go back to the column default.
+    expect(seatsAfterClear("elite", 35)).toBe(25);
+    expect(seatsAfterClear("starter", 25)).toBe(25);
+    expect(seatsAfterClear("program", 25)).toBe(25);
+    // Set by hand, above the cap or below it: kept.
+    expect(seatsAfterClear("elite", 40)).toBe(40);
+    expect(seatsAfterClear("elite", 25)).toBe(25);
+    expect(seatsAfterClear("starter", 35)).toBe(35);
+    expect(seatsAfterClear("program", 12)).toBe(12);
+    // And what a save then does: an ex-Elite team follows its next plan.
+    expect(seatsAfterPlan("starter", null, seatsAfterClear("elite", 35))).toBe(
+      25,
+    );
+  });
+
+  test("the Roster row: the chosen plan's cap, and seats a save will leave alone", () => {
+    expect(rosterCapValue("starter", null, 25)).toBe("25 people");
+    expect(rosterCapValue("program", "starter", 25)).toBe("25 people");
+    // Seats that will move to the cap need no remark.
+    expect(rosterCapValue("elite", null, 25)).toBe("35 people");
+    expect(rosterCapValue("elite", "program", 25)).toBe("35 people");
+    expect(rosterCapValue("starter", "elite", 35)).toBe("25 people");
+    // Set by hand: the cap, and what the team keeps.
+    expect(rosterCapValue("elite", "elite", 40)).toBe(
+      "35 people · this team is set to 40",
+    );
+    expect(rosterCapValue("starter", null, 40)).toBe(
+      "25 people · this team is set to 40",
+    );
+    expect(rosterCapValue("elite", "starter", 30)).toBe(
+      "35 people · this team is set to 30",
+    );
+    // By hand, and it happens to be this plan's cap: nothing to remark on.
+    expect(rosterCapValue("elite", "starter", 35)).toBe("35 people");
+    // The seat count could not be read: the cap alone.
+    expect(rosterCapValue("elite", null, null)).toBe("35 people");
   });
 
   test("the season window, in UTC, with both years across a new year", () => {
