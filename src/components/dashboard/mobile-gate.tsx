@@ -4,6 +4,8 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { Monitor, Tablet } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { usePhoneDevice } from "@/hooks/use-phone-device";
 
 /**
  * MobileGate
@@ -15,6 +17,11 @@ import { Monitor, Tablet } from "lucide-react";
  * everything) below 768px, and is `display: none` at 768px and up. Tablets in
  * portrait (>=768px) pass straight through; phones get this screen instead. No
  * user-agent sniffing, so there is no SSR/client hydration mismatch.
+ *
+ * Width alone let phones through in landscape and in "Request desktop site"
+ * mode (both report a viewport over 768px), so after hydration
+ * `usePhoneDevice()` also checks the physical screen and keeps the gate up on
+ * a phone at any width.
  *
  * It mounts last in the dashboard layout with a high z-index so it sits over the
  * sidebar, header, and content. A shared match report (`/m/[token]`) is the same
@@ -29,6 +36,7 @@ export function MobileGate({
 }) {
   const shouldReduceMotion = useReducedMotion();
   const pathname = usePathname();
+  const isPhone = usePhoneDevice();
   // Ask is built for a phone (its rail folds into a sheet and the composer
   // sits at the foot below 768px — ask-frame.tsx), so it is the one
   // dashboard page the gate lets through.
@@ -42,7 +50,10 @@ export function MobileGate({
       aria-modal="true"
       aria-labelledby="mobile-gate-title"
       aria-describedby="mobile-gate-desc"
-      className="fixed inset-0 z-[100] flex flex-col overscroll-contain bg-[#FAFAFA] md:hidden"
+      className={cn(
+        "fixed inset-0 z-[100] flex flex-col overflow-y-auto overscroll-contain bg-[#FAFAFA]",
+        !isPhone && "md:hidden",
+      )}
     >
       {/* Wordmark */}
       <div className="px-7 pt-10">
