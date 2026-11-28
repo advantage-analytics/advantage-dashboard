@@ -8,9 +8,9 @@ import { aboutMatchesPhrase, longDay, shortDay } from "@/lib/billing/plan-copy";
 import {
   EXTRA_HOUR_PRICE,
   EXTRA_HOUR_VALIDITY_MONTHS,
-  coachPlan,
+  personalPlan,
   usd,
-  type CoachPlanId,
+  type PersonalPlanId,
 } from "@/lib/billing/plans";
 import { SUPPORT_EMAIL } from "@/lib/constants";
 import {
@@ -38,7 +38,7 @@ import type { EmailMessage } from "../send";
  *  - `usageAlertEmail()` — a program's month: the beta's and a pilot's.
  *  - `usageAlertEmail({ period: "season" })` — a program on a season plan:
  *    "this season", and the season's end date where a month has its reset.
- *  - `planUsageAlertEmail()` — a player on Coach or Coach Pro, in the wording
+ *  - `planUsageAlertEmail()` — a player on Player or Player Pro, in the wording
  *    approved in docs/plans/2027-pricing.md ("Email copy"), every figure
  *    filled from the plan module and the allowance resolver.
  */
@@ -216,7 +216,7 @@ function seasonAlert(
 export interface PlanUsageAlertInput {
   to: string;
   /** The paid plan whose hours these are. */
-  planId: Exclude<CoachPlanId, "free">;
+  planId: Exclude<PersonalPlanId, "free">;
   severity: UsageAlertSeverity;
   /** Plan hours used in the current hours window. */
   usedSeconds: number;
@@ -233,20 +233,20 @@ export interface PlanUsageAlertInput {
 
 /**
  * A player's plan hours are running out, or have — the approved wording
- * (docs/plans/2027-pricing.md, "Email copy"), with the Coach example's
+ * (docs/plans/2027-pricing.md, "Email copy"), with the Player example's
  * figures replaced by this account's.
  */
 export function planUsageAlertEmail(input: PlanUsageAlertInput): EmailMessage {
   const { to, planId, severity, capSeconds, resetsAt } = input;
-  const plan = coachPlan(planId);
+  const plan = personalPlan(planId);
   const used = Math.min(Math.max(0, input.usedSeconds), capSeconds);
   const left = secondsLeft(used, capSeconds);
   const extra = Math.max(0, input.extraSeconds ?? 0);
   const resets = shortDay(resetsAt);
   const resetsLong = longDay(resetsAt);
   const price = usd(EXTRA_HOUR_PRICE);
-  // The step up, for a plan that has one: Coach → Coach Pro.
-  const next = planId === "coach" ? coachPlan("coach-pro") : null;
+  // The step up, for a plan that has one: Player → Player Pro.
+  const next = planId === "player" ? personalPlan("player-pro") : null;
   const about = aboutMatchesPhrase(left);
   const planUrl = `${emailOrigin()}/dashboard/settings/plan`;
 

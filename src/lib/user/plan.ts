@@ -20,15 +20,15 @@
  */
 
 import {
-  coachPlan,
-  isCoachPlanId,
-  type CoachPlan,
-  type CoachPlanId,
+  personalPlan,
+  isPersonalPlanId,
+  type PersonalPlan,
+  type PersonalPlanId,
 } from "@/lib/billing/plans";
 import { teamLabel, type Viewer, type Workspace } from "@/lib/workspace/types";
 
 /** A personal plan's id: what `users.plan` holds from 2027. */
-export type PlanId = CoachPlanId;
+export type PlanId = PersonalPlanId;
 
 /**
  * The plan a `users.plan` value stands for, with its price and hours from
@@ -40,11 +40,11 @@ export type PlanId = CoachPlanId;
  * until that row is moved; `isProPlan` below still names it for the beta's
  * own Settings › Plan, which is what an account sees until plans go on sale.
  */
-export function planFor(plan: string | null | undefined): CoachPlan {
-  return coachPlan(isCoachPlanId(plan) ? plan : "free");
+export function planFor(plan: string | null | undefined): PersonalPlan {
+  return personalPlan(isPersonalPlanId(plan) ? plan : "free");
 }
 
-/** Whether a `users.plan` value is a paid plan (Coach or Coach Pro). */
+/** Whether a `users.plan` value is a paid plan (Player or Player Pro). */
 export function isPaidPlan(plan: string | null | undefined): boolean {
   return planFor(plan).id !== "free";
 }

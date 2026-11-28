@@ -44,6 +44,7 @@ import {
   PILOT_LATEST_END,
   PLAN_TERM_LABELS,
   aboutMatches,
+  matchesPhrase,
   plansHaveBegun,
   programPlanFor,
   usd,
@@ -141,7 +142,7 @@ export interface PlanStanding {
   /** `allowanceFor()`'s kind for the workspace. */
   kind: AllowanceKind;
   /**
-   * The word a surface tags the workspace with: `Free`, `Coach`, `Coach Pro`,
+   * The word a surface tags the workspace with: `Free`, `Player`, `Player Pro`,
    * a team's plan (`Starter`, `Program`, `Elite`), `Pilot` on a running
    * pilot, `No plan` for a team with neither.
    */
@@ -445,11 +446,9 @@ function analyzedFact(analyzed: number): HomeCardFact {
   };
 }
 
-/** "Your first month of a plan is half off." */
+/** "Your first month of a plan is 30% off." */
 function firstMonthSentence(): string {
-  return FIRST_MONTH_DISCOUNT_PERCENT === 50
-    ? "Your first month of a plan is half off."
-    : `Your first month of a plan is ${FIRST_MONTH_DISCOUNT_PERCENT}% off.`;
+  return `Your first month of a plan is ${FIRST_MONTH_DISCOUNT_PERCENT}% off.`;
 }
 
 export function homeCardView(input: {
@@ -834,13 +833,9 @@ export function teamMeterSuffix(standing: PlanStanding): string | null {
 
 /**
  * `about half a match`, `about 1 match`, `about 3 matches` — what a balance
- * covers, from `HOURS_PER_MATCH`: a half, or the nearest whole match.
+ * covers, for a sentence that always says something. The arithmetic is
+ * `matchesPhrase()`'s; the extra-hours row reads it from one whole match up.
  */
 export function aboutMatchesPhrase(seconds: number): string {
-  const matches = Math.max(0, seconds) / 3600 / HOURS_PER_MATCH;
-  const halves = Math.round(matches * 2);
-  if (halves <= 0) return "less than half a match";
-  if (halves === 1) return "about half a match";
-  const whole = Math.max(1, Math.round(matches));
-  return `about ${whole} ${whole === 1 ? "match" : "matches"}`;
+  return matchesPhrase(seconds) ?? "less than half a match";
 }

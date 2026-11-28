@@ -26,7 +26,7 @@ import {
   type UpgradePreviewView,
 } from "@/lib/billing/checkout-view";
 import {
-  coachPlan,
+  personalPlan,
   formatUsdCents,
   type PlanPeriod,
 } from "@/lib/billing/plans";
@@ -85,7 +85,7 @@ const OFFLINE =
 
 /**
  * The one checkout — Choose a plan, extra hours, the upload wizard's paywall
- * and the Coach → Coach Pro upgrade, differing only by `mode` and the
+ * and the Player → Player Pro upgrade, differing only by `mode` and the
  * account. Every line it draws comes from `buildCheckoutView()`
  * (`lib/billing/checkout-view.ts`); this file owns the shell and the money
  * movement, not the copy.
@@ -218,10 +218,10 @@ function actionKey(action: PaidAction) {
     : `hours:${action.hours}`;
 }
 
-/** "Coach, monthly" / "2 extra hours" — what is being paid for. */
+/** "Player, monthly" / "2 extra hours" — what is being paid for. */
 function actionName(action: PaidAction) {
   return action.kind === "plan"
-    ? `${coachPlan(action.plan).name}, ${action.period}`
+    ? `${personalPlan(action.plan).name}, ${action.period}`
     : `${action.hours} extra ${action.hours === 1 ? "hour" : "hours"}`;
 }
 
@@ -384,7 +384,7 @@ function PlanCheckoutContent({
         }
         if (
           body.kind === "plan" &&
-          (body.plan === "coach" || body.plan === "coach-pro")
+          (body.plan === "player" || body.plan === "player-pro")
         ) {
           onDone({
             kind: "plan",
@@ -412,7 +412,7 @@ function PlanCheckoutContent({
       }).catch(() => null);
       if (answer?.ok && answer.body) {
         const body = answer.body as { plan?: string; period?: string };
-        const plan = body.plan === "coach" ? "coach" : "coach-pro";
+        const plan = body.plan === "player" ? "player" : "player-pro";
         onDone(
           toYearly
             ? { kind: "yearly", plan, period: "yearly" }
@@ -686,7 +686,7 @@ function PlanCheckoutContent({
           ) : phase.kind === "working" ? (
             <p role="status" className="py-6 text-[13px] text-[var(--ink-600)]">
               {view.working ??
-                `Moving you up to ${coachPlan("coach-pro").name}…`}
+                `Moving you up to ${personalPlan("player-pro").name}…`}
             </p>
           ) : phase.kind === "recording" ? (
             <p role="status" className="py-6 text-[13px] text-[var(--ink-600)]">

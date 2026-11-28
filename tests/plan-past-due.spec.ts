@@ -34,13 +34,13 @@ const TODAY = "2027-01-30";
 const SENTENCE =
   "Your last payment failed. Update your card to get this month's hours.";
 
-const COACH: AllowanceWorkspace = {
+const PLAYER: AllowanceWorkspace = {
   kind: "personal",
   orgType: null,
-  plan: "coach",
+  plan: "player",
   planPeriodStart: "2027-01-14T00:00:00Z",
 };
-const PAST_DUE: AllowanceWorkspace = { ...COACH, planStatus: "past_due" };
+const PAST_DUE: AllowanceWorkspace = { ...PLAYER, planStatus: "past_due" };
 
 const standing = (workspace: AllowanceWorkspace) =>
   planStandingFor(workspace, NOW);
@@ -54,13 +54,13 @@ test.describe("standing", () => {
     expect(standing(PAST_DUE)).toMatchObject({
       scope: "personal",
       kind: "plan",
-      name: "Coach",
+      name: "Player",
       capSeconds: 0,
       resetsOn: null,
       pastDue: true,
     });
-    expect(standing(COACH)).toMatchObject({
-      name: "Coach",
+    expect(standing(PLAYER)).toMatchObject({
+      name: "Player",
       capSeconds: 5 * H,
       resetsOn: "Feb 14",
       pastDue: false,
@@ -82,11 +82,11 @@ test.describe("the header pill", () => {
       capSeconds: 0,
     });
     expect(view).toEqual({
-      tag: "Coach",
+      tag: "Player",
       figure: { strong: "0h", rest: "left" },
       label: "Payment failed",
       detail: SENTENCE,
-      ariaLabel: `Coach: ${SENTENCE}`,
+      ariaLabel: `Player: ${SENTENCE}`,
       share: 0,
     });
   });
@@ -127,7 +127,7 @@ test.describe("Home's usage card", () => {
 
   test("the card's sentence is the failed payment, and it links to the plan", () => {
     expect(card()).toEqual({
-      eyebrow: "Jordan Reyes · Coach",
+      eyebrow: "Jordan Reyes · Player",
       figure: "0",
       line1: "hours of match video",
       line2: "left this month",
@@ -135,7 +135,7 @@ test.describe("Home's usage card", () => {
       facts: [{ text: "6 matches analyzed" }],
       cta: "See plan",
       href: "/dashboard/settings/plan",
-      ariaLabel: "Coach plan: see plan",
+      ariaLabel: "Player plan: see plan",
     });
   });
 
@@ -151,7 +151,7 @@ test.describe("Home's usage card", () => {
   test("it is not the Free card: no offer, no first-month line", () => {
     const view = card();
     expect(`${view.sentence} ${view.cta}`).not.toMatch(
-      /Choose a plan|half off|See plans/,
+      /Choose a plan|% off|first month|See plans/,
     );
     expect(view.facts.map((fact) => fact.text).join(" ")).not.toContain("Ask");
   });
@@ -177,7 +177,7 @@ test.describe("Settings › Usage: the personal card", () => {
       label: "Manage on Plan",
       href: "/dashboard/settings/plan",
     });
-    expect(view.footnote).toBe("Personal uploads only · Coach plan");
+    expect(view.footnote).toBe("Personal uploads only · Player plan");
   });
 
   test("extra hours follow it, with their expiry", () => {
@@ -188,18 +188,18 @@ test.describe("Settings › Usage: the personal card", () => {
 });
 
 test.describe("the upload wizard", () => {
-  const coach = { enabled: true, plan: "coach" } as const;
+  const player = { enabled: true, plan: "player" } as const;
 
   test("the file step's note says it, whatever is left and before any video", () => {
     for (const remainingSeconds of [0, 2 * H]) {
       expect(
-        fileStepHoursNote({ ...coach, remainingSeconds, pastDue: true }),
+        fileStepHoursNote({ ...player, remainingSeconds, pastDue: true }),
       ).toEqual({ kind: "past-due" });
     }
     // It outranks "this video is longer than what's left".
     expect(
       fileStepHoursNote({
-        ...coach,
+        ...player,
         remainingSeconds: 23 * M,
         videoSeconds: 6720,
         pastDue: true,
@@ -218,14 +218,14 @@ test.describe("the upload wizard", () => {
     ).toEqual({ kind: "no-hours" });
     expect(
       fileStepHoursNote({
-        ...coach,
+        ...player,
         remainingSeconds: undefined,
         pastDue: true,
       }),
     ).toEqual({ kind: "none" });
     expect(
       fileStepHoursNote({
-        ...coach,
+        ...player,
         enabled: false,
         remainingSeconds: 0,
         pastDue: true,
@@ -247,7 +247,7 @@ test.describe("the upload paywall", () => {
   const NEEDED = 1 * H + 52 * M;
   const PAYWALL: CheckoutMode = { kind: "paywall", neededSeconds: NEEDED };
   const account: CheckoutAccount = {
-    plan: "coach",
+    plan: "player",
     period: "monthly",
     planLeftSeconds: 0,
     extraSeconds: 0,
@@ -285,12 +285,12 @@ test.describe("the upload paywall", () => {
     const view = paywall();
     expect(view.aside).toBe(SENTENCE);
     expect(view.portalLink).toBe(true);
-    expect(view.band.offer).toBe("Coach · 0h left this month");
+    expect(view.band.offer).toBe("Player · 0h left this month");
     expect(view.band.offerDetail).toBe("Payment failed");
   });
 
-  test("Coach Pro the same; a paid-up subscriber has no portal link", () => {
-    const pro = paywall({ ...account, plan: "coach-pro" });
+  test("Player Pro the same; a paid-up subscriber has no portal link", () => {
+    const pro = paywall({ ...account, plan: "player-pro" });
     expect(pro.aside).toBe(SENTENCE);
     expect(pro.rows.map((row) => row.id)).toEqual(["hours"]);
 

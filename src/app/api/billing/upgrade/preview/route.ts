@@ -1,6 +1,6 @@
 /**
  * `POST { period?, plan? }` — what a plan change charged today would cost
- * this user right now: Coach → Coach Pro with no body, the switch to yearly
+ * this user right now: Player → Player Pro with no body, the switch to yearly
  * with `{ period: "yearly" }`. Reads only; nothing is charged or changed.
  *
  * Answers `{ payTodayCents, creditCents, creditBasis: "days" | "hours",

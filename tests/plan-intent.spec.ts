@@ -22,14 +22,50 @@ import { PLAN_HREF } from "@/lib/services/credits/packs";
 
 test.describe("the two values", () => {
   test("a paid plan and a period are an intent", () => {
+    expect(parsePlanIntent("player", "monthly")).toEqual({
+      plan: "player",
+      period: "monthly",
+    });
+    expect(parsePlanIntent("player-pro", "yearly")).toEqual({
+      plan: "player-pro",
+      period: "yearly",
+    });
+  });
+
+  test("the ids from before the rename are read as the plans they became", () => {
+    // The landing site still links `?plan=coach` until it is updated.
     expect(parsePlanIntent("coach", "monthly")).toEqual({
-      plan: "coach",
+      plan: "player",
       period: "monthly",
     });
     expect(parsePlanIntent("coach-pro", "yearly")).toEqual({
-      plan: "coach-pro",
+      plan: "player-pro",
       period: "yearly",
     });
+    expect(parsePlanIntent(["coach-pro", "player"], "monthly")).toEqual({
+      plan: "player-pro",
+      period: "monthly",
+    });
+    // The href and the cookie written from one carry the new id.
+    const intent = parsePlanIntent("coach", "yearly")!;
+    expect(planIntentHref(intent)).toBe(
+      "/dashboard/settings/plan?plan=player&period=yearly",
+    );
+    expect(encodePlanIntent(intent)).toBe("player.yearly");
+    // A path or cookie made before the rename still opens the checkout.
+    expect(
+      planIntentFromPath(
+        "/dashboard/settings/plan?plan=coach-pro&period=monthly",
+      ),
+    ).toEqual({ plan: "player-pro", period: "monthly" });
+    expect(decodePlanIntent("coach.monthly")).toEqual({
+      plan: "player",
+      period: "monthly",
+    });
+    // Only those two spellings: nothing near them.
+    for (const plan of ["Coach", "coach_pro", "coachpro", "coach-pro "]) {
+      expect(parsePlanIntent(plan, "monthly"), plan).toBeNull();
+    }
   });
 
   test("free lands on Home as it always did", () => {
@@ -39,12 +75,12 @@ test.describe("the two values", () => {
 
   test("anything else is dropped", () => {
     for (const [plan, period] of [
-      ["coach", undefined],
-      ["coach", ""],
-      ["coach", "weekly"],
-      ["coach", "Monthly"],
-      ["Coach", "monthly"],
-      ["coach_pro", "monthly"],
+      ["player", undefined],
+      ["player", ""],
+      ["player", "weekly"],
+      ["player", "Monthly"],
+      ["Player", "monthly"],
+      ["player_pro", "monthly"],
       ["pro", "monthly"],
       ["starter", "monthly"],
       ["elite", "yearly"],
@@ -53,29 +89,29 @@ test.describe("the two values", () => {
       [42, "monthly"],
       ["__proto__", "monthly"],
       ["constructor", "yearly"],
-      ["coach&period=yearly", "monthly"],
-      [{ plan: "coach" }, "monthly"],
+      ["player&period=yearly", "monthly"],
+      [{ plan: "player" }, "monthly"],
     ] as const) {
       expect(parsePlanIntent(plan, period), `${plan} / ${period}`).toBeNull();
     }
   });
 
   test("a repeated query value reads its first", () => {
-    expect(parsePlanIntent(["coach", "coach-pro"], ["yearly"])).toEqual({
-      plan: "coach",
+    expect(parsePlanIntent(["player", "player-pro"], ["yearly"])).toEqual({
+      plan: "player",
       period: "yearly",
     });
-    expect(parsePlanIntent(["nope", "coach"], "monthly")).toBeNull();
+    expect(parsePlanIntent(["nope", "player"], "monthly")).toBeNull();
   });
 });
 
 test.describe("carried as the Plan page's own query", () => {
   test("the href is the Plan page with both values, and survives the next clamp", () => {
-    const href = planIntentHref({ plan: "coach-pro", period: "yearly" });
-    expect(href).toBe("/dashboard/settings/plan?plan=coach-pro&period=yearly");
+    const href = planIntentHref({ plan: "player-pro", period: "yearly" });
+    expect(href).toBe("/dashboard/settings/plan?plan=player-pro&period=yearly");
     expect(safeNext(href)).toBe(href);
     expect(planIntentFromPath(href)).toEqual({
-      plan: "coach-pro",
+      plan: "player-pro",
       period: "yearly",
     });
     // One path for the page, wherever it is spelled.
@@ -87,11 +123,11 @@ test.describe("carried as the Plan page's own query", () => {
       "/dashboard",
       "/dashboard/settings/plan",
       "/dashboard/settings/plan?plan=free&period=monthly",
-      "/dashboard/settings/plan?plan=coach",
-      "/dashboard/settings/usage?plan=coach&period=monthly",
-      "/join/abc?plan=coach&period=monthly",
-      "https://evil.example/dashboard/settings/plan?plan=coach&period=monthly",
-      "//evil.example/dashboard/settings/plan?plan=coach&period=monthly",
+      "/dashboard/settings/plan?plan=player",
+      "/dashboard/settings/usage?plan=player&period=monthly",
+      "/join/abc?plan=player&period=monthly",
+      "https://evil.example/dashboard/settings/plan?plan=player&period=monthly",
+      "//evil.example/dashboard/settings/plan?plan=player&period=monthly",
       "",
       null,
       undefined,
@@ -101,23 +137,23 @@ test.describe("carried as the Plan page's own query", () => {
   });
 
   test("the cookie holds a plan name and a period and nothing else", () => {
-    const intent = { plan: "coach-pro", period: "monthly" } as const;
-    expect(encodePlanIntent(intent)).toBe("coach-pro.monthly");
-    expect(decodePlanIntent("coach-pro.monthly")).toEqual(intent);
-    expect(decodePlanIntent("coach.yearly")).toEqual({
-      plan: "coach",
+    const intent = { plan: "player-pro", period: "monthly" } as const;
+    expect(encodePlanIntent(intent)).toBe("player-pro.monthly");
+    expect(decodePlanIntent("player-pro.monthly")).toEqual(intent);
+    expect(decodePlanIntent("player.yearly")).toEqual({
+      plan: "player",
       period: "yearly",
     });
     for (const value of [
       "",
       null,
       undefined,
-      "coach",
+      "player",
       ".monthly",
-      "coach.",
+      "player.",
       "free.monthly",
-      "coach.monthly.extra",
-      "coach-pro/monthly",
+      "player.monthly.extra",
+      "player-pro/monthly",
       "elite.yearly",
     ]) {
       expect(decodePlanIntent(value), String(value)).toBeNull();
@@ -126,22 +162,22 @@ test.describe("carried as the Plan page's own query", () => {
 });
 
 test.describe("what opens on arrival", () => {
-  const coachMonthly = { plan: "coach", period: "monthly" } as const;
-  const proYearly = { plan: "coach-pro", period: "yearly" } as const;
+  const playerMonthly = { plan: "player", period: "monthly" } as const;
+  const proYearly = { plan: "player-pro", period: "yearly" } as const;
 
   test("a Free player gets the plan they picked, chosen", () => {
     expect(dialogForIntent(proYearly, "free")).toEqual({
       kind: "choose",
-      plan: "coach-pro",
+      plan: "player-pro",
       period: "yearly",
     });
   });
 
-  test("Coach who picked Coach Pro gets the upgrade; nobody is sold the plan they have", () => {
-    expect(dialogForIntent(proYearly, "coach")).toEqual({ kind: "upgrade" });
-    expect(dialogForIntent(coachMonthly, "coach")).toBeNull();
-    expect(dialogForIntent(coachMonthly, "coach-pro")).toBeNull();
-    expect(dialogForIntent(proYearly, "coach-pro")).toBeNull();
+  test("Player who picked Player Pro gets the upgrade; nobody is sold the plan they have", () => {
+    expect(dialogForIntent(proYearly, "player")).toEqual({ kind: "upgrade" });
+    expect(dialogForIntent(playerMonthly, "player")).toBeNull();
+    expect(dialogForIntent(playerMonthly, "player-pro")).toBeNull();
+    expect(dialogForIntent(proYearly, "player-pro")).toBeNull();
     expect(dialogForIntent(null, "free")).toBeNull();
   });
 });

@@ -24,7 +24,7 @@
  * | Webhook unreadable (internal) | the SplitStep webhook route, a SIGNED delivery whose body is not JSON or names no job id or status (`unreadableWebhookReason()`), to `INTERNAL_ALERTS_ADDRESS` only, `claimSend("webhook_unreadable:<reason>:<utc day>")` — WIRED |
  * | Upload paused           | `/api/cron/reap-stalled-uploads` (every 5 min, `pg_cron` → `pg_net`) — a job still `uploading` with no progress write for 20 minutes, to its `created_by` · pref `notifyAnalysisFailed`, `claimSend("upload_paused:<job_id>")` — WIRED once the schedule migration is applied |
  * | Usage alert (80% / spent) | `reserveQuota()` crosses a line, to owner + coaches · pref `notifyUsageAlerts`, `claimSend("usage_<severity>:<program_id>:<billing month \| season start>")` — the season wording for a program on a season plan — WIRED |
- * | Plan usage alert (80% / spent) | the same crossing on a player's Coach / Coach Pro hours (`notifyUsageThreshold()`), to the player · pref `notifyUsageAlerts`, `claimSend("usage_<severity>:<user_id>:<hours window start>")`, one per threshold per hours window — WIRED |
+ * | Plan usage alert (80% / spent) | the same crossing on a player's Player / Player Pro hours (`notifyUsageThreshold()`), to the player · pref `notifyUsageAlerts`, `claimSend("usage_<severity>:<user_id>:<hours window start>")`, one per threshold per hours window — WIRED |
  * | Weekly team digest       | Monday schedule · pref `weeklyTeamDigest` — NOT WIRED, row hidden |
  * | Claim verify address     | signed-in `startClaim()` / `resendClaim()` — WIRED |
  * | Claim verify identity    | `sendClaimVerification()` — an admin, by hand, from the review queue — WIRED |

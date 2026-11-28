@@ -5,7 +5,7 @@
  * Exactly two changes are charged today (`upgradeKind()`), and both start a
  * new billing period the moment they happen:
  *
- *   plan     Coach → Coach Pro on the same period: the new plan's full period
+ *   plan     Player → Player Pro on the same period: the new plan's full period
  *            price, less a credit for the unused part of the old plan, and
  *            the new plan's full hours fresh.
  *   period   monthly → yearly on the same plan: the yearly price, less the
@@ -21,9 +21,10 @@
  *
  * "What the old plan cost" is what the customer PAID for the current period
  * before tax (`paidForPeriodCents`: the period's invoice after discounts),
- * never more than the list price. A first-month half-off subscriber paid $75
- * for the month, so 15 of 30 days left credits $37.50, not $75 — a credit
- * from list price would hand back more than was paid. This function stays
+ * never more than the list price. A subscriber on the first-month offer paid
+ * less than list for the month (at 30% off, $105 of $150), so 15 of 30 days
+ * left credits $52.50, not $75 — a credit from list price would hand back
+ * more than was paid. This function stays
  * pure: the server reads the invoice and passes the figure in; with none
  * given, the list price is the basis.
  *
@@ -35,8 +36,8 @@
  * TIME is counted in WHOLE DAYS, a part day as one: `daysLeft` of
  * `periodDays`. The dialog prints "your 30 days left", so the share is that
  * same count — measured to the second, upgrading five minutes after
- * subscribing credited $74.99 of a $75 month and charged a cent more than the
- * difference between the plans.
+ * subscribing credited a cent less than the month had cost and charged a
+ * cent more than the difference between the plans.
  *
  * A yearly plan's hours come as twelve monthly slices that do not carry
  * over. Its "period's plan hours" are all twelve: the slices that have not
@@ -53,27 +54,27 @@
 
 import { addMonthsUtc } from "@/lib/services/splitstep/allowance";
 import {
-  coachPlan,
+  personalPlan,
   planHoursSeconds,
-  type CoachPlanId,
+  type PersonalPlanId,
   type PlanPeriod,
 } from "./plans";
 
 const DAY_MS = 86_400_000;
 const SLICES_A_YEAR = 12;
 
-/** The only upgrade there is: Coach → Coach Pro, on the same period. */
-export function isUpgrade(from: CoachPlanId, to: CoachPlanId): boolean {
-  return from === "coach" && to === "coach-pro";
+/** The only upgrade there is: Player → Player Pro, on the same period. */
+export function isUpgrade(from: PersonalPlanId, to: PersonalPlanId): boolean {
+  return from === "player" && to === "player-pro";
 }
 
 /** A plan and how it is billed: where a subscription is, or is going. */
 export interface UpgradeTarget {
-  plan: CoachPlanId;
+  plan: PersonalPlanId;
   period: PlanPeriod;
 }
 
-/** `plan`: Coach → Coach Pro. `period`: monthly → yearly. */
+/** `plan`: Player → Player Pro. `period`: monthly → yearly. */
 export type UpgradeKind = "plan" | "period";
 
 /**
@@ -98,16 +99,16 @@ export function upgradeKind(
 
 /** A plan's price for one billing period, in US cents. */
 export function periodPriceCents(
-  plan: CoachPlanId,
+  plan: PersonalPlanId,
   period: PlanPeriod,
 ): number {
-  const { monthly, yearly } = coachPlan(plan);
+  const { monthly, yearly } = personalPlan(plan);
   return (period === "monthly" ? monthly : yearly) * 100;
 }
 
 export interface UpgradeInput {
-  from: CoachPlanId;
-  to: CoachPlanId;
+  from: PersonalPlanId;
+  to: PersonalPlanId;
   /** How the CURRENT subscription is billed. */
   period: PlanPeriod;
   /**

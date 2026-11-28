@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { seasonAllowance } from "@/lib/billing/plans";
 import { planUsageAlertEmail, usageAlertEmail } from "@/lib/services/email";
 import { Plans2027Preview } from "./plans-2027-preview";
 
@@ -37,12 +38,14 @@ export default async function Plans2027DesignPage({
 }
 
 const H = 3600;
+/** A Program team's spring pool, as the plan module holds it. */
+const SEASON_H = seasonAllowance("program", "spring").hours;
 
-/** The real templates on the plan's own Coach example, and a spring season. */
+/** The real templates on the plan's own Player example, and a spring season. */
 function previewEmails(): Record<string, string> {
-  const coach = {
+  const player = {
     to: "jordan@example.com",
-    planId: "coach" as const,
+    planId: "player" as const,
     capSeconds: 5 * H,
     resetsAt: new Date("2027-02-14T00:00:00Z"),
   };
@@ -50,29 +53,29 @@ function previewEmails(): Record<string, string> {
     to: "alex@example.com",
     recipientName: "Alex",
     programName: "Northfield University Men's",
-    capSeconds: 200 * H,
+    capSeconds: SEASON_H * H,
     billingMonth: "2027-03-01",
     period: "season" as const,
     seasonEndsOn: "2027-05-31",
     programId: "22222222-2222-2222-2222-222222222222",
   };
   return {
-    low: planUsageAlertEmail({ ...coach, severity: "low", usedSeconds: 4 * H })
+    low: planUsageAlertEmail({ ...player, severity: "low", usedSeconds: 4 * H })
       .html,
     spent: planUsageAlertEmail({
-      ...coach,
+      ...player,
       severity: "spent",
       usedSeconds: 5 * H,
     }).html,
     "season-low": usageAlertEmail({
       ...season,
       severity: "low",
-      usedSeconds: 160 * H,
+      usedSeconds: SEASON_H * 0.8 * H,
     }).html,
     "season-spent": usageAlertEmail({
       ...season,
       severity: "spent",
-      usedSeconds: 200 * H,
+      usedSeconds: SEASON_H * H,
     }).html,
   };
 }

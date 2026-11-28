@@ -2,7 +2,7 @@
  * The two plan changes charged today — server only. Decision 7, and the same
  * rule for paying yearly:
  *
- *   plan     Coach → Coach Pro, on the same period (the Upgrade button);
+ *   plan     Player → Player Pro, on the same period (the Upgrade button);
  *   period   monthly → yearly, on the same plan (Pay yearly).
  *
  * `upgradeKind()` (`lib/billing/upgrade.ts`) admits exactly those; anything
@@ -67,7 +67,7 @@
 import type Stripe from "stripe";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { coachPlan, type PlanPeriod } from "@/lib/billing/plans";
+import { personalPlan, type PlanPeriod } from "@/lib/billing/plans";
 import {
   quoteUpgrade,
   upgradeKind,
@@ -105,7 +105,7 @@ import {
   syncSubscription,
 } from "./subscription";
 
-const UPGRADE_TO: PaidPlanId = "coach-pro";
+const UPGRADE_TO: PaidPlanId = "player-pro";
 
 export const UPGRADE_CREDIT_KIND = "upgrade_credit";
 export const UPGRADE_REVERSAL_KIND = "upgrade_credit_reversal";
@@ -115,7 +115,7 @@ const IN_FLIGHT_MS = 10 * 60_000;
 
 /**
  * What the caller asked to move to. Each half left out stays as it is; with
- * nothing asked at all it is the Upgrade button: Coach Pro on the same period.
+ * nothing asked at all it is the Upgrade button: Player Pro on the same period.
  */
 export interface UpgradeRequest {
   plan?: PaidPlanId;
@@ -365,9 +365,9 @@ async function prepareUpgrade(params: {
     const target = sold ? targetOf(sold, params.target) : null;
     const kind = sold && target ? upgradeKind(sold, target) : null;
     if (!sold || !target || !kind) {
-      // With nothing asked this is the Upgrade button, which only a Coach Pro
+      // With nothing asked this is the Upgrade button, which only a Player Pro
       // subscriber (or an unknown price) is refused at.
-      let sentence = `You're already on ${coachPlan(UPGRADE_TO).name}.`;
+      let sentence = `You're already on ${personalPlan(UPGRADE_TO).name}.`;
       let detail = sold ? `from_${sold.plan}` : "unknown_price";
       if (sold && target && asked) {
         const same = target.plan === sold.plan && target.period === sold.period;
@@ -375,7 +375,7 @@ async function prepareUpgrade(params: {
           ? "That change can't be made here."
           : params.target?.plan === undefined
             ? `You already pay ${target.period}.`
-            : `You're already on ${coachPlan(target.plan).name}.`;
+            : `You're already on ${personalPlan(target.plan).name}.`;
         detail = `from_${sold.plan}_${sold.period}_to_${target.plan}_${target.period}`;
       }
       return refuse("not_an_upgrade", 409, sentence, detail);
@@ -470,7 +470,7 @@ export async function previewUpgrade(params: {
   stripe: Stripe;
   admin: SupabaseClient;
   user: CheckoutUser | null;
-  /** Left out: Coach Pro on the same period. */
+  /** Left out: Player Pro on the same period. */
   target?: UpgradeRequest;
   now?: Date;
 }): Promise<BillingResult<UpgradePreview>> {
@@ -494,7 +494,7 @@ export async function previewUpgrade(params: {
 
 /**
  * The deterministic id of one attempt — see "Twice at once". A switch to
- * yearly is marked, so the two changes a monthly Coach can ask for in one
+ * yearly is marked, so the two changes a monthly Player can ask for in one
  * minute never share an idempotency key.
  */
 export function upgradeAttemptId(
@@ -647,7 +647,7 @@ export async function executeUpgrade(params: {
    * the new figures rather than charged unseen.
    */
   expectedPayTodayCents?: number;
-  /** Left out: Coach Pro on the same period. `{ period: "yearly" }`: pay yearly. */
+  /** Left out: Player Pro on the same period. `{ period: "yearly" }`: pay yearly. */
   target?: UpgradeRequest;
   now?: Date;
 }): Promise<BillingResult<UpgradeDone>> {
@@ -721,8 +721,8 @@ export async function executeUpgrade(params: {
           currency: "usd",
           description:
             kind === "period"
-              ? `Unused ${coachPlan(from.plan).name} month, credited on the switch to yearly`
-              : `Unused ${coachPlan(from.plan).name} time, credited on upgrade`,
+              ? `Unused ${personalPlan(from.plan).name} month, credited on the switch to yearly`
+              : `Unused ${personalPlan(from.plan).name} time, credited on upgrade`,
           metadata: {
             kind: UPGRADE_CREDIT_KIND,
             attempt,

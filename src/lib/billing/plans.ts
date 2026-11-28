@@ -2,17 +2,15 @@
  * The paid plans, from January 1, 2027 — the ONE place the dashboard writes a
  * price, an hour count, a match estimate, an Ask limit or a season date.
  *
- * Every figure is a copy of the landing site's
- * `advantage-landing/src/lib/plans.ts`, which is the source of truth for what
- * we sell. Pages, quota code, Stripe setup and emails read from here; nothing
- * is typed into a page. `tests/billing-plans.spec.ts` pins each figure to the
- * literal the landing file holds, so a change is one edit here plus that spec
- * (and the landing file, by hand — the two repos share no code).
+ * These are the final 2027 figures (docs/plans/2027-pricing.md, "Final
+ * pricing"). Pages, quota code, Stripe setup and emails read from here;
+ * nothing is typed into a page. `tests/billing-plans.spec.ts` pins each
+ * figure, so a change is one edit here plus that spec, and the landing site's
+ * `advantage-landing/src/lib/plans.ts` by hand (the two repos share no code;
+ * docs/plans/2027-landing-handoff.md lists what the landing site shows).
  *
- * Two places this file deliberately differs from the landing file, both by
- * decision (docs/plans/2027-pricing.md, "Decisions"):
- *  - Free has NO video: no hours and no free match (decision 2). The landing
- *    file still carries a one-match offer behind `FREE_MATCH_OFFER`.
+ * Two spellings to know:
+ *  - Free has NO video: no hours and no free match.
  *  - A full-year term is spelled `full_year`, the value `program_plans.plan_term`
  *    stores; the landing file's `Season` spells it `full-year`.
  *
@@ -29,20 +27,34 @@ export const HOURS_PER_MATCH = 1.8;
 export const EXTRA_HOUR_PRICE = 35;
 /** Extra hours last this long from the moment they are bought. */
 export const EXTRA_HOUR_VALIDITY_MONTHS = 12;
+/**
+ * About what one more match costs in extra hours, US dollars. A stated
+ * figure, agreed with the price: not `EXTRA_HOUR_PRICE × HOURS_PER_MATCH`.
+ */
+export const EXTRA_MATCH_PRICE = 60;
 
 /**
- * Rush and Priority. Kept for a later build: THIS build ignores them and
- * every job runs Standard. Do not read them into a gate or a price yet.
+ * Rush and Priority. Not in any plan and not on sale: every job runs
+ * Standard. The two prices are kept for the later build that sells them; do
+ * not read them into a gate or a price yet. Where a plan's contents are
+ * listed, `RUSH_PRIORITY_COMING_SOON` is the one line that mentions them.
  */
 export const RUSH_PRICE = 25;
 export const PRIORITY_ADDON_PERCENT = 15;
+export const RUSH_PRIORITY_COMING_SOON = "Rush and Priority: coming soon";
 
 /**
  * The paywall's offer: this much off the first month. Monthly billing only,
- * Coach and Coach Pro, first-time customers only. Checkout applies it; nobody
- * types a code. Yearly already has a month free and gets no discount.
+ * Player and Player Pro, first-time customers only. Checkout applies it;
+ * nobody types a code. Yearly already has a month free and gets no discount.
+ * Every sentence that names the offer is built from this number.
  */
-export const FIRST_MONTH_DISCOUNT_PERCENT = 50;
+export const FIRST_MONTH_DISCOUNT_PERCENT = 30;
+
+/** `30% off your first month` — the offer, as every surface names it. */
+export function firstMonthOffer(): string {
+  return `${FIRST_MONTH_DISCOUNT_PERCENT}% off your first month`;
+}
 
 /** The first day plans are enforced, a UTC calendar day. */
 export const PLANS_BEGIN = "2027-01-01";
@@ -108,13 +120,51 @@ export function aboutMatches(hours: number): number {
   return Math.max(0, Math.round(hours / HOURS_PER_MATCH));
 }
 
-/* ---------- Players and coaches: billed monthly or yearly ---------- */
+/**
+ * `about half a match`, `about 1 match`, `about 3 matches` — what a count of
+ * hours covers in a sentence, from `HOURS_PER_MATCH`: a half, or the nearest
+ * whole match. Null under half a match, where a row says nothing. The one
+ * place a match count is put in words: the usage email and the extra-hours
+ * row both read it.
+ *
+ * `fromWholeMatch` is for a row that SELLS hours: it answers null until the
+ * hours round to a whole match, so one hour prints no count. "About half a
+ * match" beside one hour's price would imply a dearer match than
+ * `EXTRA_MATCH_PRICE`, which the same dialog prints. The usage email says
+ * what a remaining hour covers, sells nothing, and keeps the half.
+ */
+export function matchesPhrase(
+  seconds: number,
+  options: { fromWholeMatch?: boolean } = {},
+): string | null {
+  const matches = Math.max(0, seconds) / 3600 / HOURS_PER_MATCH;
+  const halves = Math.round(matches * 2);
+  if (halves <= 0) return null;
+  if (halves === 1) {
+    return options.fromWholeMatch ? null : "about half a match";
+  }
+  const whole = Math.max(1, Math.round(matches));
+  return `about ${whole} ${whole === 1 ? "match" : "matches"}`;
+}
 
-export type CoachPlanId = "free" | "coach" | "coach-pro";
+/**
+ * `$35 an hour (about $60 per extra match)` — the extra-hours price as the
+ * extra-hours row says it. The only place a price per hour is shown.
+ */
+export function extraHourRate(): string {
+  return `${usd(EXTRA_HOUR_PRICE)} an hour (about ${usd(EXTRA_MATCH_PRICE)} per extra match)`;
+}
+
+/* ---------- Personal plans: billed monthly or yearly ---------- */
+
+export type PersonalPlanId = "free" | "player" | "player-pro";
 export type PlanPeriod = "monthly" | "yearly";
 
-export type CoachPlan = {
-  id: CoachPlanId;
+/** Who the personal plans are for, wherever one is introduced. */
+export const PERSONAL_PLAN_AUDIENCE = "For players and parents.";
+
+export type PersonalPlan = {
+  id: PersonalPlanId;
   name: string;
   /** US dollars a month, billed monthly. */
   monthly: number;
@@ -122,26 +172,26 @@ export type CoachPlan = {
   yearly: number;
   /** Hours of video a month, which do not carry over. Null: the plan has none. */
   hours: number | null;
-  /** About this many singles matches a month. Stored, not computed. */
+  /** About this many verified singles matches a month. Stated, not computed. */
   matches: number;
   /** Whether every match on the plan is Verified by Advantage. */
   verified: boolean;
 };
 
-export const COACH_PLANS: readonly CoachPlan[] = [
+export const PERSONAL_PLANS: readonly PersonalPlan[] = [
   {
     id: "free",
     name: "Free",
     monthly: 0,
     yearly: 0,
-    // Decision 2: no free match. Free is SwingVision imports and Ask.
+    // No free match. Free is SwingVision imports and Ask.
     hours: null,
     matches: 0,
     verified: false,
   },
   {
-    id: "coach",
-    name: "Coach",
+    id: "player",
+    name: "Player",
     monthly: 150,
     yearly: 1650,
     hours: 5,
@@ -149,29 +199,99 @@ export const COACH_PLANS: readonly CoachPlan[] = [
     verified: true,
   },
   {
-    id: "coach-pro",
-    name: "Coach Pro",
+    id: "player-pro",
+    name: "Player Pro",
     monthly: 300,
     yearly: 3300,
     hours: 10,
-    matches: 5,
+    matches: 6,
     verified: true,
   },
 ];
 
-export function isCoachPlanId(value: unknown): value is CoachPlanId {
-  return COACH_PLANS.some((plan) => plan.id === value);
+export function isPersonalPlanId(value: unknown): value is PersonalPlanId {
+  return PERSONAL_PLANS.some((plan) => plan.id === value);
 }
 
-export function coachPlan(id: CoachPlanId): CoachPlan {
-  const plan = COACH_PLANS.find((candidate) => candidate.id === id);
+/**
+ * The ids the personal plans were sold under before they were renamed. Only
+ * a link from outside still carries one (`?plan=coach` from the landing
+ * site, a plan-intent cookie set before the rename); nothing stores them.
+ */
+const LEGACY_PERSONAL_PLAN_IDS: Readonly<Record<string, PersonalPlanId>> = {
+  coach: "player",
+  "coach-pro": "player-pro",
+};
+
+/**
+ * The plan a value from OUTSIDE names (a query string, a cookie): a current
+ * id as it is, a pre-rename id as the plan it became, anything else null.
+ */
+export function personalPlanIdFrom(value: unknown): PersonalPlanId | null {
+  if (isPersonalPlanId(value)) return value;
+  if (typeof value !== "string") return null;
+  return Object.hasOwn(LEGACY_PERSONAL_PLAN_IDS, value)
+    ? LEGACY_PERSONAL_PLAN_IDS[value]
+    : null;
+}
+
+export function personalPlan(id: PersonalPlanId): PersonalPlan {
+  const plan = PERSONAL_PLANS.find((candidate) => candidate.id === id);
   if (!plan) throw new Error(`Unknown plan: ${id}`);
   return plan;
 }
 
 /** A personal plan's monthly video allowance in seconds; 0 for Free. */
-export function planHoursSeconds(id: CoachPlanId): number {
-  return (coachPlan(id).hours ?? 0) * 3600;
+export function planHoursSeconds(id: PersonalPlanId): number {
+  return (personalPlan(id).hours ?? 0) * 3600;
+}
+
+/** What Free is, where a paid plan says its matches. */
+export const FREE_PLAN_HEADLINE = "Free for SwingVision users";
+
+/**
+ * A personal plan in one line, matches first: `About 3 verified matches a
+ * month`. Free has no video and says what it is instead.
+ */
+export function planHeadline(id: PersonalPlanId): string {
+  const { hours, matches } = personalPlan(id);
+  return hours === null
+    ? FREE_PLAN_HEADLINE
+    : `About ${matches} verified ${matches === 1 ? "match" : "matches"} a month`;
+}
+
+/** `5 hours of match video`; the hours a plan carries, as a phrase. */
+function hoursPhrase(hours: number): string {
+  return `${hours} ${hours === 1 ? "hour" : "hours"} of match video`;
+}
+
+/**
+ * The line under the headline, the second of a plan row's two facts: `5
+ * hours of match video`. Null for Free, which has no hours.
+ */
+export function planHoursLine(id: PersonalPlanId): string | null {
+  const { hours } = personalPlan(id);
+  return hours === null ? null : hoursPhrase(hours);
+}
+
+/**
+ * `planHoursLine` for the checkout dialog, whose rows are narrower than
+ * Settings › Plan's: `5 hours`. Null for Free.
+ */
+export function planHoursShort(id: PersonalPlanId): string | null {
+  const { hours } = personalPlan(id);
+  return hours === null ? null : `${hours} ${hours === 1 ? "hour" : "hours"}`;
+}
+
+/**
+ * The full approved sub-copy, for the landing handoff and the docs: `5 hours
+ * of match video · every match verified`. A plan row is too narrow for it and
+ * shows `planHoursLine`. Null for Free.
+ */
+export function planSubCopy(id: PersonalPlanId): string | null {
+  const { hours, verified } = personalPlan(id);
+  if (hours === null) return null;
+  return `${hoursPhrase(hours)}${verified ? " · every match verified" : ""}`;
 }
 
 /* ---------- College programs: priced by the season ---------- */
@@ -180,6 +300,7 @@ export type CollegePlanId = "starter" | "program" | "elite";
 /** `program_plans.plan_term`. */
 export type PlanTerm = "spring" | "full_year";
 
+/** A term's price, its hours, and about how many verified matches that is. */
 export type Allowance = { price: number; hours: number; matches: number };
 
 export type CollegePlan = {
@@ -187,11 +308,13 @@ export type CollegePlan = {
   name: string;
   spring: Allowance;
   fullYear: Allowance;
-  /** Rush jobs included a season. Ignored by this build — see `RUSH_PRICE`. */
+  /** What the hours cover, as a coach would say it. */
+  covers: string;
+  /** Rush jobs included a season. None in any plan — see `RUSH_PRICE`. */
   rushIncluded: number;
-  /** Hours a month that go at Priority, when the plan includes any. Ignored by this build. */
+  /** Hours a month that go at Priority. None in any plan. */
   priorityHours: number | null;
-  /** Priority can be bought on top (+`PRIORITY_ADDON_PERCENT`). Ignored by this build. */
+  /** Priority bought on top (+`PRIORITY_ADDON_PERCENT`). Not on sale. */
   priorityAddon: boolean;
 };
 
@@ -201,6 +324,7 @@ export const COLLEGE_PLANS: readonly CollegePlan[] = [
     name: "Starter",
     spring: { price: 3000, hours: 80, matches: 45 },
     fullYear: { price: 4800, hours: 130, matches: 70 },
+    covers: "Your top courts, every dual",
     rushIncluded: 0,
     priorityHours: null,
     priorityAddon: false,
@@ -208,19 +332,21 @@ export const COLLEGE_PLANS: readonly CollegePlan[] = [
   {
     id: "program",
     name: "Program",
-    spring: { price: 7500, hours: 200, matches: 110 },
-    fullYear: { price: 10500, hours: 280, matches: 155 },
-    rushIncluded: 3,
+    spring: { price: 7500, hours: 225, matches: 125 },
+    fullYear: { price: 10500, hours: 325, matches: 180 },
+    covers: "Nearly every singles match, every dual",
+    rushIncluded: 0,
     priorityHours: null,
-    priorityAddon: true,
+    priorityAddon: false,
   },
   {
     id: "elite",
     name: "Elite",
-    spring: { price: 11000, hours: 300, matches: 165 },
-    fullYear: { price: 15000, hours: 400, matches: 220 },
-    rushIncluded: 6,
-    priorityHours: 30,
+    spring: { price: 12000, hours: 400, matches: 220 },
+    fullYear: { price: 16500, hours: 550, matches: 305 },
+    covers: "Every match, plus fall and practice",
+    rushIncluded: 0,
+    priorityHours: null,
     priorityAddon: false,
   },
 ];
@@ -341,18 +467,25 @@ export function programPlanFor(
 /* ---------- Ask ---------- */
 
 /**
- * Ask questions a month, app and connector together. Working numbers owned by
- * the Ask session: change them here only, never in the gate. Free's 20 is
- * advertised; the paid figures are a fair-use limit we do not advertise, and
- * at the limit the message is "Contact us", not a paywall.
+ * Ask questions a month on a personal plan, app and connector together.
+ * Working numbers owned by the Ask session: change them here only, never in
+ * the gate.
  */
 export const ASK_QUESTIONS_PER_MONTH = {
   free: 20,
-  coach: 150,
-  "coach-pro": 300,
-  /** Each member of a team on a college plan. */
-  teamMember: 300,
-} as const satisfies Record<CoachPlanId | "teamMember", number>;
+  player: 150,
+  "player-pro": 300,
+} as const satisfies Record<PersonalPlanId, number>;
+
+/**
+ * Ask questions a month for a team on a college plan: ONE pool the whole
+ * team draws from, not a figure per person.
+ */
+export const ASK_TEAM_QUESTIONS_PER_MONTH = {
+  starter: 500,
+  program: 1000,
+  elite: 2000,
+} as const satisfies Record<CollegePlanId, number>;
 
 /** An agent-mode question counts as this many. */
 export const ASK_AGENT_QUESTION_WEIGHT = 3;

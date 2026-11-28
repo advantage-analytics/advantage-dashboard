@@ -15,16 +15,16 @@
  * nothing server-side, so a spec can read it with `process.env` set.
  */
 
-import type { CoachPlanId, PlanPeriod } from "@/lib/billing/plans";
+import type { PersonalPlanId, PlanPeriod } from "@/lib/billing/plans";
 
-/** A plan that is sold: every `CoachPlanId` but Free. */
-export type PaidPlanId = Exclude<CoachPlanId, "free">;
+/** A plan that is sold: every `PersonalPlanId` but Free. */
+export type PaidPlanId = Exclude<PersonalPlanId, "free">;
 
-export const PAID_PLAN_IDS: readonly PaidPlanId[] = ["coach", "coach-pro"];
+export const PAID_PLAN_IDS: readonly PaidPlanId[] = ["player", "player-pro"];
 export const PLAN_PERIODS: readonly PlanPeriod[] = ["monthly", "yearly"];
 
 export function isPaidPlanId(value: unknown): value is PaidPlanId {
-  return value === "coach" || value === "coach-pro";
+  return value === "player" || value === "player-pro";
 }
 
 export function isPlanPeriod(value: unknown): value is PlanPeriod {
@@ -33,13 +33,13 @@ export function isPlanPeriod(value: unknown): value is PlanPeriod {
 
 /** The variable that holds each recurring price. */
 export const PLAN_PRICE_ENV = {
-  coach: {
-    monthly: "STRIPE_PRICE_COACH_MONTHLY",
-    yearly: "STRIPE_PRICE_COACH_YEARLY",
+  player: {
+    monthly: "STRIPE_PRICE_PLAYER_MONTHLY",
+    yearly: "STRIPE_PRICE_PLAYER_YEARLY",
   },
-  "coach-pro": {
-    monthly: "STRIPE_PRICE_COACH_PRO_MONTHLY",
-    yearly: "STRIPE_PRICE_COACH_PRO_YEARLY",
+  "player-pro": {
+    monthly: "STRIPE_PRICE_PLAYER_PRO_MONTHLY",
+    yearly: "STRIPE_PRICE_PLAYER_PRO_YEARLY",
   },
 } as const satisfies Record<PaidPlanId, Record<PlanPeriod, string>>;
 
@@ -87,7 +87,7 @@ export function extraHourPriceId(env: Env = process.env): string | null {
   return read(env, EXTRA_HOUR_PRICE_ENV, "price_");
 }
 
-/** The 50%-off, once coupon for a first monthly subscription, or null. */
+/** The first-month, once coupon for a first monthly subscription, or null. */
 export function firstMonthCouponId(env: Env = process.env): string | null {
   return read(env, FIRST_MONTH_COUPON_ENV);
 }

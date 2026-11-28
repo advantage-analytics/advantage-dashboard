@@ -7,7 +7,7 @@
  * college or a team an admin put on the pilot. From that instant it is the
  * plan's:
  *
- *  - personal: Free has none; Coach and Coach Pro draw their monthly hours
+ *  - personal: Free has none; Player and Player Pro draw their monthly hours
  *    over the HOURS WINDOW, a month-long slice anchored on the subscription
  *    (`users.plan_period_start` plus whole months), which is the Stripe
  *    period for a monthly subscriber and a fresh month twelve times a year

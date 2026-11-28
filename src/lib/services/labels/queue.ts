@@ -139,8 +139,9 @@ export function enterLabelQueue(job: LabelQueueJob): boolean {
  * rules as the queue, not added yet, and nobody past To do on it — no
  * session, or an open one nobody holds. A published match is not offered
  * again; it is reopened from its own page. From `PLANS_BEGIN` it must also
- * have been paid for (`reviewEligible`): human review is part of what a plan,
- * extra hours, a season or a pilot buys. Only the offer is gated; work
+ * have been analysed on a paid plan (`reviewEligible`): human review is part
+ * of what a plan, a season or a pilot buys, and extra hours bought without a
+ * plan do not. Only the offer is gated; work
  * already past To do stays on the boards (`enterLabelQueue`).
  */
 export function canAddToTodo(job: LabelQueueJob): boolean {

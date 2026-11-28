@@ -2,10 +2,10 @@
  * `POST { payTodayCents?, period?, plan? }` — make one of the two plan changes
  * that are charged today:
  *
- *   `{}`                    Coach → Coach Pro on the same period (decision 7):
- *                           a new billing period starts today, the full Coach
+ *   `{}`                    Player → Player Pro on the same period (decision 7):
+ *                           a new billing period starts today, the full Player
  *                           Pro price less a credit for the unused part of
- *                           Coach, and the full Coach Pro hours fresh.
+ *                           Player, and the full Player Pro hours fresh.
  *   `{ period: "yearly" }`  the same plan, paid yearly from today: the yearly
  *                           price less the same credit for the unused part of
  *                           the current month. Hours stay monthly.

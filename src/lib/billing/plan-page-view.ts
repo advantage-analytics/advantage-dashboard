@@ -18,6 +18,7 @@
 import { formatHoursLong, isUnlimitedCap } from "@/lib/data/usage-format";
 import {
   hoursLeftLabel,
+  totalLeftLabel,
   utcDayLabel,
   type CheckoutMode,
   type ScheduledChange,
@@ -26,17 +27,18 @@ import type { PlanBilling } from "./plan-fields";
 import type { PlanIntent } from "./plan-intent";
 import {
   ASK_QUESTIONS_PER_MONTH,
-  EXTRA_HOUR_PRICE,
   EXTRA_HOUR_VALIDITY_MONTHS,
-  FIRST_MONTH_DISCOUNT_PERCENT,
-  coachPlan,
+  extraHourRate,
+  personalPlan,
+  planHeadline,
+  planHoursLine,
   usd,
-  type CoachPlanId,
+  type PersonalPlanId,
 } from "./plans";
 
 export interface PlanPageInput {
   /** `planFor(users.plan).id`. */
-  plan: CoachPlanId;
+  plan: PersonalPlanId;
   billing: PlanBilling;
   /** `VideoAllowance.kind` for the viewer's personal workspace. */
   allowanceKind: string;
@@ -112,7 +114,7 @@ function hoursCard(input: PlanPageInput): PlanPageView["hours"] {
       line: "Admin accounts have no monthly cap.",
     };
   }
-  const figure = hoursLeftLabel(left + extra);
+  const figure = totalLeftLabel(left, extra);
   const plusExtra = extra > 0 ? ` + ${formatHoursLong(extra)} extra` : "";
   const resets = resetsOn ? ` · Resets ${resetsOn}` : "";
 
@@ -125,7 +127,7 @@ function hoursCard(input: PlanPageInput): PlanPageView["hours"] {
     return {
       figure,
       unit: "left this month",
-      line: `${hoursLeftLabel(left)} of ${coachPlan(input.plan).name} this month${plusExtra}${resets}`,
+      line: `${hoursLeftLabel(left)} of ${personalPlan(input.plan).name} this month${plusExtra}${resets}`,
     };
   }
   if (input.allowanceKind === "beta") {
@@ -169,25 +171,18 @@ function changeDay(change: ScheduledChange, withYear: boolean): string {
   return utcDayLabel(change.effectiveOn, withYear) ?? "renewal";
 }
 
-/** "first month half off". */
-function firstMonthClause(): string {
-  return FIRST_MONTH_DISCOUNT_PERCENT === 50
-    ? "first month half off"
-    : `first month ${FIRST_MONTH_DISCOUNT_PERCENT}% off`;
-}
-
 export function buildPlanPage(input: PlanPageInput): PlanPageView {
   const { plan, billing } = input;
   const rows: PlanPageRow[] = [];
-  const coach = coachPlan("coach");
+  // What the Billing row says where there is no renewal to name.
+  let billingLine = "Card, receipts and cancelling.";
 
   if (plan === "free") {
     rows.push({
       id: "plan",
       label: "Free",
-      description: `${ASK_QUESTIONS_PER_MONTH.free} Ask questions a month · ${coach.name} from ${usd(coach.monthly)}${
-        billing.everSubscribed ? " a month" : `, ${firstMonthClause()}`
-      }`,
+      // One line: the offer is the Choose a plan button's and the dialog's.
+      description: `${planHeadline("free")} · ${ASK_QUESTIONS_PER_MONTH.free} Ask questions a month`,
       action: {
         kind: "dialog",
         label: "Choose a plan",
@@ -196,19 +191,14 @@ export function buildPlanPage(input: PlanPageInput): PlanPageView {
       },
     });
   } else {
-    const current = coachPlan(plan);
+    const current = personalPlan(plan);
     const yearly = billing.period === "yearly";
     const pastDue = isPastDue(input);
-    const renews = billing.periodEnd
-      ? utcDayLabel(billing.periodEnd, yearly)
-      : null;
-    const price = usd(yearly ? current.yearly : current.monthly);
-    const tail = renews ? ` · Renews ${renews} at ${price}` : "";
     const upgrade: PlanPageAction | undefined =
-      plan === "coach"
+      plan === "player"
         ? {
             kind: "dialog",
-            label: `Upgrade to ${coachPlan("coach-pro").name}`,
+            label: `Upgrade to ${personalPlan("player-pro").name}`,
             tone: "primary",
             mode: { kind: "upgrade" },
           }
@@ -224,7 +214,7 @@ export function buildPlanPage(input: PlanPageInput): PlanPageView {
       ...(billing.period ? { pill: yearly ? "Yearly" : "Monthly" } : {}),
       description: pastDue
         ? PLAN_PAST_DUE_LINE
-        : `${current.hours ?? 0} hours of match video a month${tail}`,
+        : `${planHeadline(plan)} · ${planHoursLine(plan)}`,
       ...(action ? { action } : {}),
     };
 
@@ -237,13 +227,23 @@ export function buildPlanPage(input: PlanPageInput): PlanPageView {
         mode: { kind: "change", change: mock.change },
       };
     } else if (mock?.kind === "scheduled") {
-      const to = coachPlan(mock.change.to.plan);
+      const to = personalPlan(mock.change.to.plan);
       const where =
         mock.change.to.plan === plan ? mock.change.to.period : to.name;
       planRow.description = `Moves to ${where} on ${changeDay(mock.change, yearly)}`;
       planRow.action = { kind: "quiet", label: `Keep ${current.name}` };
     }
     rows.push(planRow);
+
+    // The renewal, on the Billing row: the plan row's one line has no room.
+    // A failed payment has no renewal to promise, and a change waiting for
+    // renewal is already the plan row's line.
+    const renews = billing.periodEnd
+      ? utcDayLabel(billing.periodEnd, yearly)
+      : null;
+    if (renews && !pastDue && mock?.kind !== "scheduled") {
+      billingLine = `Renews ${renews} at ${usd(yearly ? current.yearly : current.monthly)}`;
+    }
 
     // Pay yearly: one month free, for a monthly subscriber in good standing.
     if (
@@ -270,7 +270,7 @@ export function buildPlanPage(input: PlanPageInput): PlanPageView {
     rows.push({
       id: "extra",
       label: "Extra hours",
-      description: `${usd(EXTRA_HOUR_PRICE)} an hour · Last ${EXTRA_HOUR_VALIDITY_MONTHS} months · ${
+      description: `${extraHourRate()} · Last ${EXTRA_HOUR_VALIDITY_MONTHS} months · ${
         plan === "free" ? "No plan needed" : "Used after your plan's hours"
       }`,
       action: {
@@ -286,7 +286,7 @@ export function buildPlanPage(input: PlanPageInput): PlanPageView {
     rows.push({
       id: "billing",
       label: "Billing",
-      description: "Card, receipts and cancelling.",
+      description: billingLine,
       action: { kind: "portal", label: "Manage billing ↗", tone: "outline" },
     });
   }
@@ -296,19 +296,19 @@ export function buildPlanPage(input: PlanPageInput): PlanPageView {
 
 /**
  * The dialog `?plan=&period=` opens on arrival, for the plan the account is
- * already on: a Free player gets that plan chosen; a Coach subscriber who
- * picked Coach Pro gets the upgrade; anyone already on the plan they picked,
+ * already on: a Free player gets that plan chosen; a Player subscriber who
+ * picked Player Pro gets the upgrade; anyone already on the plan they picked,
  * or above it, gets nothing.
  */
 export function dialogForIntent(
   intent: PlanIntent | null,
-  plan: CoachPlanId,
+  plan: PersonalPlanId,
 ): CheckoutMode | null {
   if (!intent) return null;
   if (plan === "free") {
     return { kind: "choose", plan: intent.plan, period: intent.period };
   }
-  if (plan === "coach" && intent.plan === "coach-pro")
+  if (plan === "player" && intent.plan === "player-pro")
     return { kind: "upgrade" };
   return null;
 }

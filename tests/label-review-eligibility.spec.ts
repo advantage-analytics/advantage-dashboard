@@ -14,6 +14,7 @@ import {
 } from "@/lib/data/label-queue-server";
 import { canAddToTodo, enterLabelQueue } from "@/lib/services/labels/queue";
 import {
+  REVIEW_BASES,
   isReviewEligible,
   plansBeginInstant,
   readReviewEligibility,
@@ -29,10 +30,12 @@ import type { AdminClient } from "@/lib/supabase/admin";
 
 /**
  * Stage D of the 2027 plans: from `PLANS_BEGIN` the labellers' To do is
- * offered only matches that were paid for. Offline — the database's answer
- * (`label_review_eligibility`, proven in
- * `tests/database/plans-2027-gating.test.mjs`) is injected, and the client
- * is a recording fake.
+ * offered only matches analysed on a paid plan (a Player / Player Pro plan,
+ * a season or a pilot; extra hours bought on Free do not count). Offline —
+ * the database's answer (`label_review_eligibility`, proven in
+ * `tests/database/plans-2027-gating.test.mjs` and, for the paid-plan-only
+ * rule, `tests/database/plans-2027-final-pricing.test.mjs`) is injected, and
+ * the client is a recording fake.
  */
 
 const OWNER = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -363,6 +366,68 @@ test.describe("the gating migration", () => {
   });
 
   test("the eligibility function is the server's alone", () => {
+    expect(code).toMatch(
+      /revoke all on function public\.label_review_eligibility\(uuid\[\], timestamptz\) from public, anon, authenticated;/,
+    );
+    expect(code).toMatch(
+      /grant\s+execute on function public\.label_review_eligibility\(uuid\[\], timestamptz\) to service_role;/,
+    );
+  });
+});
+
+test.describe("the final-pricing migration: review on a paid plan only", () => {
+  const sql = readFileSync(
+    resolve(
+      __dirname,
+      "../supabase/migrations/20261127060000_plans_2027_final_pricing.sql",
+    ),
+    "utf8",
+  );
+  const code = sql
+    .split("\n")
+    .filter((line) => !line.trimStart().startsWith("--"))
+    .join("\n");
+  const eligibility = code.slice(
+    code.indexOf("create or replace function public.label_review_eligibility("),
+    code.indexOf("comment on function public.label_review_eligibility("),
+  );
+
+  test("says it is not applied, and has no bare drop", () => {
+    expect(sql).toContain("NOT YET APPLIED TO THE LIVE DATABASE");
+    // The one drop is the plan check, inside an existence-checked block.
+    expect(code.match(/\bdrop\s[^;]*/gi)).toEqual([
+      "drop constraint users_plan_check",
+    ]);
+    expect(code).toMatch(
+      /if exists \([\s\S]*?conname = 'users_plan_check'[\s\S]*?\) then\s+alter table public\.users drop constraint users_plan_check;/,
+    );
+  });
+
+  test("the gate counts the markers a paid plan writes, and no other", () => {
+    expect(REVIEW_BASES).toEqual(["plan", "season", "pilot"]);
+    expect(eligibility).toContain(
+      `u.paid_basis in (${REVIEW_BASES.map((basis) => `'${basis}'`).join(", ")})`,
+    );
+    // A Free player's purchased extra hours are not a plan.
+    expect(eligibility).not.toContain("extra_hours");
+    expect(eligibility).not.toContain("u.paid_basis is not null");
+  });
+
+  test("the reservation still records extra hours, under the new plan ids", () => {
+    expect(code).toContain(
+      "when v_plan in ('player', 'player-pro') then 'plan'",
+    );
+    expect(code).toContain("when v_purchased then 'extra_hours'");
+    expect(code).not.toContain("'coach', 'coach-pro') then 'plan'");
+  });
+
+  test("the plan check takes the new ids and the eligibility function stays the server's", () => {
+    expect(code).toContain(
+      "check (plan = any (array['free', 'player', 'player-pro', 'pro']))",
+    );
+    expect(code).toContain(
+      "check (plan = any (array['free', 'player', 'player-pro']))",
+    );
     expect(code).toMatch(
       /revoke all on function public\.label_review_eligibility\(uuid\[\], timestamptz\) from public, anon, authenticated;/,
     );
