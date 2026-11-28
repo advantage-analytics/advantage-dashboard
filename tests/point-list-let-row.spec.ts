@@ -120,3 +120,11 @@ test("an applied cut leaves the let out of the list", async ({ page }) => {
   await expect(page.locator('[data-point-id="let-2"]')).toHaveCount(0);
   await expect(page.locator('[data-point-id="p1"]')).toHaveCount(1);
 });
+
+test("lets alone leave the list to its empty state", async ({ page }) => {
+  await open(page, "?lets-only");
+  await expect(page.locator('[data-point-id="let-2"]')).toHaveCount(0);
+  await expect(
+    page.getByText("No points were detected in this film"),
+  ).toBeVisible();
+});

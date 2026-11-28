@@ -449,9 +449,13 @@ export const PointList = memo(function PointList({
     useMemo(() => scoreColumns(allPoints), [allPoints]);
 
   // The rows drawn: the cut, with the replayed lets back among them while
-  // nothing is filtered. The count below still reads `visiblePoints`.
+  // nothing is filtered and there are points to sit between — lets alone
+  // leave the list to its empty state. The count still reads `visiblePoints`.
   const rowPoints = useMemo(
-    () => (filtered ? visiblePoints : withLetRows(visiblePoints, letPoints)),
+    () =>
+      filtered || visiblePoints.length === 0
+        ? visiblePoints
+        : withLetRows(visiblePoints, letPoints),
     [filtered, visiblePoints, letPoints],
   );
 

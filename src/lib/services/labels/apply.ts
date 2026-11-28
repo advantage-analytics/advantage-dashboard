@@ -229,14 +229,10 @@ export function shotTypeOf(stroke: LabelStroke | null): string | null {
 /**
  * `shots.result` on a let serve: written at `shot_number` 0, and skipped by
  * every serve count (`calculate_match_stats`, the serve and return readers).
+ * Also the `points.result_type` of a replayed let (`LET_REPLAYED_FLAG`) — the
+ * flag, not this string, is what readers filter on.
  */
 export const LET_RESULT = "Let";
-
-/**
- * `points.result_type` on a replayed let (`LET_REPLAYED_FLAG`). The flag, not
- * this string, is what readers filter on.
- */
-export const LET_POINT_RESULT = "Let";
 
 /**
  * `label_shots.result` → `shots.result` (inverts `labelShotResult`). A let is
@@ -785,7 +781,7 @@ function buildLetPointRow(
       won_by_player1: server === "p1",
       // Null like an off-video point's: AVG(rally_length) skips it.
       rally_length: null,
-      result_type: LET_POINT_RESULT,
+      result_type: LET_RESULT,
       is_break_point: false,
       is_set_point: false,
       is_match_point: false,
@@ -814,12 +810,11 @@ function buildLetPointRow(
 
 /** The dry-run / write-summary lines for lets and dropped strokes (always printed). */
 export function letsAndDroppedLines(
-  built: Pick<AppliedRows, "letsKept" | "droppedBeforeServe"> &
-    Partial<Pick<AppliedRows, "letPointsKept">>,
+  built: Pick<AppliedRows, "letsKept" | "letPointsKept" | "droppedBeforeServe">,
 ): string[] {
   return [
     `lets kept: ${built.letsKept} (replayed serves, written at shot 0, counted as nothing)`,
-    `let points kept: ${built.letPointsKept ?? 0} (replayed points, written flagged let_replayed, counted as nothing)`,
+    `let points kept: ${built.letPointsKept} (replayed points, written flagged let_replayed, counted as nothing)`,
     `strokes before the serve dropped: ${built.droppedBeforeServe} (hit at a fault or a let)`,
   ];
 }

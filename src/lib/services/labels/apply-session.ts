@@ -633,7 +633,9 @@ export async function publishPlanned(params: {
       error: `Not published: ${scoreMismatchSentence(plan.mismatch)}. Fix the set, mark the video as ending early, or correct the match record.`,
     };
   }
-  if (plan.built.points.length === 0) {
+  // A replayed let is written but is no point: a session of nothing else
+  // would replace the match with zero counted points.
+  if (plan.built.points.every(isLetPointRow)) {
     return { ok: false, error: "Not published: there are no points to write." };
   }
   const jobId = session.jobId;

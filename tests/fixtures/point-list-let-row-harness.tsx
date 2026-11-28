@@ -11,6 +11,8 @@ import { LET_ROW_LETS, LET_ROW_MATCH, LET_ROW_POINTS } from "./let-row-points";
  */
 const query = new URLSearchParams(window.location.search);
 const filtered = query.has("filtered");
+// `?lets-only`: no counted points at all, only the let.
+const points = query.has("lets-only") ? [] : LET_ROW_POINTS;
 const filmFilters = filtered
   ? { ...INERT_FILM_LIST_FILTERS, savedOnly: true }
   : INERT_FILM_LIST_FILTERS;
@@ -19,12 +21,12 @@ createRoot(document.getElementById("root")!).render(
   <MatchDataProvider
     match={LET_ROW_MATCH}
     statsResult={null}
-    points={LET_ROW_POINTS}
+    points={points}
     letPoints={LET_ROW_LETS}
   >
     <PointList
-      allPoints={LET_ROW_POINTS}
-      visiblePoints={filtered ? LET_ROW_POINTS.slice(0, 2) : LET_ROW_POINTS}
+      allPoints={points}
+      visiblePoints={filtered ? points.slice(0, 2) : points}
       filmFilters={filmFilters}
       letPoints={LET_ROW_LETS}
       activePointId={null}

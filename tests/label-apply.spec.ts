@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 
 import {
   HAND_LABELLED_FLAG,
-  LET_POINT_RESULT,
   LET_REPLAYED_FLAG,
   OFF_VIDEO_FLAG,
   buildAppliedRows,
@@ -758,7 +757,7 @@ test.describe("a replayed let point", () => {
     const let_ = built.points[1];
     expect(isLetPointRow(let_)).toBe(true);
     expect(let_.flags).toEqual([HAND_LABELLED_FLAG, LET_REPLAYED_FLAG]);
-    expect(let_.result_type).toBe(LET_POINT_RESULT);
+    expect(let_.result_type).toBe(LET_RESULT);
     expect(
       let_.is_break_point || let_.is_set_point || let_.is_match_point,
     ).toBe(false);
