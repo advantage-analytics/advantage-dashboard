@@ -133,3 +133,52 @@ test("Ask stays open on a phone", async ({ browser }) => {
     ),
   ).toBe(false);
 });
+
+// /admin and /label mount the gate with `mountOnlyWhenShown`: the label
+// console reads any alertdialog in the document as an open layer and stops
+// answering its keys, so on a desktop the gate must not be in the DOM at all.
+test.describe("mounted only while shown (/admin, /label)", () => {
+  test("a desktop has no alertdialog in the document", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${origin}/admin/labels?only=1`);
+    await expect(page.getByText("Match report behind the gate")).toBeAttached();
+    await page.waitForTimeout(200);
+    await expect(page.locator("[role='alertdialog']")).toHaveCount(0);
+  });
+
+  test("a narrow desktop window sees the gate", async ({ page }) => {
+    await page.setViewportSize({ width: 500, height: 900 });
+    await page.goto(`${origin}/label?only=1`);
+    await expect(
+      page.getByRole("alertdialog", { name: "Built for the bigger screen" }),
+    ).toBeVisible();
+  });
+
+  test("a phone in landscape sees the gate", async ({ browser }) => {
+    expect(
+      await gateVisible(
+        browser,
+        {
+          viewport: { width: 932, height: 430 },
+          hasTouch: true,
+          isMobile: true,
+        },
+        "/label?only=1",
+      ),
+    ).toBe(true);
+  });
+
+  test("a tablet passes", async ({ browser }) => {
+    expect(
+      await gateVisible(
+        browser,
+        {
+          viewport: { width: 1180, height: 820 },
+          hasTouch: true,
+          isMobile: true,
+        },
+        "/admin?only=1",
+      ),
+    ).toBe(false);
+  });
+});

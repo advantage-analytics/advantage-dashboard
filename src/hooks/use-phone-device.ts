@@ -42,3 +42,24 @@ function isPhone(): boolean {
 export function usePhoneDevice(): boolean {
   return useSyncExternalStore(subscribe, isPhone, () => false);
 }
+
+/**
+ * Is the viewport under the `md` breakpoint (768px)? The JavaScript twin of
+ * `MobileGate`'s `md:hidden`, for a gate that must decide whether to mount at
+ * all. False on the server and on the first client render.
+ */
+const NARROW = "(max-width: 767.98px)";
+
+function subscribeNarrow(onChange: () => void): () => void {
+  const mql = window.matchMedia(NARROW);
+  mql.addEventListener("change", onChange);
+  return () => mql.removeEventListener("change", onChange);
+}
+
+export function useNarrowViewport(): boolean {
+  return useSyncExternalStore(
+    subscribeNarrow,
+    () => window.matchMedia(NARROW).matches,
+    () => false,
+  );
+}

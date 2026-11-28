@@ -1,3 +1,4 @@
+import { MobileGate } from "@/components/dashboard/mobile-gate";
 import { LabelHeader } from "@/components/label/label-header";
 import { requireLabelViewerOrNotFound } from "@/lib/services/programs/admin-guard";
 
@@ -24,6 +25,10 @@ export default async function LabelLayout({
 
   return (
     <div className="flex min-h-screen flex-col overflow-x-hidden bg-[var(--surface-card)]">
+      {/* Phones get the dashboard's "bigger screen" gate, mounted only while
+          shown: the label console's keys go quiet while any alertdialog is in
+          the document. */}
+      <MobileGate subject="the label console" mountOnlyWhenShown />
       <LabelHeader />
       <div className="flex flex-1 shrink-0 items-stretch">{children}</div>
     </div>

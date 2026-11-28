@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { Monitor, Tablet } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { usePhoneDevice } from "@/hooks/use-phone-device";
+import { useNarrowViewport, usePhoneDevice } from "@/hooks/use-phone-device";
 
 /**
  * MobileGate
@@ -26,23 +26,36 @@ import { usePhoneDevice } from "@/hooks/use-phone-device";
  * It mounts last in the dashboard layout with a high z-index so it sits over the
  * sidebar, header, and content. A shared match report (`/m/[token]`) is the same
  * report under a public header, so it mounts this too; its reader has no
- * dashboard to open, hence `subject`.
+ * dashboard to open, hence `subject`. `/admin` and `/label` mount it with
+ * `mountOnlyWhenShown`, for the reason that prop gives.
  */
 export function MobileGate({
   subject = "the dashboard",
+  mountOnlyWhenShown = false,
 }: {
   /** What the copy tells a phone reader to open on a bigger screen. */
   subject?: string;
+  /**
+   * Leave the gate out of the DOM unless it is covering the screen. The label
+   * console treats any `[role='alertdialog']` in the document as an open
+   * layer and stops answering its keys (`keysAreSpoken`, label-console.tsx),
+   * so the always-mounted, CSS-hidden gate the dashboard uses would switch
+   * every labelling shortcut off at desktop widths. The cost is that the gate
+   * appears only after hydration there, which is fine for internal pages.
+   */
+  mountOnlyWhenShown?: boolean;
 }) {
   const shouldReduceMotion = useReducedMotion();
   const pathname = usePathname();
   const isPhone = usePhoneDevice();
+  const isNarrow = useNarrowViewport();
   // Ask is built for a phone (its rail folds into a sheet and the composer
   // sits at the foot below 768px — ask-frame.tsx), so it is the one
   // dashboard page the gate lets through.
   if (pathname === "/dashboard/ask" || pathname === "/dashboard/team/ask") {
     return null;
   }
+  if (mountOnlyWhenShown && !isPhone && !isNarrow) return null;
 
   return (
     <div
