@@ -1,5 +1,4 @@
 "use client";
-
 /**
  * UploadMatchFlow — full-page wizard for creating a match.
  *
@@ -15,6 +14,7 @@
  * about how the state behind it is managed.
  */
 
+import dynamic from "next/dynamic";
 import { AdminFileSubmissionStatus } from "./AdminFileSubmissionStatus";
 import { useAdminWizardMode } from "./admin-mode";
 import {
@@ -32,7 +32,6 @@ import { useWorkspace } from "@/components/dashboard/workspace-provider";
 import { PinnedLineBar } from "./PinnedLineBar";
 import { StartOverDialog } from "./StartOverDialog";
 import { AddHoursDialog } from "@/components/dashboard/credits/add-hours-dialog";
-import { PlanCheckoutDialog } from "@/components/dashboard/billing/plan-checkout-dialog";
 import { usePlanBilling } from "@/components/dashboard/billing/use-plan-billing";
 import { SubjectBar } from "./SubjectBar";
 import { UploadMatchSuccess } from "./UploadMatchSuccess";
@@ -72,6 +71,16 @@ import {
   trackUploadStarted,
   trackUploadStepViewed,
 } from "./upload-analytics";
+
+// Rendered only while plans are on sale (`plansActive`): loaded then, so an
+// uploader before launch never downloads the checkout.
+const PlanCheckoutDialog = dynamic(
+  () =>
+    import("@/components/dashboard/billing/plan-checkout-dialog").then(
+      (loaded) => loaded.PlanCheckoutDialog,
+    ),
+  { ssr: false },
+);
 
 /** Where the flow returns to when it is dismissed or finished. */
 const PERSONAL_EXIT_HREF = "/dashboard/matches";

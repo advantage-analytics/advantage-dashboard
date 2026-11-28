@@ -11,6 +11,10 @@ import {
   type MatchVideoHttpError,
 } from "@/lib/services/match-video/http";
 
+/** A thrown value as the string the billing logs carry. */
+export const errorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
+
 export type BillingRefusalCode =
   | "unauthenticated"
   | "invalid_request"

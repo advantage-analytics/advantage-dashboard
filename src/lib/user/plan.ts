@@ -15,8 +15,8 @@
  * longer edits `role` at all; only onboarding writes it.
  *
  * Client-safe: the Plan settings page is a client component and imports from
- * here. Keep this file free of server imports — the write that needs the
- * service role lives in `roles.ts`, which a client file must never import.
+ * here. Keep this file free of server imports: `users.plan` is written only
+ * by the Stripe webhook, through the service role (`services/billing`).
  */
 
 import {
