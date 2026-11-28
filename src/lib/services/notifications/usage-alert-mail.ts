@@ -38,7 +38,7 @@ const LOG = "[notifications:usage]";
  *
  * A TEAM's goes to its owner and coaches, each behind their own "Analysis
  * allowance alerts" switch. A PLAYER's goes to the player, behind the same
- * switch, and only for plan hours (Coach, Coach Pro): on the beta's free
+ * switch, and only for plan hours (Player, Player Pro): on the beta's free
  * hours, on extra hours alone, or with an admin's allowance, the wizard's
  * meter is already in front of the one person who can do anything about it.
  *

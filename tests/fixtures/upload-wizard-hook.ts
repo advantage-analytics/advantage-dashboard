@@ -51,7 +51,7 @@ export function rosterRow(
     email: null,
     role: "player",
     lineup_spot: null,
-    managed_by: "coach",
+    managed_by: "player",
     ...overrides,
   };
 }

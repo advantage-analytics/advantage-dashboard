@@ -21,7 +21,7 @@ import type { AllowanceWorkspace } from "@/lib/services/splitstep/allowance";
  * say from January 1, 2027, for every plan and team state. Pure: fixed
  * workspaces and a fixed `now`, no database and no render.
  *
- * The figures in the expected strings are the approved mock's (the Coach
+ * The figures in the expected strings are the approved mock's (the Player
  * example, a spring Program plan, the Georgia pilot); each comes out of the
  * plan module and the allowance resolver, never out of this module.
  */
@@ -38,13 +38,13 @@ const FREE: AllowanceWorkspace = {
   orgType: null,
   plan: "free",
 };
-const COACH: AllowanceWorkspace = {
+const PLAYER: AllowanceWorkspace = {
   kind: "personal",
   orgType: null,
-  plan: "coach",
+  plan: "player",
   planPeriodStart: "2027-01-14T00:00:00Z",
 };
-const COACH_PRO: AllowanceWorkspace = { ...COACH, plan: "coach-pro" };
+const PLAYER_PRO: AllowanceWorkspace = { ...PLAYER, plan: "player-pro" };
 const ADMIN: AllowanceWorkspace = { ...FREE, unlimitedVideo: true };
 const SEASON: AllowanceWorkspace = {
   kind: "team",
@@ -100,22 +100,24 @@ test.describe("when plan wording applies", () => {
   });
 
   test("a player who bought a plan in December switches that day", () => {
-    expect(plansApplyTo({ kind: "personal", plan: "coach" }, DECEMBER)).toBe(
+    expect(plansApplyTo({ kind: "personal", plan: "player" }, DECEMBER)).toBe(
       true,
     );
     expect(
-      plansApplyTo({ kind: "personal", plan: "coach-pro" }, DECEMBER),
+      plansApplyTo({ kind: "personal", plan: "player-pro" }, DECEMBER),
     ).toBe(true);
     // A team workspace never reads a person's plan.
-    expect(plansApplyTo({ kind: "team", plan: "coach" }, DECEMBER)).toBe(false);
+    expect(plansApplyTo({ kind: "team", plan: "player" }, DECEMBER)).toBe(
+      false,
+    );
   });
 });
 
 test.describe("standing: the tag every surface shares", () => {
   test("a player's is their plan's name", () => {
     expect(standing(FREE).name).toBe("Free");
-    expect(standing(COACH).name).toBe("Coach");
-    expect(standing(COACH_PRO).name).toBe("Coach Pro");
+    expect(standing(PLAYER).name).toBe("Player");
+    expect(standing(PLAYER_PRO).name).toBe("Player Pro");
     // The legacy Lifetime value reads as Free; nothing says "Lifetime".
     expect(standing({ ...FREE, plan: "pro" }).name).toBe("Free");
   });
@@ -221,22 +223,22 @@ test.describe("the header pill", () => {
     );
   });
 
-  test("Coach: plan hours left and the real reset date", () => {
-    const view = planPillView(standing(COACH), {
+  test("Player: plan hours left and the real reset date", () => {
+    const view = planPillView(standing(PLAYER), {
       remainingSeconds: 3 * H + 12 * M,
       capSeconds: 5 * H,
     });
-    expect(view.tag).toBe("Coach");
+    expect(view.tag).toBe("Player");
     expect(view.figure).toEqual({ strong: "3.2h", rest: "left" });
-    expect(view.label).toBe("Coach plan");
+    expect(view.label).toBe("Player plan");
     expect(view.detail).toBe(
       "3.2 of 5 plan hours left this month. They reset Feb 14. Click for Plan.",
     );
     expect(view.share).toBeCloseTo(0.64, 2);
   });
 
-  test("Coach with extra hours: the figure is the total, the tooltip the split", () => {
-    const view = planPillView(standing(COACH), {
+  test("Player with extra hours: the figure is the total, the tooltip the split", () => {
+    const view = planPillView(standing(PLAYER), {
       remainingSeconds: 3 * H + 12 * M,
       capSeconds: 5 * H,
       creditSeconds: 1 * H,
@@ -249,8 +251,8 @@ test.describe("the header pill", () => {
     );
   });
 
-  test("Coach running low, then out, then on extra hours", () => {
-    const low = planPillView(standing(COACH), {
+  test("Player running low, then out, then on extra hours", () => {
+    const low = planPillView(standing(PLAYER), {
       remainingSeconds: 48 * M,
       capSeconds: 5 * H,
     });
@@ -259,7 +261,7 @@ test.describe("the header pill", () => {
       "0.8 of 5 plan hours left. They reset Feb 14, or add extra hours on Plan.",
     );
 
-    const out = planPillView(standing(COACH), {
+    const out = planPillView(standing(PLAYER), {
       remainingSeconds: 0,
       capSeconds: 5 * H,
     });
@@ -269,7 +271,7 @@ test.describe("the header pill", () => {
     );
     expect(out.share).toBe(0);
 
-    const extra = planPillView(standing(COACH), {
+    const extra = planPillView(standing(PLAYER), {
       remainingSeconds: 0,
       capSeconds: 5 * H,
       creditSeconds: 90 * M,
@@ -280,12 +282,12 @@ test.describe("the header pill", () => {
     );
   });
 
-  test("Coach Pro reads its own ten hours", () => {
-    const view = planPillView(standing(COACH_PRO), {
+  test("Player Pro reads its own ten hours", () => {
+    const view = planPillView(standing(PLAYER_PRO), {
       remainingSeconds: 10 * H,
       capSeconds: 10 * H,
     });
-    expect(view.tag).toBe("Coach Pro");
+    expect(view.tag).toBe("Player Pro");
     expect(view.detail).toContain("10 of 10 plan hours left this month.");
   });
 
@@ -357,7 +359,7 @@ test.describe("the header pill", () => {
   test("no state of the pill says Beta, Lifetime or free", () => {
     const states = [
       planPillView(standing(FREE), { remainingSeconds: 0, capSeconds: 0 }),
-      planPillView(standing(COACH), {
+      planPillView(standing(PLAYER), {
         remainingSeconds: 2 * H,
         capSeconds: 5 * H,
         creditSeconds: H,
@@ -385,10 +387,10 @@ test.describe("the header pill", () => {
 });
 
 test.describe("Home's usage card", () => {
-  test("Coach, as approved", () => {
+  test("Player, as approved", () => {
     expect(
       homeCardView({
-        standing: standing(COACH),
+        standing: standing(PLAYER),
         owner: "Jordan Reyes",
         usedSeconds: 1 * H + 48 * M,
         capSeconds: 5 * H,
@@ -397,7 +399,7 @@ test.describe("Home's usage card", () => {
         today: TODAY,
       }),
     ).toEqual({
-      eyebrow: "Jordan Reyes · Coach",
+      eyebrow: "Jordan Reyes · Player",
       figure: "4",
       line1: "hours of match video",
       line2: "left this month",
@@ -409,7 +411,7 @@ test.describe("Home's usage card", () => {
       ],
       cta: "See plan",
       href: "/dashboard/settings/plan",
-      ariaLabel: "Coach plan: see plan",
+      ariaLabel: "Player plan: see plan",
     });
   });
 
@@ -429,7 +431,7 @@ test.describe("Home's usage card", () => {
       line1: "hours of match video",
       line2: "on the Free plan",
       sentence:
-        "Choose a plan or buy extra hours to analyze your next match. Your first month of a plan is half off.",
+        "Choose a plan or buy extra hours to analyze your next match. Your first month of a plan is 30% off.",
       facts: [
         { text: "20 Ask questions a month" },
         { text: "4 matches analyzed" },
@@ -439,7 +441,7 @@ test.describe("Home's usage card", () => {
     });
   });
 
-  test("Free does not promise half off to a returning subscriber", () => {
+  test("Free does not promise the first-month offer to a returning subscriber", () => {
     const view = homeCardView({
       standing: standing(FREE),
       owner: "Jordan Reyes",
@@ -572,10 +574,10 @@ test.describe("Settings › Usage: the personal card", () => {
     },
   ];
 
-  test("Coach, as approved", () => {
+  test("Player, as approved", () => {
     expect(
       usageCardView({
-        standing: standing(COACH),
+        standing: standing(PLAYER),
         usedSeconds: 1 * H + 48 * M,
         capSeconds: 5 * H,
         creditSeconds: 1 * H,
@@ -589,7 +591,7 @@ test.describe("Settings › Usage: the personal card", () => {
         freeLeftSeconds: 3 * H + 12 * M,
         creditSeconds: 1 * H,
       },
-      line: "Coach: 3h 12m of 5h this month · Extra: 1h · Expires Oct 16, 2027",
+      line: "Player: 3h 12m of 5h this month · Extra: 1h · Expires Oct 16, 2027",
       link: { label: "Manage on Plan", href: "/dashboard/settings/plan" },
       thisMonth: {
         summary: "2 matches",
@@ -599,7 +601,7 @@ test.describe("Settings › Usage: the personal card", () => {
         ],
       },
       footnote:
-        "Personal uploads only · Coach hours reset Feb 14 · Extra hours are used after plan hours",
+        "Personal uploads only · Player hours reset Feb 14 · Extra hours are used after plan hours",
     });
   });
 
@@ -624,7 +626,7 @@ test.describe("Settings › Usage: the personal card", () => {
 
   test("one match reads as one match; a removed one still counts", () => {
     const view = usageCardView({
-      standing: standing(COACH),
+      standing: standing(PLAYER),
       usedSeconds: 30 * M,
       capSeconds: 5 * H,
       creditSeconds: 0,
@@ -638,12 +640,12 @@ test.describe("Settings › Usage: the personal card", () => {
       date: "",
       seconds: 1800,
     });
-    expect(view.line).toBe("Coach: 4h 30m of 5h this month · Extra: none");
+    expect(view.line).toBe("Player: 4h 30m of 5h this month · Extra: none");
   });
 
   test("a match's date is its calendar day, not a local moment", () => {
     const view = usageCardView({
-      standing: standing(COACH),
+      standing: standing(PLAYER),
       usedSeconds: 0,
       capSeconds: 5 * H,
       creditSeconds: 0,
@@ -657,7 +659,7 @@ test.describe("Settings › Usage: the personal card", () => {
 
   test("a list that could not be read does not claim nothing was analyzed", () => {
     const view = usageCardView({
-      standing: standing(COACH),
+      standing: standing(PLAYER),
       usedSeconds: 2 * H,
       capSeconds: 5 * H,
       creditSeconds: 0,
@@ -784,7 +786,7 @@ test.describe("the wizard's footer suffix for a team", () => {
   });
 
   test("a personal workspace keeps its own suffix", () => {
-    expect(teamMeterSuffix(standing(COACH))).toBeNull();
+    expect(teamMeterSuffix(standing(PLAYER))).toBeNull();
   });
 });
 

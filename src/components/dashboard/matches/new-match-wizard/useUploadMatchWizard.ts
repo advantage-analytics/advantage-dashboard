@@ -68,7 +68,7 @@ import {
   planHoursSeconds,
   plansHaveBegun,
   plansOnSale,
-  type CoachPlanId,
+  type PersonalPlanId,
 } from "@/lib/billing/plans";
 import { planFor } from "@/lib/user/plan";
 import { secondsLeft } from "@/lib/data/usage-format";
@@ -659,7 +659,7 @@ export interface UseUploadMatchWizardReturn {
    */
   plansActive: boolean;
   /** The plan the billed personal workspace is on, a purchase made here included. */
-  quotaPlanId: CoachPlanId;
+  quotaPlanId: PersonalPlanId;
   /** `VideoAllowance.kind` for the billed workspace — which hours the meter is showing. */
   quotaAllowanceKind: string;
   /**
@@ -1352,7 +1352,7 @@ export function useUploadMatchWizard({
   // a refresh under an in-memory video), so the purchase is laid over it here
   // until the context agrees. The server reads `users.plan` itself at Send.
   const [purchasedPlan, setPurchasedPlan] = useState<{
-    plan: CoachPlanId;
+    plan: PersonalPlanId;
     startedAt: string;
   } | null>(null);
   // A failed payment the subscriber has fixed since the page loaded, as

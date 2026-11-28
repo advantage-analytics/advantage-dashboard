@@ -35,10 +35,10 @@ const FREE: AllowanceWorkspace = {
   orgType: null,
   plan: "free",
 };
-const COACH: AllowanceWorkspace = {
+const PLAYER: AllowanceWorkspace = {
   kind: "personal",
   orgType: null,
-  plan: "coach",
+  plan: "player",
   planPeriodStart: "2027-01-14T00:00:00Z",
 };
 const SEASON: AllowanceWorkspace = {
@@ -158,17 +158,17 @@ test.describe("the header pill once plans apply", () => {
   const cases: [string, AllowanceWorkspace, PillHours, string, string][] = [
     ["Free", FREE, { remainingSeconds: 0, capSeconds: 0 }, "Free", "0h left"],
     [
-      "Coach",
-      COACH,
+      "Player",
+      PLAYER,
       { remainingSeconds: 3 * H + 12 * M, capSeconds: 5 * H },
-      "Coach",
+      "Player",
       "3.2h left",
     ],
     [
-      "Coach Pro",
-      { ...COACH, plan: "coach-pro" },
+      "Player Pro",
+      { ...PLAYER, plan: "player-pro" },
       { remainingSeconds: 7.5 * H, capSeconds: 10 * H },
-      "Coach Pro",
+      "Player Pro",
       "7.5h left",
     ],
     [
@@ -239,17 +239,17 @@ test.describe("the header pill once plans apply", () => {
   });
 
   test("loading keeps the tag and draws a bar where the figure goes", () => {
-    const html = renderPill(standing(COACH), "loading");
+    const html = renderPill(standing(PLAYER), "loading");
     expect(html).toContain('aria-busy="true"');
-    expect(html).toContain('aria-label="Coach: checking video hours left"');
-    expect(text(html)).toBe("Coach");
+    expect(html).toContain('aria-label="Player: checking video hours left"');
+    expect(text(html)).toBe("Player");
   });
 
   test("a failed read is the bare tag, never a ring or a skeleton", () => {
-    const html = renderPill(standing(COACH), null);
+    const html = renderPill(standing(PLAYER), null);
     expect(html).not.toContain("aria-busy");
-    expect(html).toContain('aria-label="Coach"');
-    expect(text(html)).toBe("Coach");
+    expect(html).toContain('aria-label="Player"');
+    expect(text(html)).toBe("Player");
     expect(html).not.toContain("<svg");
   });
 });
@@ -272,10 +272,10 @@ function renderHomeCard(view: ReturnType<typeof homeCardView>): string {
 }
 
 test.describe("Home's plan card", () => {
-  test("Coach: one link to Settings › Plan, the figure and the fact line", () => {
+  test("Player: one link to Settings › Plan, the figure and the fact line", () => {
     const html = renderHomeCard(
       homeCardView({
-        standing: standing(COACH),
+        standing: standing(PLAYER),
         owner: "Jordan Reyes",
         usedSeconds: 1 * H + 48 * M,
         capSeconds: 5 * H,
@@ -286,7 +286,7 @@ test.describe("Home's plan card", () => {
     );
     expect(html).toContain('href="/dashboard/settings/plan"');
     expect(text(html)).toBe(
-      "See plan Jordan Reyes · Coach 4 hours of match video left this month Resets Feb 14 1h extra 6 matches analyzed",
+      "See plan Jordan Reyes · Player 4 hours of match video left this month Resets Feb 14 1h extra 6 matches analyzed",
     );
   });
 
@@ -322,7 +322,7 @@ test.describe("Home's plan card", () => {
       }),
     );
     expect(text(html)).toBe(
-      "See plans Jordan Reyes · Free 0 hours of match video on the Free plan Choose a plan or buy extra hours to analyze your next match. Your first month of a plan is half off. 20 Ask questions a month 4 matches analyzed",
+      "See plans Jordan Reyes · Free 0 hours of match video on the Free plan Choose a plan or buy extra hours to analyze your next match. Your first month of a plan is 30% off. 20 Ask questions a month 4 matches analyzed",
     );
   });
 });
@@ -340,8 +340,8 @@ function renderUsageCard(view: ReturnType<typeof usageCardView>): string {
 }
 
 test.describe("Settings › Usage: the personal card", () => {
-  const coach = usageCardView({
-    standing: standing(COACH),
+  const player = usageCardView({
+    standing: standing(PLAYER),
     usedSeconds: 1 * H + 48 * M,
     capSeconds: 5 * H,
     creditSeconds: 1 * H,
@@ -362,15 +362,15 @@ test.describe("Settings › Usage: the personal card", () => {
     ],
   });
 
-  test("Coach: the lines, then This month with one row a match", () => {
-    const html = renderUsageCard(coach);
+  test("Player: the lines, then This month with one row a match", () => {
+    const html = renderUsageCard(player);
     expect(text(html)).toBe(
-      "Your analysis time 4h 12m left Coach: 3h 12m of 5h this month · Extra: 1h · Expires Oct 16, 2027 Manage on Plan This month 2 matches v. Lucas Moreno Jan 18 1:03 v. Ethan Park Jan 9 0:45 Personal uploads only · Coach hours reset Feb 14 · Extra hours are used after plan hours",
+      "Your analysis time 4h 12m left Player: 3h 12m of 5h this month · Extra: 1h · Expires Oct 16, 2027 Manage on Plan This month 2 matches v. Lucas Moreno Jan 18 1:03 v. Ethan Park Jan 9 0:45 Personal uploads only · Player hours reset Feb 14 · Extra hours are used after plan hours",
     );
   });
 
   test("the rows carry no bars: the only meter is the card's own", () => {
-    const html = renderUsageCard(coach);
+    const html = renderUsageCard(player);
     expect(html.match(/role="meter"/g)).toHaveLength(1);
     const rows = html.slice(html.indexOf("This month"));
     expect(rows).not.toContain("w-[88px]");

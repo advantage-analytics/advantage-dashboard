@@ -34,7 +34,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   EXTRA_HOUR_VALIDITY_MONTHS,
-  coachPlan,
+  personalPlan,
   plansOnSale,
   type PlanPeriod,
 } from "@/lib/billing/plans";
@@ -224,7 +224,7 @@ async function customerHistory(params: {
 }
 
 export function planProductName(plan: PaidPlanId, period: PlanPeriod): string {
-  return `Advantage ${coachPlan(plan).name}, ${period}`;
+  return `Advantage ${personalPlan(plan).name}, ${period}`;
 }
 
 export function hoursProductName(hours: number): string {
@@ -351,7 +351,7 @@ export async function startCheckout(params: {
       );
     }
 
-    // Decision 6: 50% off the first month, monthly only, first-time
+    // `FIRST_MONTH_DISCOUNT_PERCENT` off the first month, monthly only, first-time
     // customers only. Yearly already has a month free.
     const firstMonth = request.period === "monthly" && history.firstTime;
     const coupon = firstMonth ? firstMonthCouponId() : null;

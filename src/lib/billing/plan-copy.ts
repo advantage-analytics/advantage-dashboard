@@ -141,7 +141,7 @@ export interface PlanStanding {
   /** `allowanceFor()`'s kind for the workspace. */
   kind: AllowanceKind;
   /**
-   * The word a surface tags the workspace with: `Free`, `Coach`, `Coach Pro`,
+   * The word a surface tags the workspace with: `Free`, `Player`, `Player Pro`,
    * a team's plan (`Starter`, `Program`, `Elite`), `Pilot` on a running
    * pilot, `No plan` for a team with neither.
    */
@@ -445,11 +445,9 @@ function analyzedFact(analyzed: number): HomeCardFact {
   };
 }
 
-/** "Your first month of a plan is half off." */
+/** "Your first month of a plan is 30% off." */
 function firstMonthSentence(): string {
-  return FIRST_MONTH_DISCOUNT_PERCENT === 50
-    ? "Your first month of a plan is half off."
-    : `Your first month of a plan is ${FIRST_MONTH_DISCOUNT_PERCENT}% off.`;
+  return `Your first month of a plan is ${FIRST_MONTH_DISCOUNT_PERCENT}% off.`;
 }
 
 export function homeCardView(input: {

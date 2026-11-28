@@ -181,7 +181,7 @@ async function PlanBanner({
   active: Workspace;
   name: string;
 }) {
-  // The half-off line is only for an account that has never subscribed, so
+  // The first-month line is only for an account that has never subscribed, so
   // a Free player's card asks; a subscriber's has no such line to decide.
   const firstMonth = isPaidPlan(active.plan)
     ? Promise.resolve(false)

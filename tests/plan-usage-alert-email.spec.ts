@@ -20,7 +20,7 @@ import { createLoader } from "./fixtures/vm-modules";
  * claim reads and a fake sender that only records what it was handed.
  *
  * The personal copy is pinned to the approved table in
- * docs/plans/2027-pricing.md ("Email copy"), on its own Coach example: 5h,
+ * docs/plans/2027-pricing.md ("Email copy"), on its own Player example: 5h,
  * 4h used, hours resetting February 14.
  */
 
@@ -31,9 +31,9 @@ const M = 60;
 // Set at load, not in a hook: the fixtures below render at collection time.
 process.env.NEXT_PUBLIC_SITE_URL = SITE;
 
-const COACH = {
+const PLAYER = {
   to: "jordan@example.com",
-  planId: "coach" as const,
+  planId: "player" as const,
   capSeconds: 5 * H,
   resetsAt: new Date("2027-02-14T00:00:00Z"),
 };
@@ -48,7 +48,7 @@ function wellFormed(message: EmailMessage) {
 
 test.describe("a player's plan: 80% used", () => {
   const message = planUsageAlertEmail({
-    ...COACH,
+    ...PLAYER,
     severity: "low",
     usedSeconds: 4 * H,
   });
@@ -60,16 +60,16 @@ test.describe("a player's plan: 80% used", () => {
 
   test("the preheader is set, and is the approved line", () => {
     expect(message.html).toContain(
-      "About half a match left on Coach. Your hours reset Feb 14.",
+      "About half a match left on Player. Your hours reset Feb 14.",
     );
   });
 
   test("the body, word for word", () => {
     expect(message.text).toContain(
-      "You've used 4h of your 5h on Coach. The hour left covers about half a match, and your hours reset on February 14.",
+      "You've used 4h of your 5h on Player. The hour left covers about half a match, and your hours reset on February 14.",
     );
     expect(message.text).toContain(
-      "Playing more before then? Extra hours are $35 each and last 12 months, or Coach Pro gives you 10h a month.",
+      "Playing more before then? Extra hours are $35 each and last 12 months, or Player Pro gives you 10h a month.",
     );
   });
 
@@ -88,7 +88,7 @@ test.describe("a player's plan: 80% used", () => {
     expect(message.tags).toEqual({
       type: "usage_alert",
       severity: "low",
-      plan: "coach",
+      plan: "player",
     });
     expect(message.to).toBe("jordan@example.com");
   });
@@ -96,7 +96,7 @@ test.describe("a player's plan: 80% used", () => {
 
 test.describe("a player's plan: used up", () => {
   const message = planUsageAlertEmail({
-    ...COACH,
+    ...PLAYER,
     severity: "spent",
     usedSeconds: 5 * H,
   });
@@ -116,7 +116,7 @@ test.describe("a player's plan: used up", () => {
       "New matches wait until your hours reset on February 14. Anything you've already sent keeps processing.",
     );
     expect(message.text).toContain(
-      "To analyze a match sooner, add extra hours at $35 each, or move up to Coach Pro for 10h a month.",
+      "To analyze a match sooner, add extra hours at $35 each, or move up to Player Pro for 10h a month.",
     );
   });
 
@@ -131,10 +131,10 @@ test.describe("a player's plan: used up", () => {
 });
 
 test.describe("a player's plan: the figures are the account's", () => {
-  test("Coach Pro reads its ten hours and offers no step up", () => {
+  test("Player Pro reads its ten hours and offers no step up", () => {
     const low = planUsageAlertEmail({
       to: "sam@example.com",
-      planId: "coach-pro",
+      planId: "player-pro",
       severity: "low",
       usedSeconds: 8 * H,
       capSeconds: 10 * H,
@@ -142,7 +142,7 @@ test.describe("a player's plan: the figures are the account's", () => {
     });
     expect(low.subject).toBe("2h of match video left this month");
     expect(low.text).toContain(
-      "You've used 8h of your 10h on Coach Pro. The 2h left covers about 1 match, and your hours reset on March 2.",
+      "You've used 8h of your 10h on Player Pro. The 2h left covers about 1 match, and your hours reset on March 2.",
     );
     expect(low.text).toContain(
       "Playing more before then? Extra hours are $35 each and last 12 months.",
@@ -151,7 +151,7 @@ test.describe("a player's plan: the figures are the account's", () => {
 
     const spent = planUsageAlertEmail({
       to: "sam@example.com",
-      planId: "coach-pro",
+      planId: "player-pro",
       severity: "spent",
       usedSeconds: 10 * H,
       capSeconds: 10 * H,
@@ -165,7 +165,7 @@ test.describe("a player's plan: the figures are the account's", () => {
 
   test("minutes left are said as minutes", () => {
     const low = planUsageAlertEmail({
-      ...COACH,
+      ...PLAYER,
       severity: "low",
       usedSeconds: 4 * H + 12 * M,
     });
@@ -175,13 +175,13 @@ test.describe("a player's plan: the figures are the account's", () => {
 
   test("with extra hours in hand, used up does not say uploads wait", () => {
     const spent = planUsageAlertEmail({
-      ...COACH,
+      ...PLAYER,
       severity: "spent",
       usedSeconds: 5 * H,
       extraSeconds: 2 * H,
     });
     expect(spent.text).toContain(
-      "Your Coach hours reset on February 14. Until then, new matches use your 2h of extra hours.",
+      "Your Player hours reset on February 14. Until then, new matches use your 2h of extra hours.",
     );
     expect(spent.text).not.toContain("New matches wait");
     expect(spent.html).toContain(
@@ -189,7 +189,7 @@ test.describe("a player's plan: the figures are the account's", () => {
     );
 
     const low = planUsageAlertEmail({
-      ...COACH,
+      ...PLAYER,
       severity: "low",
       usedSeconds: 4 * H,
       extraSeconds: 2 * H,
@@ -202,7 +202,7 @@ test.describe("a player's plan: the figures are the account's", () => {
   test("no version says beta, pilot, credits or allowance in its copy", () => {
     for (const severity of ["low", "spent"] as const) {
       const message = planUsageAlertEmail({
-        ...COACH,
+        ...PLAYER,
         severity,
         usedSeconds: severity === "low" ? 4 * H : 5 * H,
       });
@@ -306,7 +306,7 @@ test.describe("a program's season", () => {
 const USER = "33333333-3333-3333-3333-333333333333";
 const PROGRAM = "22222222-2222-2222-2222-222222222222";
 
-function personal(planPeriodStart: string, plan = "coach"): Workspace {
+function personal(planPeriodStart: string, plan = "player"): Workspace {
   return {
     id: USER,
     kind: "personal",
@@ -372,7 +372,7 @@ test.describe("the dedupe key", () => {
       new Date("2027-01-20T18:00:00Z"),
     );
     const after = allowanceFor(
-      personal("2027-01-20T15:00:00Z", "coach-pro"),
+      personal("2027-01-20T15:00:00Z", "player-pro"),
       new Date("2027-01-20T18:00:00Z"),
     );
     expect(usageAlertDedupeKey("spent", USER, after)).not.toBe(
@@ -528,7 +528,7 @@ test.describe("the notifier, on fakes", () => {
   });
   test.afterEach(() => restore());
 
-  test("a Coach reservation crossing 80% mails the player once per window", async () => {
+  test("a Player reservation crossing 80% mails the player once per window", async () => {
     const { fakes, notifyUsageThreshold } = harness();
     const workspace = personal("2027-01-14T00:00:00Z");
     const now = new Date("2027-01-30T12:00:00Z");

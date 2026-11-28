@@ -24,7 +24,7 @@ import {
 } from "./fixtures/fake-billing";
 
 /**
- * Coach → Coach Pro (decision 7 of docs/plans/2027-pricing.md).
+ * Player → Player Pro (decision 7 of docs/plans/2027-pricing.md).
  *
  * First the money, as a pure function: the credit is the old price times the
  * SMALLER of the share of time left (in whole days, a part day as one) and
@@ -52,8 +52,8 @@ const APRIL = {
 };
 const monthly = (now: string, usedSeconds: number) =>
   quoteUpgrade({
-    from: "coach",
-    to: "coach-pro",
+    from: "player",
+    to: "player-pro",
     period: "monthly",
     ...APRIL,
     now: new Date(now),
@@ -86,45 +86,45 @@ test.describe("the credit", () => {
     });
   });
 
-  test("a half-off first month: paid $75, 15 days left → $37.50 credit, pays $262.50", () => {
+  test("a discounted first month: paid $105, 15 days left → $52.50 credit, pays $247.50", () => {
     // More than half the hours left (3h12m of 5h), so the days set it.
     const quote = quoteUpgrade({
-      from: "coach",
-      to: "coach-pro",
+      from: "player",
+      to: "player-pro",
       period: "monthly",
       ...APRIL,
       now: new Date("2027-04-16T00:00:00Z"),
       usedSeconds: 5 * H - (3 * H + 12 * 60),
-      paidForPeriodCents: 7500,
+      paidForPeriodCents: 10500,
     });
     expect(quote).toMatchObject({
-      creditCents: 3750,
-      payTodayCents: 26250,
+      creditCents: 5250,
+      payTodayCents: 24750,
       creditBasis: "days",
       // Both shares are of what was paid, so the dialog's two figures agree
-      // with the credit: 15/30 and 3h12m/5h of $75.
-      daysCreditCents: 3750,
-      hoursCreditCents: 4800,
-      creditBaseCents: 7500,
+      // with the credit: 15/30 and 3h12m/5h of $105.
+      daysCreditCents: 5250,
+      hoursCreditCents: 6720,
+      creditBaseCents: 10500,
       // The list price is still the list price.
       oldPeriodPriceCents: 15000,
       newPeriodPriceCents: 30000,
     });
   });
 
-  test("a half-off month with the hours nearly gone: the hours share of $75", () => {
+  test("a discounted month with the hours nearly gone: the hours share of $105", () => {
     const quote = quoteUpgrade({
-      from: "coach",
-      to: "coach-pro",
+      from: "player",
+      to: "player-pro",
       period: "monthly",
       ...APRIL,
       now: new Date("2027-04-16T00:00:00Z"),
       usedSeconds: 5 * H - 23 * 60,
-      paidForPeriodCents: 7500,
+      paidForPeriodCents: 10500,
     });
     expect(quote).toMatchObject({
-      creditCents: 575,
-      payTodayCents: 29425,
+      creditCents: 805,
+      payTodayCents: 29195,
       creditBasis: "hours",
     });
   });
@@ -132,8 +132,8 @@ test.describe("the credit", () => {
   test("what was paid is the basis only up to list price; unreadable is list price", () => {
     const at = (paidForPeriodCents: number | null | undefined) =>
       quoteUpgrade({
-        from: "coach",
-        to: "coach-pro",
+        from: "player",
+        to: "player-pro",
         period: "monthly",
         ...APRIL,
         now: new Date("2027-04-16T00:00:00Z"),
@@ -195,20 +195,20 @@ test.describe("the credit", () => {
       creditCents: 15000,
       payTodayCents: 30000 - 15000,
     });
-    // A half-off first month: the full $75 paid comes back, never $74.99.
-    const halfOff = quoteUpgrade({
-      from: "coach",
-      to: "coach-pro",
+    // A discounted first month: the full $105 paid comes back, never a cent less.
+    const discounted = quoteUpgrade({
+      from: "player",
+      to: "player-pro",
       period: "monthly",
       ...APRIL,
       now: new Date("2027-04-01T00:05:00Z"),
       usedSeconds: 0,
-      paidForPeriodCents: 7500,
+      paidForPeriodCents: 10500,
     });
-    expect(halfOff).toMatchObject({
+    expect(discounted).toMatchObject({
       daysLeft: 30,
-      creditCents: 7500,
-      payTodayCents: 22500,
+      creditCents: 10500,
+      payTodayCents: 19500,
     });
   });
 
@@ -249,8 +249,8 @@ test.describe("the credit", () => {
   test("a 31-day and a 28-day period count their own days", () => {
     const over = (start: string, end: string, now: string) =>
       quoteUpgrade({
-        from: "coach",
-        to: "coach-pro",
+        from: "player",
+        to: "player-pro",
         period: "monthly",
         periodStart: new Date(start),
         periodEnd: new Date(end),
@@ -303,8 +303,8 @@ test.describe("the credit", () => {
     // Stripe anchors on a moment, so a period is not always a multiple of
     // 24 hours; the count is rounded, and days left never exceed it.
     const quote = quoteUpgrade({
-      from: "coach",
-      to: "coach-pro",
+      from: "player",
+      to: "player-pro",
       period: "monthly",
       periodStart: new Date("2027-04-01T00:00:00Z"),
       periodEnd: new Date("2027-05-01T01:00:00Z"),
@@ -381,8 +381,8 @@ test.describe("the credit", () => {
     };
     const yearly = (now: string, usedSeconds: number) =>
       quoteUpgrade({
-        from: "coach",
-        to: "coach-pro",
+        from: "player",
+        to: "player-pro",
         period: "yearly",
         ...YEAR,
         now: new Date(now),
@@ -457,14 +457,14 @@ test.describe("the credit", () => {
     });
   });
 
-  test("only Coach → Coach Pro is an upgrade", () => {
-    expect(isUpgrade("coach", "coach-pro")).toBe(true);
+  test("only Player → Player Pro is an upgrade", () => {
+    expect(isUpgrade("player", "player-pro")).toBe(true);
     for (const [from, to] of [
-      ["coach-pro", "coach"],
-      ["coach", "coach"],
-      ["free", "coach"],
-      ["free", "coach-pro"],
-      ["coach-pro", "coach-pro"],
+      ["player-pro", "player"],
+      ["player", "player"],
+      ["free", "player"],
+      ["free", "player-pro"],
+      ["player-pro", "player-pro"],
     ] as const) {
       expect(isUpgrade(from, to)).toBe(false);
     }
@@ -478,7 +478,7 @@ const NOW = new Date("2027-04-16T00:00:00Z");
 const subscriber = (over = {}) =>
   fakeUser({
     id: "u1",
-    plan: "coach",
+    plan: "player",
     plan_period: "monthly",
     plan_status: "active",
     plan_period_start: "2027-04-01T00:00:00.000Z",
@@ -559,8 +559,8 @@ test.describe("making the upgrade", () => {
       now: NOW,
     });
     expect(preview.ok && preview.value).toMatchObject({
-      from: "coach",
-      to: "coach-pro",
+      from: "player",
+      to: "player-pro",
       period: "monthly",
       payTodayCents: 22500,
       creditCents: 7500,
@@ -582,7 +582,7 @@ test.describe("making the upgrade", () => {
     expect(result).toEqual({
       ok: true,
       value: {
-        plan: "coach-pro",
+        plan: "player-pro",
         period: "monthly",
         payTodayCents: 22500,
         creditCents: 7500,
@@ -621,7 +621,7 @@ test.describe("making the upgrade", () => {
         billing_cycle_anchor: "now",
         payment_behavior: "error_if_incomplete",
         // What Stripe's portal prints beside the price: the plan it is now.
-        description: "Advantage Coach Pro, monthly",
+        description: "Advantage Player Pro, monthly",
         metadata: { upgrade_attempt: attempt },
       },
       { idempotencyKey: `${attempt}:update` },
@@ -629,7 +629,7 @@ test.describe("making the upgrade", () => {
 
     // The new period starts now, which is what hands out the fresh hours.
     expect(db.user("u1")).toMatchObject({
-      plan: "coach-pro",
+      plan: "player-pro",
       plan_period: "monthly",
       plan_status: "active",
       plan_period_start: "2027-04-16T00:00:00.000Z",
@@ -659,7 +659,7 @@ test.describe("making the upgrade", () => {
       [7500, UPGRADE_REVERSAL_KIND],
     ]);
     expect(api.netBalance()).toBe(0);
-    expect(db.user("u1")?.plan).toBe("coach");
+    expect(db.user("u1")?.plan).toBe("player");
     expect(db.writes).toEqual([]);
   });
 
@@ -693,7 +693,7 @@ test.describe("making the upgrade", () => {
     expect(result.ok).toBe(true);
     // No reversal: the credit was consumed by the upgrade that did happen.
     expect(api.balance.map((t) => t.amount)).toEqual([-7500]);
-    expect(db.user("u1")?.plan).toBe("coach-pro");
+    expect(db.user("u1")?.plan).toBe("player-pro");
   });
 
   test("an unknown outcome is left alone, and the next attempt settles it", async () => {
@@ -731,11 +731,11 @@ test.describe("making the upgrade", () => {
       [-7500, UPGRADE_CREDIT_KIND],
     ]);
     expect(api.netBalance()).toBe(-7500);
-    expect(db.user("u1")?.plan).toBe("coach-pro");
+    expect(db.user("u1")?.plan).toBe("player-pro");
   });
 
   test("a credit the subscription names was used: it is never reversed", async () => {
-    // Upgraded once, back on Coach since (a renewal-time downgrade), and the
+    // Upgraded once, back on Player since (a renewal-time downgrade), and the
     // "applied" label never got written. The subscription still names it.
     const { api, run } = setup({
       sub: { metadata: { upgrade_attempt: "upg_old" } },
@@ -784,7 +784,7 @@ test.describe("making the upgrade", () => {
     expect(result.ok ? null : result.error.detail).toBe("credit_failed");
     expect(api.names()).not.toContain("subscriptions.update");
     expect(api.balance).toEqual([]);
-    expect(db.user("u1")?.plan).toBe("coach");
+    expect(db.user("u1")?.plan).toBe("player");
   });
 
   test("a twin request in flight: left to the twin, nothing reversed", async () => {
@@ -840,11 +840,11 @@ test.describe("making the upgrade", () => {
     expect(db.writes).toEqual([]);
   });
 
-  test("a yearly Coach upgrades to yearly Coach Pro", async () => {
+  test("a yearly Player upgrades to yearly Player Pro", async () => {
     const { db, api, run } = setup({
       now: new Date("2027-07-10T00:00:00Z"),
       sub: {
-        price: "price_coach_y",
+        price: "price_player_y",
         start: "2027-01-10T00:00:00Z",
         end: "2028-01-10T00:00:00Z",
       },
@@ -858,10 +858,10 @@ test.describe("making the upgrade", () => {
     });
     expect(api.argsOf("subscriptions.update")?.[1]).toMatchObject({
       items: [{ id: "si_1", price: "price_pro_y" }],
-      description: "Advantage Coach Pro, yearly",
+      description: "Advantage Player Pro, yearly",
     });
     expect(db.user("u1")).toMatchObject({
-      plan: "coach-pro",
+      plan: "player-pro",
       plan_period: "yearly",
       plan_period_end: "2028-07-10T00:00:00.000Z",
     });
@@ -880,8 +880,8 @@ test.describe("pay yearly: the quote", () => {
     over: Partial<Parameters<typeof quoteUpgrade>[0]> = {},
   ) =>
     quoteUpgrade({
-      from: "coach",
-      to: "coach",
+      from: "player",
+      to: "player",
       period: "monthly",
       toPeriod: "yearly",
       ...APRIL,
@@ -890,7 +890,7 @@ test.describe("pay yearly: the quote", () => {
       ...over,
     });
 
-  test("monthly Coach mid-month: $75 credit for 15 days, pays $1,575", () => {
+  test("monthly Player mid-month: $75 credit for 15 days, pays $1,575", () => {
     const quote = toYearly("2027-04-16T00:00:00Z", 5 * H - (3 * H + 12 * 60));
     expect(quote).toMatchObject({
       creditCents: 7500,
@@ -919,13 +919,13 @@ test.describe("pay yearly: the quote", () => {
     });
   });
 
-  test("a discounted first month: the credit is a share of the $75 paid", () => {
+  test("a discounted first month: the credit is a share of the $105 paid", () => {
     expect(
-      toYearly("2027-04-16T00:00:00Z", 0, { paidForPeriodCents: 7500 }),
+      toYearly("2027-04-16T00:00:00Z", 0, { paidForPeriodCents: 10500 }),
     ).toMatchObject({
-      creditCents: 3750,
-      payTodayCents: 161250,
-      creditBaseCents: 7500,
+      creditCents: 5250,
+      payTodayCents: 159750,
+      creditBaseCents: 10500,
       oldPeriodPriceCents: 15000,
     });
   });
@@ -945,11 +945,11 @@ test.describe("pay yearly: the quote", () => {
     }
   });
 
-  test("Coach Pro pays its own year, less its own month", () => {
+  test("Player Pro pays its own year, less its own month", () => {
     expect(
       toYearly("2027-04-16T00:00:00Z", 0, {
-        from: "coach-pro",
-        to: "coach-pro",
+        from: "player-pro",
+        to: "player-pro",
       }),
     ).toMatchObject({
       creditCents: 15000,
@@ -960,7 +960,7 @@ test.describe("pay yearly: the quote", () => {
 
   test("exactly two changes are charged today", () => {
     const at = (
-      plan: "coach" | "coach-pro" | "free",
+      plan: "player" | "player-pro" | "free",
       period: "monthly" | "yearly",
     ) => ({
       plan,
@@ -968,30 +968,30 @@ test.describe("pay yearly: the quote", () => {
     });
     // A bigger plan on the same period.
     expect(
-      upgradeKind(at("coach", "monthly"), at("coach-pro", "monthly")),
+      upgradeKind(at("player", "monthly"), at("player-pro", "monthly")),
     ).toBe("plan");
-    expect(upgradeKind(at("coach", "yearly"), at("coach-pro", "yearly"))).toBe(
-      "plan",
-    );
+    expect(
+      upgradeKind(at("player", "yearly"), at("player-pro", "yearly")),
+    ).toBe("plan");
     // The same plan, monthly → yearly.
-    expect(upgradeKind(at("coach", "monthly"), at("coach", "yearly"))).toBe(
+    expect(upgradeKind(at("player", "monthly"), at("player", "yearly"))).toBe(
       "period",
     );
     expect(
-      upgradeKind(at("coach-pro", "monthly"), at("coach-pro", "yearly")),
+      upgradeKind(at("player-pro", "monthly"), at("player-pro", "yearly")),
     ).toBe("period");
     for (const [from, to] of [
       // Both at once.
-      [at("coach", "monthly"), at("coach-pro", "yearly")],
+      [at("player", "monthly"), at("player-pro", "yearly")],
       // Down, back to monthly, or nowhere.
-      [at("coach-pro", "monthly"), at("coach", "monthly")],
-      [at("coach", "yearly"), at("coach", "monthly")],
-      [at("coach-pro", "yearly"), at("coach", "monthly")],
-      [at("coach", "monthly"), at("coach", "monthly")],
-      [at("coach", "yearly"), at("coach", "yearly")],
+      [at("player-pro", "monthly"), at("player", "monthly")],
+      [at("player", "yearly"), at("player", "monthly")],
+      [at("player-pro", "yearly"), at("player", "monthly")],
+      [at("player", "monthly"), at("player", "monthly")],
+      [at("player", "yearly"), at("player", "yearly")],
       // Free has no subscription to change.
       [at("free", "monthly"), at("free", "yearly")],
-      [at("free", "monthly"), at("coach", "monthly")],
+      [at("free", "monthly"), at("player", "monthly")],
     ] as const) {
       expect(upgradeKind(from, to)).toBeNull();
     }
@@ -1012,8 +1012,8 @@ test.describe("pay yearly: making the switch", () => {
     });
     expect(preview.ok && preview.value).toMatchObject({
       kind: "period",
-      from: "coach",
-      to: "coach",
+      from: "player",
+      to: "player",
       fromPeriod: "monthly",
       period: "yearly",
       payTodayCents: 157500,
@@ -1034,7 +1034,7 @@ test.describe("pay yearly: making the switch", () => {
     expect(result).toEqual({
       ok: true,
       value: {
-        plan: "coach",
+        plan: "player",
         period: "yearly",
         payTodayCents: 157500,
         creditCents: 7500,
@@ -1060,7 +1060,7 @@ test.describe("pay yearly: making the switch", () => {
       expect.objectContaining({
         amount: -7500,
         currency: "usd",
-        description: "Unused Coach month, credited on the switch to yearly",
+        description: "Unused Player month, credited on the switch to yearly",
         metadata: {
           kind: UPGRADE_CREDIT_KIND,
           attempt,
@@ -1074,21 +1074,21 @@ test.describe("pay yearly: making the switch", () => {
     expect(api.argsOf("subscriptions.update")).toEqual([
       "sub_1",
       {
-        items: [{ id: "si_1", price: "price_coach_y" }],
+        items: [{ id: "si_1", price: "price_player_y" }],
         proration_behavior: "none",
         billing_cycle_anchor: "now",
         payment_behavior: "error_if_incomplete",
-        // Not "Advantage Coach, monthly", which checkout set and the portal
+        // Not "Advantage Player, monthly", which checkout set and the portal
         // would go on printing beside the yearly price.
-        description: "Advantage Coach, yearly",
+        description: "Advantage Player, yearly",
         metadata: { upgrade_attempt: attempt },
       },
       { idempotencyKey: `${attempt}:update` },
     ]);
 
-    // Still Coach; the year starts now, and so does a fresh month of hours.
+    // Still Player; the year starts now, and so does a fresh month of hours.
     expect(db.user("u1")).toMatchObject({
-      plan: "coach",
+      plan: "player",
       plan_period: "yearly",
       plan_status: "active",
       plan_period_start: "2027-04-16T00:00:00.000Z",
@@ -1097,19 +1097,19 @@ test.describe("pay yearly: making the switch", () => {
     expect(api.balance[0].metadata.applied).toBe("1");
   });
 
-  test("Coach Pro switches to its own yearly price", async () => {
+  test("Player Pro switches to its own yearly price", async () => {
     const { db, api, run } = setup({ sub: { price: "price_pro_m" } });
     const result = await run(YEARLY);
     expect(result.ok && result.value).toMatchObject({
-      plan: "coach-pro",
+      plan: "player-pro",
       period: "yearly",
     });
     expect(api.argsOf("subscriptions.update")?.[1]).toMatchObject({
       items: [{ id: "si_1", price: "price_pro_y" }],
-      description: "Advantage Coach Pro, yearly",
+      description: "Advantage Player Pro, yearly",
     });
     expect(db.user("u1")).toMatchObject({
-      plan: "coach-pro",
+      plan: "player-pro",
       plan_period: "yearly",
     });
   });
@@ -1128,7 +1128,7 @@ test.describe("pay yearly: making the switch", () => {
     ]);
     expect(api.netBalance()).toBe(0);
     expect(db.user("u1")).toMatchObject({
-      plan: "coach",
+      plan: "player",
       plan_period: "monthly",
     });
     expect(db.writes).toEqual([]);
@@ -1171,7 +1171,7 @@ test.describe("pay yearly: making the switch", () => {
     // …and the switch to yearly, in the same minute, is its own attempt.
     const switched = await run(YEARLY);
     expect(switched.ok && switched.value).toMatchObject({
-      plan: "coach",
+      plan: "player",
       period: "yearly",
     });
     const attempts = api.balance.map((t) => [t.amount, t.metadata.attempt]);
@@ -1202,12 +1202,12 @@ test.describe("what the routes accept as a target", () => {
     expect(readUpgradeRequest({ period: "yearly" })).toEqual({
       period: "yearly",
     });
-    expect(readUpgradeRequest({ plan: "coach-pro" })).toEqual({
-      plan: "coach-pro",
+    expect(readUpgradeRequest({ plan: "player-pro" })).toEqual({
+      plan: "player-pro",
     });
     expect(
-      readUpgradeRequest({ target: { plan: "coach", period: "yearly" } }),
-    ).toEqual({ plan: "coach", period: "yearly" });
+      readUpgradeRequest({ target: { plan: "player", period: "yearly" } }),
+    ).toEqual({ plan: "player", period: "yearly" });
   });
 
   test("anything that is not a plan or a period is refused, not guessed", () => {
@@ -1228,8 +1228,8 @@ test.describe("what the routes accept as a target", () => {
 /**
  * The credit is a share of what the customer PAID for the current period
  * (the period's invoice, after discounts, before tax), never of list price:
- * a half-off first month upgraded at once must not be credited $75 of the
- * $75 it cost.
+ * a discounted first month ($105 of a $150 list price) upgraded mid-month
+ * must not be credited from the $150 it did not cost.
  */
 test.describe("the credit comes from what was paid", () => {
   const SUB = { latest_invoice: "in_1" };
@@ -1241,21 +1241,21 @@ test.describe("the credit comes from what was paid", () => {
       now: NOW,
     });
 
-  test("a half-off first month: the preview and the charge are both $37.50 / $262.50", async () => {
-    // $75 after the coupon, plus tax that is no part of the basis.
+  test("a discounted first month: the preview and the charge are both $52.50 / $247.50", async () => {
+    // $105 after the coupon, plus tax that is no part of the basis.
     const world = setup({
       sub: SUB,
-      invoices: [fakeInvoice({ paid: 7500, tax: 619 })],
+      invoices: [fakeInvoice({ paid: 10500, tax: 866 })],
     });
 
     const shown = await preview(world);
     expect(shown.ok && shown.value).toMatchObject({
-      creditCents: 3750,
-      payTodayCents: 26250,
+      creditCents: 5250,
+      payTodayCents: 24750,
       creditBasis: "days",
-      daysCreditCents: 3750,
-      hoursCreditCents: 4800,
-      creditBaseCents: 7500,
+      daysCreditCents: 5250,
+      hoursCreditCents: 6720,
+      creditBaseCents: 10500,
       oldPeriodPriceCents: 15000,
     });
     expect(world.api.names()).toEqual([
@@ -1265,17 +1265,17 @@ test.describe("the credit comes from what was paid", () => {
     expect(world.api.argsOf("invoices.retrieve")?.[0]).toBe("in_1");
 
     // The dialog sends back what it showed; the charge is that number.
-    const done = await world.run({ expectedPayTodayCents: 26250 });
+    const done = await world.run({ expectedPayTodayCents: 24750 });
     expect(done).toMatchObject({
       ok: true,
-      value: { payTodayCents: 26250, creditCents: 3750 },
+      value: { payTodayCents: 24750, creditCents: 5250 },
     });
-    expect(world.api.balance.map((t) => t.amount)).toEqual([-3750]);
+    expect(world.api.balance.map((t) => t.amount)).toEqual([-5250]);
 
     // What list price would have charged is refused as a moved quote.
     const other = setup({
       sub: SUB,
-      invoices: [fakeInvoice({ paid: 7500 })],
+      invoices: [fakeInvoice({ paid: 10500 })],
     });
     const stale = await other.run({ expectedPayTodayCents: 22500 });
     expect(stale.ok ? null : stale.error.code).toBe("quote_changed");
@@ -1311,11 +1311,11 @@ test.describe("the credit comes from what was paid", () => {
     const world = setup({
       sub: SUB,
       invoices: [
-        fakeInvoice({ paid: 7500, tax: 619, noTotalExcludingTax: true }),
+        fakeInvoice({ paid: 10500, tax: 866, noTotalExcludingTax: true }),
       ],
     });
     const shown = await preview(world);
-    expect(shown.ok && shown.value).toMatchObject({ creditCents: 3750 });
+    expect(shown.ok && shown.value).toMatchObject({ creditCents: 5250 });
   });
 
   test("an invoice that cannot be read falls back to list price, and says so", async () => {
@@ -1323,19 +1323,19 @@ test.describe("the credit comes from what was paid", () => {
       ["no_latest_invoice", {}, false],
       [
         "invoice_read_failed",
-        { sub: SUB, invoices: [fakeInvoice({ paid: 7500 })] },
+        { sub: SUB, invoices: [fakeInvoice({ paid: 10500 })] },
         true,
       ],
       [
         "invoice_open",
-        { sub: SUB, invoices: [fakeInvoice({ paid: 7500, status: "open" })] },
+        { sub: SUB, invoices: [fakeInvoice({ paid: 10500, status: "open" })] },
         false,
       ],
       [
         "invoice_of_another_subscription",
         {
           sub: SUB,
-          invoices: [fakeInvoice({ paid: 7500, subscription: "sub_9" })],
+          invoices: [fakeInvoice({ paid: 10500, subscription: "sub_9" })],
         },
         false,
       ],
@@ -1345,7 +1345,7 @@ test.describe("the credit comes from what was paid", () => {
           sub: SUB,
           invoices: [
             fakeInvoice({
-              paid: 7500,
+              paid: 10500,
               start: "2027-03-01T00:00:00Z",
               end: "2027-04-01T00:00:00Z",
             }),
@@ -1440,10 +1440,10 @@ test.describe("who cannot upgrade", () => {
     ]);
   });
 
-  test("already on Coach Pro, or on a price that is no plan", async () => {
+  test("already on Player Pro, or on a price that is no plan", async () => {
     expect(await attempt({ price: "price_pro_m" })).toEqual([
       "not_an_upgrade",
-      "from_coach-pro",
+      "from_player-pro",
     ]);
     expect(await attempt({ price: "price_mystery" })).toEqual([
       "not_an_upgrade",
@@ -1468,35 +1468,35 @@ test.describe("who cannot upgrade", () => {
   test("only the two changes: everything else asked for is refused", async () => {
     // Already yearly.
     expect(
-      await attempt({ price: "price_coach_y" }, subscriber(), {
+      await attempt({ price: "price_player_y" }, subscriber(), {
         period: "yearly",
       }),
-    ).toEqual(["not_an_upgrade", "from_coach_yearly_to_coach_yearly"]);
+    ).toEqual(["not_an_upgrade", "from_player_yearly_to_player_yearly"]);
     // Back to monthly waits for renewal; it is not made here.
     expect(
-      await attempt({ price: "price_coach_y" }, subscriber(), {
+      await attempt({ price: "price_player_y" }, subscriber(), {
         period: "monthly",
       }),
-    ).toEqual(["not_an_upgrade", "from_coach_yearly_to_coach_monthly"]);
+    ).toEqual(["not_an_upgrade", "from_player_yearly_to_player_monthly"]);
     // A smaller plan, the same.
     expect(
-      await attempt({ price: "price_pro_m" }, subscriber(), { plan: "coach" }),
-    ).toEqual(["not_an_upgrade", "from_coach-pro_monthly_to_coach_monthly"]);
+      await attempt({ price: "price_pro_m" }, subscriber(), { plan: "player" }),
+    ).toEqual(["not_an_upgrade", "from_player-pro_monthly_to_player_monthly"]);
     // A bigger plan AND a year at once is two changes.
     expect(
-      await attempt({}, subscriber(), { plan: "coach-pro", period: "yearly" }),
-    ).toEqual(["not_an_upgrade", "from_coach_monthly_to_coach-pro_yearly"]);
+      await attempt({}, subscriber(), { plan: "player-pro", period: "yearly" }),
+    ).toEqual(["not_an_upgrade", "from_player_monthly_to_player-pro_yearly"]);
     // Asking for what is already held.
     expect(
-      await attempt({}, subscriber(), { plan: "coach", period: "monthly" }),
-    ).toEqual(["not_an_upgrade", "from_coach_monthly_to_coach_monthly"]);
+      await attempt({}, subscriber(), { plan: "player", period: "monthly" }),
+    ).toEqual(["not_an_upgrade", "from_player_monthly_to_player_monthly"]);
   });
 
   test("the yearly price is not configured", async () => {
-    await withEnv({ STRIPE_PRICE_COACH_YEARLY: undefined }, async () => {
+    await withEnv({ STRIPE_PRICE_PLAYER_YEARLY: undefined }, async () => {
       expect(await attempt({}, subscriber(), { period: "yearly" })).toEqual([
         "price_not_configured",
-        "STRIPE_PRICE_COACH_YEARLY",
+        "STRIPE_PRICE_PLAYER_YEARLY",
       ]);
     });
   });
@@ -1508,11 +1508,11 @@ test.describe("who cannot upgrade", () => {
     ]);
   });
 
-  test("the Coach Pro price is not configured", async () => {
-    await withEnv({ STRIPE_PRICE_COACH_PRO_MONTHLY: undefined }, async () => {
+  test("the Player Pro price is not configured", async () => {
+    await withEnv({ STRIPE_PRICE_PLAYER_PRO_MONTHLY: undefined }, async () => {
       expect(await attempt({})).toEqual([
         "price_not_configured",
-        "STRIPE_PRICE_COACH_PRO_MONTHLY",
+        "STRIPE_PRICE_PLAYER_PRO_MONTHLY",
       ]);
     });
   });

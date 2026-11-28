@@ -19,7 +19,9 @@
 -- What it does:
 --
 --   users   Decision 4: the one legacy `pro` (Lifetime) account moves to
---           Free. Then `pro` leaves the check: free | coach | coach-pro.
+--           Free. Then `pro` leaves the check: free | player | player-pro
+--           (the ids 20261127060000_plans_2027_final_pricing renames the
+--           plans to; this migration may run before or after that one).
 --           In that order — the check cannot be narrowed while a row still
 --           holds the value.
 --
@@ -57,14 +59,19 @@ begin
     alter table public.users drop constraint users_plan_check;
   end if;
 
+  -- The ids the plans had before they were renamed. No live row holds one
+  -- (read 2026-11-27); a database where one does is moved, not refused.
+  update public.users set plan = 'player'     where plan = 'coach';
+  update public.users set plan = 'player-pro' where plan = 'coach-pro';
+
   alter table public.users
     add constraint users_plan_check
-    check (plan = any (array['free', 'coach', 'coach-pro']));
+    check (plan = any (array['free', 'player', 'player-pro']));
 end;
 $$;
 
 comment on column public.users.plan is
-  'Paid entitlement: free | coach | coach-pro. Written only by the Stripe webhook via the service role; users_block_plan_self_update blocks client writes.';
+  'Paid entitlement: free | player | player-pro. Written only by the Stripe webhook via the service role; users_block_plan_self_update blocks client writes.';
 
 comment on column public.video_credits.pack is
   'The retired $14 / $60 bundle a purchase was (1h | 5h). NULL for an admin grant and for extra hours bought by the hour (source = purchase) from 2027.';
@@ -82,7 +89,7 @@ begin
      where conname = 'users_plan_check'
        and conrelid = 'public.users'::regclass
        and pg_get_constraintdef(oid) not like '%''pro''%'
-       and pg_get_constraintdef(oid) like '%''coach-pro''%'
+       and pg_get_constraintdef(oid) like '%''player-pro''%'
   ) then
     raise exception 'plans_2027_billing: users_plan_check was not narrowed';
   end if;

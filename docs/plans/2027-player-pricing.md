@@ -77,7 +77,7 @@ Picked screens (frame ids in the mockups):
 
 > **Superseded (2026-11-25).** Stage 2 is now
 > [`2027-pricing.md`](2027-pricing.md), which follows the landing site's plans
-> (Coach / Coach Pro, college season plans, $35 extra hours). Everything below
+> (now Player / Player Pro, college season plans, $35 extra hours). Everything below
 > in this stage, including "Stage 2 build", its open questions and the unit
 > economics, is kept only as history.
 

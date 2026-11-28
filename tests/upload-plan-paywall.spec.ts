@@ -54,9 +54,9 @@ test("on sale, the paywall is the plan checkout — still opened at Send, not be
 });
 
 test("an account already on a paid plan gets the plan checkout whatever the date", async () => {
-  const h = await atPaywall({ onSale: false, plan: "coach" });
+  const h = await atPaywall({ onSale: false, plan: "player" });
   expect(h.current.plansActive).toBe(true);
-  expect(h.current.quotaPlanId).toBe("coach");
+  expect(h.current.quotaPlanId).toBe("player");
 });
 
 test("extra hours that cover the video carry the trim step on", async () => {
@@ -76,23 +76,23 @@ test("extra hours that cover the video carry the trim step on", async () => {
 
 test("a new plan counts its full hours at once and carries on", async () => {
   const h = await atPaywall({ onSale: true });
-  h.current.handlePurchase({ kind: "plan", plan: "coach", period: "monthly" });
+  h.current.handlePurchase({ kind: "plan", plan: "player", period: "monthly" });
   h.render();
   expect(h.current.paywall).toBeNull();
   expect(h.current.error).toBeNull();
-  expect(h.current.quotaPlanId).toBe("coach");
+  expect(h.current.quotaPlanId).toBe("player");
   expect(h.current.step).toBe("match");
 });
 
 test("an upgrade is counted the same way", async () => {
-  const h = await atPaywall({ onSale: false, plan: "coach" });
+  const h = await atPaywall({ onSale: false, plan: "player" });
   h.current.handlePurchase({
     kind: "upgrade",
-    plan: "coach-pro",
+    plan: "player-pro",
     period: "monthly",
   });
   h.render();
-  expect(h.current.quotaPlanId).toBe("coach-pro");
+  expect(h.current.quotaPlanId).toBe("player-pro");
   expect(h.current.step).toBe("match");
 });
 
@@ -108,15 +108,15 @@ test("a plan that lands after the dialog gave up waiting is picked up from the r
   expect(h.current.quotaPlanId).toBe("free");
   expect(h.current.paymentPending).toBe(true);
 
-  h.current.syncPlan("coach-pro", "2027-01-14T08:00:00.000Z");
+  h.current.syncPlan("player-pro", "2027-01-14T08:00:00.000Z");
   h.render();
-  expect(h.current.quotaPlanId).toBe("coach-pro");
+  expect(h.current.quotaPlanId).toBe("player-pro");
   expect(h.current.paymentPending).toBe(false);
 
   // A stale read of the old plan must not undo it.
-  h.current.syncPlan("coach", "2027-01-14T08:00:00.000Z");
+  h.current.syncPlan("player", "2027-01-14T08:00:00.000Z");
   h.render();
-  expect(h.current.quotaPlanId).toBe("coach-pro");
+  expect(h.current.quotaPlanId).toBe("player-pro");
 });
 
 test.describe("a failed payment fixed in another tab", () => {
@@ -131,7 +131,7 @@ test.describe("a failed payment fixed in another tab", () => {
     pastDue: false,
   };
 
-  /** A Coach subscriber, payment failed, stopped at the trim step's paywall. */
+  /** A Player subscriber, payment failed, stopped at the trim step's paywall. */
   async function pastDueAtPaywall(
     hoursLeftReads: NonNullable<
       Parameters<typeof uploadWizardHarness>[0]
@@ -141,7 +141,7 @@ test.describe("a failed payment fixed in another tab", () => {
     const h = uploadWizardHarness({
       quotaCapSeconds: 7200,
       props: { initialProvider: "splitstep" },
-      workspace: { plan: "coach", planStatus: "past_due" },
+      workspace: { plan: "player", planStatus: "past_due" },
       hoursLeftReads,
     });
     await h.flush();
@@ -174,7 +174,7 @@ test.describe("a failed payment fixed in another tab", () => {
     expect(h.hoursLeftCallCount).toBe(1);
     expect(h.current.quotaPastDue).toBe(false);
     expect(h.current.quotaFreeSeconds).toBe(7200);
-    expect(h.current.quotaPlanId).toBe("coach");
+    expect(h.current.quotaPlanId).toBe("player");
     expect(h.current.paywall).toBeNull();
     // The same objects, not equal copies: nothing was reset or remounted.
     expect(h.current.formData).toBe(before.formData);
@@ -229,7 +229,7 @@ test.describe("a failed payment fixed in another tab", () => {
   }
 
   test("an account that is not past due is never asked about", async () => {
-    const h = await atPaywall({ onSale: false, plan: "coach" });
+    const h = await atPaywall({ onSale: false, plan: "player" });
     h.current.closeAddHours();
     await h.current.refreshPastDue();
     await h.flush();

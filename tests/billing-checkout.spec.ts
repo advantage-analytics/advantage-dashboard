@@ -83,11 +83,11 @@ async function checkout(
 
 const returning = (over = {}) =>
   fakeUser({ id: "u1", stripe_customer_id: "cus_1", ...over });
-const MONTHLY = { kind: "plan", plan: "coach", period: "monthly" };
-const YEARLY = { kind: "plan", plan: "coach-pro", period: "yearly" };
+const MONTHLY = { kind: "plan", plan: "player", period: "monthly" };
+const YEARLY = { kind: "plan", plan: "player-pro", period: "yearly" };
 
 test.describe("a plan checkout", () => {
-  test("a first-time customer, monthly: embedded, taxed, and half off the first month", async () => {
+  test("a first-time customer, monthly: embedded, taxed, and the first-month discount", async () => {
     const { result, session, db, api } = await checkout(MONTHLY);
 
     expect(result).toEqual({
@@ -112,16 +112,16 @@ test.describe("a plan checkout", () => {
       customer: "cus_new",
       customer_update: { address: "auto", name: "auto" },
       client_reference_id: "u1",
-      line_items: [{ price: "price_coach_m", quantity: 1 }],
+      line_items: [{ price: "price_player_m", quantity: 1 }],
       metadata: {
         kind: "plan",
-        plan: "coach",
+        plan: "player",
         period: "monthly",
         user_id: "u1",
       },
       subscription_data: {
         metadata: { user_id: "u1" },
-        description: "Advantage Coach, monthly",
+        description: "Advantage Player, monthly",
       },
       discounts: [{ coupon: "coupon_first_month" }],
     });
@@ -208,7 +208,7 @@ test.describe("a plan checkout", () => {
       expect(result.ok && result.value.firstMonthDiscount, name).toBe(false);
       expect(session, name).not.toHaveProperty("discounts");
       expect(session?.line_items, name).toEqual([
-        { price: "price_coach_m", quantity: 1 },
+        { price: "price_player_m", quantity: 1 },
       ]);
     }
   });
@@ -246,7 +246,7 @@ test.describe("a plan checkout", () => {
     expect(session).toMatchObject({
       customer: "cus_1",
       client_reference_id: "u1",
-      line_items: [{ price: "price_coach_m", quantity: 1 }],
+      line_items: [{ price: "price_player_m", quantity: 1 }],
       metadata: { user_id: "u1" },
     });
   });
@@ -270,12 +270,12 @@ test.describe("a plan checkout", () => {
       ],
       [
         "our row says so, though Stripe lists nothing",
-        returning({ plan: "coach", plan_status: "active" }),
+        returning({ plan: "player", plan_status: "active" }),
         {},
       ],
       [
         "our row says so, and the customer id was lost",
-        fakeUser({ id: "u1", plan: "coach-pro", plan_status: "past_due" }),
+        fakeUser({ id: "u1", plan: "player-pro", plan_status: "past_due" }),
         {},
       ],
     ];
@@ -314,7 +314,7 @@ test.describe("a plan checkout", () => {
       { kind: "plan", plan: "free", period: "monthly" },
       { kind: "plan", plan: "pro", period: "monthly" },
       { kind: "plan", plan: "elite", period: "monthly" },
-      { kind: "plan", plan: "coach", period: "weekly" },
+      { kind: "plan", plan: "player", period: "weekly" },
       { kind: "credits", pack: "5h" },
     ]) {
       const { refusal, api } = await checkout(body);
@@ -362,7 +362,7 @@ test.describe("an hours checkout", () => {
     for (const user of [
       fakeUser({ id: "u1" }),
       returning({
-        plan: "coach",
+        plan: "player",
         plan_status: "active",
         stripe_subscription_id: "sub_1",
       }),
@@ -422,10 +422,10 @@ test.describe("refused before anything is created", () => {
 
   test("an unset price refuses that item only, with its own code", async () => {
     const unset: [unknown, string][] = [
-      [MONTHLY, "STRIPE_PRICE_COACH_MONTHLY"],
-      [{ ...MONTHLY, period: "yearly" }, "STRIPE_PRICE_COACH_YEARLY"],
-      [{ ...YEARLY, period: "monthly" }, "STRIPE_PRICE_COACH_PRO_MONTHLY"],
-      [YEARLY, "STRIPE_PRICE_COACH_PRO_YEARLY"],
+      [MONTHLY, "STRIPE_PRICE_PLAYER_MONTHLY"],
+      [{ ...MONTHLY, period: "yearly" }, "STRIPE_PRICE_PLAYER_YEARLY"],
+      [{ ...YEARLY, period: "monthly" }, "STRIPE_PRICE_PLAYER_PRO_MONTHLY"],
+      [YEARLY, "STRIPE_PRICE_PLAYER_PRO_YEARLY"],
       [{ kind: "hours", hours: 1 }, "STRIPE_PRICE_EXTRA_HOUR"],
     ];
     for (const [body, name] of unset) {
@@ -440,7 +440,7 @@ test.describe("refused before anything is created", () => {
       }
     }
     // The others still open while one is unset.
-    await withEnv({ STRIPE_PRICE_COACH_MONTHLY: undefined }, async () => {
+    await withEnv({ STRIPE_PRICE_PLAYER_MONTHLY: undefined }, async () => {
       expect((await checkout(YEARLY)).result.ok).toBe(true);
       expect((await checkout({ kind: "hours", hours: 1 })).result.ok).toBe(
         true,
@@ -632,10 +632,10 @@ test.describe("the portal", () => {
 test.describe("price ids come from the environment, both ways", () => {
   test("plan and period to price, and a price back to its plan", () => {
     const pairs = [
-      ["coach", "monthly", "price_coach_m"],
-      ["coach", "yearly", "price_coach_y"],
-      ["coach-pro", "monthly", "price_pro_m"],
-      ["coach-pro", "yearly", "price_pro_y"],
+      ["player", "monthly", "price_player_m"],
+      ["player", "yearly", "price_player_y"],
+      ["player-pro", "monthly", "price_pro_m"],
+      ["player-pro", "yearly", "price_pro_y"],
     ] as const;
     for (const [plan, period, price] of pairs) {
       expect(priceIdFor(plan, period)).toBe(price);
@@ -661,22 +661,22 @@ test.describe("price ids come from the environment, both ways", () => {
   test("an unset or malformed variable is absent, never a guess", () => {
     const env = {
       ...TEST_PRICES,
-      STRIPE_PRICE_COACH_MONTHLY: "",
-      STRIPE_PRICE_COACH_YEARLY: "prod_123",
+      STRIPE_PRICE_PLAYER_MONTHLY: "",
+      STRIPE_PRICE_PLAYER_YEARLY: "prod_123",
       STRIPE_PRICE_EXTRA_HOUR: undefined,
       STRIPE_PORTAL_CONFIGURATION: "price_wrong_kind",
     };
-    expect(priceIdFor("coach", "monthly", env)).toBeNull();
-    expect(priceIdFor("coach", "yearly", env)).toBeNull();
-    expect(priceIdFor("coach-pro", "yearly", env)).toBe("price_pro_y");
+    expect(priceIdFor("player", "monthly", env)).toBeNull();
+    expect(priceIdFor("player", "yearly", env)).toBeNull();
+    expect(priceIdFor("player-pro", "yearly", env)).toBe("price_pro_y");
     expect(extraHourPriceId(env)).toBeNull();
     expect(portalConfigurationId(env)).toBeNull();
     // An unset variable must never match an empty price id.
     expect(planForPriceId("", env)).toBeNull();
     expect(planForPriceId("prod_123", env)).toBeNull();
     expect(
-      priceIdFor("coach", "monthly", {
-        STRIPE_PRICE_COACH_MONTHLY: " price_x ",
+      priceIdFor("player", "monthly", {
+        STRIPE_PRICE_PLAYER_MONTHLY: " price_x ",
       }),
     ).toBe("price_x");
   });

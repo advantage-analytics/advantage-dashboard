@@ -26,7 +26,7 @@ import {
 import {
   EXTRA_HOUR_PRICE,
   EXTRA_HOUR_VALIDITY_MONTHS,
-  coachPlan,
+  personalPlan,
   plansHaveBegun,
   usd,
 } from "@/lib/billing/plans";
@@ -639,11 +639,12 @@ export default function HelpCenterPage() {
                   // From January 1, 2027: the plans' own figures, from the
                   // plan module — nothing here is typed.
                   <p className={proseClass}>
-                    {coachPlan("coach").name} includes{" "}
-                    {coachPlan("coach").hours} hours of match video a month and{" "}
-                    {coachPlan("coach-pro").name} {coachPlan("coach-pro").hours}
-                    ; the {coachPlan("free").name} plan has none. Extra hours
-                    are {usd(EXTRA_HOUR_PRICE)} each on{" "}
+                    {personalPlan("player").name} includes{" "}
+                    {personalPlan("player").hours} hours of match video a month
+                    and {personalPlan("player-pro").name}{" "}
+                    {personalPlan("player-pro").hours}; the{" "}
+                    {personalPlan("free").name} plan has none. Extra hours are{" "}
+                    {usd(EXTRA_HOUR_PRICE)} each on{" "}
                     <Link href={PLAN_HREF} className={linkClass}>
                       Settings › Plan
                     </Link>

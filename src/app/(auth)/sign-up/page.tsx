@@ -18,7 +18,7 @@ export const metadata = { title: "Create account" };
  * other destination renders the ordinary form with no extra read. A browser
  * that is already signed in gets `SignedInGate`'s card instead of the form.
  *
- * `?plan=<id>&period=<p>` is the landing site's "Choose Coach": both values
+ * `?plan=<id>&period=<p>` is the landing site's "Choose Player": both values
  * are checked against the plan module (`parsePlanIntent`) and become a `next`
  * of Settings › Plan with the same two values, where the checkout dialog
  * opens on them. `plan=free`, an unknown plan or a missing period is dropped

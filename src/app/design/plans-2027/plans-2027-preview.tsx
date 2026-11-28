@@ -41,14 +41,17 @@ import {
 } from "@/lib/billing/checkout-view";
 import type { PlanBilling } from "@/lib/billing/plan-fields";
 import type { PlanPageInput } from "@/lib/billing/plan-page-view";
-import { planHoursSeconds } from "@/lib/billing/plans";
+import { planHoursSeconds, seasonAllowance } from "@/lib/billing/plans";
 import { quoteUpgrade } from "@/lib/billing/upgrade";
 
 const noop = () => {};
 const H = 3600;
 const M = 60;
+/** The season pools the team fixtures draw from, as the plan module holds them. */
+const PROGRAM_SPRING_H = seasonAllowance("program", "spring").hours;
+const ELITE_YEAR_H = seasonAllowance("elite", "full_year").hours;
 
-/* ---------- Fixtures: a Coach month from Apr 14 to May 14, 2027 ---------- */
+/* ---------- Fixtures: a Player month from Apr 14 to May 14, 2027 ---------- */
 
 const PERIOD_START = new Date("2027-04-14T00:00:00Z");
 const PERIOD_END = new Date("2027-05-14T00:00:00Z");
@@ -63,7 +66,7 @@ const NEVER: PlanBilling = {
   everSubscribed: false,
 };
 
-function subscribed(plan: "coach" | "coach-pro"): PlanBilling {
+function subscribed(plan: "player" | "player-pro"): PlanBilling {
   return {
     plan,
     periodStart: PERIOD_START.toISOString(),
@@ -86,11 +89,11 @@ const PAGE_FREE: PlanPageInput = {
   freeEnds: "Dec 31, 2026",
 };
 
-const PAGE_COACH: PlanPageInput = {
-  plan: "coach",
-  billing: subscribed("coach"),
+const PAGE_PLAYER: PlanPageInput = {
+  plan: "player",
+  billing: subscribed("player"),
   allowanceKind: "plan",
-  capSeconds: planHoursSeconds("coach"),
+  capSeconds: planHoursSeconds("player"),
   planLeftSeconds: 3 * H + 12 * M,
   extraSeconds: 1 * H,
   nextExtraExpiresAt: "2028-02-02T00:00:00Z",
@@ -98,11 +101,11 @@ const PAGE_COACH: PlanPageInput = {
   freeEnds: "Dec 31, 2026",
 };
 
-const PAGE_COACH_PRO: PlanPageInput = {
-  ...PAGE_COACH,
-  plan: "coach-pro",
-  billing: subscribed("coach-pro"),
-  capSeconds: planHoursSeconds("coach-pro"),
+const PAGE_PLAYER_PRO: PlanPageInput = {
+  ...PAGE_PLAYER,
+  plan: "player-pro",
+  billing: subscribed("player-pro"),
+  capSeconds: planHoursSeconds("player-pro"),
   planLeftSeconds: 7 * H + 40 * M,
   extraSeconds: 0,
   nextExtraExpiresAt: null,
@@ -117,8 +120,8 @@ const ACCOUNT_FREE: CheckoutAccount = {
   firstMonthEligible: true,
 };
 
-const ACCOUNT_COACH: CheckoutAccount = {
-  plan: "coach",
+const ACCOUNT_PLAYER: CheckoutAccount = {
+  plan: "player",
   period: "monthly",
   planLeftSeconds: 3 * H + 12 * M,
   extraSeconds: 1 * H,
@@ -126,16 +129,16 @@ const ACCOUNT_COACH: CheckoutAccount = {
   firstMonthEligible: false,
 };
 
-/** Out of hours mid-month: 23 minutes of Coach left, no extra hours. */
-const ACCOUNT_COACH_SPENT: CheckoutAccount = {
-  ...ACCOUNT_COACH,
+/** Out of hours mid-month: 23 minutes of Player left, no extra hours. */
+const ACCOUNT_PLAYER_SPENT: CheckoutAccount = {
+  ...ACCOUNT_PLAYER,
   planLeftSeconds: 23 * M,
   extraSeconds: 0,
 };
 
-const ACCOUNT_COACH_PRO_SPENT: CheckoutAccount = {
-  ...ACCOUNT_COACH_SPENT,
-  plan: "coach-pro",
+const ACCOUNT_PLAYER_PRO_SPENT: CheckoutAccount = {
+  ...ACCOUNT_PLAYER_SPENT,
+  plan: "player-pro",
 };
 
 /** The real quote, on fixed dates: 15 days left, so the credit is by days. */
@@ -143,13 +146,13 @@ const PREVIEW_DAYS: PreviewState = {
   status: "ready",
   preview: {
     ...quoteUpgrade({
-      from: "coach",
-      to: "coach-pro",
+      from: "player",
+      to: "player-pro",
       period: "monthly",
       periodStart: PERIOD_START,
       periodEnd: PERIOD_END,
       now: new Date("2027-04-29T00:00:00Z"),
-      usedSeconds: planHoursSeconds("coach") - (3 * H + 12 * M),
+      usedSeconds: planHoursSeconds("player") - (3 * H + 12 * M),
     }),
     period: "monthly",
   },
@@ -160,31 +163,31 @@ const PREVIEW_HOURS: PreviewState = {
   status: "ready",
   preview: {
     ...quoteUpgrade({
-      from: "coach",
-      to: "coach-pro",
+      from: "player",
+      to: "player-pro",
       period: "monthly",
       periodStart: PERIOD_START,
       periodEnd: PERIOD_END,
       now: new Date("2027-04-29T00:00:00Z"),
-      usedSeconds: planHoursSeconds("coach") - 23 * M,
+      usedSeconds: planHoursSeconds("player") - 23 * M,
     }),
     period: "monthly",
   },
 };
 
-/** Coach, monthly → yearly on the same day: the same $75 credit for 15 days. */
+/** Player, monthly → yearly on the same day: the same $75 credit for 15 days. */
 const PREVIEW_YEARLY: PreviewState = {
   status: "ready",
   preview: {
     ...quoteUpgrade({
-      from: "coach",
-      to: "coach",
+      from: "player",
+      to: "player",
       period: "monthly",
       toPeriod: "yearly",
       periodStart: PERIOD_START,
       periodEnd: PERIOD_END,
       now: new Date("2027-04-29T00:00:00Z"),
-      usedSeconds: planHoursSeconds("coach") - (3 * H + 12 * M),
+      usedSeconds: planHoursSeconds("player") - (3 * H + 12 * M),
     }),
     period: "yearly",
     fromPeriod: "monthly",
@@ -196,8 +199,8 @@ const NEEDED = 1 * H + 52 * M;
 /* ---------- A failed renewal: the plan stays, the hours wait ---------- */
 
 const PAGE_PAST_DUE: PlanPageInput = {
-  ...PAGE_COACH,
-  billing: { ...subscribed("coach"), status: "past_due" },
+  ...PAGE_PLAYER,
+  billing: { ...subscribed("player"), status: "past_due" },
   // What `allowanceFor()` answers for a past-due plan: its own kind, no hours.
   capSeconds: 0,
   planLeftSeconds: 0,
@@ -207,7 +210,7 @@ const PAGE_PAST_DUE: PlanPageInput = {
 };
 
 const ACCOUNT_PAST_DUE: CheckoutAccount = {
-  ...ACCOUNT_COACH,
+  ...ACCOUNT_PLAYER,
   planLeftSeconds: 0,
   extraSeconds: 0,
   resetsOn: null,
@@ -216,49 +219,49 @@ const ACCOUNT_PAST_DUE: CheckoutAccount = {
 
 /* ---------- MOCK ONLY: a change at renewal (nothing is wired) ---------- */
 
-/** Coach Pro, monthly, Jan 14 to Feb 14, 2027. */
+/** Player Pro, monthly, Jan 14 to Feb 14, 2027. */
 const PAGE_PRO_FEB: PlanPageInput = {
-  ...PAGE_COACH_PRO,
+  ...PAGE_PLAYER_PRO,
   billing: {
-    ...subscribed("coach-pro"),
+    ...subscribed("player-pro"),
     periodStart: "2027-01-14T00:00:00Z",
     periodEnd: "2027-02-14T00:00:00Z",
   },
   resetsOn: "Feb 14",
 };
 const ACCOUNT_PRO_FEB: CheckoutAccount = {
-  plan: "coach-pro",
+  plan: "player-pro",
   period: "monthly",
   planLeftSeconds: 7 * H + 40 * M,
   extraSeconds: 0,
   resetsOn: "Feb 14",
   firstMonthEligible: false,
 };
-/** Coach Pro → Coach, at the month's renewal. */
+/** Player Pro → Player, at the month's renewal. */
 const MOVE_DOWN: ScheduledChange = {
-  to: { plan: "coach", period: "monthly" },
+  to: { plan: "player", period: "monthly" },
   effectiveOn: "2027-02-14",
 };
 
-/** Coach, yearly, Jan 14, 2027 to Jan 14, 2028. */
-const PAGE_COACH_YEAR: PlanPageInput = {
-  ...PAGE_COACH,
+/** Player, yearly, Jan 14, 2027 to Jan 14, 2028. */
+const PAGE_PLAYER_YEAR: PlanPageInput = {
+  ...PAGE_PLAYER,
   billing: {
-    ...subscribed("coach"),
+    ...subscribed("player"),
     period: "yearly",
     periodStart: "2027-01-14T00:00:00Z",
     periodEnd: "2028-01-14T00:00:00Z",
   },
   resetsOn: "Feb 14",
 };
-const ACCOUNT_COACH_YEAR: CheckoutAccount = {
-  ...ACCOUNT_COACH,
+const ACCOUNT_PLAYER_YEAR: CheckoutAccount = {
+  ...ACCOUNT_PLAYER,
   period: "yearly",
   resetsOn: "Feb 14",
 };
-/** Coach yearly → Coach monthly, at the year's renewal. */
+/** Player yearly → Player monthly, at the year's renewal. */
 const PAY_MONTHLY: ScheduledChange = {
-  to: { plan: "coach", period: "monthly" },
+  to: { plan: "player", period: "monthly" },
   effectiveOn: "2028-01-14",
 };
 
@@ -276,7 +279,7 @@ type DialogState = {
 type State =
   | { kind: "page"; label: string; page: PlanPageInput }
   | DialogState
-  | { kind: "file"; label: string; plan: "free" | "coach"; pastDue?: boolean }
+  | { kind: "file"; label: string; plan: "free" | "player"; pastDue?: boolean }
   | { kind: "pill"; label: string }
   | { kind: "home"; label: string }
   | { kind: "usage"; label: string }
@@ -295,15 +298,15 @@ const WS_FREE: AllowanceWorkspace = {
   orgType: null,
   plan: "free",
 };
-const WS_COACH: AllowanceWorkspace = {
+const WS_PLAYER: AllowanceWorkspace = {
   kind: "personal",
   orgType: null,
-  plan: "coach",
+  plan: "player",
   planPeriodStart: "2027-01-14T00:00:00Z",
 };
-const WS_COACH_PRO: AllowanceWorkspace = { ...WS_COACH, plan: "coach-pro" };
-const WS_COACH_PAST_DUE: AllowanceWorkspace = {
-  ...WS_COACH,
+const WS_PLAYER_PRO: AllowanceWorkspace = { ...WS_PLAYER, plan: "player-pro" };
+const WS_PLAYER_PAST_DUE: AllowanceWorkspace = {
+  ...WS_PLAYER,
   planStatus: "past_due",
 };
 const WS_SEASON: AllowanceWorkspace = {
@@ -340,7 +343,7 @@ const standing = (workspace: AllowanceWorkspace): PlanStanding =>
 
 const TEAM_USAGE: ProgramUsage = {
   usedSeconds: 58 * H,
-  capSeconds: 200 * H,
+  capSeconds: PROGRAM_SPRING_H * H,
   billingMonth: "2027-01-01",
   lines: [
     { userId: "u1", name: "Jordan Reyes", usedSeconds: 21 * H, matchCount: 12 },
@@ -375,34 +378,34 @@ const STATES: Record<string, State> = {
     label: "Settings › Plan — Free",
     page: PAGE_FREE,
   },
-  "plan-coach": {
+  "plan-player": {
     kind: "page",
-    label: "Settings › Plan — Coach, monthly",
-    page: PAGE_COACH,
+    label: "Settings › Plan — Player, monthly",
+    page: PAGE_PLAYER,
   },
-  "plan-coach-pro": {
+  "plan-player-pro": {
     kind: "page",
-    label: "Settings › Plan — Coach Pro",
-    page: PAGE_COACH_PRO,
+    label: "Settings › Plan — Player Pro",
+    page: PAGE_PLAYER_PRO,
   },
   "plan-past-due": {
     kind: "page",
-    label: "Settings › Plan — Coach, the last payment failed",
+    label: "Settings › Plan — Player, the last payment failed",
     page: PAGE_PAST_DUE,
   },
-  "plan-coach-pro-change": {
+  "plan-player-pro-change": {
     kind: "page",
-    label: "MOCK — Settings › Plan, Coach Pro with a quiet Change plan",
+    label: "MOCK — Settings › Plan, Player Pro with a quiet Change plan",
     page: { ...PAGE_PRO_FEB, mock: { kind: "change-plan", change: MOVE_DOWN } },
   },
   "plan-scheduled": {
     kind: "page",
-    label: "MOCK — Settings › Plan, a move to Coach waiting for Feb 14",
+    label: "MOCK — Settings › Plan, a move to Player waiting for Feb 14",
     page: { ...PAGE_PRO_FEB, mock: { kind: "scheduled", change: MOVE_DOWN } },
   },
   choose: {
     kind: "dialog",
-    label: "Dialog — Choose a plan (first month half off)",
+    label: "Dialog — Choose a plan (30% off the first month)",
     page: PAGE_FREE,
     mode: { kind: "choose" },
     account: ACCOUNT_FREE,
@@ -410,9 +413,9 @@ const STATES: Record<string, State> = {
   "choose-yearly": {
     kind: "dialog",
     label:
-      "Dialog — Choose a plan, arriving with ?plan=coach-pro&period=yearly",
+      "Dialog — Choose a plan, arriving with ?plan=player-pro&period=yearly",
     page: PAGE_FREE,
-    mode: { kind: "choose", plan: "coach-pro", period: "yearly" },
+    mode: { kind: "choose", plan: "player-pro", period: "yearly" },
     account: ACCOUNT_FREE,
   },
   "choose-returning": {
@@ -429,12 +432,12 @@ const STATES: Record<string, State> = {
     mode: { kind: "hours" },
     account: ACCOUNT_FREE,
   },
-  "hours-coach": {
+  "hours-player": {
     kind: "dialog",
-    label: "Dialog — Buy hours, Coach",
-    page: PAGE_COACH,
+    label: "Dialog — Buy hours, Player",
+    page: PAGE_PLAYER,
     mode: { kind: "hours" },
-    account: ACCOUNT_COACH,
+    account: ACCOUNT_PLAYER,
   },
   "paywall-free": {
     kind: "dialog",
@@ -444,68 +447,68 @@ const STATES: Record<string, State> = {
     account: ACCOUNT_FREE,
     wizard: true,
   },
-  "paywall-coach": {
+  "paywall-player": {
     kind: "dialog",
-    label: "Dialog — Upload paywall, Coach out of hours",
-    page: PAGE_COACH,
+    label: "Dialog — Upload paywall, Player out of hours",
+    page: PAGE_PLAYER,
     mode: { kind: "paywall", neededSeconds: NEEDED },
-    account: ACCOUNT_COACH_SPENT,
+    account: ACCOUNT_PLAYER_SPENT,
     preview: PREVIEW_HOURS,
     wizard: true,
   },
-  "paywall-coach-pro": {
+  "paywall-player-pro": {
     kind: "dialog",
-    label: "Dialog — Upload paywall, Coach Pro out of hours",
-    page: PAGE_COACH_PRO,
+    label: "Dialog — Upload paywall, Player Pro out of hours",
+    page: PAGE_PLAYER_PRO,
     mode: { kind: "paywall", neededSeconds: NEEDED },
-    account: ACCOUNT_COACH_PRO_SPENT,
+    account: ACCOUNT_PLAYER_PRO_SPENT,
     wizard: true,
   },
   upgrade: {
     kind: "dialog",
     label: "Dialog — Upgrade (credit by days)",
-    page: PAGE_COACH,
+    page: PAGE_PLAYER,
     mode: { kind: "upgrade" },
-    account: ACCOUNT_COACH,
+    account: ACCOUNT_PLAYER,
     preview: PREVIEW_DAYS,
   },
   "upgrade-hours": {
     kind: "dialog",
     label: "Dialog — Upgrade (credit by hours)",
-    page: PAGE_COACH,
+    page: PAGE_PLAYER,
     mode: { kind: "upgrade" },
-    account: ACCOUNT_COACH_SPENT,
+    account: ACCOUNT_PLAYER_SPENT,
     preview: PREVIEW_HOURS,
   },
   "upgrade-loading": {
     kind: "dialog",
     label: "Dialog — Upgrade, the price still loading",
-    page: PAGE_COACH,
+    page: PAGE_PLAYER,
     mode: { kind: "upgrade" },
-    account: ACCOUNT_COACH,
+    account: ACCOUNT_PLAYER,
     preview: { status: "loading" },
   },
   "upgrade-refused": {
     kind: "dialog",
     label: "Dialog — Upgrade, refused (card needs updating, quote kept)",
-    page: PAGE_COACH,
+    page: PAGE_PLAYER,
     mode: { kind: "upgrade" },
-    account: ACCOUNT_COACH,
+    account: ACCOUNT_PLAYER,
     // The quote stays on screen; only the sentence is added.
     preview: PREVIEW_DAYS,
     refusal: "Update your card before upgrading.",
   },
   "pay-yearly": {
     kind: "dialog",
-    label: "Dialog — Pay yearly (Coach, monthly → yearly)",
-    page: PAGE_COACH,
+    label: "Dialog — Pay yearly (Player, monthly → yearly)",
+    page: PAGE_PLAYER,
     mode: { kind: "yearly" },
-    account: ACCOUNT_COACH,
+    account: ACCOUNT_PLAYER,
     preview: PREVIEW_YEARLY,
   },
   "paywall-past-due": {
     kind: "dialog",
-    label: "Dialog — Upload paywall, Coach whose last payment failed",
+    label: "Dialog — Upload paywall, Player whose last payment failed",
     page: PAGE_PAST_DUE,
     mode: { kind: "paywall", neededSeconds: NEEDED },
     account: ACCOUNT_PAST_DUE,
@@ -513,7 +516,7 @@ const STATES: Record<string, State> = {
   },
   downgrade: {
     kind: "dialog",
-    label: "MOCK — Dialog, move down to Coach at renewal",
+    label: "MOCK — Dialog, move down to Player at renewal",
     page: { ...PAGE_PRO_FEB, mock: { kind: "change-plan", change: MOVE_DOWN } },
     mode: { kind: "change", change: MOVE_DOWN },
     account: ACCOUNT_PRO_FEB,
@@ -521,9 +524,9 @@ const STATES: Record<string, State> = {
   "downgrade-monthly": {
     kind: "dialog",
     label: "MOCK — Dialog, yearly → monthly at the year's renewal",
-    page: PAGE_COACH_YEAR,
+    page: PAGE_PLAYER_YEAR,
     mode: { kind: "change", change: PAY_MONTHLY },
-    account: ACCOUNT_COACH_YEAR,
+    account: ACCOUNT_PLAYER_YEAR,
   },
   pending: {
     kind: "dialog",
@@ -538,16 +541,16 @@ const STATES: Record<string, State> = {
     label: "Upload wizard — file step, Free with no hours",
     plan: "free",
   },
-  "file-coach": {
+  "file-player": {
     kind: "file",
     label:
-      "Upload wizard — file step, Coach with a video longer than what's left",
-    plan: "coach",
+      "Upload wizard — file step, Player with a video longer than what's left",
+    plan: "player",
   },
   "file-past-due": {
     kind: "file",
-    label: "Upload wizard — file step, Coach whose last payment failed",
-    plan: "coach",
+    label: "Upload wizard — file step, Player whose last payment failed",
+    plan: "player",
     pastDue: true,
   },
   "header-pill": {
@@ -560,7 +563,7 @@ const STATES: Record<string, State> = {
   },
   usage: {
     kind: "usage",
-    label: "Settings › Usage — the personal card, Coach and Free",
+    label: "Settings › Usage — the personal card, Player and Free",
   },
   "team-hours": {
     kind: "team-hours",
@@ -572,12 +575,12 @@ const STATES: Record<string, State> = {
   },
   "email-low": {
     kind: "email",
-    label: "Email — 80% used, Coach",
+    label: "Email — 80% used, Player",
     email: "low",
   },
   "email-spent": {
     kind: "email",
-    label: "Email — used up, Coach",
+    label: "Email — used up, Player",
     email: "spent",
   },
   "email-season-low": {
@@ -629,7 +632,7 @@ export function Plans2027Preview({
       <div className="mt-6">
         <PlanSettings
           {...chosen.page}
-          preview={chosen.page.plan === "coach" ? PREVIEW_DAYS : undefined}
+          preview={chosen.page.plan === "player" ? PREVIEW_DAYS : undefined}
           yearlyPreview={PREVIEW_YEARLY}
         />
       </div>
@@ -697,11 +700,11 @@ function FileStepState({
   plan,
   pastDue = false,
 }: {
-  plan: "free" | "coach";
+  plan: "free" | "player";
   pastDue?: boolean;
 }) {
-  const withFile = plan === "coach" && !pastDue;
-  const remaining = plan === "coach" && !pastDue ? 23 * M : 0;
+  const withFile = plan === "player" && !pastDue;
+  const remaining = plan === "player" && !pastDue ? 23 * M : 0;
   const note = fileStepHoursNote({
     enabled: true,
     plan,
@@ -711,7 +714,7 @@ function FileStepState({
   });
   const suffix =
     meterSuffix({
-      allowanceKind: plan === "coach" ? "plan" : "none",
+      allowanceKind: plan === "player" ? "plan" : "none",
       resetsOn: pastDue ? null : RESETS_ON,
       pastDue,
     }) ?? "";
@@ -724,10 +727,10 @@ function FileStepState({
       description={STEP_CONFIG_PROCESSING.file?.description}
       back={noop}
       meter={
-        plan === "coach" && !pastDue ? (
+        plan === "player" && !pastDue ? (
           <FooterMeter
             remainingSeconds={remaining}
-            capSeconds={planHoursSeconds("coach")}
+            capSeconds={planHoursSeconds("player")}
             suffix={suffix}
             freeWord="plan"
             creditWord="extra"
@@ -851,13 +854,13 @@ function PillStates({ label }: { label: string }) {
       },
     },
     {
-      name: "Coach",
-      workspace: WS_COACH,
+      name: "Player",
+      workspace: WS_PLAYER,
       hours: { remainingSeconds: 3 * H + 12 * M, capSeconds: 5 * H },
     },
     {
-      name: "Coach, with extra hours",
-      workspace: WS_COACH,
+      name: "Player, with extra hours",
+      workspace: WS_PLAYER,
       hours: {
         remainingSeconds: 3 * H + 12 * M,
         capSeconds: 5 * H,
@@ -866,34 +869,40 @@ function PillStates({ label }: { label: string }) {
       },
     },
     {
-      name: "Coach, running low",
-      workspace: WS_COACH,
+      name: "Player, running low",
+      workspace: WS_PLAYER,
       hours: { remainingSeconds: 48 * M, capSeconds: 5 * H },
     },
     {
-      name: "Coach, out of hours",
-      workspace: WS_COACH,
+      name: "Player, out of hours",
+      workspace: WS_PLAYER,
       hours: { remainingSeconds: 0, capSeconds: 5 * H },
     },
     {
-      name: "Coach, the last payment failed",
-      workspace: WS_COACH_PAST_DUE,
+      name: "Player, the last payment failed",
+      workspace: WS_PLAYER_PAST_DUE,
       hours: { remainingSeconds: 0, capSeconds: 0 },
     },
     {
-      name: "Coach Pro",
-      workspace: WS_COACH_PRO,
+      name: "Player Pro",
+      workspace: WS_PLAYER_PRO,
       hours: { remainingSeconds: 7 * H + 40 * M, capSeconds: 10 * H },
     },
     {
       name: "A team on Program, spring",
       workspace: WS_SEASON,
-      hours: { remainingSeconds: 142 * H, capSeconds: 200 * H },
+      hours: {
+        remainingSeconds: (PROGRAM_SPRING_H - 58) * H,
+        capSeconds: PROGRAM_SPRING_H * H,
+      },
     },
     {
       name: "A team on Elite, full year",
       workspace: WS_FULL_YEAR,
-      hours: { remainingSeconds: 310 * H, capSeconds: 400 * H },
+      hours: {
+        remainingSeconds: (ELITE_YEAR_H - 90) * H,
+        capSeconds: ELITE_YEAR_H * H,
+      },
     },
     {
       name: "A pilot team",
@@ -905,8 +914,8 @@ function PillStates({ label }: { label: string }) {
       workspace: WS_NO_PLAN,
       hours: { remainingSeconds: 0, capSeconds: 0 },
     },
-    { name: "Loading", workspace: WS_COACH, hours: "loading" },
-    { name: "The read failed", workspace: WS_COACH, hours: null },
+    { name: "Loading", workspace: WS_PLAYER, hours: "loading" },
+    { name: "The read failed", workspace: WS_PLAYER, hours: null },
   ];
   return (
     <Frame label={label}>
@@ -931,10 +940,10 @@ function HomeStates({ label }: { label: string }) {
   const personal = { owner: "Jordan Reyes", today: TODAY };
   const cards = [
     {
-      name: "Coach",
+      name: "Player",
       view: homeCardView({
         ...personal,
-        standing: standing(WS_COACH),
+        standing: standing(WS_PLAYER),
         usedSeconds: 1 * H + 48 * M,
         capSeconds: 5 * H,
         creditSeconds: 1 * H,
@@ -942,10 +951,10 @@ function HomeStates({ label }: { label: string }) {
       }),
     },
     {
-      name: "Coach, the last payment failed",
+      name: "Player, the last payment failed",
       view: homeCardView({
         ...personal,
-        standing: standing(WS_COACH_PAST_DUE),
+        standing: standing(WS_PLAYER_PAST_DUE),
         usedSeconds: 0,
         capSeconds: 0,
         analyzed: 6,
@@ -969,7 +978,7 @@ function HomeStates({ label }: { label: string }) {
         owner: "Northfield University",
         programId: PROGRAM_ID,
         usedSeconds: 58 * H,
-        capSeconds: 200 * H,
+        capSeconds: PROGRAM_SPRING_H * H,
         analyzed: 31,
         today: TODAY,
       }),
@@ -1005,7 +1014,7 @@ function HomeStates({ label }: { label: string }) {
         owner: "Northfield University",
         programId: PROGRAM_ID,
         usedSeconds: 90 * H,
-        capSeconds: 400 * H,
+        capSeconds: ELITE_YEAR_H * H,
         analyzed: 52,
         today: TODAY,
       }),
@@ -1028,10 +1037,10 @@ function UsageStates({ label }: { label: string }) {
   return (
     <Frame label={label}>
       <div className="flex max-w-[640px] flex-col gap-8">
-        <Case name="Coach, two matches this month, an extra hour">
+        <Case name="Player, two matches this month, an extra hour">
           <PersonalUsageCard
             view={usageCardView({
-              standing: standing(WS_COACH),
+              standing: standing(WS_PLAYER),
               usedSeconds: 1 * H + 48 * M,
               capSeconds: 5 * H,
               creditSeconds: 1 * H,
@@ -1040,10 +1049,10 @@ function UsageStates({ label }: { label: string }) {
             })}
           />
         </Case>
-        <Case name="Coach, the last payment failed">
+        <Case name="Player, the last payment failed">
           <PersonalUsageCard
             view={usageCardView({
-              standing: standing(WS_COACH_PAST_DUE),
+              standing: standing(WS_PLAYER_PAST_DUE),
               usedSeconds: 0,
               capSeconds: 0,
               creditSeconds: 0,
@@ -1079,7 +1088,11 @@ function TeamHoursStates({ label }: { label: string }) {
     {
       name: "Elite, full year",
       workspace: WS_FULL_YEAR,
-      usage: { ...TEAM_USAGE, usedSeconds: 90 * H, capSeconds: 400 * H },
+      usage: {
+        ...TEAM_USAGE,
+        usedSeconds: 90 * H,
+        capSeconds: ELITE_YEAR_H * H,
+      },
     },
     {
       name: "A pilot",
@@ -1121,8 +1134,8 @@ function TeamMeterStates({ label }: { label: string }) {
     {
       name: "Program, spring",
       workspace: WS_SEASON,
-      left: 142 * H,
-      cap: 200 * H,
+      left: (PROGRAM_SPRING_H - 58) * H,
+      cap: PROGRAM_SPRING_H * H,
     },
     { name: "A pilot", workspace: WS_PILOT, left: 61.5 * H, cap: 75 * H },
   ];

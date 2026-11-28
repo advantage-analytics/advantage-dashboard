@@ -66,11 +66,11 @@ function world(
   return { db, api, send, stripeNow, row: () => db.user("u1")! };
 }
 
-/** A user already on Coach monthly, as the first events leave them. */
-const onCoach = (over = {}) =>
+/** A user already on Player monthly, as the first events leave them. */
+const onPlayer = (over = {}) =>
   fakeUser({
     id: "u1",
-    plan: "coach",
+    plan: "player",
     plan_period: "monthly",
     plan_status: "active",
     plan_period_start: "2027-04-01T00:00:00.000Z",
@@ -89,7 +89,12 @@ const planSession = (over: Partial<Stripe.Checkout.Session> = {}) =>
     customer: "cus_1",
     subscription: "sub_1",
     client_reference_id: "u1",
-    metadata: { kind: "plan", plan: "coach", period: "monthly", user_id: "u1" },
+    metadata: {
+      kind: "plan",
+      plan: "player",
+      period: "monthly",
+      user_id: "u1",
+    },
     ...over,
   }) as Stripe.Checkout.Session;
 
@@ -109,7 +114,7 @@ test.describe("a subscription's life", () => {
       body: { received: true, outcome: "synced" },
     });
     const written = {
-      plan: "coach",
+      plan: "player",
       plan_period: "monthly",
       plan_status: "active",
       plan_period_start: "2027-04-01T00:00:00.000Z",
@@ -136,19 +141,19 @@ test.describe("a subscription's life", () => {
       fakeSubscription({ metadata: { user_id: "u1" } }),
     );
     expect(row()).toMatchObject({
-      plan: "coach",
+      plan: "player",
       stripe_customer_id: "cus_1",
       stripe_subscription_id: "sub_1",
     });
   });
 
   test("renew: the paid invoice moves the period on", async () => {
-    const { send, stripeNow, row } = world({}, onCoach());
+    const { send, stripeNow, row } = world({}, onPlayer());
     stripeNow({ start: "2027-05-01T00:00:00Z", end: "2027-06-01T00:00:00Z" });
 
     await send("invoice.paid", invoice());
     expect(row()).toMatchObject({
-      plan: "coach",
+      plan: "player",
       plan_status: "active",
       plan_period_start: "2027-05-01T00:00:00.000Z",
       plan_period_end: "2027-06-01T00:00:00.000Z",
@@ -156,7 +161,7 @@ test.describe("a subscription's life", () => {
   });
 
   test("upgrade: the new price and the new period", async () => {
-    const { send, stripeNow, row } = world({}, onCoach());
+    const { send, stripeNow, row } = world({}, onPlayer());
     const pro = {
       price: "price_pro_m",
       start: "2027-04-16T00:00:00Z",
@@ -166,7 +171,7 @@ test.describe("a subscription's life", () => {
 
     await send("customer.subscription.updated", fakeSubscription(pro));
     expect(row()).toMatchObject({
-      plan: "coach-pro",
+      plan: "player-pro",
       plan_period: "monthly",
       plan_period_start: "2027-04-16T00:00:00.000Z",
       plan_period_end: "2027-05-16T00:00:00.000Z",
@@ -180,7 +185,7 @@ test.describe("a subscription's life", () => {
     });
     await send("checkout.session.completed", planSession());
     expect(row()).toMatchObject({
-      plan: "coach-pro",
+      plan: "player-pro",
       plan_period: "yearly",
       plan_period_end: "2028-04-01T00:00:00.000Z",
     });
@@ -188,7 +193,10 @@ test.describe("a subscription's life", () => {
 
   test("a scheduled downgrade changes nothing until the renewal it is for", async () => {
     const pro = { price: "price_pro_m" };
-    const { send, stripeNow, row } = world(pro, onCoach({ plan: "coach-pro" }));
+    const { send, stripeNow, row } = world(
+      pro,
+      onPlayer({ plan: "player-pro" }),
+    );
 
     // Scheduled: the subscription gains a schedule, the price is unchanged.
     stripeNow({ ...pro, schedule: "sub_sched_1" });
@@ -196,24 +204,24 @@ test.describe("a subscription's life", () => {
       "customer.subscription.updated",
       fakeSubscription({ ...pro, schedule: "sub_sched_1" }),
     );
-    expect(row()).toMatchObject({ plan: "coach-pro", plan_status: "active" });
+    expect(row()).toMatchObject({ plan: "player-pro", plan_status: "active" });
 
-    // Renewal: the schedule's next phase puts the Coach price on it.
+    // Renewal: the schedule's next phase puts the Player price on it.
     const renewed = {
-      price: "price_coach_m",
+      price: "price_player_m",
       start: "2027-05-01T00:00:00Z",
       end: "2027-06-01T00:00:00Z",
     };
     stripeNow(renewed);
     await send("customer.subscription.updated", fakeSubscription(renewed));
     expect(row()).toMatchObject({
-      plan: "coach",
+      plan: "player",
       plan_period_start: "2027-05-01T00:00:00.000Z",
     });
   });
 
   test("cancel at period end: the plan stays until the period ends", async () => {
-    const { send, stripeNow, row } = world({}, onCoach());
+    const { send, stripeNow, row } = world({}, onPlayer());
 
     stripeNow({ cancel_at_period_end: true });
     await send(
@@ -221,7 +229,7 @@ test.describe("a subscription's life", () => {
       fakeSubscription({ cancel_at_period_end: true }),
     );
     expect(row()).toMatchObject({
-      plan: "coach",
+      plan: "player",
       plan_status: "active",
       plan_period_end: "2027-05-01T00:00:00.000Z",
     });
@@ -240,32 +248,32 @@ test.describe("a subscription's life", () => {
   });
 
   test("payment failed, then recovered: the plan never left", async () => {
-    const { send, stripeNow, row } = world({}, onCoach());
+    const { send, stripeNow, row } = world({}, onPlayer());
     const may = { start: "2027-05-01T00:00:00Z", end: "2027-06-01T00:00:00Z" };
 
     stripeNow({ ...may, status: "past_due" });
     await send("invoice.payment_failed", invoice());
-    expect(row()).toMatchObject({ plan: "coach", plan_status: "past_due" });
+    expect(row()).toMatchObject({ plan: "player", plan_status: "past_due" });
 
     // Stripe's retries each say the same thing.
     await send("invoice.payment_failed", invoice(), "evt_retry_2");
-    expect(row()).toMatchObject({ plan: "coach", plan_status: "past_due" });
+    expect(row()).toMatchObject({ plan: "player", plan_status: "past_due" });
 
     stripeNow(may);
     await send("invoice.paid", invoice());
     expect(row()).toMatchObject({
-      plan: "coach",
+      plan: "player",
       plan_status: "active",
       plan_period_start: "2027-05-01T00:00:00.000Z",
     });
   });
 
   test("payment failed, then the retries ran out: Free", async () => {
-    const { send, stripeNow, row } = world({}, onCoach());
+    const { send, stripeNow, row } = world({}, onPlayer());
 
     stripeNow({ status: "past_due" });
     await send("invoice.payment_failed", invoice());
-    expect(row().plan).toBe("coach");
+    expect(row().plan).toBe("player");
 
     stripeNow({ status: "canceled" });
     await send(
@@ -276,7 +284,7 @@ test.describe("a subscription's life", () => {
   });
 
   test("retries set to mark the subscription unpaid: Free too, and it can come back", async () => {
-    const { send, stripeNow, row } = world({}, onCoach());
+    const { send, stripeNow, row } = world({}, onPlayer());
     stripeNow({ status: "unpaid" });
     await send(
       "customer.subscription.updated",
@@ -290,34 +298,34 @@ test.describe("a subscription's life", () => {
 
     stripeNow({});
     await send("invoice.paid", invoice());
-    expect(row()).toMatchObject({ plan: "coach", plan_status: "active" });
+    expect(row()).toMatchObject({ plan: "player", plan_status: "active" });
   });
 });
 
 test.describe("delivery is not orderly", () => {
   test("a duplicate event writes the same row again", async () => {
-    const { send, row } = world({ price: "price_pro_m" }, onCoach());
+    const { send, row } = world({ price: "price_pro_m" }, onPlayer());
     const event = fakeSubscription({ price: "price_pro_m" });
     await send("customer.subscription.updated", event, "evt_same");
     const once = { ...row() };
     await send("customer.subscription.updated", event, "evt_same");
     expect(row()).toEqual(once);
-    expect(once.plan).toBe("coach-pro");
+    expect(once.plan).toBe("player-pro");
   });
 
   test("a stale event cannot undo a newer state", async () => {
-    // Stripe now holds Coach Pro; an older `updated` still says Coach.
-    const { send, row } = world({ price: "price_pro_m" }, onCoach());
+    // Stripe now holds Player Pro; an older `updated` still says Player.
+    const { send, row } = world({ price: "price_pro_m" }, onPlayer());
     await send("customer.subscription.updated", fakeSubscription({}));
-    expect(row().plan).toBe("coach-pro");
+    expect(row().plan).toBe("player-pro");
 
     // And an older "payment failed" for a subscription that has since paid.
     await send("invoice.payment_failed", invoice());
-    expect(row()).toMatchObject({ plan: "coach-pro", plan_status: "active" });
+    expect(row()).toMatchObject({ plan: "player-pro", plan_status: "active" });
   });
 
   test("`deleted` before `created`: the end state is still the end", async () => {
-    const { send, row } = world({ status: "canceled" }, onCoach());
+    const { send, row } = world({ status: "canceled" }, onPlayer());
     await send(
       "customer.subscription.deleted",
       fakeSubscription({ status: "canceled" }),
@@ -330,7 +338,7 @@ test.describe("delivery is not orderly", () => {
   test("a late `deleted` for a replaced subscription does not end the new one", async () => {
     const { send, row, api } = world(
       { id: "sub_2", price: "price_pro_m" },
-      onCoach({ plan: "coach-pro", stripe_subscription_id: "sub_2" }),
+      onPlayer({ plan: "player-pro", stripe_subscription_id: "sub_2" }),
     );
     const old = fakeSubscription({ id: "sub_1", status: "canceled" });
     api.subscriptions.set("sub_1", old);
@@ -338,14 +346,14 @@ test.describe("delivery is not orderly", () => {
     const answer = await send("customer.subscription.deleted", old);
     expect(answer.body).toEqual({ received: true, outcome: "superseded" });
     expect(row()).toMatchObject({
-      plan: "coach-pro",
+      plan: "player-pro",
       plan_status: "active",
       stripe_subscription_id: "sub_2",
     });
   });
 
   test("a deleted subscription Stripe no longer returns: the event's copy is used", async () => {
-    const { send, row, api } = world({}, onCoach());
+    const { send, row, api } = world({}, onPlayer());
     api.subscriptions.delete("sub_1");
     await send(
       "customer.subscription.deleted",
@@ -357,7 +365,7 @@ test.describe("delivery is not orderly", () => {
 
 test.describe("what changes nothing", () => {
   test("a price that maps to no plan: nothing written, and it is logged", async () => {
-    const { send, row, db } = world({ price: "price_mystery" }, onCoach());
+    const { send, row, db } = world({ price: "price_mystery" }, onPlayer());
     const before = { ...row() };
 
     for (const [type, object] of [
@@ -439,7 +447,7 @@ test.describe("what changes nothing", () => {
   });
 
   test("an invoice with no subscription (a college's) is not ours", async () => {
-    const { send, api, db } = world({}, onCoach());
+    const { send, api, db } = world({}, onPlayer());
     const answer = await send("invoice.paid", invoice(null));
     expect(answer.body).toEqual({ received: true, skipped: "no_subscription" });
     expect(api.calls).toEqual([]);
@@ -458,14 +466,14 @@ test.describe("what changes nothing", () => {
 
 test.describe("when a retry can help, Stripe is asked to retry", () => {
   test("the row cannot be written", async () => {
-    const { send, db } = world({}, onCoach());
+    const { send, db } = world({}, onPlayer());
     db.fail.write.users = { code: "42703", message: "no such column" };
     const answer = await send("invoice.paid", invoice());
     expect(answer.status).toBe(500);
   });
 
   test("Stripe cannot be read", async () => {
-    const { send, api, row } = world({}, onCoach());
+    const { send, api, row } = world({}, onPlayer());
     api.fail["subscriptions.retrieve"] = () => new Error("stripe is down");
     for (const [type, object] of [
       ["customer.subscription.updated", fakeSubscription({})],
@@ -473,7 +481,7 @@ test.describe("when a retry can help, Stripe is asked to retry", () => {
     ] as const) {
       expect((await send(type, object)).status).toBe(500);
     }
-    expect(row().plan).toBe("coach");
+    expect(row().plan).toBe("player");
   });
 });
 
@@ -713,12 +721,12 @@ test.describe("confirming a plan", () => {
       ok: true,
       value: {
         kind: "plan",
-        plan: "coach",
+        plan: "player",
         period: "monthly",
         status: "active",
       },
     });
-    expect(db.user("u1")?.plan).toBe("coach");
+    expect(db.user("u1")?.plan).toBe("player");
   });
 
   test("someone else's session reads as not found, and writes nothing", async () => {
@@ -777,7 +785,7 @@ test.describe("confirming a plan", () => {
  * must never rewrite the row: it is cancelled and refunded instead.
  */
 test.describe("one subscription per user", () => {
-  /** On Coach (`sub_1`, live), and a second, paid, Coach Pro `sub_2`. */
+  /** On Player (`sub_1`, live), and a second, paid, Player Pro `sub_2`. */
   function twice(
     over: {
       first?: Parameters<typeof fakeSubscription>[0];
@@ -790,7 +798,7 @@ test.describe("one subscription per user", () => {
       latest_invoice: "in_2",
       metadata: { user_id: "u1" },
     });
-    const db = fakeAdmin({ users: [over.user ?? onCoach()] });
+    const db = fakeAdmin({ users: [over.user ?? onPlayer()] });
     const api = fakeStripe({
       subscriptions: [
         fakeSubscription({ latest_invoice: "in_1", ...over.first }),
@@ -823,7 +831,7 @@ test.describe("one subscription per user", () => {
       body: { received: true, outcome: "duplicate" },
     });
 
-    expect(row()).toEqual(onCoach());
+    expect(row()).toEqual(onPlayer());
     expect(db.writes).toEqual([]);
 
     expect(api.argsOf("subscriptions.update")).toEqual([
@@ -894,7 +902,7 @@ test.describe("one subscription per user", () => {
     }
     expect(api.refunds).toEqual([]);
     expect(api.names()).not.toContain("refunds.create");
-    expect(row()).toEqual(onCoach());
+    expect(row()).toEqual(onPlayer());
     expect(db.writes).toEqual([]);
   });
 
@@ -934,7 +942,7 @@ test.describe("one subscription per user", () => {
     expect(logged.map((line) => line[0])).toEqual([
       "[billing] DUPLICATE SUBSCRIPTION NOT MARKED",
     ]);
-    expect(row()).toEqual(onCoach());
+    expect(row()).toEqual(onPlayer());
     expect(db.writes).toEqual([]);
 
     api.fail["subscriptions.update"] = undefined;
@@ -975,7 +983,7 @@ test.describe("one subscription per user", () => {
     });
     await send("customer.subscription.deleted", api.subscriptions.get("sub_2"));
 
-    expect(row()).toEqual(onCoach());
+    expect(row()).toEqual(onPlayer());
     expect(db.writes).toEqual([]);
     expect(count("subscriptions.cancel")).toBe(1);
     expect(count("refunds.create")).toBe(1);
@@ -985,7 +993,7 @@ test.describe("one subscription per user", () => {
     // And the plan they kept still syncs as before.
     await send("invoice.paid", invoice("sub_1"));
     expect(row()).toMatchObject({
-      plan: "coach",
+      plan: "player",
       plan_status: "active",
       stripe_subscription_id: "sub_1",
     });
@@ -1000,7 +1008,7 @@ test.describe("one subscription per user", () => {
       const answer = await send("checkout.session.completed", secondSession());
       expect(answer.body).toEqual({ received: true, outcome: "synced" });
       expect(row()).toMatchObject({
-        plan: "coach-pro",
+        plan: "player-pro",
         stripe_subscription_id: "sub_2",
       });
       expect(api.names()).not.toContain("subscriptions.cancel");
@@ -1022,7 +1030,7 @@ test.describe("one subscription per user", () => {
 
     const answer = await send("checkout.session.completed", secondSession());
     expect(answer.status).toBe(500);
-    expect(row()).toEqual(onCoach());
+    expect(row()).toEqual(onPlayer());
     expect(db.writes).toEqual([]);
     expect(api.names()).not.toContain("subscriptions.cancel");
     expect(api.refunds).toEqual([]);
@@ -1037,7 +1045,7 @@ test.describe("one subscription per user", () => {
       status: 500,
       body: { error: "Duplicate subscription not settled" },
     });
-    expect(row()).toEqual(onCoach());
+    expect(row()).toEqual(onPlayer());
     expect(db.writes).toEqual([]);
     expect(api.refunds).toEqual([]);
     expect(logged.map((line) => line[0])).toEqual([
@@ -1054,7 +1062,7 @@ test.describe("one subscription per user", () => {
     expect(retried.body).toEqual({ received: true, outcome: "duplicate" });
     expect(api.subscriptions.get("sub_2")?.status).toBe("canceled");
     expect(count("refunds.create")).toBe(1);
-    expect(row()).toEqual(onCoach());
+    expect(row()).toEqual(onPlayer());
   });
 
   test("the refund fails: loud, no overwrite, and any later event makes it — once", async () => {
@@ -1086,7 +1094,7 @@ test.describe("one subscription per user", () => {
     await send("checkout.session.completed", secondSession());
     expect(api.refunds).toHaveLength(1);
     expect(count("subscriptions.cancel")).toBe(1);
-    expect(row()).toEqual(onCoach());
+    expect(row()).toEqual(onPlayer());
     expect(db.writes).toEqual([]);
   });
 
@@ -1116,7 +1124,7 @@ test.describe("one subscription per user", () => {
 
     const kept = row().stripe_subscription_id as string;
     const undone = kept === "sub_1" ? "sub_2" : "sub_1";
-    expect(row().plan).toBe(kept === "sub_1" ? "coach" : "coach-pro");
+    expect(row().plan).toBe(kept === "sub_1" ? "player" : "player-pro");
     expect(api.subscriptions.get(kept)?.status).toBe("active");
     expect(api.subscriptions.get(undone)?.status).toBe("canceled");
     expect(api.refunds.map((refund) => refund.charge)).toEqual([
@@ -1131,7 +1139,7 @@ test.describe("one subscription per user", () => {
     api.subscriptions.delete("sub_2");
     const answer = await send("customer.subscription.updated", second);
     expect(answer.body).toEqual({ received: true, outcome: "superseded" });
-    expect(row()).toEqual(onCoach());
+    expect(row()).toEqual(onPlayer());
     expect(db.writes).toEqual([]);
     expect(api.names()).not.toContain("subscriptions.cancel");
     expect(api.refunds).toEqual([]);
@@ -1152,7 +1160,7 @@ test.describe("one subscription per user", () => {
         : [result.error.code, result.error.status, result.error.detail],
     ).toEqual(["already_subscribed", 409, "duplicate_subscription"]);
     expect(result.ok ? "" : result.error.message).toContain("refunded");
-    expect(row()).toEqual(onCoach());
+    expect(row()).toEqual(onPlayer());
     expect(api.refunds).toHaveLength(1);
   });
 });

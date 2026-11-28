@@ -30,7 +30,7 @@ export type BillingRefusalCode =
   /** No subscription to upgrade, open a portal for, or change. */
   | "no_subscription"
   /**
-   * Not one of the two changes charged today (Coach → Coach Pro on the same
+   * Not one of the two changes charged today (Player → Player Pro on the same
    * period, monthly → yearly on the same plan) on a healthy subscription.
    */
   | "not_an_upgrade"

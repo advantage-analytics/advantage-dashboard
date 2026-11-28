@@ -101,16 +101,16 @@ const FREE: CheckoutAccount = {
   resetsOn: null,
   firstMonthEligible: true,
 };
-const COACH: CheckoutAccount = {
-  plan: "coach",
+const PLAYER: CheckoutAccount = {
+  plan: "player",
   period: "monthly",
   planLeftSeconds: 3 * H + 12 * M,
   extraSeconds: 1 * H,
   resetsOn: "May 14",
   firstMonthEligible: false,
 };
-const COACH_SPENT: CheckoutAccount = {
-  ...COACH,
+const PLAYER_SPENT: CheckoutAccount = {
+  ...PLAYER,
   planLeftSeconds: 23 * M,
   extraSeconds: 0,
 };
@@ -120,13 +120,13 @@ function preview(planLeftSeconds: number): PreviewState {
     status: "ready",
     preview: {
       ...quoteUpgrade({
-        from: "coach",
-        to: "coach-pro",
+        from: "player",
+        to: "player-pro",
         period: "monthly",
         periodStart: new Date("2027-04-14T00:00:00Z"),
         periodEnd: new Date("2027-05-14T00:00:00Z"),
         now: new Date("2027-04-29T00:00:00Z"),
-        usedSeconds: planHoursSeconds("coach") - planLeftSeconds,
+        usedSeconds: planHoursSeconds("player") - planLeftSeconds,
       }),
       period: "monthly",
     },
@@ -178,22 +178,22 @@ const NEEDED: CheckoutMode = { kind: "paywall", neededSeconds: 1 * H + 52 * M };
 
 test("Choose a plan: the band, the pills, both plans with the full price struck through", () => {
   const html = draw({ kind: "choose" }, FREE);
-  expect(texts(html, /<h2[^>]*>(.*?)<\/h2>/g)).toEqual(["Start Coach."]);
+  expect(texts(html, /<h2[^>]*>(.*?)<\/h2>/g)).toEqual(["Start Player."]);
   // The figure carries full white and never wraps; the words step back.
   expect(html).toContain(
-    '<span class="whitespace-nowrap text-white tabular-nums">Coach</span>',
+    '<span class="whitespace-nowrap text-white tabular-nums">Player</span>',
   );
-  expect(html).toContain("Half off your first month");
-  expect(html).toContain("$75 today, then $150 a month");
+  expect(html).toContain("30% off your first month");
+  expect(html).toContain("$105 today, then $150 a month");
   expect(radios(html)).toEqual([
     "Monthly",
     "Yearly · 1 month free",
-    "Coach5h a month, about 3 matches$150$75then $150 a month",
-    "Coach Pro10h a month, about 5 matches$300$150then $300 a month",
+    "PlayerAbout 3 verified matches a month · 5 hours of match video · every match verified$150$105then $150 a month",
+    "Player ProAbout 6 verified matches a month · 10 hours of match video · every match verified$300$210then $300 a month",
   ]);
   expect(texts(html, /<s [^>]*>(.*?)<\/s>/g)).toEqual(["$150", "$300"]);
   expect(html).toContain("Not now");
-  expect(primary(html)).toEqual(["Continue to pay $75"]);
+  expect(primary(html)).toEqual(["Continue to pay $105"]);
   expect(html).toContain("See a sample report");
 });
 
@@ -203,12 +203,12 @@ test("Upload paywall, Free: the two plans, then extra hours for just this match"
     "This match needs 1h 52m.",
   ]);
   expect(radios(html)).toEqual([
-    "Coach5h a month, about 3 matches · Verified by Advantage$150$75then $150 a month",
-    "Coach Pro10h a month, about 5 matches · Verified by Advantage$300$150then $300 a month",
-    "2 extra hours$35 an hour · No plan · Last 12 months$70",
+    "PlayerAbout 3 verified matches a month · 5 hours of match video · every match verified$150$105then $150 a month",
+    "Player ProAbout 6 verified matches a month · 10 hours of match video · every match verified$300$210then $300 a month",
+    "2 extra hours$35 an hour (about $60 per extra match) · No plan · Last 12 months$70",
   ]);
   expect(html.indexOf("Or pay for just this match")).toBeGreaterThan(
-    html.indexOf("Coach Pro"),
+    html.indexOf("Player Pro"),
   );
   expect(html.indexOf("Or pay for just this match")).toBeLessThan(
     html.indexOf("2 extra hours"),
@@ -217,20 +217,20 @@ test("Upload paywall, Free: the two plans, then extra hours for just this match"
   expect(html).not.toContain("Yearly · 1 month free");
   expect(primary(html)).toEqual([
     "Shorten the trim instead",
-    "Pay $75 and send",
+    "Pay $105 and send",
   ]);
 });
 
 test("Upload paywall, a subscriber: extra hours, the upgrade, and the draft aside", () => {
-  const html = draw(NEEDED, COACH_SPENT, {
+  const html = draw(NEEDED, PLAYER_SPENT, {
     wizard: true,
     preview: preview(23 * M),
   });
-  expect(html).toContain("Coach · 23m left this month");
+  expect(html).toContain("Player · 23m left this month");
   expect(html).toContain("Hours reset May 14");
   expect(radios(html)).toEqual([
     "2 extra hoursCovers it, 31m to spare · Last 12 months$70$35 an hour",
-    "Move up to Coach Pro10 fresh hours today · $11.50 credit for your 23m$288.50then $300 a month",
+    "Move up to Player Pro10 fresh hours today · $11.50 credit for your 23m$288.50then $300 a month",
   ]);
   expect(html).toContain(
     "Or keep it as a draft and send it when your hours reset on May 14.",
@@ -240,22 +240,22 @@ test("Upload paywall, a subscriber: extra hours, the upgrade, and the draft asid
     "Pay $70 and send",
   ]);
   // No first-month offer is made to someone already subscribed.
-  expect(html).not.toContain("Half off");
+  expect(html).not.toContain("off your first month");
 });
 
-test("Upgrade: Coach Pro chosen, the current plan beneath it and not selectable", () => {
-  const html = draw({ kind: "upgrade" }, COACH, {
+test("Upgrade: Player Pro chosen, the current plan beneath it and not selectable", () => {
+  const html = draw({ kind: "upgrade" }, PLAYER, {
     preview: preview(3 * H + 12 * M),
   });
   expect(texts(html, /<h2[^>]*>(.*?)<\/h2>/g)).toEqual([
-    "Move up to Coach Pro.",
+    "Move up to Player Pro.",
   ]);
   // One radio: the plan being bought. The plan held is a row, not a choice.
   expect(radios(html)).toEqual([
-    "Coach Pro10 fresh hours today · $75 credit for your 15 days left$225then $300 a month",
+    "Player Pro10 fresh hours today · $75 credit for your 15 days left$225then $300 a month",
   ]);
   expect(html).toContain('aria-checked="true"');
-  expect(html).toMatch(/Coach<span[^>]*>Your plan<\/span>/);
+  expect(html).toMatch(/Player<span[^>]*>Your plan<\/span>/);
   expect(html).toContain(
     "15 days ($75) or 3h 12m of hours ($96). From today you're billed $300 on the 29th of each month, and your 1h of extra hours stays.",
   );
@@ -264,7 +264,7 @@ test("Upgrade: Coach Pro chosen, the current plan beneath it and not selectable"
 });
 
 test("Upgrade: bars while the price loads, and the refusal sentence when it cannot be priced", () => {
-  const loading = draw({ kind: "upgrade" }, COACH, {
+  const loading = draw({ kind: "upgrade" }, PLAYER, {
     preview: { status: "loading" },
   });
   expect(loading).toContain('role="status"');
@@ -272,7 +272,7 @@ test("Upgrade: bars while the price loads, and the refusal sentence when it cann
   expect(radios(loading)).toEqual([]);
   expect(loading).toMatch(/<button[^>]*disabled=""[^>]*>Continue to pay</);
 
-  const refused = draw({ kind: "upgrade" }, COACH, {
+  const refused = draw({ kind: "upgrade" }, PLAYER, {
     preview: {
       status: "failed",
       message: "Update your card before upgrading.",
@@ -285,11 +285,11 @@ test("Upgrade: bars while the price loads, and the refusal sentence when it cann
 });
 
 test("Upgrade: a refused charge keeps the quote, the amount and the button, and adds the sentence", () => {
-  const html = draw({ kind: "upgrade" }, COACH, {
+  const html = draw({ kind: "upgrade" }, PLAYER, {
     preview: preview(3 * H + 12 * M),
     refusal: "Update your card before upgrading.",
   });
-  expect(radios(html).join(" ")).toContain("Coach Pro");
+  expect(radios(html).join(" ")).toContain("Player Pro");
   expect(primary(html)).toEqual(["Continue to pay $225"]);
   expect(html).toContain("$225");
   expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Continue to pay/);
@@ -299,7 +299,7 @@ test("Upgrade: a refused charge keeps the quote, the amount and the button, and 
 });
 
 test("Extra hours: quick picks and one row, never a plan", () => {
-  const html = draw({ kind: "hours" }, COACH);
+  const html = draw({ kind: "hours" }, PLAYER);
   expect(texts(html, /<h2[^>]*>(.*?)<\/h2>/g)).toEqual(["Add extra hours."]);
   expect(radios(html)).toEqual(["1h", "2h", "5h", "10h"]);
   expect(html).toContain("1 extra hour");
@@ -314,19 +314,19 @@ test("a payment that has not shown up offers no way to pay again", () => {
 });
 
 test("Pay yearly: the year chosen with its credit, the month beside it with the grey pill, no checkout form", () => {
-  const html = draw({ kind: "yearly" }, COACH, {
+  const html = draw({ kind: "yearly" }, PLAYER, {
     preview: {
       status: "ready",
       preview: {
         ...quoteUpgrade({
-          from: "coach",
-          to: "coach",
+          from: "player",
+          to: "player",
           period: "monthly",
           toPeriod: "yearly",
           periodStart: new Date("2027-04-14T00:00:00Z"),
           periodEnd: new Date("2027-05-14T00:00:00Z"),
           now: new Date("2027-04-29T00:00:00Z"),
-          usedSeconds: planHoursSeconds("coach") - (3 * H + 12 * M),
+          usedSeconds: planHoursSeconds("player") - (3 * H + 12 * M),
         }),
         period: "yearly",
         fromPeriod: "monthly",
@@ -336,9 +336,9 @@ test("Pay yearly: the year chosen with its credit, the month beside it with the 
   expect(texts(html, /<h2[^>]*>(.*?)<\/h2>/g)).toEqual(["Pay yearly."]);
   // One selectable row; the current plan is not a choice.
   expect(radios(html)).toEqual([
-    "Coach, yearly$75 credit for your 15 days left$1,575then $1,650 a year",
+    "Player, yearly$75 credit for your 15 days left$1,575then $1,650 a year",
   ]);
-  expect(html).toContain("Coach, monthly");
+  expect(html).toContain("Player, monthly");
   expect(html).toContain("Your plan");
   expect(html).toContain("Then $1,650 a year, next on Apr 29, 2028");
   expect(primary(html)).toEqual(["Continue to pay $1,575"]);
@@ -350,7 +350,7 @@ test("Pay yearly: the year chosen with its credit, the month beside it with the 
 });
 
 test("Pay yearly: bars while the price loads, and nothing to press", () => {
-  const html = draw({ kind: "yearly" }, COACH, {
+  const html = draw({ kind: "yearly" }, PLAYER, {
     preview: { status: "loading" },
   });
   expect(html).toContain('role="status"');
@@ -361,7 +361,7 @@ test("Pay yearly: bars while the price loads, and nothing to press", () => {
 test("Upload paywall, a failed payment: extra hours only, and Update card in the aside", () => {
   const html = draw(
     NEEDED,
-    { ...COACH_SPENT, planLeftSeconds: 0, resetsOn: null, pastDue: true },
+    { ...PLAYER_SPENT, planLeftSeconds: 0, resetsOn: null, pastDue: true },
     { wizard: true },
   );
   expect(radios(html)).toHaveLength(1);
@@ -377,17 +377,17 @@ test("Upload paywall, a failed payment: extra hours only, and Update card in the
   expect(html).toContain("Pay $70 and send");
 });
 
-test("MOCK, move down to Coach: the smaller plan chosen, the current one with the pill, a live button", () => {
+test("MOCK, move down to Player: the smaller plan chosen, the current one with the pill, a live button", () => {
   const html = draw(
     {
       kind: "change",
       change: {
-        to: { plan: "coach", period: "monthly" },
+        to: { plan: "player", period: "monthly" },
         effectiveOn: "2027-02-14",
       },
     },
     {
-      plan: "coach-pro",
+      plan: "player-pro",
       period: "monthly",
       planLeftSeconds: 7 * H + 40 * M,
       extraSeconds: 0,
@@ -395,18 +395,20 @@ test("MOCK, move down to Coach: the smaller plan chosen, the current one with th
       firstMonthEligible: false,
     },
   );
-  expect(texts(html, /<h2[^>]*>(.*?)<\/h2>/g)).toEqual(["Move down to Coach."]);
-  expect(radios(html)).toEqual([
-    "Coach$150 a month from Feb 14 · 5 hours a month$0today",
+  expect(texts(html, /<h2[^>]*>(.*?)<\/h2>/g)).toEqual([
+    "Move down to Player.",
   ]);
-  expect(html).toContain("Coach Pro");
+  expect(radios(html)).toEqual([
+    "Player$150 a month from Feb 14 · 5 hours a month$0today",
+  ]);
+  expect(html).toContain("Player Pro");
   expect(html).toContain("Your plan");
   expect(html).toContain(
-    "You keep Coach Pro and its 10 hours until Feb 14. Nothing is charged today.",
+    "You keep Player Pro and its 10 hours until Feb 14. Nothing is charged today.",
   );
   expect(html).toContain("Not now");
-  expect(html).toContain("Move to Coach on Feb 14");
-  expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Move to Coach/);
+  expect(html).toContain("Move to Player on Feb 14");
+  expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Move to Player/);
   expect(html).not.toContain("data-stripe");
 });
 
@@ -415,15 +417,15 @@ test("MOCK, yearly → monthly: Pay monthly, switching at the year's renewal", (
     {
       kind: "change",
       change: {
-        to: { plan: "coach", period: "monthly" },
+        to: { plan: "player", period: "monthly" },
         effectiveOn: "2028-01-14",
       },
     },
-    { ...COACH, period: "yearly", resetsOn: "Feb 14" },
+    { ...PLAYER, period: "yearly", resetsOn: "Feb 14" },
   );
   expect(texts(html, /<h2[^>]*>(.*?)<\/h2>/g)).toEqual(["Pay monthly."]);
   expect(radios(html)).toEqual([
-    "Coach, monthly$150 a month from Jan 14, 2028$0today",
+    "Player, monthly$150 a month from Jan 14, 2028$0today",
   ]);
   expect(html).toContain(
     "Your year is paid through Jan 14, 2028. Nothing is charged today.",
@@ -522,7 +524,7 @@ test.describe("Update card when the browser will not open a tab", () => {
       }),
     );
     expect(html).not.toContain("<a ");
-    expect(draw(NEEDED, COACH_SPENT, { refusal: "No." })).not.toContain(
+    expect(draw(NEEDED, PLAYER_SPENT, { refusal: "No." })).not.toContain(
       "Open billing",
     );
   });

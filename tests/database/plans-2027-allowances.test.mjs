@@ -155,17 +155,17 @@ const remaining = async (db, id) =>
 
 const inDays = (days) => new Date(Date.now() + days * 86_400_000).toISOString();
 
-// A Coach subscription anchored on the 31st, 12:00 UTC. The windows are what
+// A Player subscription anchored on the 31st, 12:00 UTC. The windows are what
 // `hoursWindow("2027-01-31T12:00:00Z", …)` answers; the spec pins them.
 const JAN31 = ["2027-01-31T12:00:00Z", "2027-02-28T12:00:00Z"];
 const FEB28 = ["2027-02-28T12:00:00Z", "2027-03-31T12:00:00Z"];
-const COACH_CAP = 5 * H;
+const PLAYER_CAP = 5 * H;
 
 test("a monthly window anchored on the 31st counts what was created inside it, across two calendar months", async () => {
   const db = await boot();
 
   // The hour before the period starts: January's ledger, not this window's.
-  const before = await personal(db, PLAYER, JAN31, 2 * H, COACH_CAP);
+  const before = await personal(db, PLAYER, JAN31, 2 * H, PLAYER_CAP);
   await dated(db, before.job, "2027-01-31T11:00:00Z");
 
   // January 31 and February 10 file under different billing months and are
@@ -175,12 +175,12 @@ test("a monthly window anchored on the 31st counts what was created inside it, a
     PLAYER,
     JAN31,
     2 * H,
-    COACH_CAP,
+    PLAYER_CAP,
     "2027-01-31T13:00:00Z",
   );
   assert.deepEqual(
     [first.ok, first.used_seconds, first.cap_seconds],
-    [true, 2 * H, COACH_CAP],
+    [true, 2 * H, PLAYER_CAP],
     "the row dated before the anchor is not counted",
   );
   const second = await personal(
@@ -188,7 +188,7 @@ test("a monthly window anchored on the 31st counts what was created inside it, a
     PLAYER,
     JAN31,
     2 * H,
-    COACH_CAP,
+    PLAYER_CAP,
     "2027-02-10T09:00:00Z",
   );
   assert.equal(second.used_seconds, 4 * H);
@@ -203,19 +203,19 @@ test("a monthly window anchored on the 31st counts what was created inside it, a
     ["2027-01-01", "2027-02-01"],
   );
 
-  const over = await personal(db, PLAYER, JAN31, 2 * H, COACH_CAP);
+  const over = await personal(db, PLAYER, JAN31, 2 * H, PLAYER_CAP);
   assert.deepEqual(
     [over.ok, over.used_seconds, over.cap_seconds, over.credit_seconds],
-    [false, 4 * H, COACH_CAP, 0],
+    [false, 4 * H, PLAYER_CAP, 0],
     "5 h is the cap: 2 h more than the 1 h left is refused",
   );
-  const exact = await personal(db, PLAYER, JAN31, H, COACH_CAP);
+  const exact = await personal(db, PLAYER, JAN31, H, PLAYER_CAP);
   assert.deepEqual([exact.ok, exact.used_seconds], [true, 5 * H]);
 });
 
 test("plan hours do not roll over into the next window", async () => {
   const db = await boot();
-  await personal(db, PLAYER, JAN31, H, COACH_CAP, "2027-02-01T00:00:00Z");
+  await personal(db, PLAYER, JAN31, H, PLAYER_CAP, "2027-02-01T00:00:00Z");
 
   // 4 h went unused. The next window holds 5 h, not 9.
   const full = await personal(
@@ -223,22 +223,22 @@ test("plan hours do not roll over into the next window", async () => {
     PLAYER,
     FEB28,
     5 * H,
-    COACH_CAP,
+    PLAYER_CAP,
     "2027-03-01T00:00:00Z",
   );
   assert.deepEqual([full.ok, full.used_seconds], [true, 5 * H]);
-  const more = await personal(db, PLAYER, FEB28, 1, COACH_CAP);
+  const more = await personal(db, PLAYER, FEB28, 1, PLAYER_CAP);
   assert.deepEqual([more.ok, more.used_seconds], [false, 5 * H]);
 
   // The window's last instant belongs to it; its end belongs to the next.
   const edge = await boot();
-  const last = await personal(edge, PLAYER, JAN31, H, COACH_CAP);
+  const last = await personal(edge, PLAYER, JAN31, H, PLAYER_CAP);
   await dated(edge, last.job, "2027-02-28T11:59:59Z");
-  const next = await personal(edge, PLAYER, JAN31, H, COACH_CAP);
+  const next = await personal(edge, PLAYER, JAN31, H, PLAYER_CAP);
   await dated(edge, next.job, "2027-02-28T12:00:00Z");
-  const inJan = await personal(edge, PLAYER, JAN31, 1, COACH_CAP);
+  const inJan = await personal(edge, PLAYER, JAN31, 1, PLAYER_CAP);
   assert.equal(inJan.used_seconds - 1, H, "only the 11:59:59 row is in it");
-  const inFeb = await personal(edge, PLAYER, FEB28, 1, COACH_CAP);
+  const inFeb = await personal(edge, PLAYER, FEB28, 1, PLAYER_CAP);
   assert.equal(inFeb.used_seconds - 1, H, "the 12:00:00 row is the next one's");
 });
 
@@ -256,11 +256,11 @@ test("a yearly subscriber gets a fresh allowance in every monthly slice", async 
       PLAYER,
       [start, end],
       5 * H,
-      COACH_CAP,
+      PLAYER_CAP,
       when,
     );
     assert.deepEqual([full.ok, full.used_seconds], [true, 5 * H], start);
-    const more = await personal(db, PLAYER, [start, end], 1, COACH_CAP);
+    const more = await personal(db, PLAYER, [start, end], 1, PLAYER_CAP);
     assert.equal(more.ok, false, `${start} is spent`);
   }
   const rows = await db.query(
@@ -309,7 +309,7 @@ test("Free has no hours: refused with nothing written, unless purchased hours co
 
 test("plan hours are spent first, then purchased hours, soonest-expiring first", async () => {
   const db = await boot();
-  await personal(db, PLAYER, JAN31, 4 * H, COACH_CAP, "2027-02-01T00:00:00Z");
+  await personal(db, PLAYER, JAN31, 4 * H, PLAYER_CAP, "2027-02-01T00:00:00Z");
 
   const later = await credit(db, PLAYER, H, inDays(30));
   const sooner = await credit(db, PLAYER, 2 * H, inDays(10), "grant");
@@ -317,7 +317,7 @@ test("plan hours are spent first, then purchased hours, soonest-expiring first",
   const expired = await credit(db, PLAYER, 10 * H, inDays(-1));
 
   // 2.5 h: the plan's last hour, then 1.5 h from the lot that expires first.
-  const mixed = await personal(db, PLAYER, JAN31, 2.5 * H, COACH_CAP);
+  const mixed = await personal(db, PLAYER, JAN31, 2.5 * H, PLAYER_CAP);
   assert.deepEqual(
     [
       mixed.ok,
@@ -336,7 +336,7 @@ test("plan hours are spent first, then purchased hours, soonest-expiring first",
   assert.equal(ledger.rows[0].reserved_seconds, H, "only the plan's share");
 
   // The plan is spent: the next hour drains the sooner lot, then the later.
-  const credits = await personal(db, PLAYER, JAN31, H, COACH_CAP);
+  const credits = await personal(db, PLAYER, JAN31, H, PLAYER_CAP);
   assert.deepEqual(
     [credits.ok, credits.credit_spent_seconds, credits.credit_seconds],
     [true, H, 0.5 * H],
@@ -344,7 +344,7 @@ test("plan hours are spent first, then purchased hours, soonest-expiring first",
   assert.equal(await remaining(db, sooner), 0);
   assert.equal(await remaining(db, later), 0.5 * H);
 
-  const short = await personal(db, PLAYER, JAN31, H, COACH_CAP);
+  const short = await personal(db, PLAYER, JAN31, H, PLAYER_CAP);
   assert.deepEqual(
     [short.ok, short.credit_seconds],
     [false, 0.5 * H],
@@ -355,18 +355,18 @@ test("plan hours are spent first, then purchased hours, soonest-expiring first",
 
 test("an upgrade's new period starts with fresh hours and the old usage stays in the ledger", async () => {
   const db = await boot();
-  // Coach from January 5, used up by the 10th.
+  // Player from January 5, used up by the 10th.
   const old = await personal(
     db,
     PLAYER,
     ["2027-01-05T00:00:00Z", "2027-02-05T00:00:00Z"],
     5 * H,
-    COACH_CAP,
+    PLAYER_CAP,
     "2027-01-10T00:00:00Z",
   );
   assert.equal(old.ok, true);
 
-  // Coach Pro on January 20: `plan_period_start` moves there.
+  // Player Pro on January 20: `plan_period_start` moves there.
   const pro = ["2027-01-20T00:00:00Z", "2027-02-20T00:00:00Z"];
   const fresh = await personal(db, PLAYER, pro, 10 * H, 10 * H);
   assert.deepEqual(
@@ -394,10 +394,10 @@ test("an admin's hours override replaces the cap it was handed", async () => {
     [PLAYER],
   );
   const month = ["2027-01-01T00:00:00Z", "2027-02-01T00:00:00Z"];
-  const within = await personal(db, PLAYER, month, H, COACH_CAP);
+  const within = await personal(db, PLAYER, month, H, PLAYER_CAP);
   assert.deepEqual([within.ok, within.cap_seconds], [true, H]);
   await dated(db, within.job, "2027-01-02T00:00:00Z");
-  const over = await personal(db, PLAYER, month, 1, COACH_CAP);
+  const over = await personal(db, PLAYER, month, 1, PLAYER_CAP);
   assert.deepEqual([over.ok, over.cap_seconds], [false, H]);
 });
 
@@ -543,7 +543,7 @@ test("release and reconcile still give hours back", async () => {
 
   // A player: plan hours and purchased hours both come back.
   const lot = await credit(db, PLAYER, 2 * H, inDays(60));
-  const spend = await personal(db, PLAYER, JAN31, 6 * H, COACH_CAP);
+  const spend = await personal(db, PLAYER, JAN31, 6 * H, PLAYER_CAP);
   assert.deepEqual(
     [spend.ok, spend.used_seconds, spend.credit_spent_seconds],
     [true, 5 * H, H],
@@ -557,14 +557,14 @@ test("release and reconcile still give hours back", async () => {
     4 * H,
   ]);
   assert.equal(await remaining(db, lot), 2 * H);
-  const reconciled = await personal(db, PLAYER, JAN31, H, COACH_CAP);
+  const reconciled = await personal(db, PLAYER, JAN31, H, PLAYER_CAP);
   assert.deepEqual(
     [reconciled.ok, reconciled.used_seconds, reconciled.credit_spent_seconds],
     [true, 5 * H, 0],
     "4 h actual + this hour, all from the plan",
   );
   await db.query("select public.release_processing_quota($1)", [spend.job]);
-  const released = await personal(db, PLAYER, JAN31, 4 * H, COACH_CAP);
+  const released = await personal(db, PLAYER, JAN31, 4 * H, PLAYER_CAP);
   assert.deepEqual([released.ok, released.used_seconds], [true, 5 * H]);
 
   // Safe to call twice, and on a job that holds nothing.
@@ -581,12 +581,12 @@ test("the reserve functions refuse bad arguments and a second reservation for on
       [job, PLAYER, start, end, seconds, cap],
     );
   await assert.rejects(
-    call(JAN31[0], JAN31[1], 0, COACH_CAP),
+    call(JAN31[0], JAN31[1], 0, PLAYER_CAP),
     /must be positive/,
   );
-  await assert.rejects(call(JAN31[1], JAN31[0], 60, COACH_CAP), /bad window/);
-  await assert.rejects(call(JAN31[0], JAN31[0], 60, COACH_CAP), /bad window/);
-  await assert.rejects(call(null, JAN31[1], 60, COACH_CAP), /bad window/);
+  await assert.rejects(call(JAN31[1], JAN31[0], 60, PLAYER_CAP), /bad window/);
+  await assert.rejects(call(JAN31[0], JAN31[0], 60, PLAYER_CAP), /bad window/);
+  await assert.rejects(call(null, JAN31[1], 60, PLAYER_CAP), /bad window/);
   await assert.rejects(call(JAN31[0], JAN31[1], 60, -1), /bad p_cap_seconds/);
   await assert.rejects(call(JAN31[0], JAN31[1], 60, null), /bad p_cap_seconds/);
 
@@ -606,11 +606,11 @@ test("the reserve functions refuse bad arguments and a second reservation for on
   );
 
   assert.equal(
-    (await call(JAN31[0], JAN31[1], 60, COACH_CAP)).rows[0].ok,
+    (await call(JAN31[0], JAN31[1], 60, PLAYER_CAP)).rows[0].ok,
     true,
   );
   await assert.rejects(
-    call(JAN31[0], JAN31[1], 60, COACH_CAP),
+    call(JAN31[0], JAN31[1], 60, PLAYER_CAP),
     /processing_usage_job_id_key/,
   );
   await assert.rejects(
@@ -913,7 +913,7 @@ test("nothing is executable signed out, and only the service role reserves", asy
   const reserve = () =>
     db.query(
       "select * from public.reserve_plan_personal_quota($1, $2, $3, $4, $5, $6)",
-      [job, PLAYER, ...JAN31, 60, COACH_CAP],
+      [job, PLAYER, ...JAN31, 60, PLAYER_CAP],
     );
   await assert.rejects(as(db, "anon", null, reserve), /permission denied/);
   await assert.rejects(

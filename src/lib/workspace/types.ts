@@ -403,7 +403,7 @@ export interface Viewer {
    */
   avatarUrl: string | null;
   /**
-   * `users.plan` — 'free' | 'coach' | 'coach-pro', plus the legacy 'pro'. The
+   * `users.plan` — 'free' | 'player' | 'player-pro', plus the legacy 'pro'. The
    * paid entitlement, and only that. Read it through `planFor()` in
    * `lib/user/plan.ts`, which is where legacy and unknown values become Free.
    */
