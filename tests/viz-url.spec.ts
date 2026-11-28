@@ -1887,3 +1887,32 @@ test.describe("Returns is one chart", () => {
     );
   });
 });
+
+test("a Result token names who won in the chips' words, as the legend beside it does", () => {
+  const onOpponent = {
+    cut: "serve",
+    chart: "scatter",
+    filters: { ...EMPTY_VIZ_FILTERS, player: "opponent", result: ["won"] },
+    viewId: null,
+  } as const;
+  const full = { you: "Avery Zzseed", opponent: "Riley Park" };
+  const chips = { you: "Zzseed", opponent: "Park" };
+  const label = (opts: Parameters<typeof activeFilterEntries>[2]) =>
+    activeFilterEntries(onOpponent, full, opts).find((e) => e.key === "result")
+      ?.label;
+  // The charted player (the opponent) won: "Park won", never "Riley Park won".
+  expect(label({ winnerNames: chips })).toBe("Park won");
+  // Lost on the opponent's chart is the other player's win.
+  expect(
+    activeFilterEntries(
+      {
+        ...onOpponent,
+        filters: { ...onOpponent.filters, result: ["lost"] },
+      },
+      full,
+      { winnerNames: chips },
+    ).find((e) => e.key === "result")?.label,
+  ).toBe("Zzseed won");
+  // With no chip words, the phrase names fall back.
+  expect(label({})).toBe("Riley Park won");
+});

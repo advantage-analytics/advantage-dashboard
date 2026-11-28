@@ -551,6 +551,8 @@ export function VizLightbox({
   const phrases = activeFilterEntries(state, names, {
     errorSplitJudged,
     bandLabels: bandLabelsOf(matchCtx),
+    // "Park won", as the legend and the chips say it.
+    winnerNames: chipLabels,
   })
     .filter((e) => e.key !== "player" && !unchangedBaseKey(e.key))
     .map((e) => e.label);

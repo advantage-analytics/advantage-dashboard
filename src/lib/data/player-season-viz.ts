@@ -1512,6 +1512,8 @@ export function buildSeasonLightbox(
   const filterPhrases = activeFilterEntries(state, names, {
     errorSplitJudged: judged,
     bandLabels: bands,
+    // "Kim won", as the legend and the chips say it.
+    winnerNames: subjectWords,
   })
     .filter(
       (entry) =>

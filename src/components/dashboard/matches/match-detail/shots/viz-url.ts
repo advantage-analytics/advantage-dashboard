@@ -1235,6 +1235,10 @@ export function activeFilterEntries(
     /** Contact and Landed in name the viewer's bands ("return struck 0–5
      *  ft behind"). Omitted, the default bands in feet. */
     bandLabels?: FilterBandLabels;
+    /** The player chips' words (`PlayerChipLabels`) for who won a point,
+     *  so a Result token reads as the legend beside it does ("Park won",
+     *  "You won"). Omitted, `names`. */
+    winnerNames?: PhraseNames;
   } = {},
 ): ActiveFilterEntry[] {
   if (state.cut === null) {
@@ -1275,11 +1279,12 @@ export function activeFilterEntries(
     }
 
     const values = state.filters[key] as readonly string[];
+    const chip = options.winnerNames ?? names;
     const winners =
       key === "result"
         ? state.filters.player === "you"
-          ? { won: names.you, lost: names.opponent }
-          : { won: names.opponent, lost: names.you }
+          ? { won: chip.you, lost: chip.opponent }
+          : { won: chip.opponent, lost: chip.you }
         : null;
     for (const value of values) {
       // Won / Lost are the CHARTED player's (as the legend's are), so the
