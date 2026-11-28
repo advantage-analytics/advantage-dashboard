@@ -45,12 +45,7 @@ import {
   viewerFullCourtTransform,
   viewerInitialTransform,
 } from "./court-geometry";
-import {
-  bandKindFor,
-  isPlacementCut,
-  isReturnCut,
-  marksAreShots,
-} from "./cut-kinds";
+import { bandKindFor, isPlacementCut } from "./cut-kinds";
 import { HeatRampLegend, LegendMark } from "./legend-mark";
 import { LifecycleChip } from "./lifecycle-chip";
 import type { PlayerChipLabels } from "./player-chip-labels";
@@ -71,13 +66,9 @@ import {
 } from "./lightbox-court";
 import {
   COUNT_NOUN,
-  EntryChips,
-  ErrorTypeChips,
   LegendFilter,
   LightboxFilterPanel,
-  RallyLengthChips,
-  ServeChips,
-  ServeReturnedChips,
+  toolbarChipsFor,
   type LightboxAdvancedFilters,
   type LightboxSeasonFilters,
 } from "./lightbox-filters";
@@ -789,24 +780,14 @@ export function VizLightboxShell({
   }, [drawerPhase]);
   const advancedFilters = filterPanel?.advanced;
   // The toolbar's lead chips for this chart (see the toolbar), or none.
-  const ToolbarChips = isReturnCut(cut)
-    ? ServeReturnedChips
-    : cut === "serve"
-      ? ServeChips
-      : marksAreShots(cut)
-        ? RallyLengthChips
-        : cut === "approaches"
-          ? EntryChips
-          : null;
-  const toolbarChips = !filterPanel ? null : cut === "errors" ? (
-    <ErrorTypeChips
-      filters={filters}
-      setFilters={filterPanel.onChange}
-      errorSplitJudged={filterPanel.errorSplitJudged}
-    />
-  ) : ToolbarChips ? (
-    <ToolbarChips filters={filters} setFilters={filterPanel.onChange} />
-  ) : null;
+  const toolbarChips =
+    filterPanel &&
+    toolbarChipsFor({
+      cut,
+      filters,
+      setFilters: filterPanel.onChange,
+      errorSplitJudged: filterPanel.errorSplitJudged,
+    });
   const seasonFilters = filterPanel?.season;
   const drawerShown =
     drawerPhase !== "closed" &&
@@ -1223,7 +1204,7 @@ export function VizLightboxShell({
                         their way to the net. Drawn in a draft too — the
                         Filters menu is not, and the chips hold the one
                         control for these keys. */}
-                    {filterPanel && toolbarChips !== null && (
+                    {toolbarChips && (
                       <>
                         {player && (
                           <span

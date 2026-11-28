@@ -313,6 +313,10 @@ export function SeasonVizLightbox({
   // The page's match scope (`?sres=` …), which a view opened on this page
   // reads its matches under — the Save popover's Matches row names it.
   const searchParams = useSearchParams();
+  const pageScope = useMemo(
+    () => parseMatchScope(new URLSearchParams(searchParams.toString())),
+    [searchParams],
+  );
 
   // Each mark's match and point, by mark id and by point id (a point id is
   // unique across matches, as a mark id is).
@@ -512,9 +516,6 @@ export function SeasonVizLightbox({
     // scope (`?sres=` / `?sopp=` / `?ssurf=` / `?sm=`, read from the URL
     // now), which a card opened from the wall carries in — never to the
     // whole season under a scoped page. No scope: the whole season.
-    const pageScope = parseMatchScope(
-      new URLSearchParams(searchParams.toString()),
-    );
     setState((prev) => ({
       ...withoutSeasonFilters(prev),
       ...(pageScope ? { season: pageScope } : {}),
@@ -697,9 +698,7 @@ export function SeasonVizLightbox({
                       }
                       matchScope={matchScopeWords(
                         court.seasonOptions.matches,
-                        parseMatchScope(
-                          new URLSearchParams(searchParams.toString()),
-                        ),
+                        pageScope,
                       )}
                     />
                   </Suspense>

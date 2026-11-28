@@ -1,4 +1,4 @@
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
 import {
   MatchesFilterPanel,
   type FilterPanelSection,
@@ -37,23 +37,7 @@ import { matchesMenuValueLabel } from "./lightbox-matches-sheet";
 
 /* ── Filters panel ─────────────────────────────────────────────────────── */
 
-/** The charts whose Filters menu has no Serve row (see the panel): Serves
- *  and Returns choose it in their toolbar chips; Rally shots, Errors and
- *  Approaches in Advanced filters › Serve › Type, which offers First and
- *  Second serve on each of them (`cutAvailability` keeps both). That leaves
- *  every chart without the row. */
-function servesFromToolbarOrAdvanced(cut: Cut): boolean {
-  return (
-    cut === "serve" ||
-    isReturnCut(cut) ||
-    marksAreShots(cut) ||
-    cut === "errors" ||
-    cut === "approaches"
-  );
-}
-
 type PanelKey =
-  | "ball"
   | "court"
   | "set"
   | "zone"
@@ -179,11 +163,11 @@ export interface LightboxAdvancedFilters {
  * come first — Serves' Zone (Any · Wide · Body · T), Approaches' Approach to
  * and Direction (checklists: the model's groups are multi-select, plan
  * decision Q7) — then Rally length (Any · Short · Medium · Long; not on
- * Rally shots, whose toolbar carries it as `RallyLengthChips`), Pressure,
+ * Rally shots, whose toolbar carries it as `toolbarChipsFor`), Pressure,
  * Court and Set, with Advanced filters last. Errors' type and Approaches'
- * way to the net are toolbar chips (`ErrorTypeChips`, `EntryChips`), not
- * sections. No chart has a Serve row any more (`servesFromToolbarOrAdvanced`):
- * the serve is a toolbar chip or Advanced filters › Serve › Type. Segmented
+ * way to the net are toolbar chips (`toolbarChipsFor`), not
+ * sections. No chart has a Serve row: the serve is a
+ * toolbar chip or Advanced filters › Serve › Type. Segmented
  * rows carry no counts; a checklist option carries the count it alone would
  * leave. Applied live,
  * with Clear and the live count in the footer. Only the keys
@@ -329,26 +313,6 @@ export function LightboxFilterPanel({
         },
       ],
     });
-  // 1st or 2nd serve would sit after the shared run — but every chart
-  // reaches it elsewhere: Returns ("Serve returned" chips) and Serves ("1st
-  // serve · 2nd serve" chips, board Final-04) in the toolbar; Rally shots,
-  // Errors and Approaches (the Final boards) in Advanced filters › Serve ›
-  // Type, which filters the same points. Kept for a chart that has neither.
-  if (keys.has("ball") && !servesFromToolbarOrAdvanced(cut))
-    sections.push({
-      label: "Serve",
-      segmented: [
-        {
-          key: "ball",
-          options: [
-            { value: null, label: "Any" },
-            { value: "first", label: OPTIONS.ball.first },
-            { value: "second", label: OPTIONS.ball.second },
-          ],
-        },
-      ],
-    });
-
   function isChecklistActive(key: PanelKey, value: string): boolean {
     return (filters[key as keyof VizFilters] as readonly string[]).includes(
       value,
@@ -487,75 +451,6 @@ const RALLY_CHIPS = [
   ...RALLY_SEGMENTS.map(({ value, label }) => ({ value, label })),
 ] as const;
 
-/**
- * The Returns toolbar's lead chips (board Final-04): All · vs 1st serve ·
- * vs 2nd serve over the `ball` key, which on a return cut already reads the
- * serve being returned.
- */
-export function ServeReturnedChips({
-  filters,
-  setFilters,
-}: {
-  filters: VizFilters;
-  setFilters: (next: VizFilters) => void;
-}) {
-  return (
-    <FilterChips
-      label="Serve returned"
-      filterKey="ball"
-      options={SERVE_RETURNED}
-      filters={filters}
-      setFilters={setFilters}
-    />
-  );
-}
-
-/**
- * The Serves toolbar's lead chips (board Final-04): All · 1st serve · 2nd
- * serve over the `ball` key. Serves' Filters menu has no Serve row: this is
- * where the serve is chosen.
- */
-export function ServeChips({
-  filters,
-  setFilters,
-}: {
-  filters: VizFilters;
-  setFilters: (next: VizFilters) => void;
-}) {
-  return (
-    <FilterChips
-      label="Serve"
-      filterKey="ball"
-      options={SERVE_CHIPS}
-      filters={filters}
-      setFilters={setFilters}
-    />
-  );
-}
-
-/**
- * Rally shots' toolbar chips (board Final-07): All · Short · Medium · Long
- * over the `rally` key — the Filters menu's Rally length row, which Rally
- * shots and Rally position leave out, as chips.
- */
-export function RallyLengthChips({
-  filters,
-  setFilters,
-}: {
-  filters: VizFilters;
-  setFilters: (next: VizFilters) => void;
-}) {
-  return (
-    <FilterChips
-      label="Rally length"
-      filterKey="rally"
-      options={RALLY_CHIPS}
-      filters={filters}
-      setFilters={setFilters}
-    />
-  );
-}
-
 const ENTRY_CHIPS = [
   { value: null, label: "All" },
   ...(Object.keys(OPTIONS.entry) as (keyof typeof OPTIONS.entry)[]).map(
@@ -564,28 +459,70 @@ const ENTRY_CHIPS = [
 ];
 
 /**
- * Approaches' toolbar chips (the Final boards): All · Approach · Serve and
- * volley · Drawn in over the `entry` ("Way to the net") key, one at a time.
- * The key stays a list, as a saved view or a Statistics row writes it; a
- * list of two lights no chip, as the Zone row does. Approaches' Filters menu
- * has no Way to the net section: this is where it is chosen.
+ * A chart's toolbar lead chips (boards Final-04…09), or none: Returns'
+ * "Serve returned" (All · vs 1st serve · vs 2nd serve over the `ball` key,
+ * which on a return cut already reads the serve being returned), Serves'
+ * 1st/2nd serve, Rally shots' Rally length, Approaches' Way to the net (a
+ * list of two lights no chip, as the Zone row does) and Errors' type. Their
+ * Filters menus carry no such row: this is where each is chosen.
  */
-export function EntryChips({
+export function toolbarChipsFor({
+  cut,
   filters,
   setFilters,
+  errorSplitJudged,
 }: {
+  cut: Cut;
   filters: VizFilters;
   setFilters: (next: VizFilters) => void;
-}) {
-  return (
-    <FilterChips
-      label="Way to the net"
-      filterKey="entry"
-      options={ENTRY_CHIPS}
-      filters={filters}
-      setFilters={setFilters}
-    />
-  );
+  errorSplitJudged: boolean;
+}): ReactNode {
+  if (cut === "errors")
+    return (
+      <ErrorTypeChips
+        filters={filters}
+        setFilters={setFilters}
+        errorSplitJudged={errorSplitJudged}
+      />
+    );
+  const chipProps = { filters, setFilters };
+  if (isReturnCut(cut))
+    return (
+      <FilterChips
+        label="Serve returned"
+        filterKey="ball"
+        options={SERVE_RETURNED}
+        {...chipProps}
+      />
+    );
+  if (cut === "serve")
+    return (
+      <FilterChips
+        label="Serve"
+        filterKey="ball"
+        options={SERVE_CHIPS}
+        {...chipProps}
+      />
+    );
+  if (marksAreShots(cut))
+    return (
+      <FilterChips
+        label="Rally length"
+        filterKey="rally"
+        options={RALLY_CHIPS}
+        {...chipProps}
+      />
+    );
+  if (cut === "approaches")
+    return (
+      <FilterChips
+        label="Way to the net"
+        filterKey="entry"
+        options={ENTRY_CHIPS}
+        {...chipProps}
+      />
+    );
+  return null;
 }
 
 /**
@@ -597,7 +534,7 @@ export function EntryChips({
  * option's values; All empties it. A chip is lit only when the key holds
  * exactly its values, so a list no single chip stands for lights none.
  */
-export function ErrorTypeChips({
+function ErrorTypeChips({
   filters,
   setFilters,
   errorSplitJudged,
