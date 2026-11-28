@@ -14,6 +14,7 @@ import {
   type AuthErrorField,
   type EmailProblemReason,
 } from "./error-messages";
+import { authErrorSlug } from "./login-failure";
 
 export type SignUpRefusalReason =
   // The form's own checks, in the order it runs them.
@@ -91,11 +92,5 @@ const BY_MESSAGE: ReadonlyArray<[RegExp, SignUpRefusalReason]> = [
 
 /** Supabase's refusal of `auth.signUp`, read from its `code` first, then its message. */
 export function signUpServerReason(err: unknown): SignUpRefusalReason {
-  const code =
-    err && typeof err === "object" && "code" in err
-      ? (err as { code?: unknown }).code
-      : undefined;
-  if (typeof code === "string" && code in BY_CODE) return BY_CODE[code];
-  const raw = err instanceof Error ? err.message : String(err ?? "");
-  return BY_MESSAGE.find(([match]) => match.test(raw))?.[1] ?? "unknown";
+  return authErrorSlug(err, BY_CODE, BY_MESSAGE);
 }

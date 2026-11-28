@@ -40,11 +40,23 @@ const BY_MESSAGE: ReadonlyArray<[RegExp, LoginFailureReason]> = [
 ];
 
 export function loginFailureReason(err: unknown): LoginFailureReason {
+  return authErrorSlug(err, BY_CODE, BY_MESSAGE);
+}
+
+/**
+ * A fixed slug for a Supabase auth error: its `code` looked up first, then
+ * its message matched, else `unknown`. The error itself never leaves here.
+ */
+export function authErrorSlug<R extends string>(
+  err: unknown,
+  byCode: Readonly<Record<string, R>>,
+  byMessage: ReadonlyArray<[RegExp, R]>,
+): R | "unknown" {
   const code =
     err && typeof err === "object" && "code" in err
       ? (err as { code?: unknown }).code
       : undefined;
-  if (typeof code === "string" && code in BY_CODE) return BY_CODE[code];
+  if (typeof code === "string" && code in byCode) return byCode[code];
   const raw = err instanceof Error ? err.message : String(err ?? "");
-  return BY_MESSAGE.find(([match]) => match.test(raw))?.[1] ?? "unknown";
+  return byMessage.find(([match]) => match.test(raw))?.[1] ?? "unknown";
 }
