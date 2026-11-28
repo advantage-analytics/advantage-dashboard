@@ -273,15 +273,16 @@ test.describe("wiring", () => {
     expect(flow).toContain("onDone={handlePurchase}");
   });
 
-  test("the file step shows the hours note above the drop zone in place of the idle strip, and the old red notice only before the sale", () => {
+  test("the file step shows the hours note below the drop zone in place of the idle strip, and the old red notice only before the sale", () => {
     const steps = read("UploadWizardSteps.tsx");
     expect(steps).toContain("enabled: plansActive && isProcessingProvider");
-    expect(steps).toContain('hideIdleNote={hoursNote.kind !== "none"}');
+    expect(steps).toContain("hoursNote={hoursNoteNode}");
     expect(steps).toMatch(
       /plansActive \|\|\s*!canBuyCredits \|\|\s*!isProcessingProvider/,
     );
-    expect(steps.indexOf("<FileHoursNote note={hoursNote}")).toBeLessThan(
-      steps.indexOf("<FileStepContent"),
+    // It rides inside FileStepContent, in the idle strip's slot.
+    expect(steps.indexOf("<FileStepContent")).toBeLessThan(
+      steps.indexOf("hoursNote={hoursNoteNode}"),
     );
     // One line, never wrapped; grey, with the Info glyph in ink-400.
     expect(steps).toContain('<span className="min-w-0 flex-1 truncate">');
@@ -292,7 +293,13 @@ test.describe("wiring", () => {
     expect(steps).not.toContain('href="/dashboard/settings/plan"');
 
     const content = read("FileStepContent.tsx");
-    expect(content).toMatch(/notices\.length === 0 &&\s*!hideIdleNote && \(/);
+    expect(content).toMatch(
+      /\{hoursNote \?\?\s*\(isVideo && warnings\.length === 0 && notices\.length === 0 &&/,
+    );
+    // Under the drop zone too, before a file is picked.
+    expect(content.indexOf("{hoursNote}")).toBeGreaterThan(
+      content.indexOf("aria-label={`Drop ${whose} ${noun} here, or browse`}"),
+    );
   });
 
   test("the footer meter stops naming the pilot once the suffix is a plan's", () => {

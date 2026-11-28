@@ -759,44 +759,45 @@ function FileStepState({
       onContinue={noop}
       continueDisabled={!withFile}
     >
-      <div className="flex flex-col gap-6">
-        <FileHoursNote note={note} onSeePlans={noop} />
-        <FileStepContent
-          kind="processing"
-          selectedProvider="splitstep"
-          subjectFirstName={null}
-          uploadedFile={
-            withFile
-              ? {
-                  name: "court-3-saturday.mp4",
-                  size: "3.9 GB",
-                  status: "ready",
-                }
-              : null
-          }
-          probe={withFile ? PROBE : null}
-          warnings={[]}
-          notes={[]}
-          notices={[]}
-          hideIdleNote={note.kind !== "none"}
-          busy={false}
-          error={null}
-          parsingState={{
-            isParsing: false,
-            parseError: null,
-            parseWarnings: [],
-            parseSuccess: false,
-          }}
-          formData={{} as FormData}
-          acceptString=".mp4,.mov,.m4v,.avi,.mkv,.webm"
-          isOver={false}
-          onDragOver={noop}
-          onDragLeave={noop}
-          onDrop={noop}
-          onFileChange={noop}
-          onRemove={noop}
-        />
-      </div>
+      <FileStepContent
+        kind="processing"
+        selectedProvider="splitstep"
+        subjectFirstName={null}
+        uploadedFile={
+          withFile
+            ? {
+                name: "court-3-saturday.mp4",
+                size: "3.9 GB",
+                status: "ready",
+              }
+            : null
+        }
+        probe={withFile ? PROBE : null}
+        warnings={[]}
+        notes={[]}
+        notices={[]}
+        hoursNote={
+          note.kind === "none" ? null : (
+            <FileHoursNote note={note} onSeePlans={noop} />
+          )
+        }
+        busy={false}
+        error={null}
+        parsingState={{
+          isParsing: false,
+          parseError: null,
+          parseWarnings: [],
+          parseSuccess: false,
+        }}
+        formData={{} as FormData}
+        acceptString=".mp4,.mov,.m4v,.avi,.mkv,.webm"
+        isOver={false}
+        onDragOver={noop}
+        onDragLeave={noop}
+        onDrop={noop}
+        onFileChange={noop}
+        onRemove={noop}
+      />
     </WizardShell>
   );
 }

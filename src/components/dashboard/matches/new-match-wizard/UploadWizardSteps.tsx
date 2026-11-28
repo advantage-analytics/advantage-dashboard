@@ -235,39 +235,46 @@ export function FileStep() {
     [onVideoPick],
   );
 
+  // Memoised on what it says, so memo(FileStepContent) still skips renders:
+  // `fileStepHoursNote()` hands back a fresh object every render.
+  const hoursLeft = hoursNote.kind === "too-long" ? hoursNote.leftSeconds : 0;
+  const hoursNoteNode = useMemo(
+    () =>
+      hoursNote.kind === "none" ? null : (
+        <FileHoursNote note={hoursNote} onSeePlans={openAddHours} />
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on what the note says
+    [hoursNote.kind, hoursLeft, openAddHours],
+  );
+
   return (
     <div className="flex flex-col gap-9">
-      {/* One column, so the hours note sits 24px above the drop zone and the
-          step body is the same element whether or not there is a note. */}
-      <div className="flex flex-col gap-6">
-        <FileHoursNote note={hoursNote} onSeePlans={openAddHours} />
-        <FileStepContent
-          kind={isProcessingProvider ? "processing" : "import"}
-          selectedProvider={selectedProvider}
-          subjectFirstName={view.subjectFirstName}
-          uploadedFile={uploadedFile}
-          probe={videoProbe}
-          warnings={isProcessingProvider ? videoWarnings : []}
-          notes={isProcessingProvider ? videoNotes : []}
-          notices={isProcessingProvider ? videoNotices : []}
-          busy={isProbing || isUploading || parsingState.isParsing}
-          error={uploadError}
-          parsingState={parsingState}
-          formData={formData}
-          acceptString={acceptString}
-          isOver={isOver}
-          onDragOver={onDragOver}
-          onDragLeave={onDragLeave}
-          onDrop={isProcessingProvider ? onVideoDrop : handleDrop}
-          onFileChange={
-            isProcessingProvider ? onVideoFileChange : handleFileChange
-          }
-          onRemove={isProcessingProvider ? handleRemoveVideo : handleRemoveFile}
-          // One grey strip per place: the hours note stands in for the
-          // "Nothing is uploading yet" strip rather than stacking above it.
-          hideIdleNote={hoursNote.kind !== "none"}
-        />
-      </div>
+      <FileStepContent
+        kind={isProcessingProvider ? "processing" : "import"}
+        selectedProvider={selectedProvider}
+        subjectFirstName={view.subjectFirstName}
+        uploadedFile={uploadedFile}
+        probe={videoProbe}
+        warnings={isProcessingProvider ? videoWarnings : []}
+        notes={isProcessingProvider ? videoNotes : []}
+        notices={isProcessingProvider ? videoNotices : []}
+        busy={isProbing || isUploading || parsingState.isParsing}
+        error={uploadError}
+        parsingState={parsingState}
+        formData={formData}
+        acceptString={acceptString}
+        isOver={isOver}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={isProcessingProvider ? onVideoDrop : handleDrop}
+        onFileChange={
+          isProcessingProvider ? onVideoFileChange : handleFileChange
+        }
+        onRemove={isProcessingProvider ? handleRemoveVideo : handleRemoveFile}
+        // One grey strip per place: the hours note takes the "Nothing is
+        // uploading yet" strip's slot under the drop zone / file row.
+        hoursNote={hoursNoteNode}
+      />
       <OutOfHoursNotice />
       <IdentityQuestion />
       <WizardEligibilityNotice />
