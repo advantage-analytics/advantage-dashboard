@@ -173,10 +173,11 @@ test.describe("Plan rows", () => {
   test("Coach: upgrade, buy hours, manage billing", () => {
     expect(rows(COACH)).toEqual([
       ["plan", "Coach", "Upgrade to Coach Pro"],
+      ["yearly", "Pay yearly", "Switch to yearly"],
       ["extra", "Extra hours", "Buy hours"],
       ["billing", "Billing", "Manage billing ↗"],
     ]);
-    const [plan, extra, billing] = buildPlanPage(COACH).rows;
+    const [plan, , extra, billing] = buildPlanPage(COACH).rows;
     expect(plan.pill).toBe("Monthly");
     expect(plan.description).toBe(
       "5 hours of match video a month · Renews Feb 14 at $150",
@@ -216,24 +217,151 @@ test.describe("Plan rows", () => {
     );
   });
 
-  test("a failed payment says so where the renewal date was", () => {
-    expect(
-      buildPlanPage({
-        ...COACH,
-        billing: { ...ACTIVE, status: "past_due" },
-      }).rows[0].description,
-    ).toBe(
-      "5 hours of match video a month · Payment failed. Update your card in Manage billing",
+  test("Pay yearly: a monthly subscriber's own plan, a year at a time", () => {
+    const yearly = buildPlanPage(COACH).rows[1];
+    expect(yearly).toEqual({
+      id: "yearly",
+      label: "Pay yearly",
+      description: "$1,650 a year. One month free.",
+      action: {
+        kind: "dialog",
+        label: "Switch to yearly",
+        tone: "outline",
+        mode: { kind: "yearly" },
+      },
+    });
+    // Coach Pro's own figure, from the plan module.
+    const pro: PlanPageInput = {
+      ...COACH,
+      plan: "coach-pro",
+      billing: { ...ACTIVE, plan: "coach-pro" },
+    };
+    expect(rows(pro)).toEqual([
+      ["plan", "Coach Pro", undefined],
+      ["yearly", "Pay yearly", "Switch to yearly"],
+      ["extra", "Extra hours", "Buy hours"],
+      ["billing", "Billing", "Manage billing ↗"],
+    ]);
+    expect(buildPlanPage(pro).rows[1].description).toBe(
+      "$3,300 a year. One month free.",
     );
+    // Nobody already paying yearly, and nobody without a plan.
+    for (const input of [
+      FREE,
+      { ...COACH, billing: { ...ACTIVE, period: "yearly" as const } },
+      { ...COACH, billing: { ...ACTIVE, period: null } },
+    ]) {
+      expect(rows(input).map(([id]) => id)).not.toContain("yearly");
+    }
   });
 
-  test("no row offers a switch to yearly or a downgrade", () => {
+  test("a failed payment: the plan stays, the row says so and its action is Update card", () => {
+    const pastDue: PlanPageInput = {
+      ...COACH,
+      billing: { ...ACTIVE, status: "past_due" },
+      // What the resolver answers for the unpaid window.
+      capSeconds: 0,
+      planLeftSeconds: 0,
+      resetsOn: null,
+    };
+    const view = buildPlanPage(pastDue);
+    // No upgrade and no Pay yearly until the card is fixed.
+    expect(rows(pastDue)).toEqual([
+      ["plan", "Coach", "Update card"],
+      ["extra", "Extra hours", "Buy hours"],
+      ["billing", "Billing", "Manage billing ↗"],
+    ]);
+    const [plan] = view.rows;
+    expect(plan.pill).toBe("Monthly");
+    expect(plan.description).toBe(
+      "Payment failed. Update your card to get this month's hours.",
+    );
+    // The same portal call Manage billing makes.
+    expect(plan.action).toEqual({
+      kind: "portal",
+      label: "Update card",
+      tone: "primary",
+    });
+    // The Video hours line says the same where the reset day was; the extra
+    // hour is still theirs to spend.
+    expect(view.hours).toEqual({
+      figure: "1h",
+      unit: "left this month",
+      line: "Payment failed. Update your card to get this month's hours.",
+    });
+    // Coach Pro the same, with no upgrade to lose.
+    expect(
+      rows({
+        ...pastDue,
+        plan: "coach-pro",
+        billing: { ...ACTIVE, plan: "coach-pro", status: "past_due" },
+      })[0],
+    ).toEqual(["plan", "Coach Pro", "Update card"]);
+    // A Free account whose old subscription ended past due is just Free.
+    expect(
+      rows({ ...FREE, billing: { ...NEVER, status: "past_due" } })[0],
+    ).toEqual(["plan", "Free", "Choose a plan"]);
+  });
+
+  test("the real page offers no downgrade and nothing at renewal", () => {
     for (const input of [FREE, COACH]) {
-      const labels = buildPlanPage(input).rows.flatMap((row) => [
+      const view = buildPlanPage(input);
+      const labels = view.rows.flatMap((row) => [
         row.label,
+        row.description,
         row.action?.label ?? "",
       ]);
-      expect(labels.join(" ")).not.toMatch(/yearly|downgrade|cancel/i);
+      expect(labels.join(" ")).not.toMatch(
+        /downgrade|change plan|move down|moves to|keep coach/i,
+      );
+      // Nothing but the two real kinds of action: a dialog, or the portal.
+      for (const row of view.rows) {
+        expect(["dialog", "portal", undefined]).toContain(row.action?.kind);
+        if (row.action?.kind === "dialog") {
+          expect(row.action.mode.kind).not.toBe("change");
+        }
+      }
     }
+  });
+
+  test("MOCK: a change at renewal is drawn only from the mock field", () => {
+    const pro: PlanPageInput = {
+      ...COACH,
+      plan: "coach-pro",
+      billing: { ...ACTIVE, plan: "coach-pro" },
+    };
+    const change = {
+      to: { plan: "coach", period: "monthly" },
+      effectiveOn: "2027-02-14",
+    } as const;
+
+    const offered = buildPlanPage({
+      ...pro,
+      mock: { kind: "change-plan", change },
+    }).rows[0];
+    expect(offered.description).toBe(
+      "10 hours of match video a month · Renews Feb 14 at $300",
+    );
+    expect(offered.action).toEqual({
+      kind: "quiet",
+      label: "Change plan",
+      mode: { kind: "change", change },
+    });
+
+    const scheduled = buildPlanPage({
+      ...pro,
+      mock: { kind: "scheduled", change },
+    });
+    expect(scheduled.rows[0].description).toBe("Moves to Coach on Feb 14");
+    expect(scheduled.rows[0].action).toEqual({
+      kind: "quiet",
+      label: "Keep Coach Pro",
+    });
+    // A plan on its way down is not also offered a year.
+    expect(scheduled.rows.map((row) => row.id)).toEqual([
+      "plan",
+      "extra",
+      "billing",
+    ]);
   });
 });

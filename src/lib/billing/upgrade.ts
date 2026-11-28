@@ -1,9 +1,19 @@
 /**
- * What an upgrade costs today — decision 7 of docs/plans/2027-pricing.md.
+ * What a change that is charged today costs — decision 7 of
+ * docs/plans/2027-pricing.md, and the same rule for paying yearly.
  *
- * Coach → Coach Pro starts a new billing period the moment it happens: the
- * new plan's full period price, less a credit for the unused part of the old
- * plan, and the new plan's full hours fresh.
+ * Exactly two changes are charged today (`upgradeKind()`), and both start a
+ * new billing period the moment they happen:
+ *
+ *   plan     Coach → Coach Pro on the same period: the new plan's full period
+ *            price, less a credit for the unused part of the old plan, and
+ *            the new plan's full hours fresh.
+ *   period   monthly → yearly on the same plan: the yearly price, less the
+ *            same credit for the unused part of the current month. Hours stay
+ *            monthly slices, the first one fresh today.
+ *
+ * Everything else (a smaller plan, yearly → monthly, both at once) waits for
+ * renewal and is not priced here.
  *
  *   credit = what the old plan cost for the period
  *            × min(share of the period's TIME left,
@@ -51,6 +61,35 @@ export function isUpgrade(from: CoachPlanId, to: CoachPlanId): boolean {
   return from === "coach" && to === "coach-pro";
 }
 
+/** A plan and how it is billed: where a subscription is, or is going. */
+export interface UpgradeTarget {
+  plan: CoachPlanId;
+  period: PlanPeriod;
+}
+
+/** `plan`: Coach → Coach Pro. `period`: monthly → yearly. */
+export type UpgradeKind = "plan" | "period";
+
+/**
+ * Which charged-today change `from` → `to` is, or null when it is not one.
+ * Exactly two are: a bigger plan on the same period, and the same paid plan
+ * moved from monthly to yearly. Both at once is neither.
+ */
+export function upgradeKind(
+  from: UpgradeTarget,
+  to: UpgradeTarget,
+): UpgradeKind | null {
+  if (from.period === to.period) {
+    return isUpgrade(from.plan, to.plan) ? "plan" : null;
+  }
+  return from.plan === to.plan &&
+    from.plan !== "free" &&
+    from.period === "monthly" &&
+    to.period === "yearly"
+    ? "period"
+    : null;
+}
+
 /** A plan's price for one billing period, in US cents. */
 export function periodPriceCents(
   plan: CoachPlanId,
@@ -63,7 +102,14 @@ export function periodPriceCents(
 export interface UpgradeInput {
   from: CoachPlanId;
   to: CoachPlanId;
+  /** How the CURRENT subscription is billed. */
   period: PlanPeriod;
+  /**
+   * How the new one is billed. Left out, the same as `period` (a plan
+   * upgrade); `"yearly"` from a monthly `period` is the switch to yearly.
+   * With `to`, this is the target `{ plan, period }`.
+   */
+  toPeriod?: PlanPeriod;
   /** The current billing period, as Stripe has it. */
   periodStart: Date;
   periodEnd: Date;
@@ -149,9 +195,10 @@ function futureSlices(periodStart: Date, now: Date): number {
 
 export function quoteUpgrade(input: UpgradeInput): UpgradeQuote {
   const { from, to, period, periodStart, periodEnd, now } = input;
+  const toPeriod = input.toPeriod ?? period;
 
   const oldPeriodPriceCents = periodPriceCents(from, period);
-  const newPeriodPriceCents = periodPriceCents(to, period);
+  const newPeriodPriceCents = periodPriceCents(to, toPeriod);
   const paid = input.paidForPeriodCents;
   const creditBaseCents =
     typeof paid === "number" && Number.isFinite(paid)
@@ -207,7 +254,8 @@ export function quoteUpgrade(input: UpgradeInput): UpgradeQuote {
     newPeriodPriceCents,
     oldPeriodPriceCents,
     creditBaseCents,
-    nextBillingDay: addMonthsUtc(now, yearly ? 12 : 1)
+    // The NEW subscription's first renewal: a year on when it is yearly.
+    nextBillingDay: addMonthsUtc(now, toPeriod === "yearly" ? 12 : 1)
       .toISOString()
       .slice(0, 10),
     periodHoursLeftSeconds,

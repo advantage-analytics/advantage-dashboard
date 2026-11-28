@@ -662,6 +662,11 @@ export interface UseUploadMatchWizardReturn {
   /** `VideoAllowance.kind` for the billed workspace — which hours the meter is showing. */
   quotaAllowanceKind: string;
   /**
+   * The billed personal workspace's last payment failed: its plan stays but
+   * this month's plan hours wait on the card (`VideoAllowance.pastDue`).
+   */
+  quotaPastDue: boolean;
+  /**
    * What closes a TEAM's footer meter once plans have begun — "Spring, ends
    * May 31", "Pilot ends May 31", "No plan" — or null for the beta's wording
    * and for a personal workspace.
@@ -1350,6 +1355,8 @@ export function useUploadMatchWizard({
           ...eligibilityWorkspace,
           plan: purchasedPlan.plan,
           planPeriodStart: purchasedPlan.startedAt,
+          // Just paid for: whatever the stale context said, it is not unpaid.
+          planStatus: "active",
         }
       : eligibilityWorkspace;
   const quotaPlanId = planFor(
@@ -4492,6 +4499,7 @@ export function useUploadMatchWizard({
     plansActive,
     quotaPlanId,
     quotaAllowanceKind: quotaAllowance.kind,
+    quotaPastDue: quotaAllowance.pastDue === true,
     quotaTeamSuffix,
     openAddHours,
     closeAddHours,

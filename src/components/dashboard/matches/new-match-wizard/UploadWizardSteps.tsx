@@ -192,6 +192,7 @@ export function FileStep() {
     handleRemoveVideo,
     plansActive,
     quotaPlanId,
+    quotaPastDue,
     remainingQuotaSeconds,
     openAddHours,
   } = wizard;
@@ -203,6 +204,7 @@ export function FileStep() {
     plan: quotaPlanId,
     remainingSeconds: remainingQuotaSeconds,
     videoSeconds: uploadedFile ? videoProbe?.durationSeconds : null,
+    pastDue: quotaPastDue,
   });
 
   const onDragOver = useCallback(
@@ -293,6 +295,14 @@ export function FileHoursNote({
         lead="No video hours yet."
         rest="You'll choose a plan or buy hours before it's analyzed."
         onSeePlans={() => onSeePlans()}
+      />
+    );
+  }
+  if (note.kind === "past-due") {
+    return (
+      <HoursNote
+        lead="Your last payment failed."
+        rest="Update your card to get this month's hours."
       />
     );
   }

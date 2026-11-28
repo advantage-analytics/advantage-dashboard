@@ -24,7 +24,8 @@ export type BillingRouteContext =
 
 export async function billingRouteContext(
   request: Request,
-  options: { body: boolean },
+  /** `"optional"`: an empty body is `{}`; anything sent must still be an object. */
+  options: { body: boolean | "optional" },
 ): Promise<BillingRouteContext> {
   const origin = checkSameOrigin(request, [siteUrl()]);
   if (origin) return { ok: false, response: errorResponse(origin) };
@@ -39,6 +40,14 @@ export async function billingRouteContext(
 
   // Signed out is answered before the body is read, by the service.
   if (!options.body || !signedIn) {
+    return { ok: true, user: signedIn, body: {} };
+  }
+
+  // No body at all is "nothing asked" where the route allows that.
+  if (
+    options.body === "optional" &&
+    (!request.body || request.headers.get("content-length") === "0")
+  ) {
     return { ok: true, user: signedIn, body: {} };
   }
 

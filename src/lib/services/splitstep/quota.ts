@@ -24,6 +24,7 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { PAST_DUE_SENTENCE } from "@/lib/billing/checkout-view";
 import {
   formatHoursLong,
   secondsLeft,
@@ -428,6 +429,7 @@ async function reservePersonal(params: {
       remainingSeconds:
         secondsLeft(row.used_seconds, row.cap_seconds) + row.credit_seconds,
       now,
+      pastDue: allowance.pastDue === true,
     }),
   };
 }
@@ -437,11 +439,17 @@ async function reservePersonal(params: {
  * credits), and the next step — add hours, shorten the trim, or wait for the
  * 1st. In December there is no 1st to wait for (free hours end Dec 31), so
  * the wait drops out. Never says "allowance": the player owns these hours.
+ *
+ * A subscriber whose last payment failed (`pastDue`) is told that instead of
+ * the next step: this month's plan hours are waiting on the card, and adding
+ * hours is not the first thing to say to someone already paying for some.
  */
 export function personalRefusalMessage(params: {
   neededSeconds: number;
   remainingSeconds: number;
   now?: Date;
+  /** `VideoAllowance.pastDue` for the allowance refused against. */
+  pastDue?: boolean;
 }): string {
   const { neededSeconds, remainingSeconds, now } = params;
   const back = freeHoursReturnOn(now);
@@ -450,6 +458,7 @@ export function personalRefusalMessage(params: {
       ? "You're out of video hours."
       : `This video needs ${formatHoursLong(neededSeconds)}. You have ` +
         `${formatHoursLong(remainingSeconds)} left.`;
+  if (params.pastDue) return `${lead} ${PAST_DUE_SENTENCE}`;
   const next = back
     ? `Add hours on Settings › Plan to send it now, shorten the trim, or ` +
       `wait for your free hours on ${back}.`
@@ -555,6 +564,8 @@ export interface QuotaPeek {
   resetsOn?: string | null;
   /** The kind of that allowance, set with `resetsOn` — a refusal's wording. */
   allowanceKind?: AllowanceKind;
+  /** `VideoAllowance.pastDue`: the plan's hours are waiting on a payment. */
+  pastDue?: boolean;
 }
 
 /**
@@ -597,6 +608,7 @@ export function peekRefusalMessage(
     return personalRefusalMessage({
       neededSeconds,
       remainingSeconds: peek.remainingSeconds,
+      pastDue: peek.pastDue === true,
     });
   }
   return capRefusalMessage({
@@ -716,6 +728,7 @@ export async function peekQuota(
     ...buildPeek(usedSeconds, capSeconds, credits.seconds, credits),
     resetsOn: allowanceResetsOn(allowance),
     allowanceKind: allowance.kind,
+    ...(allowance.pastDue ? { pastDue: true } : {}),
   };
 }
 

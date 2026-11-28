@@ -141,10 +141,7 @@ import { loadEligibleRoster } from "./eligible-roster";
 import { uploadEligibility } from "@/lib/workspace/upload-eligibility";
 import type { RosterIdentity } from "@/lib/workspace/upload-eligibility";
 import type { Workspace } from "@/lib/workspace/types";
-import {
-  readPlanPeriodStart,
-  readProgramPlanRef,
-} from "@/lib/billing/plan-fields";
+import { readPlanWindow, readProgramPlanRef } from "@/lib/billing/plan-fields";
 
 import {
   classifyFailure,
@@ -1296,7 +1293,7 @@ async function resolveAutoRetryWorkspace(params: {
       // The owner's plan and its period, which decide the hours a retry
       // draws from January 1, 2027 — see `Workspace.plan`.
       plan: (owner?.plan as string | null | undefined) ?? null,
-      planPeriodStart: await readPlanPeriodStart(supabase, userId),
+      ...(await ownerPlanWindow(supabase, userId)),
       programStatus: null,
       playersCanUpload: false,
       uploadPolicy: "everyone",
@@ -1381,4 +1378,13 @@ async function resolveAutoRetryWorkspace(params: {
     // link is the sole reader, and it never sees this object.
     myPlayerId: null,
   };
+}
+
+/** The owner's hours window and payment state, as `Workspace` carries them. */
+async function ownerPlanWindow(
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<Pick<Workspace, "planPeriodStart" | "planStatus">> {
+  const facts = await readPlanWindow(supabase, userId);
+  return { planPeriodStart: facts.periodStart, planStatus: facts.status };
 }

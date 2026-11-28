@@ -35,7 +35,7 @@ import {
 } from "@/lib/services/splitstep/allowance";
 import { isPaidPlan, planFor } from "@/lib/user/plan";
 import type { Workspace } from "@/lib/workspace/types";
-import { hoursLeftLabel } from "./checkout-view";
+import { PAST_DUE_SENTENCE, hoursLeftLabel } from "./checkout-view";
 import {
   ASK_QUESTIONS_PER_MONTH,
   COLLEGE_PLANS,
@@ -157,6 +157,12 @@ export interface PlanStanding {
   resetsOn: string | null;
   /** ISO instant the hours window ends. */
   windowEnd: string;
+  /**
+   * A personal plan whose last payment failed: the plan and its name stay,
+   * `capSeconds` is 0 and nothing resets until the card is updated. Every
+   * surface then says `PAST_DUE_SENTENCE` where it would say the hours.
+   */
+  pastDue: boolean;
 }
 
 /** A workspace's plan and hours window at `now`, with their words. */
@@ -170,6 +176,7 @@ export function planStandingFor(
     capSeconds: allowance.capSeconds,
     resetsOn: allowanceResetsOn(allowance),
     windowEnd: allowance.windowEnd.toISOString(),
+    pastDue: allowance.pastDue === true,
   };
 
   if (workspace.kind === "personal") {
@@ -319,6 +326,19 @@ export function planPillView(
   const extraSentence = `Your ${formatHoursLong(extra)} of extra hours ${
     until ? `last until ${until}` : "are used after them"
   }.`;
+
+  // A failed renewal: the plan stays, this month's hours wait on the card.
+  if (standing.pastDue) {
+    return done({
+      figure:
+        extra > 0
+          ? { strong: `${formatHoursShort(extra)}h`, rest: "extra" }
+          : { strong: "0h", rest: "left" },
+      label: "Payment failed",
+      detail: PAST_DUE_SENTENCE,
+      share: extra > 0 ? 1 : 0,
+    });
+  }
 
   // No hours of the plan's own: Free, or an allowance of zero.
   if (cap <= 0) {
@@ -535,6 +555,21 @@ export function homeCardView(input: {
   const extraFact: HomeCardFact[] =
     extra > 0 ? [{ text: `${formatHoursLong(extra)} extra` }] : [];
 
+  // A failed renewal: the card's one sentence says so, in place of the offer.
+  if (standing.pastDue) {
+    return {
+      eyebrow,
+      figure,
+      line1,
+      line2: extra > 0 ? "left in extra hours" : "left this month",
+      sentence: PAST_DUE_SENTENCE,
+      facts: [matches],
+      cta: "See plan",
+      href: PLAN_HREF,
+      ariaLabel: `${standing.name} plan: see plan`,
+    };
+  }
+
   if (input.capSeconds <= 0) {
     return {
       eyebrow,
@@ -662,10 +697,13 @@ export function usageCardView(input: {
           freeLeftSeconds: left,
           creditSeconds: extra,
         },
-    line: `${planPart} · ${extraPart}`,
+    // A failed renewal: the line is that, and any extra hours after it.
+    line: standing.pastDue
+      ? `${PAST_DUE_SENTENCE}${extra > 0 ? ` ${extraPart}` : ""}`
+      : `${planPart} · ${extraPart}`,
     link: {
       label:
-        capSeconds > 0 || unlimited
+        capSeconds > 0 || unlimited || standing.pastDue
           ? "Manage on Plan"
           : "Choose a plan on Plan",
       href: PLAN_HREF,

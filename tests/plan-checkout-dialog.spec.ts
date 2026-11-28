@@ -303,3 +303,121 @@ test("a payment that has not shown up offers no way to pay again", () => {
   expect(radios(html)).toEqual([]);
   expect(html).not.toContain("Continue to pay");
 });
+
+test("Pay yearly: the year chosen with its credit, the month beside it with the grey pill, no checkout form", () => {
+  const html = draw({ kind: "yearly" }, COACH, {
+    preview: {
+      status: "ready",
+      preview: {
+        ...quoteUpgrade({
+          from: "coach",
+          to: "coach",
+          period: "monthly",
+          toPeriod: "yearly",
+          periodStart: new Date("2027-04-14T00:00:00Z"),
+          periodEnd: new Date("2027-05-14T00:00:00Z"),
+          now: new Date("2027-04-29T00:00:00Z"),
+          usedSeconds: planHoursSeconds("coach") - (3 * H + 12 * M),
+        }),
+        period: "yearly",
+        fromPeriod: "monthly",
+      },
+    },
+  });
+  expect(texts(html, /<h2[^>]*>(.*?)<\/h2>/g)).toEqual(["Pay yearly."]);
+  // One selectable row; the current plan is not a choice.
+  expect(radios(html)).toEqual([
+    "Coach, yearly$75 credit for your 15 days left$1,575then $1,650 a year",
+  ]);
+  expect(html).toContain("Coach, monthly");
+  expect(html).toContain("Your plan");
+  expect(html).toContain("Then $1,650 a year, next on Apr 29, 2028");
+  expect(primary(html)).toEqual(["Continue to pay $1,575"]);
+  expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Continue to pay/);
+  // The card on file is charged: Stripe's frame is never drawn.
+  expect(html).not.toContain("data-stripe");
+  // No monthly / yearly pills: there is one thing to do here.
+  expect(html).not.toContain("Yearly · 1 month free");
+});
+
+test("Pay yearly: bars while the price loads, and nothing to press", () => {
+  const html = draw({ kind: "yearly" }, COACH, {
+    preview: { status: "loading" },
+  });
+  expect(html).toContain('role="status"');
+  expect(radios(html)).toEqual([]);
+  expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Continue to pay</);
+});
+
+test("Upload paywall, a failed payment: extra hours only, and Update card in the aside", () => {
+  const html = draw(
+    NEEDED,
+    { ...COACH_SPENT, planLeftSeconds: 0, resetsOn: null, pastDue: true },
+    { wizard: true },
+  );
+  expect(radios(html)).toHaveLength(1);
+  expect(radios(html)[0]).toContain("2 extra hours");
+  expect(html).not.toContain("Move up to");
+  expect(html).toContain(
+    "Your last payment failed. Update your card to get this month's hours.",
+  );
+  expect(html).toMatch(
+    /<button[^>]*type="button"[^>]*>Update card ↗<\/button>/,
+  );
+  expect(html).toContain("Payment failed");
+  expect(html).toContain("Pay $70 and send");
+});
+
+test("MOCK, move down to Coach: the smaller plan chosen, the current one with the pill, a live button", () => {
+  const html = draw(
+    {
+      kind: "change",
+      change: {
+        to: { plan: "coach", period: "monthly" },
+        effectiveOn: "2027-02-14",
+      },
+    },
+    {
+      plan: "coach-pro",
+      period: "monthly",
+      planLeftSeconds: 7 * H + 40 * M,
+      extraSeconds: 0,
+      resetsOn: "Feb 14",
+      firstMonthEligible: false,
+    },
+  );
+  expect(texts(html, /<h2[^>]*>(.*?)<\/h2>/g)).toEqual(["Move down to Coach."]);
+  expect(radios(html)).toEqual([
+    "Coach$150 a month from Feb 14 · 5 hours a month$0today",
+  ]);
+  expect(html).toContain("Coach Pro");
+  expect(html).toContain("Your plan");
+  expect(html).toContain(
+    "You keep Coach Pro and its 10 hours until Feb 14. Nothing is charged today.",
+  );
+  expect(html).toContain("Not now");
+  expect(html).toContain("Move to Coach on Feb 14");
+  expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Move to Coach/);
+  expect(html).not.toContain("data-stripe");
+});
+
+test("MOCK, yearly → monthly: Pay monthly, switching at the year's renewal", () => {
+  const html = draw(
+    {
+      kind: "change",
+      change: {
+        to: { plan: "coach", period: "monthly" },
+        effectiveOn: "2028-01-14",
+      },
+    },
+    { ...COACH, period: "yearly", resetsOn: "Feb 14" },
+  );
+  expect(texts(html, /<h2[^>]*>(.*?)<\/h2>/g)).toEqual(["Pay monthly."]);
+  expect(radios(html)).toEqual([
+    "Coach, monthly$150 a month from Jan 14, 2028$0today",
+  ]);
+  expect(html).toContain(
+    "Your year is paid through Jan 14, 2028. Nothing is charged today.",
+  );
+  expect(html).toContain("Switch on Jan 14, 2028");
+});
