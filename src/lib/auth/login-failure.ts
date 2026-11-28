@@ -13,6 +13,9 @@ export type LoginFailureReason =
   | "rate_limited"
   | "invalid_email"
   | "network"
+  // Google: Supabase answered with neither an error nor a URL to send the
+  // browser to, so the tap would otherwise have done nothing at all.
+  | "no_redirect_url"
   | "unknown";
 
 export type LoginMethod = "password" | "google";
@@ -24,6 +27,8 @@ const BY_CODE: Readonly<Record<string, LoginFailureReason>> = {
   over_email_send_rate_limit: "rate_limited",
   email_address_invalid: "invalid_email",
   validation_failed: "invalid_email",
+  // Not Supabase's: the form's own code for an OAuth answer with no URL.
+  no_redirect_url: "no_redirect_url",
 };
 
 const BY_MESSAGE: ReadonlyArray<[RegExp, LoginFailureReason]> = [

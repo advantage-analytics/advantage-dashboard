@@ -104,15 +104,37 @@ export function toAuthError(err: unknown): AuthError {
  * text. Deliberately permissive: this is a typo net, not RFC 5322.
  */
 export function validateEmail(value: string): string | null {
+  return emailProblem(value)?.message ?? null;
+}
+
+/** Which rule `validateEmail` refused on, as a fixed slug for analytics. */
+export type EmailProblemReason =
+  "email_missing" | "email_malformed" | "email_no_domain";
+
+/** `validateEmail`, with the rule that refused named beside its message. */
+export function emailProblem(
+  value: string,
+): { reason: EmailProblemReason; message: string } | null {
   const email = value.trim();
-  if (!email) return "Enter the email address on your account.";
+  if (!email) {
+    return {
+      reason: "email_missing",
+      message: "Enter the email address on your account.",
+    };
+  }
   const at = email.indexOf("@");
   if (at < 1 || at !== email.lastIndexOf("@")) {
-    return "Enter a valid email address.";
+    return {
+      reason: "email_malformed",
+      message: "Enter a valid email address.",
+    };
   }
   const domain = email.slice(at + 1);
   if (!domain.includes(".") || domain.startsWith(".") || domain.endsWith(".")) {
-    return "That address is missing its domain — try .edu or .com";
+    return {
+      reason: "email_no_domain",
+      message: "That address is missing its domain — try .edu or .com",
+    };
   }
   return null;
 }

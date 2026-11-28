@@ -3,6 +3,8 @@ import { isPostHogConfigured } from "@/lib/posthog-client";
 import type { VideoRejectionReason } from "@/lib/services/upload/types";
 import type { ClaimRoleValue } from "@/lib/services/programs/claim-roles";
 import type { ConnectorApp } from "@/lib/auth/oauth-consent";
+import type { AuthErrorField } from "@/lib/auth/error-messages";
+import type { SignUpRefusalReason } from "@/lib/auth/sign-up-refusal";
 import type { TrimSkipReason } from "@/lib/video/trim-plan";
 import type { TrimDiscardedTrack } from "@/lib/video/trim-protocol";
 import type {
@@ -187,6 +189,18 @@ export interface AnalyticsEvents {
     /** The route's refusal slug; `other` for any slug not listed; null when not refused. */
     refusal_code: AskRefusalCode | null;
     http_status: number | null;
+  };
+
+  // Sign-in and sign-up attempts that go nowhere. `login_started` is sent
+  // when the Google button is tapped, before any await, so a tap that never
+  // reaches Google (its `login_failed`, or nothing at all) is told from one
+  // never made. `sign_up_refused` is one per refused /sign-up submit: the
+  // field that owns the message and the rule's slug (`sign-up-refusal.ts`),
+  // never anything typed.
+  login_started: { method: "google" };
+  sign_up_refused: {
+    field: AuthErrorField;
+    reason: SignUpRefusalReason;
   };
 }
 
