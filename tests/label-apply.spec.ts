@@ -10,6 +10,7 @@ import {
   letsAndDroppedLines,
   pointInsertRow,
   pointScoreOf,
+  servedAgainAfterIn,
   resultTypeOf,
   shotResultOf,
   shotTypeOf,
@@ -692,6 +693,69 @@ test.describe("lets kept, strokes before the serve dropped", () => {
     const stats = expectedStats(built.points);
     expect(stats.p1.firstServes).toBe(1);
     expect(stats.p1.firstServesIn).toBe(1);
+  });
+
+  test("a serve called in and then served again is published as a let, or as a fault before a second serve", () => {
+    clock = 100;
+    id = 0;
+    const replayed = build([
+      pt(0, "p1", "ace", (p) => [
+        shot(p, "p1", "first_serve", "in"),
+        shot(p, "p2", "backhand", "in"),
+        shot(p, "p1", "first_serve", "in"),
+      ]),
+    ]);
+    expect(
+      replayed.points[0].shots.map((s) => [s.shot_number, s.result, s.zone]),
+    ).toEqual([
+      [0, "Let", null],
+      [1, "In", replayed.points[0].shots[1].zone],
+    ]);
+    expect(replayed.warnings.join()).toContain("published as a let");
+    // One point, one first serve: the preview counts it once.
+    const stats = expectedStats(replayed.points);
+    expect([stats.p1.firstServes, stats.p1.firstServesIn]).toEqual([1, 1]);
+
+    clock = 100;
+    id = 0;
+    const faulted = build([
+      pt(0, "p1", "ace", (p) => [
+        shot(p, "p1", "first_serve", "in"),
+        shot(p, "p2", "backhand", "in"),
+        shot(p, "p1", "second_serve", "in"),
+      ]),
+    ]);
+    expect(
+      faulted.points[0].shots.map((s) => [
+        s.shot_number,
+        s.shot_type,
+        s.result,
+      ]),
+    ).toEqual([
+      [0, "First Serve", null],
+      [1, "Second Serve", "In"],
+    ]);
+    expect(faulted.warnings.join()).toContain("published as a fault");
+    const faultStats = expectedStats(faulted.points);
+    expect([faultStats.p1.firstServes, faultStats.p1.firstServesIn]).toEqual([
+      1, 0,
+    ]);
+
+    expect(
+      servedAgainAfterIn({ stroke: "first_serve", result: "out" }, [
+        { stroke: "second_serve" },
+      ]),
+    ).toBeNull();
+    expect(
+      servedAgainAfterIn({ stroke: "first_serve", result: "in" }, [
+        { stroke: "forehand" },
+      ]),
+    ).toBeNull();
+    expect(
+      servedAgainAfterIn({ stroke: "second_serve", result: "in" }, [
+        { stroke: "second_serve" },
+      ]),
+    ).toBe("let");
   });
 
   test("a swing at a fault is dropped; the fault stays at shot 0", () => {

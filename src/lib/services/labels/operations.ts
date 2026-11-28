@@ -386,6 +386,12 @@ export function suggestedDeleteReason(
  * behind a double fault). Empty when a live stroke or a tombstone with
  * another reason follows: then what came after was not that call's alone.
  * `ghosts` is the console's own flag (`isLiveShot`).
+ *
+ * After a let or a faulted first serve as stored (`isReplayedServe`) the
+ * call took only the strokes before the server's next serve
+ * (`deadBallsAfterMiss`), so the run stops at the next live serve: the
+ * replay and its rally were never the call's. Every stroke before it must
+ * still be a `dead_ball_after_fault` tombstone.
  */
 export function deadBallRun(
   shots: readonly LabelShot[],
@@ -397,9 +403,27 @@ export function deadBallRun(
   if (at === -1) return [];
   // A ghost the site removed is no stroke while the session draws ghosts:
   // it neither counts as following the ball nor is it put back.
-  const after = ordered
+  let after = ordered
     .slice(at + 1)
     .filter((shot) => shot.status === "deleted" || isLiveShot(shot, ghosts));
+  const anchor = ordered[at];
+  if (isReplayedServe(anchor)) {
+    const replay = after.findIndex(
+      (shot) =>
+        shot.status !== "deleted" &&
+        isServeStroke(shot.stroke) &&
+        (anchor.hitter === null ||
+          shot.hitter === null ||
+          shot.hitter === anchor.hitter),
+    );
+    if (replay !== -1) after = after.slice(0, replay);
+    const dead = after.every(
+      (shot) =>
+        shot.status === "deleted" &&
+        shot.deleteReason === "dead_ball_after_fault",
+    );
+    return dead ? after.map((shot) => shot.id) : [];
+  }
   const dead = after.every(
     (shot) =>
       shot.status === "deleted" &&

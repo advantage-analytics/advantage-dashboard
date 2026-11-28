@@ -25,6 +25,10 @@
  *   until the serve that counts. It is dropped, as the derivation's
  *   `playedRally` drops it, and counted in `droppedBeforeServe`. It still
  *   widens the point's clip window.
+ * - A serve stored in before the counted serve was hit again
+ *   (`servedAgainAfterIn`): written as a fault (no result) when it is a first
+ *   serve with a second serve after it, else as a let, with a warning — as
+ *   'In' it would count as a first serve in beside the serve that counted.
  * - A serve stored in whose landing reads out or net (`inServeLandingMiss`)
  *   is written as in with its landing and zone as labelled: the call is the
  *   labeller's, and the landing is what they placed.
@@ -348,6 +352,27 @@ function isAppliedPoint(point: Pick<LabelPoint, "status" | "ending">): boolean {
 }
 
 /**
+ * How to publish a serve called in that the server hit again: `serve` is a
+ * serve before the counted one, `later` the played strokes after it up to and
+ * including the counted serve. "fault" when it is a first serve and a second
+ * serve follows (the ball was out, played on); "let" for any other serve
+ * followed by another serve (replayed, unmarked). Null when the serve is not
+ * stored in, or no serve follows it.
+ */
+export function servedAgainAfterIn(
+  serve: Pick<LabelShot, "stroke" | "result">,
+  later: readonly Pick<LabelShot, "stroke">[],
+): "fault" | "let" | null {
+  if (!isServeStroke(serve.stroke) || serve.result !== "in") return null;
+  const serves = later.filter((s) => isServeStroke(s.stroke));
+  if (serves.length === 0) return null;
+  return serve.stroke === "first_serve" &&
+    serves.some((s) => s.stroke === "second_serve")
+    ? "fault"
+    : "let";
+}
+
+/**
  * A point's live strokes split three ways: `played`, the rally numbered and
  * counted (lets out, and no stroke but a serve before the counted serve);
  * `lets`, the replayed serves written at shot 0; `dropped`, the strokes hit
@@ -437,15 +462,28 @@ function buildShotRows(
     if (shot.stroke === null) {
       warnings.push(`${at}: ${named(shot)} has no stroke type`);
     }
+    const result = shotResultOf(playedOnResult(shot, next, ending));
+    const zone = isServeStroke(shot.stroke)
+      ? serveZone(shot.landingX)
+      : directionZone(filled?.x ?? shot.landingX, shot.contactX);
+    // A serve called in before the counted serve was hit again
+    // (`servedAgainAfterIn`): a fault before a second serve, else a let
+    // nobody marked. Written as in it would count as a first serve in beside
+    // the serve that counted.
+    const again =
+      i < from ? servedAgainAfterIn(shot, played.slice(i + 1, from + 1)) : null;
+    if (again) {
+      warnings.push(
+        `${at}: ${named(shot)} is a serve called in before the serve that counted — published as ${again === "fault" ? "a fault" : "a let"}`,
+      );
+    }
     byId.set(shot.id, {
       ...base(shot),
       shot_number: shotNumber(i, from),
       landing_x: metInAir ? null : shot.landingX,
       landing_y: metInAir ? null : shot.landingY,
-      result: shotResultOf(playedOnResult(shot, next, ending)),
-      zone: isServeStroke(shot.stroke)
-        ? serveZone(shot.landingX)
-        : directionZone(filled?.x ?? shot.landingX, shot.contactX),
+      result: again === "fault" ? null : again === "let" ? LET_RESULT : result,
+      zone: again ? null : zone,
     });
   });
   for (const shot of lets) {
