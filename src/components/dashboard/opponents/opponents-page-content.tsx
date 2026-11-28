@@ -166,6 +166,7 @@ export function OpponentsPageContent({
           opponents={visibleOpponents}
           selectedKey={selectedId}
           onToggle={toggle}
+          compact={selectedId !== null}
           empty={
             <TableEmptyBody
               icon={Brain}

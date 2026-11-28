@@ -1,3 +1,4 @@
+import { LIST_TRACK_TRANSITION } from "@/components/dashboard/matches/match-list-layout";
 import type { PersonalOpponent } from "@/lib/data/personal-opponents";
 import { cn } from "@/lib/utils";
 import {
@@ -9,12 +10,13 @@ import {
 import { opponentFormBars } from "./opponent-form-links";
 import {
   OPPONENTS_CARD_PADDING,
-  OPPONENTS_GRID_COLS,
   OPPONENTS_MIN_WIDTH,
+  OPPONENTS_MIN_WIDTH_COMPACT,
   OPPONENTS_ROW_BOX,
   OPPONENTS_ROW_FRAME,
   opponentRowControl,
   opponentRowWash,
+  personalOpponentsGrid,
 } from "./opponents-table-layout";
 import { OpponentsTableHeader } from "./opponents-table-header";
 
@@ -32,9 +34,10 @@ export function opponentRowId(key: string): string {
  * Opponent · Plays · Record · Last match
  *
  * The three cells after the name are the shared ones in `opponent-cells.tsx`,
- * the same the team table draws, so the two pages cannot drift. Four tracks
- * fit beside the open drawer as they are (`opponents-table-layout`), so the
- * table has one set of tracks and nothing slides shut on a row click.
+ * the same the team table draws, so the two pages cannot drift. Beside the
+ * open drawer (`compact`) Plays slides shut, as it does on the team table:
+ * the drawer states the hand and backhand under the name, and a 1280 window
+ * leaves the card too little room for all four (`opponents-table-layout`).
  *
  * An opponent is a CONTAINER row (law 3): it peeks in the drawer rather than
  * travelling. The whole row takes the click and the selected one keeps its
@@ -51,6 +54,7 @@ export function OpponentsTable({
   selectedKey,
   onToggle,
   empty,
+  compact = false,
 }: {
   /** The rows to draw, already chipped, filtered and sorted by the page. */
   opponents: readonly PersonalOpponent[];
@@ -69,6 +73,8 @@ export function OpponentsTable({
    * bare page.
    */
   empty?: React.ReactNode;
+  /** The drawer is open beside the table: Plays collapses. */
+  compact?: boolean;
 }) {
   return (
     <section
@@ -76,8 +82,13 @@ export function OpponentsTable({
       className="surface-card overflow-x-auto"
       style={{ padding: OPPONENTS_CARD_PADDING }}
     >
-      <div className={OPPONENTS_MIN_WIDTH}>
-        <OpponentsTableHeader />
+      <div
+        className={cn(
+          compact ? OPPONENTS_MIN_WIDTH_COMPACT : OPPONENTS_MIN_WIDTH,
+          LIST_TRACK_TRANSITION,
+        )}
+      >
+        <OpponentsTableHeader compact={compact} />
         {opponents.length === 0 ? (
           empty
         ) : (
@@ -88,6 +99,7 @@ export function OpponentsTable({
                 opponent={opponent}
                 selected={opponent.key === selectedKey}
                 onToggle={onToggle}
+                compact={compact}
               />
             ))}
           </div>
@@ -101,11 +113,14 @@ function OpponentRow({
   opponent,
   selected,
   onToggle,
+  compact,
 }: {
   opponent: PersonalOpponent;
   selected: boolean;
+  compact: boolean;
   onToggle: (key: string, viaKeyboard: boolean) => void;
 }) {
+  const grid = personalOpponentsGrid(compact);
   return (
     <div
       id={opponentRowId(opponent.key)}
@@ -113,10 +128,12 @@ function OpponentRow({
       className={cn(
         OPPONENTS_ROW_FRAME,
         OPPONENTS_ROW_BOX,
-        "cursor-pointer transition-[background-color] duration-200 ease-[var(--ease-primary)]",
+        grid.className,
+        LIST_TRACK_TRANSITION,
+        "cursor-pointer",
         opponentRowWash(selected),
       )}
-      style={OPPONENTS_GRID_COLS}
+      style={grid.style}
     >
       {/* It truncates bare; the drawer, one click away, states it in full. */}
       <OpponentNameCell name={opponent.name} />
